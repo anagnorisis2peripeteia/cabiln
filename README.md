@@ -74,7 +74,7 @@ seq = Sequence('!1-A-G-K-A-!1')
 # Lactam staple: Lys ε-amine (R4) → Asp sidechain carboxyl (R3)
 seq = Sequence('ac-K.!1(4,3)-A-A-A-D.!1(3,4)-am')
 
-# Disulfide bridge — first endpoint declares (r_self, r_other); second just .!1
+# Disulfide bridge
 seq = Sequence('ac-C.!1(4,4)-A-G-A-C.!1-am')
 
 # Hydrocarbon staple (i, i+4): two olefinic residues, RCM closes the ring
