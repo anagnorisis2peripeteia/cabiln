@@ -29,7 +29,7 @@ G-C[.Mal(4,1).DBCO(2,1)]-A-G-AzK-G
 !1-C.!2(4,4)-A-G-K-A-C.!2-!1
 
 # Hydrocarbon-stapled helix (RCM, i,i+7)
-ac-A-S5.!1(4,4)-A-A-A-A-A-R8.!1(4,4)-G-am
+ac-A-S5.!1(4,4)-A-A-A-A-A-R8.!1-G-am
 
 # Full Fmoc-SPPS protection pattern — three residues, three different protecting groups
 fmoc-C.trt(4,1)-K.boc(4,1)-R.pbf(4,1)-am
@@ -78,10 +78,10 @@ seq = Sequence('ac-K.!1(4,3)-A-A-A-D.!1-am')
 seq = Sequence('ac-C.!1(4,4)-A-G-A-C.!1-am')
 
 # Hydrocarbon staple (i, i+4): two olefinic residues, RCM closes the ring
-seq = Sequence('ac-A-S5.!1(4,4)-A-A-A-S5.!1(4,4)-G-am')
+seq = Sequence('ac-A-S5.!1(4,4)-A-A-A-S5.!1-G-am')
 
 # Hydrocarbon staple (i, i+7): mixed S5/R8 pair for longer helix
-seq = Sequence('ac-A-S5.!1(4,4)-A-A-A-A-A-R8.!1(4,4)-G-am')
+seq = Sequence('ac-A-S5.!1(4,4)-A-A-A-A-A-R8.!1-G-am')
 ```
 
 The `.!n(r1,r2)` suffix on the **first** endpoint names both R-groups of the bond; the second endpoint carries just `.!n` (the R-group is already determined). This avoids the ambiguity of old BILN `C(1,3)` notation where you couldn't tell which number was the bond ID and which was the R-group.
@@ -116,11 +116,12 @@ Reading the bracket left to right matches synthesis order from Lys outward: K �
 **Brackets compose freely with everything else:**
 
 ```python
-# Protected Cys with bracket, plus head-to-tail cyclisation
+# Single-step bracket is valid but redundant — C[.Mal(4,1)] == C.Mal(4,1)
+# Brackets only add value when chaining 2+ sequential steps
 seq = Sequence('!1-C[.Mal(4,1)]-A-G-K-!1')
 
-# Multiple independent brackets on one peptide (auto bond IDs: 100, 101, …)
-seq = Sequence('fmoc-C[.trt(4,1)]-G-K[.boc(4,1)]-am')
+# Multiple protecting groups — inline notation is cleaner for single steps
+seq = Sequence('fmoc-C.trt(4,1)-G-K.boc(4,1)-am')
 
 # Bracket lipidation + disulfide staple on the same peptide
 seq = Sequence('ac-C.!1(4,4)-A-K[.gGlu(4,4).AEEA(1,2).C20FA(1,2)]-A-C.!1-am')
@@ -478,8 +479,8 @@ Sequence('ac-C.!1(4,4)-A-G-MalAla.!1-am')
 # 2. Cys + MalLys — larger ring
 Sequence('ac-C.!1(4,4)-A-A-A-MalLys.!1-am')
 
-# 3. Bracket form — maleimide as first conjugation step
-Sequence('ac-A-C[.MalAla(4,1)]-G-am')
+# 3. Inline notation — equivalent, cleaner for a single step
+Sequence('ac-A-C.MalAla(4,1)-G-am')
 
 # 4. Two thiol-maleimide crosslinks — parallel bridges
 Sequence('ac-C.!1(4,4)-A-MalAla.!1-G-C.!2(4,4)-A-MalAla.!2-am')
