@@ -72,7 +72,7 @@ Head-to-tail and backbone cyclisation uses marker tokens at both endpoints. The 
 seq = Sequence('!1-A-G-K-A-!1')
 
 # Lactam staple: Lys ε-amine (R4) → Asp sidechain carboxyl (R3)
-seq = Sequence('ac-K.!1(4,3)-A-A-A-D.!1(3,4)-am')
+seq = Sequence('ac-K.!1(4,3)-A-A-A-D.!1-am')
 
 # Disulfide bridge
 seq = Sequence('ac-C.!1(4,4)-A-G-A-C.!1-am')
@@ -199,7 +199,7 @@ Sequence('fmoc-C.trt(4,1)-K.boc(4,1)-R.pbf(4,1)-am')
 Sequence('ac-C.!1(4,4)-A-G-A-C.!1-am')
 
 # Lactam staple (ε-amine R4 ↔ sidechain carboxyl R3)
-Sequence('ac-K.!1(4,3)-A-A-A-D.!1(3,4)-am')
+Sequence('ac-K.!1(4,3)-A-A-A-D.!1-am')
 
 # Aspartimide (backbone ↔ sidechain carboxyl — five-membered ring)
 Sequence('ac-A-D.!1(4,3)-G.!1-A-am')
@@ -329,10 +329,10 @@ Sequence('ac-A-G-K-L-V-am')
 Sequence('!1-A-G-K-A-G-!1')
 
 # 3. Macrolactam — Lys ε-amine (R4) to Asp sidechain carboxyl (R3)
-Sequence('ac-K.!1(4,3)-A-A-A-D.!1(3,4)-am')
+Sequence('ac-K.!1(4,3)-A-A-A-D.!1-am')
 
 # 4. Glutamate lactam — six-membered ring
-Sequence('ac-K.!1(4,3)-A-A-A-A-E.!1(3,4)-am')
+Sequence('ac-K.!1(4,3)-A-A-A-A-E.!1-am')
 
 # 5. Lactam inside head-to-tail ring — bicyclic scaffold
 Sequence('!1-K.!2(4,3)-A-G-A-D.!2(3,4)-!1')
@@ -810,7 +810,7 @@ print(Chem.MolToSmiles(rdmol))
 ### Validate before building
 
 ```python
-report = Sequence.validate('ac-K.!1(4,3)-A-A-A-D.!1(3,4)-am')
+report = Sequence.validate('ac-K.!1(4,3)-A-A-A-D.!1-am')
 print(report.ok)        # True
 print(report.bonds)     # [(K, R4, D, R3)]
 print(report.warnings)  # any chemistry alerts
