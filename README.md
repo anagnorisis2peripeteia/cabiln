@@ -139,11 +139,7 @@ Reading this: the main chain is `ac-K.!1(4,2)-G-am`; the branch is `C20FA-gGlu-A
 Full Retatrutide (GIP/GLP-1/glucagon triple agonist, 39 residues with C20 lipidation):
 
 ```python
-seq = Sequence(
-    'Y-Aib-Q-G-T-F-T-S-D-Y-S-I-aMeLeu-L-D-K.!1(4,2)'
-    '-A-Q-Aib-A-F-I-E-Y-L-L-E-G-G-P-S-S-G-A-P-P-P-S-am'
-    '%C20FA-gGlu-AEEA-!1'
-)
+seq = Sequence('Y-Aib-Q-G-T-F-T-S-D-Y-S-I-aMeLeu-L-D-K.!1(4,2)-A-Q-Aib-A-F-I-E-Y-L-L-E-G-G-P-S-S-G-A-P-P-P-S-am%C20FA-gGlu-AEEA-!1')
 ```
 
 ---
