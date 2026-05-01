@@ -347,28 +347,27 @@ Reactant pair: `backbone_o` + `backbone_c`
 An α-hydroxy acid carries its R1 as `backbone_o`; the `-` junction with the next residue forms an ester instead of an amide. Register α-hydroxy acid monomers before use.
 
 <details>
-<summary>5 examples — register α-hydroxy acid monomers first</summary>
+<summary>5 examples — Glc (glycolic acid) is in the library; register others from SMILES</summary>
 
 ```python
-# Register lactic acid (Ala-sized α-hydroxy acid, R1 = backbone_o)
-register_monomer(smiles='OC(C)C(=O)O', symbol='Lac', name='Lactic acid')
-# Register glycolic acid (Gly-sized α-hydroxy acid)
-register_monomer(smiles='OCC(=O)O', symbol='Glc', name='Glycolic acid')
+# Glc (glycolic acid, Gly-sized α-hydroxy acid) is already in the library.
+# To add lactic acid (Ala-sized):
+# register_monomer(smiles='OC(C)C(=O)O', symbol='Lac', name='Lactic acid')
 
-# 1. Single ester junction — one backbone amide replaced by ester
-Sequence('ac-A-Lac-G-A-am')
-
-# 2. Two ester junctions — alternating hydroxy/amino acids
-Sequence('ac-A-Lac-G-Lac-A-am')
-
-# 3. Glycolic acid in backbone
+# 1. Glycolic acid ester junction in a tetrapeptide
 Sequence('ac-G-Glc-A-G-am')
 
+# 2. Two glycolic acid junctions — alternating ester/amide backbone
+Sequence('ac-A-Glc-A-Glc-A-am')
+
+# 3. Glycolic acid flanked by charged residues
+Sequence('ac-K-Glc-D-am')
+
 # 4. Cyclic depsipeptide — head-to-tail ring with ester junction
-Sequence('!1-Lac-A-G-A-!1')
+Sequence('!1-Glc-A-G-A-!1')
 
 # 5. Depsipeptide + disulfide staple
-Sequence('ac-C.!1(4,4)-Lac-G-A-C.!1-am')
+Sequence('ac-C.!1(4,4)-Glc-G-A-C.!1-am')
 ```
 
 </details>
