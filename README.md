@@ -153,6 +153,32 @@ seq = Sequence('Y-Aib-Q-G-T-F-T-S-D-Y-S-I-aMeLeu-L-D-K[.gGlu(4,4).AEEA(1,2).C20F
 
 ---
 
+## Combining notations
+
+The four extensions compose freely. Any crosslink, bracket, and branch can appear together on the same string:
+
+```python
+# Disulfide staple + 3-step lipidation on the same peptide
+Sequence('ac-C.!1(4,4)-A-K[.gGlu(4,4).AEEA(1,2).C20FA(1,2)]-A-C.!1-am')
+#              ^---disulfide crosslink---^  ^---isopeptide lipid linker---^
+
+# Full Fmoc-SPPS protection: Pbf on Arg, Boc on Lys, disulfide between two Cys
+Sequence('fmoc-R.pbf(4,1)-A-C.!1(4,4)-K.boc(4,1)-A-C.!1-am')
+#               ^Arg guard  ^-disulfide-^  ^Lys guard  ^2nd Cys
+
+# Hydrocarbon staple (RCM, i,i+4) plus isopeptide lipidation on the same helix
+Sequence('ac-S5.!1(4,4)-A-A-K[.gGlu(4,4).AEEA(1,2).C20FA(1,2)]-A-S5.!1-am')
+#              ^-------RCM staple-------^  ^--------lipid linker--------^
+
+# Cyclic peptide with lipidation inside the ring
+Sequence('!1-A-K[.gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-A-!1')
+#          ^head-to-tail cycle^  ^lipidation bracket^
+```
+
+Bioconjugation handles (Mal, DBCO, TCO, Tz) follow the same pattern once the monomers are registered via `pyPept-monomer-add`.
+
+---
+
 ## Chemistry types and bond validation
 
 CABILN knows what chemistry each R-group represents. When you write a bond, the library checks whether the reaction is chemically sensible and warns you if it isn't.
