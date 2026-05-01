@@ -16,9 +16,9 @@ BILN already handles crosslinks and cyclic peptides. CABILN adds three things BI
 The result is that complex peptides that previously required separate files or hand-crafted CHUCKLES fragments can be written as a single string:
 
 ```
-# GLP-1 agonist — 39-residue backbone with a C20 fatty acid on Lys sidechain
-# (branch notation: %% splits the main chain from the pendant lipid chain)
-Y-Aib-Q-G-T-F-T-S-D-Y-S-I-aMeLeu-L-D-K.!1(4,2)-A-Q-Aib-A-F-I-E-Y-L-L-E-G-G-P-S-S-G-A-P-P-P-S-am%C20FA-gGlu-AEEA-!1
+# GLP-1 agonist — 39-residue backbone with C20 fatty acid on Lys via isopeptide linker
+# 3-step bracket: Lys R4 → gGlu γ-COOH (R4, isopeptide) → AEEA → C20FA
+Y-Aib-Q-G-T-F-T-S-D-Y-S-I-aMeLeu-L-D-K[.gGlu(4,4).AEEA(1,2).C20FA(1,2)]-A-Q-Aib-A-F-I-E-Y-L-L-E-G-G-P-S-S-G-A-P-P-P-S-am
 
 # Maleimide conjugation then DBCO loading on Cys — two sequential reactions,
 # each step's R-group refers to the preceding fragment, not to Cys directly
@@ -127,19 +127,35 @@ seq = Sequence('!1-C[.Mal(4,1)]-A-G-K-!1')
 
 ### 4 — Sidechain branch `mainchain%%branch`
 
-For branched architectures (fatty acid lipidation, branched polymers, PEG decoration), the `%%` separator splits the string into a main chain and a pendant chain. The crosslink bond ID ties them together.
+The `%%` separator splits the string into a main chain and a pendant chain that reads N→C through backbone R-groups (R1→R2 at each `-`). It is the right tool when the branch itself is a simple linear chain attaching at its **backbone N-terminus** to the main chain sidechain.
 
 ```python
-# Lys ε-amine (R4) → fatty acid chain endpoint (R2)
-seq = Sequence('ac-K.!1(4,2)-G-am%C20FA-gGlu-AEEA-!1')
+# Simple PEG branch: Lys ε-amine (R4) → PEG chain N-terminus (R1)
+seq = Sequence('ac-K.!1(4,1)-G-am%!1-PEG-am')
 ```
 
-Reading this: the main chain is `ac-K.!1(4,2)-G-am`; the branch is `C20FA-gGlu-AEEA-!1`. Bond `!1` connects Lys R4 to the branch terminus R2.
+**Important:** because the branch reads purely N→C, any residue in the branch uses its backbone R-groups for the chain connections. If you need to route through a **sidechain R-group** of a branch residue (e.g. gGlu's γ-COOH is R4, not R1/R2), use the bracket notation instead — `%%` cannot express that.
 
-Full Retatrutide (GIP/GLP-1/glucagon triple agonist, 39 residues with C20 lipidation):
+For the semaglutide/retatrutide-type isopeptide linker, the connectivity is:
+
+```
+Lys_R4 → gGlu_R4 (γ-COOH, isopeptide) → gGlu_R1 → AEEA → C20FA
+```
+
+The γ-COOH of gGlu is R4 (sidechain), so the 3-step bracket is needed:
 
 ```python
-seq = Sequence('Y-Aib-Q-G-T-F-T-S-D-Y-S-I-aMeLeu-L-D-K.!1(4,2)-A-Q-Aib-A-F-I-E-Y-L-L-E-G-G-P-S-S-G-A-P-P-P-S-am%C20FA-gGlu-AEEA-!1')
+# Correct: 3-step bracket routes via gGlu γ-COOH (R4)
+seq = Sequence('ac-K[.gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-am')
+
+# Wrong: branch notation reads gGlu backbone-to-backbone, γ-COOH never used
+# seq = Sequence('ac-K.!1(4,2)-G-am%C20FA-gGlu-AEEA-!1')  # different molecule
+```
+
+Full Retatrutide (GIP/GLP-1/glucagon triple agonist, 39 residues with C20 isopeptide lipidation):
+
+```python
+seq = Sequence('Y-Aib-Q-G-T-F-T-S-D-Y-S-I-aMeLeu-L-D-K[.gGlu(4,4).AEEA(1,2).C20FA(1,2)]-A-Q-Aib-A-F-I-E-Y-L-L-E-G-G-P-S-S-G-A-P-P-P-S-am')
 ```
 
 ---
@@ -225,12 +241,11 @@ Sequence('ac-pTyr-am')          # phosphotyrosine
 
 ### Fatty acid lipidation (GLP-1 agonists)
 
-The branch notation naturally represents the lipidation architecture used in semaglutide, tirzepatide, and related drugs:
+Semaglutide/retatrutide-type lipidation routes through gGlu's γ-carboxyl (R4, sidechain), so the 3-step bracket is the correct notation — the `%%` branch notation would wire gGlu backbone-to-backbone and leave the γ-COOH unused:
 
 ```python
-# Lys lipidation via gamma-glutamic acid linker and mini-PEG
-seq = Sequence('ac-K.!1(4,2)-G-am%C20FA-gGlu-AEEA-!1')
-#                      ^bond on Lys R4→branch R2       ^branch endpoint
+# Lys ε-amine → gGlu γ-COOH (isopeptide) → gGlu α-amine → AEEA → C20FA
+seq = Sequence('ac-K[.gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-am')
 ```
 
 ---
