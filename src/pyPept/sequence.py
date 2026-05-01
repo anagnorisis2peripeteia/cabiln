@@ -80,12 +80,12 @@ _INLINE_BOND_RE = re.compile(r'\.(!\w+)(?:\((\d+),(\d+)\))?')
 _INLINE_CAP_RE  = re.compile(r'\.([A-Za-z]\w*)\((\d+),(\d+)\)')
 
 # Detects old BILN bare-integer crosslink annotations: Token(bid,rg) not preceded by '.'.
-_OLD_BILN_RE = re.compile(r'(?<![.\w])([A-Za-z]\w*)\((\d+),(\d+)\)')
+_OLD_BILN_RE = re.compile(r'(?<![.\w\[])([A-Za-z]\w*)\((\d+),(\d+)\)')
 
-# Matches [...] sequential reaction bracket on a residue: [.Cap1(x,y).Cap2(z,w)...]
-# Each entry uses .Fragment(prev_r, cap_r) where prev_r is the preceding fragment's
-# R-group and cap_r is the new fragment's R-group.  Processed left-to-right.
-_BRACKET_RE = re.compile(r'\[([^\]]*)\]')
+# Matches .[...] sequential reaction bracket on a residue: .[Cap1(x,y).Cap2(z,w)...]
+# The dot sits outside the bracket (consistent with inline .Cap(r,r) notation).
+# Each entry inside uses Fragment(prev_r, cap_r); entries separated by '.'.
+_BRACKET_RE = re.compile(r'\.\[([^\]]*)\]')
 
 
 def biln_to_cabiln(biln):
@@ -261,7 +261,7 @@ def _expand_inline_caps(biln, peptide_branch_threshold=2):
     _bracket_ctx = [None]
 
     def _sub_bracket(m):
-        content = m.group(1)
+        content = '.' + m.group(1)  # dot lives outside bracket in notation; restore for parsing
         steps = list(_INLINE_CAP_RE.finditer(content))
         if not steps:
             raise ValueError(

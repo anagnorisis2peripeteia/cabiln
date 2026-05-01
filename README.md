@@ -18,11 +18,11 @@ The result is that complex peptides that previously required separate files or h
 ```
 # GLP-1 agonist — 39-residue backbone, C20 isopeptide lipidation on Lys
 # bracket reads synthesis order: K → gGlu(γ-COOH isopeptide) → AEEA → C20FA
-Y-Aib-Q-G-T-F-T-S-D-Y-S-I-aMeLeu-L-D-K[.gGlu(4,4).AEEA(1,2).C20FA(1,2)]-A-Q-Aib-A-F-I-E-Y-L-L-E-G-G-P-S-S-G-A-P-P-P-S-am
+Y-Aib-Q-G-T-F-T-S-D-Y-S-I-aMeLeu-L-D-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-A-Q-Aib-A-F-I-E-Y-L-L-E-G-G-P-S-S-G-A-P-P-P-S-am
 
 # Maleimide conjugation then DBCO loading on Cys — two sequential reactions,
 # each step's R-group refers to the preceding fragment, not to Cys directly
-G-C[.Mal(4,1).DBCO(2,1)]-A-G-AzK-G
+G-C.[Mal(4,1).DBCO(2,1)]-A-G-AzK-G
 
 # Cyclic peptide with a disulfide bridge — head-to-tail (!1) + sidechain crosslink (!2)
 # Second endpoint is just .!2 — R-groups are declared once on the first endpoint
@@ -86,12 +86,12 @@ seq = Sequence('ac-A-S5.!1(4,4)-A-A-A-A-A-R8.!1-G-am')
 
 The `.!n(r1,r2)` suffix on the **first** endpoint names both R-groups of the bond; the second endpoint carries just `.!n` (the R-group is already determined). This avoids the ambiguity of old BILN `C(1,3)` notation where you couldn't tell which number was the bond ID and which was the R-group.
 
-### 3 — Sequential bioconjugation bracket `Res[.A(r,s).B(t,u)…]`
+### 3 — Sequential bioconjugation bracket `Res.[A(r,s).B(t,u)…]`
 
 The bracket notation chains modifications onto one residue in order. **Each step's R-group refers to the fragment immediately before it**, not to the original residue — so the string reads in the same order as the synthesis steps. Each bracket is independent, they can be mixed freely with crosslinks and branch notation, and multiple brackets can appear on the same peptide.
 
 ```
-Host[.CapA(host_r, capA_r).CapB(capA_r, capB_r).CapC(capB_r, capC_r)]
+Host.[CapA(host_r, capA_r).CapB(capA_r, capB_r).CapC(capB_r, capC_r)]
 ```
 
 **Two-step** — maleimide thiol-Michael then DBCO loading:
@@ -99,7 +99,7 @@ Host[.CapA(host_r, capA_r).CapB(capA_r, capB_r).CapC(capB_r, capC_r)]
 ```python
 # Step 1: Mal R1 occupies Cys R4 (thiol → thioether), Mal R2 is now exposed
 # Step 2: DBCO R1 occupies Mal R2 — DBCO goes onto the maleimide, not onto Cys
-seq = Sequence('G-C[.Mal(4,1).DBCO(2,1)]-A')
+seq = Sequence('G-C.[Mal(4,1).DBCO(2,1)]-A')
 ```
 
 **Three-step** — fatty acid lipidation (semaglutide/retatrutide-type isopeptide linker):
@@ -108,7 +108,7 @@ seq = Sequence('G-C[.Mal(4,1).DBCO(2,1)]-A')
 # Step 1: gGlu R4 (γ-COOH) bonds to Lys R4 (ε-amine) — isopeptide
 # Step 2: AEEA R2 bonds to gGlu R1 (α-amine) — amide
 # Step 3: C20FA R2 bonds to AEEA R1 (amine) — amide to fatty diacid
-seq = Sequence('ac-K[.gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-am')
+seq = Sequence('ac-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-am')
 ```
 
 Reading the bracket left to right matches synthesis order from Lys outward: K → gGlu (isopeptide) → AEEA → C20FA.
@@ -116,15 +116,15 @@ Reading the bracket left to right matches synthesis order from Lys outward: K �
 **Brackets compose freely with everything else:**
 
 ```python
-# Single-step bracket is valid but redundant — C[.Mal(4,1)] == C.Mal(4,1)
+# Single-step bracket is valid but redundant — C.[Mal(4,1)] == C.Mal(4,1)
 # Brackets only add value when chaining 2+ sequential steps
-seq = Sequence('!1-C[.Mal(4,1)]-A-G-K-!1')
+seq = Sequence('!1-C.[Mal(4,1)]-A-G-K-!1')
 
 # Multiple protecting groups — inline notation is cleaner for single steps
 seq = Sequence('fmoc-C.trt(4,1)-G-K.boc(4,1)-am')
 
 # Bracket lipidation + disulfide staple on the same peptide
-seq = Sequence('ac-C.!1(4,4)-A-K[.gGlu(4,4).AEEA(1,2).C20FA(1,2)]-A-C.!1-am')
+seq = Sequence('ac-C.!1(4,4)-A-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-A-C.!1-am')
 ```
 
 ### 4 — Sidechain branch `mainchain%%branch`
@@ -140,7 +140,7 @@ Branch and bracket are interchangeable when the pendant chain attaches via a **b
 
 ```python
 # Bracket: reads K → gGlu → AEEA → C20FA (synthesis order)
-seq = Sequence('ac-K[.gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-am')
+seq = Sequence('ac-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-am')
 
 # Branch: same molecule, string reads C20FA → AEEA → gGlu (reversed)
 seq = Sequence('ac-K.!1(4,4)-G-am%C20FA-AEEA-gGlu.!1')
@@ -149,7 +149,7 @@ seq = Sequence('ac-K.!1(4,4)-G-am%C20FA-AEEA-gGlu.!1')
 Full Retatrutide (GIP/GLP-1/glucagon triple agonist, 39 residues):
 
 ```python
-seq = Sequence('Y-Aib-Q-G-T-F-T-S-D-Y-S-I-aMeLeu-L-D-K[.gGlu(4,4).AEEA(1,2).C20FA(1,2)]-A-Q-Aib-A-F-I-E-Y-L-L-E-G-G-P-S-S-G-A-P-P-P-S-am')
+seq = Sequence('Y-Aib-Q-G-T-F-T-S-D-Y-S-I-aMeLeu-L-D-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-A-Q-Aib-A-F-I-E-Y-L-L-E-G-G-P-S-S-G-A-P-P-P-S-am')
 ```
 
 ---
@@ -160,7 +160,7 @@ The four extensions compose freely. Any crosslink, bracket, and branch can appea
 
 ```python
 # Disulfide staple + 3-step lipidation on the same peptide
-Sequence('ac-C.!1(4,4)-A-K[.gGlu(4,4).AEEA(1,2).C20FA(1,2)]-A-C.!1-am')
+Sequence('ac-C.!1(4,4)-A-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-A-C.!1-am')
 #              ^---disulfide crosslink---^  ^---isopeptide lipid linker---^
 
 # Full Fmoc-SPPS protection: Pbf on Arg, Boc on Lys, disulfide between two Cys
@@ -168,11 +168,11 @@ Sequence('fmoc-R.pbf(4,1)-A-C.!1(4,4)-K.boc(4,1)-A-C.!1-am')
 #               ^Arg guard  ^-disulfide-^  ^Lys guard  ^2nd Cys
 
 # Hydrocarbon staple (RCM, i,i+4) plus isopeptide lipidation on the same helix
-Sequence('ac-S5.!1(4,4)-A-A-K[.gGlu(4,4).AEEA(1,2).C20FA(1,2)]-A-S5.!1-am')
+Sequence('ac-S5.!1(4,4)-A-A-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-A-S5.!1-am')
 #              ^-------RCM staple-------^  ^--------lipid linker--------^
 
 # Cyclic peptide with lipidation inside the ring
-Sequence('!1-A-K[.gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-A-!1')
+Sequence('!1-A-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-A-!1')
 #          ^head-to-tail cycle^  ^lipidation bracket^
 ```
 
@@ -218,7 +218,7 @@ Sequence('G-AzK-G')
 
 # Two-step: maleimide thiol-Michael then DBCO loading; azide-Lys in the same chain
 # DBCO attaches to Mal R2, not to Cys — bracket notation makes the order explicit
-Sequence('G-C[.Mal(4,1).DBCO(2,1)]-A-G-AzK-G')
+Sequence('G-C.[Mal(4,1).DBCO(2,1)]-A-G-AzK-G')
 ```
 
 IEDDA (tetrazine ligation — tetrazine + TCO):
@@ -265,7 +265,7 @@ Semaglutide/retatrutide-type lipidation routes through gGlu's γ-carboxyl (R4). 
 
 ```python
 # Bracket — reads K → gGlu (isopeptide) → AEEA → C20FA
-seq = Sequence('ac-K[.gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-am')
+seq = Sequence('ac-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-am')
 
 # Branch — same molecule, string reversed: C20FA → AEEA → gGlu ← K
 seq = Sequence('ac-K.!1(4,4)-G-am%C20FA-AEEA-gGlu.!1')
@@ -396,7 +396,7 @@ Sequence('ac-C.!1(4,4)-C.!2(4,4)-A-G-A-C.!2-C.!1-am')
 Sequence('!1-C.!2(4,4)-A-G-A-C.!2-!1')
 
 # 5. Disulfide + isopeptide lipidation on same peptide
-Sequence('ac-C.!1(4,4)-A-K[.gGlu(4,4).AEEA(1,2).C20FA(1,2)]-A-C.!1-am')
+Sequence('ac-C.!1(4,4)-A-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-A-C.!1-am')
 ```
 
 </details>
@@ -458,7 +458,7 @@ Sequence('!1-C.!2(4,4)-A-G-ClAcAla.!2-!1')
 Sequence('ac-C.!1(4,4)-A-ClAcAla.!1-G-C.!2(4,4)-A-ClAcAla.!2-am')
 
 # 5. Thioether + lipidation
-Sequence('ac-C.!1(4,4)-A-K[.gGlu(4,4).AEEA(1,2).C20FA(1,2)]-A-ClAcAla.!1-am')
+Sequence('ac-C.!1(4,4)-A-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-A-ClAcAla.!1-am')
 ```
 
 </details>
@@ -520,7 +520,7 @@ Sequence('ac-K.!1(4,4)-A-K.!2(4,4)-G-GlyNHS.!1-A-GlyNHS.!2-am')
 Sequence('!1-K.!2(4,4)-A-G-GlyNHS.!2-!1')
 
 # 5. NHS amide + lipidation on same peptide
-Sequence('ac-K.!1(4,4)-A-GlyNHS.!1-K[.gGlu(4,4).AEEA(1,2).C20FA(1,2)]-am')
+Sequence('ac-K.!1(4,4)-A-GlyNHS.!1-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-am')
 ```
 
 </details>
@@ -613,7 +613,7 @@ Sequence('ac-A-Pra.!1(4,4)-G-AzAla.!1-A-am')
 Sequence('ac-Pra.!1(4,4)-A-Pra.!2(4,4)-A-AzK.!1-G-AzAla.!2-am')
 
 # 5. CuAAC + isopeptide lipidation
-Sequence('ac-Pra.!1(4,4)-A-K[.gGlu(4,4).AEEA(1,2).C20FA(1,2)]-A-AzK.!1-am')
+Sequence('ac-Pra.!1(4,4)-A-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-A-AzK.!1-am')
 ```
 
 </details>
@@ -722,7 +722,7 @@ Sequence('ac-A-S5.!1(4,4)-A-A-A-A-A-R8.!1-G-am')
 Sequence('ac-S5.!1(4,4)-A-A-A-S5.!1-am')
 
 # 4. Hydrocarbon staple + isopeptide lipidation — stapled GLP-1 analogue motif
-Sequence('ac-S5.!1(4,4)-A-A-K[.gGlu(4,4).AEEA(1,2).C20FA(1,2)]-A-S5.!1-am')
+Sequence('ac-S5.!1(4,4)-A-A-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-A-S5.!1-am')
 
 # 5. Staple + disulfide — orthogonal RCM and thiol crosslinks
 Sequence('ac-C.!1(4,4)-A-S5.!2(4,4)-A-A-A-S5.!2-A-C.!1-am')
@@ -897,7 +897,7 @@ seq = Sequence(cabiln)   # C.!1(3,3)-A-A-A-C.!1
 | Linear BILN `A-G-K` | Works | Unchanged from upstream |
 | Capped BILN `fmoc-A-G-K-am` | Works | Unchanged |
 | CABILN crosslinks `.!n(r,s)` | Works | New in this fork |
-| CABILN brackets `[.A(r,s).B(t,u)]` | Works | New in this fork |
+| CABILN brackets `.[A(r,s).B(t,u)]` | Works | New in this fork |
 | CABILN branches `%%` | Works | New in this fork |
 | Old BILN crosslinks `C(1,3)` | Requires `fmt='biln'` | Raises `ValueError` otherwise; auto-converts when declared |
 | FASTA `ACDEFGHIKLMNPQRSTVWY` | Works | Via `run_pyPept --fasta` |

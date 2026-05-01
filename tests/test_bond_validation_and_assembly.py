@@ -1346,7 +1346,7 @@ class TestRoundTrips:
             b = Converter(helm='PEPTIDE1{C.A.A.A.C}$PEPTIDE1,PEPTIDE1,1:R3-5:R3$$$V2.0')
             biln = b.get_biln()
         # Must not contain bare integer crosslink notation
-        assert not re.search(r'(?<![.\w])[A-Za-z]\w*\(\d+,\d+\)', biln), \
+        assert not re.search(r'(?<!.[\w])[A-Za-z]\w*\(\d+,\d+\)', biln), \
             f"Old BILN notation present in: {biln}"
         assert '.!1' in biln
 
@@ -2206,13 +2206,13 @@ class TestSequenceValidate:
 
 
 # ---------------------------------------------------------------------------
-# 11. Sequential reaction bracket notation — [.A(r,s).B(t,u)...]
+# 11. Sequential reaction bracket notation — .[A(r,s).B(t,u)...]
 # ---------------------------------------------------------------------------
 
 class TestBracketNotation:
-    """Tests for [...] sequential reaction bracket syntax in CABILN.
+    """Tests for .[..] sequential reaction bracket syntax in CABILN.
 
-    Inside [...], each .Frag(x,y) attaches to the preceding fragment:
+    Inside .[..], each .Frag(x,y) attaches to the preceding fragment:
       - first entry: host.Rx -> Frag.Ry
       - subsequent entries: prev_frag.Rx -> Frag.Ry
     Auto bond IDs are assigned left-to-right starting from 100.
@@ -2221,14 +2221,14 @@ class TestBracketNotation:
     # --- _expand_inline_caps unit tests ---
 
     def test_single_step_bracket_equals_inline_cap(self):
-        """Single-step bracket [.boc(4,1)] expands identically to .boc(4,1)."""
-        result_bracket, _ = _expand_inline_caps('K[.boc(4,1)]-am')
+        """Single-step bracket .[boc(4,1)] expands identically to .boc(4,1)."""
+        result_bracket, _ = _expand_inline_caps('K.[boc(4,1)]-am')
         result_inline,  _ = _expand_inline_caps('K.boc(4,1)-am')
         assert result_bracket == result_inline
 
     def test_two_step_bracket_host_annotation(self):
         """Host residue receives only the first bond annotation from a two-step bracket."""
-        result, _ = _expand_inline_caps('G[.A(3,1).am(2,1)]')
+        result, _ = _expand_inline_caps('G.[A(3,1).am(2,1)]')
         # G gets the first auto bond ID at its R3
         assert '(100,3)' in result
         # Second bond ID must NOT appear on G
@@ -2236,18 +2236,18 @@ class TestBracketNotation:
 
     def test_two_step_bracket_intermediate_fragment(self):
         """Intermediate fragment receives both incoming and outgoing bond annotations."""
-        result, _ = _expand_inline_caps('G[.A(3,1).am(2,1)]')
+        result, _ = _expand_inline_caps('G.[A(3,1).am(2,1)]')
         # A is intermediate: attached at R1 by bond 100, passes on at R2 by bond 101
         assert 'A(100,1)(101,2)' in result
 
     def test_two_step_bracket_terminal_fragment(self):
         """Terminal fragment in a two-step bracket receives only its incoming bond."""
-        result, _ = _expand_inline_caps('G[.A(3,1).am(2,1)]')
+        result, _ = _expand_inline_caps('G.[A(3,1).am(2,1)]')
         assert 'am(101,1)' in result
 
     def test_three_step_bracket_full_chain(self):
         """Three-step bracket produces correct annotations on all three fragments."""
-        result, _ = _expand_inline_caps('G[.A(3,1).G(2,1).am(2,1)]')
+        result, _ = _expand_inline_caps('G.[A(3,1).G(2,1).am(2,1)]')
         assert '(100,3)' in result      # G host → bond 100 at R3
         assert 'A(100,1)(101,2)' in result   # first intermediate
         assert 'G(101,1)(102,2)' in result   # second intermediate
@@ -2256,7 +2256,7 @@ class TestBracketNotation:
     def test_multiple_brackets_get_distinct_bond_ids(self):
         """Two brackets on different residues get non-overlapping auto bond IDs."""
         import re as _re
-        result, _ = _expand_inline_caps('C[.trt(4,1)]-G-K[.boc(4,1)]-am')
+        result, _ = _expand_inline_caps('C.[trt(4,1)]-G-K.[boc(4,1)]-am')
         ids = [int(i) for i in _re.findall(r'\((\d+),\d+\)', result)
                if int(i) >= 100]
         # Each single-step bracket uses one bond ID; each ID appears exactly twice
@@ -2268,8 +2268,8 @@ class TestBracketNotation:
             assert ids.count(bid) == 2, f"Bond ID {bid} should appear twice: {ids}"
 
     def test_bracket_and_crosslink_coexist(self):
-        """A residue can carry both a [...] bracket and a .!1 crosslink marker."""
-        result, brg = _expand_inline_caps('C[.trt(4,1)].!1(4,4)-G-C.!1')
+        """A residue can carry both a .[..] bracket and a .!1 crosslink marker."""
+        result, brg = _expand_inline_caps('C.[trt(4,1)].!1(4,4)-G-C.!1')
         # bracket annotation present
         assert '(100,4)' in result
         assert 'trt(100,1)' in result
@@ -2279,7 +2279,7 @@ class TestBracketNotation:
 
     def test_bracket_preserves_other_inline_caps(self):
         """A bracket on one residue does not affect inline caps on other residues."""
-        result, _ = _expand_inline_caps('K[.boc(4,1)]-G.ac(2,1)-am')
+        result, _ = _expand_inline_caps('K.[boc(4,1)]-G.ac(2,1)-am')
         # boc bracket: ID 100 on K.R4, boc attached at R1
         assert '(100,4)' in result
         assert 'boc(100,1)' in result
@@ -2289,50 +2289,50 @@ class TestBracketNotation:
 
     def test_bracket_in_percent_separated_segment(self):
         """Bracket notation works in a %-separated branch segment."""
-        result, _ = _expand_inline_caps('K.!1(4,2)-am%G[.boc(3,1)]-G.!1')
+        result, _ = _expand_inline_caps('K.!1(4,2)-am%G.[boc(3,1)]-G.!1')
         assert 'boc(' in result
         assert '(!1,4)' in result
 
     # --- Error cases ---
 
     def test_empty_bracket_raises(self):
-        """Empty [] raises ValueError."""
+        """Empty .[] raises ValueError."""
         with pytest.raises(ValueError, match='no valid'):
-            _expand_inline_caps('C[]')
+            _expand_inline_caps('C.[]')
 
     def test_bracket_with_crosslink_marker_raises(self):
-        """[.!1(4,4)] raises because !1 is not a letter-starting cap token."""
+        """.[!1(4,4)] raises because !1 is not a letter-starting cap token."""
         with pytest.raises(ValueError, match='no valid'):
-            _expand_inline_caps('C[.!1(4,4)]-G-C.!1(4,4)-am')
+            _expand_inline_caps('C.[!1(4,4)]-G-C.!1(4,4)-am')
 
     def test_bracket_with_trailing_garbage_raises(self):
-        """[.trt(4,1)xyz] raises because 'xyz' is not a valid entry."""
+        """.[trt(4,1)xyz] raises because 'xyz' is not a valid entry."""
         with pytest.raises(ValueError, match='unrecognised'):
-            _expand_inline_caps('C[.trt(4,1)xyz]-am')
+            _expand_inline_caps('C.[trt(4,1)xyz]-am')
 
     def test_bracket_missing_parens_raises(self):
-        """[.trt] (no r-group numbers) raises because .trt has no (x,y)."""
+        """.[trt] (no r-group numbers) raises because .trt has no (x,y)."""
         with pytest.raises(ValueError, match='no valid'):
-            _expand_inline_caps('C[.trt]-am')
+            _expand_inline_caps('C.[trt]-am')
 
     # --- Backbone peptide branch guard ---
 
     def test_backbone_r2_r1_pattern_warns_when_two_steps(self):
         """Two or more R2->R1 steps in a bracket emit UserWarning (peptide branch)."""
         with pytest.warns(UserWarning, match='R2->R1|backbone amide|peptide branch'):
-            _expand_inline_caps('K[.G(4,1).A(2,1).am(2,1)]')
+            _expand_inline_caps('K.[G(4,1).A(2,1).am(2,1)]')
 
     def test_single_r2_r1_step_no_warn(self):
         """A single R2->R1 step (e.g. Mal->DBCO style) does NOT warn — ambiguous."""
         with warnings.catch_warnings():
             warnings.simplefilter('error')
-            _expand_inline_caps('C[.Mal(4,1).DBCO(2,1)]')
+            _expand_inline_caps('C.[Mal(4,1).DBCO(2,1)]')
 
     def test_backbone_pattern_expansion_still_works(self):
         """Warning does not prevent expansion — structure still returned correctly."""
         with warnings.catch_warnings():
             warnings.simplefilter('always')
-            result, _ = _expand_inline_caps('K[.G(4,1).A(2,1).am(2,1)]')
+            result, _ = _expand_inline_caps('K.[G(4,1).A(2,1).am(2,1)]')
         assert 'G(100,1)(101,2)' in result
         assert 'A(101,1)(102,2)' in result
         assert 'am(102,1)' in result
@@ -2341,25 +2341,25 @@ class TestBracketNotation:
         """R4->R1 (sidechain->cap) inside bracket does NOT warn."""
         with warnings.catch_warnings():
             warnings.simplefilter('error')
-            _expand_inline_caps('K[.boc(4,1)]')
+            _expand_inline_caps('K.[boc(4,1)]')
 
     # --- colorize_cabiln ---
 
     def test_colorize_single_bracket_pair(self):
         """Single bracket pair gets ANSI colour codes on open and close."""
         import re as _re
-        coloured = colorize_cabiln('C[.trt(4,1)]')
+        coloured = colorize_cabiln('C.[trt(4,1)]')
         # At least one ANSI colour escape is injected
         assert _re.search(r'\033\[\d+m', coloured), "No ANSI escape found"
         # Reset code present after close bracket
         assert '\033[0m' in coloured
         # Original content still intact when escapes stripped
         plain = _re.sub(r'\033\[\d+m', '', coloured)
-        assert plain == 'C[.trt(4,1)]'
+        assert plain == 'C.[trt(4,1)]'
 
     def test_colorize_two_pairs_different_colours(self):
         """Two bracket pairs get different ANSI colour codes."""
-        coloured = colorize_cabiln('C[.trt(4,1)]-K[.boc(4,1)]')
+        coloured = colorize_cabiln('C.[trt(4,1)]-K.[boc(4,1)]')
         # Extract just the escape sequences before each [
         import re as _re
         escapes = _re.findall(r'\033\[\d+m(?=\[)', coloured)
@@ -2368,7 +2368,7 @@ class TestBracketNotation:
 
     def test_colorize_use_ansi_false_returns_plain(self):
         """use_ansi=False returns the string unchanged."""
-        s = 'C[.trt(4,1)]-K[.boc(4,1)]'
+        s = 'C.[trt(4,1)]-K.[boc(4,1)]'
         assert colorize_cabiln(s, use_ansi=False) == s
 
     def test_colorize_no_brackets_returns_unchanged(self):
@@ -2379,10 +2379,10 @@ class TestBracketNotation:
     # --- End-to-end assembly tests ---
 
     def test_bracket_single_step_assembly_matches_inline(self):
-        """fmoc-C[.trt(4,1)]-am assembles to the same molecule as fmoc-C.trt(4,1)-am."""
+        """fmoc-C.[trt(4,1)]-am assembles to the same molecule as fmoc-C.trt(4,1)-am."""
         with warnings.catch_warnings():
             warnings.simplefilter('always')
-            mol_bracket = _romol('fmoc-C[.trt(4,1)]-am')
+            mol_bracket = _romol('fmoc-C.[trt(4,1)]-am')
             mol_inline  = _romol('fmoc-C.trt(4,1)-am')
         from rdkit import Chem
         smi_bracket = Chem.MolToSmiles(mol_bracket)
@@ -2393,7 +2393,7 @@ class TestBracketNotation:
         """Sequence.validate() returns ok=True for a single-step bracket sequence."""
         with warnings.catch_warnings():
             warnings.simplefilter('always')
-            report = Sequence.validate('fmoc-C[.trt(4,1)]-am')
+            report = Sequence.validate('fmoc-C.[trt(4,1)]-am')
         assert report.ok is True
 
 
