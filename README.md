@@ -1,49 +1,274 @@
 # pyPept — CABILN Fork
 
-**Chemistry Aware BILN (CABILN) extensions to pyPept**
+**Chemistry Aware BILN (CABILN) — a single-string notation for any peptide you can make in a lab**
 
-> This is a development fork of [pyPept](https://github.com/Boehringer-Ingelheim/pyPept) by Boehringer Ingelheim.
-> Original publication: [pyPept: a python library to generate atomistic 2D and 3D representations of peptides](https://jcheminf.biomedcentral.com/articles/10.1186/s13321-023-00748-2), *Journal of Cheminformatics*, 2023, 15:79.
-> Original authors: Rodrigo Ochoa, J.B. Brown, Thomas Fox.
+> Development fork of [pyPept](https://github.com/Boehringer-Ingelheim/pyPept) by Boehringer Ingelheim.  
+> Original publication: [pyPept: a python library to generate atomistic 2D and 3D representations of peptides](https://jcheminf.biomedcentral.com/articles/10.1186/s13321-023-00748-2), *J. Cheminformatics*, 2023.  
+> Original authors: Rodrigo Ochoa, J.B. Brown, Thomas Fox.  
 > Fork extensions: Cameron Beeley, 2026.
 
 ---
 
-## What this fork adds
+## Why CABILN?
 
-**CABILN** (Chemistry Aware BILN) is a superset of BILN that makes modified and cyclic peptide notation more expressive:
+Plain BILN handles linear peptides well. The moment you add a disulfide, a staple, a fatty acid branch, or a click-chemistry conjugate, the notation collapses — you end up with separate files, hand-crafted CHUCKLES fragments, or nothing at all.
 
-| Feature | Syntax | Example |
-|---------|--------|---------|
-| Inline cap / modification | `.Cap(host_r,cap_r)` | `fmoc-C.trt(4,1)-am` |
-| Terminal cyclisation | `!n-...-!n` | `!1-A-A-A-A-!1` |
-| Sequential bioconjugation bracket | `Res[.A(r,s).B(t,u)]` | `C[.Mal(4,1).DBCO(2,1)]` |
-| Sidechain branch | `chain%%branch` | `K.!n(3,1)%%!n-PEG-am` |
+CABILN extends BILN so that **any peptide you can synthesise has one unambiguous string**:
 
-In addition, a new SMARTS-driven monomer pre-activation pipeline replaces the manual CHUCKLES authoring workflow, and a CLI tool allows novel monomers to be registered directly from SMILES or CABILN.
+```
+# GLP-1 agonist with C20 fatty acid lipidation on Lys sidechain
+Y-Aib-Q-G-T-F-T-S-D-Y-S-I-aMeLeu-L-D-K.!1(4,2)-A-Q-Aib-A-F-I-E-Y-L-L-E-G-G-P-S-S-G-A-P-P-P-S-am%C20FA-gGlu-AEEA-!1
+
+# Cyclic disulfide-bridged peptide
+!1-C.!2(4,4)-A-G-K-A-C.!2(4,4)-!1
+
+# Hydrocarbon-stapled helix (RCM, i,i+7)
+ac-A-S5.!1(4,4)-A-A-A-A-A-R8.!1(4,4)-G-am
+
+# SPAAC bioconjugate: cyclooctyne on Cys, azide-lysine handle
+G-C[.DBCO(4,1)]-A-G-AzK-G
+
+# Three-level protecting group sequence (full Fmoc-SPPS representation)
+fmoc-C.trt(4,1)-K.boc(4,1)-R.pbf(4,1)-am
+```
+
+Every string above feeds directly into `Sequence(...)` and produces a valid RDKit molecule.
 
 ---
 
-## What still works from upstream pyPept
+## The four CABILN extensions
 
-| Input | Status | Notes |
-|-------|--------|-------|
-| Linear BILN (`A-G-K`) | ✓ Works | Unchanged |
-| Capped BILN (`fmoc-A-G-K-am`) | ✓ Works | Unchanged |
-| FASTA (`PEPTIDE` → `P-E-P-T-I-D-E`) | ✓ Works | Via `run_pyPept --fasta` |
-| HELM linear (`PEPTIDE1{...}$$$$V2.0`) | ✓ Works | Converter produces BILN |
-| Old BILN crosslinks (`C(1,3)-A-C(1,3)`) | ✗ Rejected | Use `.!n(y,z)` CABILN notation |
-| HELM crosslinks (`$PEPTIDE1,PEPTIDE1,...`) | ✗ Fails | Converter outputs old crosslink notation |
+### 1 — Inline sidechain modification `.Token(host_r, cap_r)`
+
+Attach a cap, protecting group, or small molecule to **any R-group of any residue**, inline, without a separate bond table.
+
+```
+Residue.Modifier(host_Rgroup, modifier_Rgroup)
+```
+
+| Sequence | What it means |
+|----------|---------------|
+| `fmoc-C.trt(4,1)-am` | Cys, thiol (R4) capped with trityl R1 |
+| `fmoc-K.boc(4,1)-am` | Lys, ε-amine (R4) capped with Boc R1 |
+| `fmoc-R.pbf(4,1)-am` | Arg, guanidinium (R4) capped with Pbf R1 |
+| `fmoc-C.acm(4,1)-am` | Cys, thiol (R4) with acetamidomethyl |
+| `ac-pSer-am` | Pre-formed phosphoserine (no inline notation needed) |
+
+Multiple residues capped in one string:
+
+```python
+seq = Sequence('fmoc-C.trt(4,1)-K.boc(4,1)-R.pbf(4,1)-am')
+```
+
+### 2 — Terminal cyclisation `!n-...-!n`
+
+Head-to-tail and backbone cyclisation uses marker tokens at both endpoints. The bond ID `n` is just a label — any integer or short string.
+
+```python
+# Head-to-tail cyclic tetrapeptide
+seq = Sequence('!1-A-G-K-A-!1')
+
+# Lactam staple: Lys ε-amine (R4) → Asp sidechain carboxyl (R3)
+seq = Sequence('ac-K.!1(4,3)-A-A-A-D.!1(3,4)-am')
+
+# Disulfide bridge
+seq = Sequence('ac-C.!1(4,4)-A-G-A-C.!1(4,4)-am')
+
+# Hydrocarbon staple (i, i+4): two olefinic residues, RCM closes the ring
+seq = Sequence('ac-A-S5.!1(4,4)-A-A-A-S5.!1(4,4)-G-am')
+
+# Hydrocarbon staple (i, i+7): mixed S5/R8 pair for longer helix
+seq = Sequence('ac-A-S5.!1(4,4)-A-A-A-A-A-R8.!1(4,4)-G-am')
+```
+
+The `.!n(r1,r2)` suffix on the **first** endpoint names both R-groups of the bond; the second endpoint carries just `.!n` (the R-group is already determined). This avoids the ambiguity of old BILN `C(1,3)` notation where you couldn't tell which number was the bond ID and which was the R-group.
+
+### 3 — Sequential bioconjugation bracket `Res[.A(r,s).B(t,u)…]`
+
+The bracket notation lets you chain modifications onto one residue in order. **Each cap's R-group refers to the fragment immediately before it**, not to the original residue. This mirrors how sequential conjugation actually works at the bench.
+
+```
+Host[.CapA(host_r, capA_r).CapB(capA_r, capB_r).CapC(capB_r, capC_r)]
+```
+
+**One-step** — equivalent to the inline dot notation:
+
+```python
+# Cys (R4=thiol) capped with trityl (R1)
+seq = Sequence('fmoc-C[.trt(4,1)]-am')
+# identical to:  fmoc-C.trt(4,1)-am
+```
+
+**Two-step** — maleimide conjugation then DBCO on Cys thiol:
+
+```python
+# Step 1: Mal occupies R4 of Cys (thiol → thioether), exposes R2
+# Step 2: DBCO occupies R2 of Mal, adds the strained cyclooctyne handle
+seq = Sequence('G-C[.Mal(4,1).DBCO(2,1)]-A')
+```
+
+Why two steps? Because DBCO is going onto the maleimide, not onto Cys directly. The bracket makes the reaction sequence explicit and unambiguous.
+
+**Three-step** — isopeptide branch capped with amide:
+
+```python
+# G backbone R3 → A at R1, A exposes R2 → G at R1, second G exposes R2 → am
+seq = Sequence('G[.A(3,1).G(2,1).am(2,1)]')
+```
+
+**Multiple independent brackets on one peptide:**
+
+```python
+# Auto-incrementing bond IDs: 100 for C/trt, 101 for K/boc
+seq = Sequence('fmoc-C[.trt(4,1)]-G-K[.boc(4,1)]-am')
+```
+
+Brackets compose with crosslinks:
+
+```python
+# Maleimide conjugation on Cys, then head-to-tail cyclisation
+seq = Sequence('!1-C[.Mal(4,1)]-A-G-K-!1')
+```
+
+### 4 — Sidechain branch `mainchain%%branch`
+
+For branched architectures (fatty acid lipidation, branched polymers, PEG decoration), the `%%` separator splits the string into a main chain and a pendant chain. The crosslink bond ID ties them together.
+
+```python
+# Lys ε-amine (R4) → fatty acid chain endpoint (R2)
+seq = Sequence('ac-K.!1(4,2)-G-am%C20FA-gGlu-AEEA-!1')
+```
+
+Reading this: the main chain is `ac-K.!1(4,2)-G-am`; the branch is `C20FA-gGlu-AEEA-!1`. Bond `!1` connects Lys R4 to the branch terminus R2.
+
+Full Retatrutide (GIP/GLP-1/glucagon triple agonist, 39 residues with C20 lipidation):
+
+```python
+seq = Sequence(
+    'Y-Aib-Q-G-T-F-T-S-D-Y-S-I-aMeLeu-L-D-K.!1(4,2)'
+    '-A-Q-Aib-A-F-I-E-Y-L-L-E-G-G-P-S-S-G-A-P-P-P-S-am'
+    '%C20FA-gGlu-AEEA-!1'
+)
+```
 
 ---
 
-## Installation
+## Chemistry types and bond validation
+
+CABILN knows what chemistry each R-group represents. When you write a bond, the library checks whether the reaction is chemically sensible and warns you if it isn't.
+
+### Protecting groups and caps
+
+Standard Fmoc-SPPS protection pattern — these all validate silently:
+
+```python
+Sequence('fmoc-C.trt(4,1)-K.boc(4,1)-R.pbf(4,1)-am')
+#         ^N-term  ^thiol    ^ε-amine   ^guanidinium ^C-term
+```
+
+### Crosslinks and macrolactams
+
+```python
+# Disulfide (thiol R4 ↔ thiol R4)
+Sequence('ac-C.!1(4,4)-A-G-A-C.!1(4,4)-am')
+
+# Lactam staple (ε-amine R4 ↔ sidechain carboxyl R3)
+Sequence('ac-K.!1(4,3)-A-A-A-D.!1(3,4)-am')
+
+# Aspartimide (backbone ↔ sidechain carboxyl — five-membered ring)
+Sequence('ac-A-D.!1(4,3)-G.!1-A-am')
+# Glutarimide variant (six-membered ring)
+Sequence('ac-A-E.!1(4,3)-G.!1-A-am')
+```
+
+### Bioconjugation handles
+
+SPAAC (copper-free click — cyclooctyne + azide):
+
+```python
+# Azide handle on Lys sidechain, ready for strain-promoted cycloaddition
+Sequence('G-AzK-G')
+
+# With DBCO already conjugated on Cys
+Sequence('G-C[.DBCO(4,1)]-A-G-AzK-G')
+```
+
+IEDDA (tetrazine ligation — tetrazine + TCO):
+
+```python
+# Tetrazine on Lys, trans-cyclooctene on adjacent Lys
+Sequence('ac-K.Tz(4,1)-A-A-K.TCO(4,1)-am')
+```
+
+Oxime ligation (aminooxy + aldehyde):
+
+```python
+# Pre-formed oxime linkage in a modified residue
+Sequence('ac-A-Aoa-G-Ald-A-am')
+```
+
+Depsipeptide (ester backbone):
+
+```python
+# O-linked ester in place of one amide
+Sequence('ac-A-Hser.!1(3,2)-G.!1-A-am')
+```
+
+Thioester:
+
+```python
+# S–C(=O) linkage — thiol R4 to carboxyl R2
+Sequence('ac-C.!1(4,2)-A-G-!1-am')
+```
+
+### Phosphopeptides
+
+Pre-formed phospho residues slot in like any other monomer — no special notation:
+
+```python
+Sequence('ac-pSer-am')          # phosphoserine
+Sequence('ac-A-pSer-A-am')      # phospho-tripeptide
+Sequence('ac-pTyr-am')          # phosphotyrosine
+```
+
+### Fatty acid lipidation (GLP-1 agonists)
+
+The branch notation naturally represents the lipidation architecture used in semaglutide, tirzepatide, and related drugs:
+
+```python
+# Lys lipidation via gamma-glutamic acid linker and mini-PEG
+seq = Sequence('ac-K.!1(4,2)-G-am%C20FA-gGlu-AEEA-!1')
+#                      ^bond on Lys R4→branch R2       ^branch endpoint
+```
+
+---
+
+## How the R-group system works
+
+Every monomer in the library has numbered R-groups (attachment points). The standard mapping for α-amino acids is:
+
+| R-group | Role |
+|---------|------|
+| R1 | Backbone N (incoming amide bond) |
+| R2 | Backbone C (outgoing amide bond / carboxyl) |
+| R3 | N-modification / backbone N cap |
+| R4+ | Sidechain (thiol, amine, carboxyl, …) |
+
+When you write `C.trt(4,1)`, you are saying: form a bond between **Cys R4** (the thiol) and **trt R1** (the attachment point of the trityl group). The library looks up both monomers, finds their chemical types, and validates that thiol–C is a sensible bond.
+
+The same `(host_r, cap_r)` pair controls all bond formation — caps, crosslinks, and bracket chains all use identical syntax.
+
+---
+
+## Getting started
+
+### Installation
 
 ```bash
 pip install git+https://github.com/anagnorisis2peripeteia/pyPept.git
 ```
 
-Or for development:
+Development install:
 
 ```bash
 git clone https://github.com/anagnorisis2peripeteia/pyPept.git
@@ -53,76 +278,35 @@ pip install -e ".[dev]"
 
 Requires Python ≥ 3.9, RDKit, and BioPython.
 
----
-
-## Quick start
-
-### Linear and capped peptides (BILN)
+### Build a molecule
 
 ```python
 from pyPept.sequence import Sequence
 from pyPept.molecule import Molecule
 from rdkit import Chem
 
-seq = Sequence('fmoc-A-G-K-am')
+seq = Sequence('ac-C.!1(4,4)-A-G-A-C.!1(4,4)-am')
 mol = Molecule(seq)
-print(Chem.MolToSmiles(mol.get_molecule(fmt='ROMol')))
+rdmol = mol.get_molecule(fmt='ROMol')
+print(Chem.MolToSmiles(rdmol))
 ```
 
-### Inline sidechain modification (CABILN)
-
-Attach a protecting group or cap to a sidechain R-group inline:
+### Validate before building
 
 ```python
-# Cys with trityl protection on the thiol (R4)
-seq = Sequence('fmoc-C.trt(4,1)-G-A-am')
-
-# Lys with Boc on the ε-amine (R4)
-seq = Sequence('fmoc-K.boc(4,1)-A-am')
-```
-
-### Head-to-tail cyclic peptides
-
-```python
-# Cyclic tetrapeptide — !1 marks the cyclisation endpoints
-seq = Sequence('!1-A-G-K-A-!1')
-```
-
-### Sequential bioconjugation bracket
-
-Attach multiple groups to a residue in sequence — each step's R-group refers to the preceding fragment:
-
-```python
-# Maleimide conjugation followed by DBCO on Cys
-seq = Sequence('G-C[.Mal(4,1).DBCO(2,1)]-A')
-```
-
-### Sidechain branch
-
-```python
-# PEG branch on Lys ε-amine
-seq = Sequence('A-K.!n(3,1)-G%%!n-PEG-am')
-```
-
-### FASTA input (CLI)
-
-```bash
-run_pyPept --fasta ACDEFGHIKLMNPQRSTVWY
-```
-
-### HELM input (linear only)
-
-```bash
-run_pyPept --helm 'PEPTIDE1{[ac].D.T.H.F.E.I.A.[am]}$$$$V2.0'
+report = Sequence.validate('ac-K.!1(4,3)-A-A-A-D.!1(3,4)-am')
+print(report.ok)        # True
+print(report.bonds)     # [(K, R4, D, R3)]
+print(report.warnings)  # any chemistry alerts
 ```
 
 ---
 
-## Monomer pipeline
+## Monomer pipeline — add any structure
 
-### Pre-activate a new monomer
+If a residue isn't in the library, register it from SMILES in one call. The pipeline auto-detects backbone N, backbone C, and all sidechain attachment points using a SMARTS graph-topology rule — no manual CHUCKLES authoring.
 
-Converts plain SMILES to a CHUCKLES fragment with auto-detected R-groups:
+### Pre-activate (inspect R-groups first)
 
 ```python
 from pyPept.interfaces.monomer_pipeline import pre_activate
@@ -133,48 +317,69 @@ print(result.leaving)     # {1: '[H]', 2: '[OH]', 3: '[H]', 4: '[H]'}
 print(result.chem_types)  # {1: 'backbone_n', 2: 'backbone_c', 3: 'backbone_n_mod', 4: 'thiol'}
 ```
 
-R1/R2 (backbone N and carboxyl C) are detected via a graph-topology rule that handles α-, β-, and γ-amino acids without hard-coded stereo assumptions. Sidechain slots (R3+) are assigned wherever chemistry permits.
+R1/R2 are assigned by graph topology (the unique path between the amino N and the carboxyl C), so the rule handles α-, β-, and γ-amino acids, N-methyl, and Aib-type residues without hard-coded stereo assumptions.
 
-### Register a new monomer via CLI
-
-```bash
-# From plain SMILES
-pyPept-monomer-add --smiles "N[C@@H](CCCCNC(=O)OC(C)(C)C)C(=O)O" \
-    --symbol Lys_Boc --name "Boc-Lysine"
-
-# From CABILN (assemble first, then onboard)
-pyPept-monomer-add --from-cabiln "K.boc(4,1)" --symbol Lys_Boc
-```
-
-The monomer is appended to `monomers.sdf` without overwriting existing entries.
-
-### Programmatic registration
+### Register to library
 
 ```python
 from pyPept.interfaces.cli_monomer import register_monomer
 
-result = register_monomer(
+register_monomer(
     smiles='N[C@@H](CCCCNC(=O)OC(C)(C)C)C(=O)O',
     symbol='Lys_Boc',
     name='Boc-Lysine',
 )
+# Appends to monomers.sdf — existing records untouched
+```
+
+### CLI registration
+
+```bash
+# From SMILES
+pyPept-monomer-add --smiles "N[C@@H](CS)C(=O)O" --symbol Cys_check
+
+# From an existing CABILN fragment (assembles first, then registers the product)
+pyPept-monomer-add --from-cabiln "K.boc(4,1)" --symbol Lys_Boc --name "Boc-lysine"
 ```
 
 ---
 
-## Crosslink notation (CABILN vs old BILN)
+## CABILN vs old BILN crosslink notation
 
-Old BILN used bare integer bond IDs: `C(1,3)-A-A-A-C(1,3)`. This is **rejected** in CABILN to avoid ambiguity with attachment point indices.
+Old BILN used bare integers: `C(1,3)-A-A-A-C(1,3)`. The `1` was the bond ID and the `3` was the R-group, but there was no delimiter — scanning left to right you couldn't tell which was which.
 
-Use `.!n(host_r,cap_r)` instead:
+CABILN separates the bond marker with `.!`:
+
+| Old BILN | CABILN equivalent |
+|----------|-------------------|
+| `C(1,3)-A-C(1,3)` | `C.!1(3,3)-A-C.!1` |
+| `K(2,4)-A-D(2,3)` | `K.!2(4,3)-A-D.!2` |
+
+Old BILN strings passed to `Sequence()` are **auto-converted** with a `DeprecationWarning`. Explicit conversion:
 
 ```python
-# Disulfide bridge between two Cys (R4 = thiol)
-seq = Sequence('C.!1(4,4)-A-A-A-C.!1(4,4)')
+from pyPept.sequence import biln_to_cabiln
 
-# Lactam staple: Lys ε-amine (R4) to Asp sidechain carboxyl (R3)
-seq = Sequence('K.!1(4,3)-A-A-A-D.!1(3,4)')
+old = 'C(1,3)-A-A-A-C(1,3)'
+new = biln_to_cabiln(old)
+print(new)  # C.!1(3,3)-A-A-A-C.!1
 ```
+
+---
+
+## Compatibility
+
+| Input | Status | Notes |
+|-------|--------|-------|
+| Linear BILN `A-G-K` | Works | Unchanged from upstream |
+| Capped BILN `fmoc-A-G-K-am` | Works | Unchanged |
+| CABILN crosslinks `.!n(r,s)` | Works | New in this fork |
+| CABILN brackets `[.A(r,s).B(t,u)]` | Works | New in this fork |
+| CABILN branches `%%` | Works | New in this fork |
+| Old BILN crosslinks `C(1,3)` | Auto-converts | DeprecationWarning emitted |
+| FASTA `ACDEFGHIKLMNPQRSTVWY` | Works | Via `run_pyPept --fasta` |
+| HELM linear `PEPTIDE1{...}$$$$V2.0` | Works | Converter produces CABILN |
+| HELM crosslinks `$PEPTIDE1,PEPTIDE1,…` | Works | Converter emits `.!n(r,s)` CABILN |
 
 ---
 
@@ -182,12 +387,12 @@ seq = Sequence('K.!1(4,3)-A-A-A-D.!1(3,4)')
 
 | Command | Description |
 |---------|-------------|
-| `run_pyPept --biln <seq>` | Generate 2D/3D structure from BILN/CABILN |
-| `run_pyPept --fasta <seq>` | Generate from FASTA single-letter codes |
-| `run_pyPept --helm <seq>` | Generate from HELM (linear only) |
-| `pyPept-BILN-validate --biln <seq>` | Validate a BILN/CABILN string |
+| `run_pyPept --biln <seq>` | 2D/3D structure from BILN or CABILN |
+| `run_pyPept --fasta <seq>` | Structure from FASTA single-letter codes |
+| `run_pyPept --helm <seq>` | Structure from HELM (linear or crosslinked) |
+| `pyPept-BILN-validate --biln <seq>` | Validate a CABILN string, list bonds |
 | `pyPept-monomer-add --smiles <smi> --symbol <tok>` | Register monomer from SMILES |
-| `pyPept-monomer-add --from-cabiln <seq> --symbol <tok>` | Register monomer from CABILN |
+| `pyPept-monomer-add --from-cabiln <seq> --symbol <tok>` | Register from CABILN fragment |
 
 ---
 
@@ -197,7 +402,7 @@ seq = Sequence('K.!1(4,3)-A-A-A-D.!1(3,4)')
 pytest tests/test_bond_validation_and_assembly.py -v
 ```
 
-260 tests covering bond validation, CABILN notation, monomer pipeline, and CLI.
+271 tests covering: bond validation, inline caps, bracket notation (1/2/3-step), crosslinks, RCM staples, SPAAC/IEDDA/oxime/hydrazone/depsipeptide/thioester chemistry, fatty acid branching, phosphopeptides, monomer pipeline, CLI, and HELM/BILN/FASTA round-trips.
 
 ---
 
