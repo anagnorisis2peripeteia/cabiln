@@ -34,24 +34,30 @@ class Converter:
     """
     Class to convert between BILN and HELM (and viceversa)
     """
-    def __init__(self, biln=None, helm=None):
-        """Construct a BILN or HELM molecule. They can be read from a file
+    def __init__(self, biln=None, helm=None, chuckles=None):
+        """Construct a BILN, HELM, or CHUCKLES molecule.
 
-        :param biln: The BILN format that will be converted to HELM
+        :param biln: BILN sequence string
         :type biln: str
-        :param helm: The HELM format that will be converted to BILN
+        :param helm: HELM sequence string
         :type helm: str
+        :param chuckles: CHUCKLES sequence string (dot-separated monomers,
+            pipe-separated chains, same cyclisation syntax as BILN)
+        :type chuckles: str
         """
 
         self.polymerinfo = {"chains": [], "bonds": []}
 
-        if biln is not None and helm is not None:
+        given = sum(x is not None for x in (biln, helm, chuckles))
+        if given > 1:
             raise ValueError(
-                "Converter cannot be initialized with both BILN and HELM.")
+                "Converter accepts only one of biln, helm, or chuckles.")
         elif biln is not None:
             self.eval_biln(biln=biln)
         elif helm is not None:
             self.eval_helm(helm=helm)
+        elif chuckles is not None:
+            self.eval_chuckles(chuckles=chuckles)
 
     ############################################################
     @staticmethod
@@ -304,6 +310,82 @@ class Converter:
         self.polymerinfo["bonds"] = bonds
 
     ############################################################
+    def eval_chuckles(self, chuckles):
+        """Generate internal PolymerInfo dictionary from a CHUCKLES sequence.
+
+        CHUCKLES format (Siani et al. JCICS 1994):
+          - monomers separated by '.' within a chain
+          - chains separated by '|'
+          - cyclisation bonds via same ``(bondID,RgroupNum)`` syntax as BILN
+
+        Example::
+
+            A.G.K                      # linear tripeptide
+            A.G.K(1,3).E(1,3)          # sidechain-cyclised
+            A.G.K|D.E                  # two chains
+
+        :param chuckles: CHUCKLES sequence string
+        :type chuckles: str
+        """
+        chains = chuckles.split('|')
+        bondinfo = {}
+        list_of_simple_polymers = []
+
+        for cidx, chain in enumerate(chains):
+            residues = chain.split('.')
+            polymer = []
+            for ridx, res in enumerate(residues):
+                match = re.findall(r"\((\d+),(\d+)\)", res)
+                resname = re.sub(r"\(.*\)", "", res)
+                if match:
+                    for m_val in match:
+                        bidx = m_val[0]
+                        gidx = int(m_val[1])
+                        try:
+                            bondinfo[bidx].append(cidx)
+                        except KeyError:
+                            bondinfo[bidx] = [cidx]
+                        bondinfo[bidx].append(ridx)
+                        bondinfo[bidx].append(gidx)
+                polymer.append(resname)
+            list_of_simple_polymers.append(polymer)
+
+        self.polymerinfo["chains"] = list_of_simple_polymers
+
+        list_of_connections = []
+        for key in bondinfo:
+            if len(bondinfo[key]) != 6:
+                warnings.warn(
+                    f'Error in CHUCKLES bond information: bond {key} not correct')
+                return None
+            c1_val, r1_val, g1_val, c2_val, r2_val, g2_val = bondinfo[key]
+            list_of_connections.append(
+                [c1_val, r1_val, g1_val, c2_val, r2_val, g2_val])
+
+        self.polymerinfo["bonds"] = list_of_connections
+
+    ############################################################
+    def __to_chuckles(self):
+        """Generate a CHUCKLES sequence string from polymerinfo.
+
+        :return: CHUCKLES string, or None if empty
+        :rtype: str or None
+        """
+        chains = copy.deepcopy(self.polymerinfo["chains"])
+        bonds = copy.deepcopy(self.polymerinfo["bonds"])
+
+        for ibond, bond in enumerate(bonds):
+            c1_value, res1, rgroup1, c2_value, res2, rgroup2 = bond
+            chains[c1_value][res1] = (
+                f"{chains[c1_value][res1]}({ibond + 1},{rgroup1})")
+            chains[c2_value][res2] = (
+                f"{chains[c2_value][res2]}({ibond + 1},{rgroup2})")
+
+        chain_strings = ['.'.join(chain) for chain in chains]
+        chuckles = '|'.join(chain_strings)
+        return chuckles if chuckles else None
+
+    ############################################################
     def eval_biln(self, biln):
         """Generate internal PolymerInfo dictionary from a BILN string.
 
@@ -378,10 +460,19 @@ class Converter:
     def get_biln(self):
         """Return a BILN string from the PolymerInfo generated at
         instantiation.
-        
+
         :return: str"""
         biln = self.__to_biln()
         return biln
+
+    ############################################################
+    def get_chuckles(self):
+        """Return a CHUCKLES sequence string from the PolymerInfo generated
+        at instantiation.
+
+        :return: str or None
+        """
+        return self.__to_chuckles()
 
     # End of Converter pipeline functions.
 

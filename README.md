@@ -6,6 +6,9 @@
 * Journal of Cheminformatics, 2023, 15:79
 * Authors: Rodrigo Ochoa, J.B Brown, Thomas Fox
 
+> **This fork** (v1.1.0 beta) extends pyPept with the **CABILN** (Chemistry Aware BILN) notation and a
+> SMARTS-driven monomer activation pipeline.  See the [CABILN Extensions](#cabiln-extensions) section below.
+
 ## Purpose
 
 pyPept is a package to allow the analysis of natural and modified peptides that are assembled based on personalized monomer dictionaries using the Boehringer Ingelheim line notation format (BILN). From a BILN, a peptide construct can then be represented as an RDKit object for further prediction of properties and usage in a variety of software packages that handle chemical structures. pyPept provides both programmatic APIs and CLI tools. 
@@ -176,6 +179,64 @@ Each of the functions included in the `BILNParser` object provides doctests that
 python implementation.py 
 src/pyPept/biln/parser/implementation.py : All 185 doctests passed.
 ```
+
+---
+
+## CABILN Extensions
+
+**CABILN** (Chemistry Aware BILN) is a superset of BILN introduced in this fork.  It adds
+chemistry-aware shorthand for inline sidechain modifications, sequential bioconjugation reactions,
+and a SMARTS-driven pipeline for onboarding novel monomers.
+
+### Notation additions over BILN
+
+| Feature | Syntax | Example |
+|---------|--------|---------|
+| Inline cap / modification | `.Cap(host_r,cap_r)` | `fmoc-C.trt(4,1)-am` — Cys thiol protected with Trt |
+| Terminal cyclisation sugar | `!n-...-!n` | `!1-A-A-A-A-!1` — head-to-tail cyclic tetrapeptide |
+| Sequential reaction bracket | `Res[.A(r,s).B(t,u)]` | `C[.Mal(4,1).DBCO(2,1)]` — maleimide then DBCO on Cys |
+| Multi-chain / branch | `chain1%%chain2` | `K.!n(3,1)%%!n-G-A-am` — Lys sidechain branch |
+
+### New CLI tools
+
+**`pyPept-monomer-add`** — register a novel monomer into the library from a plain SMILES or a CABILN
+sequence.  The monomer is run through the SMARTS pre-activation pipeline and appended to
+`monomers.sdf` without overwriting existing entries.
+
+```bash
+# From plain SMILES
+pyPept-monomer-add --smiles "N[C@@H](CCCCNC(=O)OC(C)(C)C)C(=O)O" \
+    --symbol Lys_Boc --name "Boc-Lysine"
+
+# From CABILN (assemble first, then onboard)
+pyPept-monomer-add --from-cabiln "K.Boc(4,1)" --symbol Lys_Boc
+```
+
+Arguments: `--smiles` / `--from-cabiln` (mutually exclusive), `--symbol` (required),
+`--name`, `--type` (default `aa`), `--subtype` (default `modified`), `--sdf` (default: installed `monomers.sdf`).
+
+### Monomer pipeline API
+
+```python
+from pyPept.interfaces.monomer_pipeline import pre_activate
+
+result = pre_activate("N[C@@H](CS)C(=O)O")
+# result.chuckles   → '[1*]N([3*])[C@@H](CS[4*])C([2*])=O'
+# result.leaving    → {1: '[H]', 2: '[OH]', 3: '[H]', 4: '[H]'}
+# result.chem_types → {1: 'backbone_n', 2: 'backbone_c', 3: 'backbone_n_mod', 4: 'thiol'}
+```
+
+`pre_activate()` auto-detects backbone R1/R2 via graph-topology rules (works for α-, β-, γ-amino acids),
+and assigns R3+ sidechain slots wherever chemistry permits (thiol, amine, hydroxyl, etc.).
+
+### CABILN bracket colorizer
+
+```python
+from pyPept.sequence import colorize_cabiln
+print(colorize_cabiln("C[.Mal(4,1).DBCO(2,1)]"))  # ANSI colour-coded bracket pairs
+```
+
+---
 
 ## References
 

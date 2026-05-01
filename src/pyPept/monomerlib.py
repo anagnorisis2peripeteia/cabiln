@@ -45,8 +45,6 @@ class MonomerConstants:
 
     attr_monomer_symbol = "m_abbr"
     attr_linkable_R_groups = "m_Rgroups"
-    attr_linkable_R_grop_idx = "m_RgroupIdx"
-    attr_linkable_R_group_attachidx = "m_attachmentPointIdx"
 
 ############################################################
 
@@ -103,23 +101,14 @@ class MonomerLibrary:
         """
         df_group = PandasTools.LoadSDF(path)
 
-        groups = [
-            MonomerConstants.attr_linkable_R_groups,
-            MonomerConstants.attr_linkable_R_grop_idx,
-            MonomerConstants.attr_linkable_R_group_attachidx,
-            ]
-
+        # Only m_Rgroups needs parsing; m_RgroupIdx and m_attachmentPointIdx
+        # are vestigial sidecar properties — attachment points are now read
+        # directly from mol isotope labels in sequence assembly.
+        rg_col = MonomerConstants.attr_linkable_R_groups
+        df_group[rg_col] = df_group[rg_col].astype(object)
         for idx in df_group.index:
-            for group in groups:
-                change = df_group[group][idx].split(
-                    MonomerConstants.sdf_change_separator)
-                if group == MonomerConstants.attr_linkable_R_groups:
-                    updated_change = [
-                        None if v == 'None' else v for v in change]
-                else:
-                    updated_change = [
-                        None if v == 'None' else int(v) for v in change]
-                df_group.loc[idx, group] = updated_change
+            change = df_group[rg_col][idx].split(MonomerConstants.sdf_change_separator)
+            df_group.at[idx, rg_col] = [None if v == 'None' else v for v in change]
         df_group = df_group.set_index('symbol')
         df_group = df_group.rename(columns={"ROMol": "m_romol"})
 
@@ -149,6 +138,28 @@ class MonomerLibrary:
         """
         return tuple(self[MonomerConstants.attr_monomer_symbol])
     ############################################################
+
+    ############################################################
+    @staticmethod
+    def chuckles_smiles(monomer_row):
+        """Return the CHUCKLES unit SMILES for a monomer row.
+
+        R-group dummy atoms are written as isotope-labelled wildcards:
+        slot 0 → [1*] (N-term), slot 1 → [2*] (C-term), slot 2 → [3*] (sidechain).
+        Concatenating unit SMILES across a sequence at matching slots yields
+        the full-peptide SMILES (Siani et al. JCICS 1994).
+
+        :param monomer_row: a row from the MonomerLibrary dataframe
+        :return: SMILES string
+        :rtype: str
+        """
+        mol = monomer_row['m_romol']
+        if mol is None:
+            return ''
+        try:
+            return Chem.MolToSmiles(mol)
+        except Exception:
+            return ''
 
     ############################################################
     def GetRGroups(self, monomer):

@@ -22,9 +22,14 @@ __license__ = "MIT"
 import warnings
 
 # Third-party libraries
-from rdkit import Chem
+from rdkit import Chem, RDLogger
 from rdkit.Chem import AllChem
 from rdkit.Chem.Draw import rdDepictor
+
+# SanitizeMol fires "not removing hydrogen atom without neighbors" when it
+# reconciles H-counts on atoms adjacent to removed dummy atoms.  The output
+# molecule is chemically correct; suppress the noise.
+RDLogger.DisableLog('rdApp.warning')
 
 ##########################################################################
 # Functions and classes
@@ -99,20 +104,158 @@ class Molecule:
         self.mol = Chem.RWMol(mol)
 
     ############################################################################
-    def __add_bonds_to_mol(self):
+    def __add_bonds_to_mol(self, sequence):
         """
-        Based on bond information, add bonds between the monomers in the
-        sequence.
+        Form inter-monomer bonds using SMIRKS reactions from reactions.yaml.
+
+        Each dummy atom in every monomer is relabeled to a globally unique
+        isotope  (m_idx + 1) * 100 + original_isotope  before any reactions
+        run.  This means that even when multiple monomers of the same type
+        (e.g. two Cys) are present, each dummy is uniquely addressable and
+        the targeted SMIRKS can match exactly the right pair.
+
+        For bonds not covered by the SMIRKS library a generic single-bond
+        SMIRKS is generated on the fly (equivalent to the legacy AddBond).
         """
+        from pyPept.interfaces.reaction_library import (
+            REACTION_INDEX, infer_chem_type, run_bond_smirks, _generic_bond_smirks
+        )
+        from pyPept.sequence import _slot_for_attachment
+        from rdkit.Chem import AllChem
 
-        offset = self.offset
+        monomers_orig = [mon['m_romol'] for mon in sequence.s_monomers]
 
+        # ── Step 1: relabel all dummies to globally unique isotopes ──────────
+        # unique_iso(m_idx, slot) = (m_idx + 1) * 100 + slot  (slot is 1-based)
+        tagged = []
+        for m_idx, mol in enumerate(monomers_orig):
+            rw = Chem.RWMol(mol)
+            for atom in rw.GetAtoms():
+                if atom.GetAtomicNum() == 0:
+                    orig = atom.GetIsotope()      # 1-based slot index
+                    atom.SetIsotope((m_idx + 1) * 100 + orig)
+            tagged.append(rw.GetMol())
+
+        # ── Step 2: fragment pool with union-find ─────────────────────────────
+        pool = {i: tagged[i] for i in range(len(tagged))}
+        parent = list(range(len(tagged)))
+
+        def find_root(i):
+            while parent[i] != i:
+                parent[i] = parent[parent[i]]
+                i = parent[i]
+            return i
+
+        # ── Step 3: process each bond ─────────────────────────────────────────
         for bond in self.bondlist:
-            m1_value, at1, m2_value, at2 = bond
-            at1 = offset[m1_value] + at1
-            at2 = offset[m2_value] + at2
+            m1, at1, m2, at2 = bond[:4]
+            root1, root2 = find_root(m1), find_root(m2)
+            frag1, frag2 = pool[root1], pool[root2]
 
-            self.mol.AddBond(at1, at2, Chem.BondType.SINGLE)
+            # Globally unique isotopes for this bond's two attachment dummies.
+            # Use the stored slot when present (avoids _slot_for_attachment
+            # ambiguity when an atom neighbours multiple dummies, e.g. backbone N).
+            slot1 = bond[4] if len(bond) > 4 else _slot_for_attachment(monomers_orig[m1], at1)
+            slot2 = bond[5] if len(bond) > 4 else _slot_for_attachment(monomers_orig[m2], at2)
+            iso1 = (m1 + 1) * 100 + slot1
+            iso2 = (m2 + 1) * 100 + slot2
+
+            # Look up SMIRKS reaction
+            ct1 = infer_chem_type(monomers_orig[m1], at1, slot=slot1)
+            ct2 = infer_chem_type(monomers_orig[m2], at2, slot=slot2)
+            entry = REACTION_INDEX.get((ct1, ct2))
+
+            if entry is None:
+                # Fall back to a generic single-bond SMIRKS built with the
+                # globally-unique isotopes already embedded. slot_a/slot_b
+                # are left None so run_bond_smirks skips the isotope substitution.
+                sym1 = monomers_orig[m1].GetAtomWithIdx(at1).GetAtomicNum()
+                sym2 = monomers_orig[m2].GetAtomWithIdx(at2).GetAtomicNum()
+                entry = {'id': f'generic_{ct1}_{ct2}',
+                         'steps': [_generic_bond_smirks(iso1, sym1, iso2, sym2)],
+                         'slot_a': None,
+                         'slot_b': None}
+            else:
+                # For YAML reactions, orient so frag1/iso1 correspond to the
+                # SMIRKS slot_a (first reactant template).  If m1 is the slot_b
+                # side, swap before passing to run_bond_smirks.
+                slot_a_iso = entry.get('slot_a')
+                if slot_a_iso is not None and slot1 != slot_a_iso:
+                    frag1, frag2 = frag2, frag1
+                    iso1, iso2 = iso2, iso1
+
+            intramol = (root1 == root2)
+            try:
+                product = run_bond_smirks(frag1, frag2, iso1, iso2, entry, intramol)
+            except ValueError as exc:
+                raise ValueError(
+                    f"Bond formation failed between monomer {m1} (slot {slot1}, "
+                    f"{ct1}) and monomer {m2} (slot {slot2}, {ct2}): {exc}"
+                ) from exc
+
+            pool[root1] = product
+            if not intramol:
+                del pool[root2]
+                parent[root2] = root1
+
+        # ── Step 4: combine any remaining disconnected fragments ──────────────
+        frags = list(pool.values())
+        combined = frags[0]
+        for frag in frags[1:]:
+            combined = Chem.CombineMols(combined, frag)
+
+        self.mol = Chem.RWMol(combined)
+
+    ############################################################################
+    def __restore_and_remove_rgroups(self, sequence):
+        """
+        Restore leaving-group atoms on unbound R-group slots, then remove all
+        remaining dummy atoms.
+
+        After SMIRKS-based assembly, bonded dummies are already consumed by the
+        reactions.  Only unbound dummies remain in self.mol.  Each is identified
+        by its globally unique isotope  (m_idx + 1) * 100 + slot  (slot 1-based),
+        which maps back to the monomer's m_Rgroups list to determine whether
+        to remove the dummy ([H]) or replace it with a leaving-group atom ([OH]).
+        """
+        # Build leaving-group lookup: globally-unique isotope → leaving SMILES
+        leaving_for_iso: dict = {}
+        for m_idx, mon in enumerate(sequence.s_monomers):
+            for slot_idx, lg in enumerate(mon['m_Rgroups']):
+                iso = (m_idx + 1) * 100 + (slot_idx + 1)
+                leaving_for_iso[iso] = lg
+
+        emol = Chem.RWMol(self.mol)
+        try:
+            Chem.Kekulize(emol, clearAromaticFlags=True)
+        except Exception:
+            pass
+
+        to_remove = []
+
+        for atom in emol.GetAtoms():
+            if atom.GetAtomicNum() != 0:
+                continue
+            iso = atom.GetIsotope()
+            lg = leaving_for_iso.get(iso)
+
+            lg_mol = Chem.MolFromSmiles(lg) if lg else None
+            is_h = (lg is None or lg_mol is None or (
+                lg_mol.GetNumAtoms() == 1
+                and lg_mol.GetAtomWithIdx(0).GetAtomicNum() == 1))
+
+            if is_h:
+                for nb in atom.GetNeighbors():
+                    nb.SetNoImplicit(False)
+                to_remove.append(atom.GetIdx())
+            else:
+                emol.ReplaceAtom(atom.GetIdx(),
+                                 Chem.Atom(lg_mol.GetAtomWithIdx(0).GetAtomicNum()))
+
+        for idx in sorted(set(to_remove), reverse=True):
+            emol.RemoveAtom(idx)
+
+        return emol.GetMol()
 
     ########################################################################################
     def __fixDihedrals(self):
@@ -231,20 +374,26 @@ class Molecule:
         self.monomers = sequence.s_monomers
         self.bondlist = sequence.s_bonds
 
-        # Step 0: generate a atom offset list: offset[i] = Sum (number of atoms up to monomer i-1)
-        self.__generate_offset_list()
+        # Step 1: form all inter-monomer bonds via SMIRKS, building self.mol
+        # as the combined product.  Uses globally-unique dummy isotopes so that
+        # each reactive site is unambiguously targeted even when multiple
+        # monomers of the same type are present.
+        self.__add_bonds_to_mol(sequence)
 
-        # Step 1: put all monomers into a single molecule
-        self.__combine_all_monomers()
-
-        # Step 2: from the bond list, add the bonds into molecule
-        self.__add_bonds_to_mol()
-
-        # Step3: remove the Rgroups
-        self.mol = Chem.DeleteSubstructs(self.mol, Chem.MolFromSmarts('[#0]'))
+        # Step 2: restore unbound R-group slots (remove [H] dummies, replace
+        # others with their leaving-group atom).
+        self.mol = self.__restore_and_remove_rgroups(sequence)
 
         # Step 4: sanitize and generate 2D coords
-        Chem.SanitizeMol(self.mol)
+        try:
+            Chem.SanitizeMol(self.mol)
+        except Exception as exc:
+            raise ValueError(
+                "Molecule sanitization failed after assembly — the assembled "
+                "structure has invalid valence. This usually means incompatible "
+                "R-group attachment points were joined. Check R-group assignments "
+                f"in the BILN sequence. RDKit detail: {exc}"
+            ) from exc
 
         # Compute 2D coordinates
         if self.depiction == 'rdkit':

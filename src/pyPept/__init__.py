@@ -5,3 +5,5 @@ try:
 except importlib.metadata.PackageNotFoundError:
     __version__ = "unknown version"
 
+from pyPept.show import show
+

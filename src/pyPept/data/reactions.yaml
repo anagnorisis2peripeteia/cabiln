@@ -1,0 +1,255 @@
+# pyPept reaction SMIRKS library
+#
+# Each entry:
+#   id:           unique snake_case identifier
+#   description:  human-readable label
+#   slot_a:       isotope label on the first reactant dummy
+#   slot_b:       isotope label on the second reactant dummy (omit for unimolecular)
+#   steps:        ordered SMIRKS list; assembly applies them sequentially
+#   take_largest: (optional) filter out small byproducts (e.g. N2 from IEDDA, NHS ring)
+#
+# Intramolecular ring closure is handled automatically by wrapping the
+# bimolecular step-0 SMIRKS in parentheses: ([A].[B]) >> [P]
+#
+# ── SMIRKS AUTHORING RULES ────────────────────────────────────────────────────
+#
+# Rule 1 — Low-valence reactive atoms (N, O, S that carry a free H):
+#   Place [n*] DIRECTLY on the reactive atom. [n*] displaces H; the chain bond
+#   survives as an unmapped bond and is preserved in both inter- and intramolecular
+#   reactions automatically.
+#   Examples:  [1*][N:2]   [4*][S:2]   [1*][O:2]
+#
+# Rule 2 — High-valence reactive atoms (sp/sp2 carbon with no free H):
+#   The reactive carbon is fully bonded within its functional group (alkyne C,
+#   carbonyl C). Placing [n*] directly on it consumes the only spare connection,
+#   leaving no chain bond — intramolecular grouped-SMIRKS ring closure fails.
+#   Instead, place [n*] on the ADJACENT sp3 carbon (α to the functional group).
+#   That α-carbon carries both [n*] and the chain bond (unmapped, preserved).
+#   Examples:  [4*]C[C:2]#[CH:3]   [4*]C[C:2](=[O:3])ON…
+#
+# Rule 3 — Verify intramolecular closure after writing any new SMIRKS:
+#   Build a model SMILES with both dummy isotopes in one connected molecule and
+#   call run_bond_smirks(..., intramolecular=True). Zero products → apply Rule 2.
+#
+# Rule 4 — Reactions with a leaving group (NHS ester, IEDDA N2 expulsion):
+#   Add  take_largest: true  so byproduct fragments are automatically filtered.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── BACKBONE BONDS ────────────────────────────────────────────────────────────
+
+- id: backbone_amide
+  description: Standard peptide amide bond (N-to-C)
+  reactant_pairs:
+    - [backbone_n, backbone_c]
+    - [amine_primary, backbone_c]
+    - [amine_primary, carboxyl]
+  slot_a: 1
+  slot_b: 2
+  steps:
+    - "[1*][N:2].[2*][C:4](=[O:5]) >> [N:2][C:4](=[O:5])"
+
+- id: backbone_ester
+  description: Depsipeptide ester bond (O-to-C)
+  reactant_pairs:
+    - [backbone_o, backbone_c]
+  slot_a: 1
+  slot_b: 2
+  steps:
+    - "[1*][O:2].[2*][C:4](=[O:5]) >> [O:2][C:4](=[O:5])"
+
+# ── SIDECHAIN / CROSSLINK BONDS ───────────────────────────────────────────────
+
+- id: disulfide
+  description: Disulfide bridge (S-S) between two cysteine-type sidechains
+  reactant_pairs:
+    - [thiol, thiol]
+    - [selenol, selenol]
+  slot_a: 4
+  slot_b: 4
+  steps:
+    - "[4*][S:2].[4*][S:4] >> [S:2][S:4]"
+
+- id: thioester
+  description: Thioester crosslink (S to carbonyl carbon)
+  reactant_pairs:
+    - [thiol, backbone_c]
+    - [thiol, carboxyl]
+  slot_a: 4
+  slot_b: 2
+  steps:
+    - "[4*][S:2].[2*][C:4](=[O:5]) >> [S:2][C:4](=[O:5])"
+
+- id: thioether_halide
+  description: Thioether from thiol + alkyl halide (SN2; halide departs)
+  reactant_pairs:
+    - [thiol, alkyl_halide_c]
+  slot_a: 4
+  slot_b: 4
+  steps:
+    - "[4*][S:2].[4*][C:4][Cl,Br,I] >> [S:2][C:4]"
+
+- id: thiol_maleimide
+  description: Thiol-maleimide Michael addition; succinimide ring retained
+  reactant_pairs:
+    - [thiol, maleimide_c]
+  slot_a: 4
+  slot_b: 4
+  steps:
+    - "[4*][C:2]1=[C:3][C:4](=[O:5])[N:6][C:7](=[O:8])1.[4*][S:10] >> [C:2]1([S:10])[C:3][C:4](=[O:5])[N:6][C:7](=[O:8])1"
+
+- id: nhs_ester_amide
+  description: NHS ester + amine → amide; NHS ring departs as leaving group
+  reactant_pairs:
+    - [amine_primary, nhs_ester]
+    - [amine_secondary, nhs_ester]
+  slot_a: 4
+  slot_b: 4
+  take_largest: true
+  steps:
+    - "[4*]C[C:2](=[O:3])ON1C(=O)CCC1=O.[4*][N:5] >> [N:5][C:2](=[O:3])"
+
+- id: oxime_ligation
+  description: Oxime ligation; aminooxy + aldehyde → C=N-O (water implicit)
+  reactant_pairs:
+    - [aminooxy, aldehyde]
+  slot_a: 4
+  slot_b: 4
+  steps:
+    - "[4*][NH:3][O:2].[4*][C:5]=[O] >> [O:2][NH0:3]=[CH:5]"
+
+- id: hydrazone
+  description: Hydrazone condensation; hydrazide + aldehyde → C=N-N (water implicit)
+  reactant_pairs:
+    - [hydrazide, aldehyde]
+  slot_a: 4
+  slot_b: 4
+  steps:
+    - "[4*][N:2][N:3].[4*][C:4]=[O] >> [N:2][N:3]=[CH:4]"
+
+# ── CLICK CHEMISTRY ───────────────────────────────────────────────────────────
+
+- id: cuaac_1_4_triazole
+  description: CuAAC; terminal alkyne + azide → 1,4-disubstituted 1H-1,2,3-triazole
+  reactant_pairs:
+    - [alkyne_c, azide_alpha_c]
+  slot_a: 4
+  slot_b: 4
+  notes: >
+    Azide N atoms intentionally unmapped in both reactant and product patterns
+    (Gillingham-Lab approach) to avoid formal-charge carry-over that causes
+    kekulization failures in RDKit.
+  steps:
+    - "[4*]C[C:2]#[CH:3].[4*][C:5][N]=[N+]=[N-] >> [C:5][n]1[n][n][c:3][c:2]1"
+
+- id: spaac_triazole
+  description: SPAAC; strained cyclooctyne + organic azide → 1,2,3-triazole (copper-free bioorthogonal)
+  reactant_pairs:
+    - [cyclooctyne_c, azide_alpha_c]
+  slot_a: 4
+  slot_b: 4
+  notes: >
+    Azide N atoms intentionally unmapped (same approach as CuAAC) to avoid
+    formal-charge carry-over. C:3 has no H constraint so the SMIRKS matches
+    internal cyclic alkynes (cyclooctynes) as well as any other internal alkyne.
+    Produces one regioisomer; ring atoms bonded to C:2/C:3 via unmapped bonds
+    are preserved, giving the fused bicyclic triazole for DBCO/BCN substrates.
+  steps:
+    - "[4*]C[C:2]#[C:3].[4*][C:5][N]=[N+]=[N-] >> [C:5][n]1[n][n][c:3][c:2]1"
+
+- id: iedda_tetrazine_tco
+  description: >
+    IEDDA; s-tetrazine + trans-cyclooctene (TCO) → dihydropyridazine via
+    two-step [4+2] then retro-[4+2] N2 expulsion.
+  reactant_pairs:
+    - [tetrazine_c, tco_c]
+  slot_a: 4
+  slot_b: 4
+  take_largest: true
+  notes: >
+    Step 1 uses [#6]/[#7] (any carbon/nitrogen) so the SMIRKS matches aromatic
+    tetrazine (c/n in RDKit) as well as Kekulé C/N representations. The ~ any-bond
+    handles aromatic and single/double bonds alike. [4*] on sp3 α-carbon of each
+    component (Rule 2 — high-valence reacting atoms).
+  steps:
+    - "[4*]C[#6:1]~[#7:2]~[#7:3]~[#6:4].[4*]C[C:5]=[C:6] >> [C:1]1[N:2][N:3][C:4][C:6][C:5]1"
+    - "[C:1]1[N:2][N:3][C:4][C:6][C:5]1 >> [C:1]=[C:5][C:6]=[C:4].[N:2]#[N:3]"
+
+# ── POST-TRANSLATIONAL MODIFICATIONS ─────────────────────────────────────────
+
+- id: phosphorylation
+  description: O-phosphorylation; Ser/Thr/Tyr hydroxyl + phosphate → phosphate ester
+  reactant_pairs:
+    - [hydroxyl, phosphate_p]
+  slot_a: 4
+  slot_b: 4
+  notes: >
+    Requires the hydroxyl-bearing residue to expose R4 on the hydroxyl O.
+    Standard Ser/Thr/Tyr monomers do not have R4; use pSer/pThr/pTyr pre-formed
+    monomers for the common case, or a custom R4-hydroxyl monomer for this
+    reaction YAML.
+  steps:
+    - "[4*][O:2].[4*][P:3](=[O:4])([OH:5])[OH:6] >> [O:2][P:3](=[O:4])([OH:5])[OH:6]"
+
+# ── STAPLING / CROSSLINKING ───────────────────────────────────────────────────
+
+- id: rcm_alkene
+  description: >
+    Ring-closing olefin metathesis (RCM); two terminal alkenes →
+    internal cyclic alkene + ethylene (discarded). Used for all-hydrocarbon
+    stapled peptides (Verdine/Walensky chemistry, S5/R8 monomers).
+    [4*] is placed on the internal vinyl carbon (replacing the vinyl H),
+    so both slot_a and slot_b are 4.
+  reactant_pairs:
+    - [terminal_alkene, terminal_alkene]
+  slot_a: 4
+  slot_b: 4
+  take_largest: true
+  steps:
+    - "[4*][C:1]=[CH2:2].[4*][C:3]=[CH2:4] >> [C:1]=[C:3].[CH2:2]=[CH2:4]"
+
+- id: imide_n_acylation
+  description: >
+    N-acylation of a backbone amide N (R3 slot) by a sidechain carboxyl
+    (R4 slot) to form a cyclic imide. Intramolecular closure gives
+    succinimide (Asp, 5-membered) or glutarimide (Glu, 6-membered)
+    embedded in the assembled peptide — the classic Asp deamidation
+    intermediate and a constrained pharmacophore.
+  reactant_pairs:
+    - [backbone_n_mod, carboxyl]
+  slot_a: 3
+  slot_b: 4
+  steps:
+    - "[3*][N:1].[4*][C:2](=[O:3]) >> [N:1][C:2](=[O:3])"
+
+# ── UNBOUND SITE RESTORATION ─────────────────────────────────────────────────
+# Applied to terminal dummy atoms that were never consumed by a bond reaction.
+
+- id: restore_r1_h
+  description: Cap R1 (N-terminal amine) with H
+  slot_a: 1
+  steps:
+    - "[1*][N:2] >> [H][N:2]"
+
+- id: restore_r2_oh
+  description: Cap R2 (C-terminal carbonyl) with OH → free acid
+  slot_a: 2
+  steps:
+    - "[2*][C:2](=[O:3]) >> O[C:2](=[O:3])"
+
+- id: restore_r3_h
+  description: Cap R3 (secondary amine / proline N) with H
+  slot_a: 3
+  steps:
+    - "[3*][N:2] >> [H][N:2]"
+
+- id: restore_r4_thiol
+  description: Cap R4 thiol sidechain with H → free thiol
+  slot_a: 4
+  steps:
+    - "[4*][S:2] >> [H][S:2]"
+
+- id: restore_r4_amine
+  description: Cap R4 amine sidechain with H → free amine
+  slot_a: 4
+  steps:
+    - "[4*][N:2] >> [H][N:2]"
