@@ -272,6 +272,92 @@ seq = Sequence('ac-K.!1(4,4)-G-am%C20FA-AEEA-gGlu.!1')
 
 ---
 
+## How chemistry-aware validation works
+
+Every bond in CABILN is validated before assembly. The system runs in two stages:
+
+**Stage 1 — R-group labelling.** When a monomer is registered, SMARTS patterns are matched against the CHUCKLES fragment to label each R-group with a chemistry type. The full type set:
+
+| Type | What it matches | Example monomer |
+|------|-----------------|-----------------|
+| `backbone_n` | α-amine (R1) | all amino acids |
+| `backbone_c` | α-carboxyl (R2) | all amino acids |
+| `backbone_n_mod` | N-methyl or secondary backbone N (R3) | Pro, Sar |
+| `thiol` | –SH | Cys |
+| `amine_primary` | –NH₂ sidechain | Lys, Orn |
+| `carboxyl` | –COOH sidechain | Asp, Glu, gGlu |
+| `guanidinium` | –C(=NH)NH₂ | Arg |
+| `hydroxyl` | aliphatic –OH | Ser, Thr |
+| `hydroxyl_phenolic` | phenol –OH | Tyr |
+| `maleimide_c` | maleimide C= | MalAla, MalLys |
+| `alkyne_c` | terminal alkyne –C≡CH | Pra, Hpg |
+| `azide_alpha_c` | –CH₂N₃ | AzAla, AzHal, AzK |
+| `cyclooctyne_c` | ring-strained alkyne | CyoAla, CyoLys |
+| `tetrazine_c` | s-tetrazine | TzAla, TzLys |
+| `tco_c` | trans-cyclooctene | TcoAla, TcoLys |
+| `terminal_alkene` | –CH=CH₂ | S5, R8 (stapling olefins) |
+| `aldehyde` | –CHO | aldehyde handles |
+| `aminooxy` | –NHOH | oxime handles |
+| `hydrazide` | –CONHNH₂ | hydrazone handles |
+| `nhs_ester` | NHS-activated ester | activated linkers |
+| `phosphate_p` | –PO(OH)₂ | pSer, pTyr |
+
+**Stage 2 — bond validation.** When a bond is declared (crosslink, bracket, or inline cap), the pair of chemistry types is looked up in a reaction table. Reactions are classified as:
+
+- **Silent** — standard peptide chemistry, no warning
+- **Warned** — unusual but valid, `UserWarning` emitted
+- **Rejected** — raises `ValueError`
+
+### Supported reaction types
+
+**Amide / backbone bonds** (silent)
+- Backbone N–C(=O) — every `-` between residues
+- N-cap to backbone N — `fmoc-A`, `ac-A`
+- Isopeptide — backbone N to sidechain carboxyl (`K.!1(4,3)`)
+- Depsipeptide ester — backbone O to backbone C (`Hser.!1(3,2)`)
+
+**Sidechain crosslinks** (silent)
+- Disulfide — `Cys.!1(4,4)` × 2 (thiol–thiol)
+- Diselenide — selenocysteine pairs
+- Thioether/protecting group — thiol–C aliphatic (`C.trt(4,1)`)
+- Lactam — amine sidechain to carboxyl sidechain
+- Aspartimide/glutarimide — backbone C to sidechain carboxyl
+
+**Click chemistry** (silent)
+- CuAAC 1,4-triazole — alkyne (`Pra`) × azide (`AzK`) — `Pra.!1(4,4)-...-AzK.!1`
+- SPAAC triazole — cyclooctyne (`CyoAla`) × azide (`AzAla`) — copper-free
+- IEDDA — tetrazine (`TzAla`) × TCO (`TcoAla`) — fastest bioorthogonal reaction
+
+**Bioconjugation** (UserWarning — unusual but intentional)
+- Thiol-maleimide — thiol × maleimide\_c (`C.!1(4,4)` on `MalAla`)
+- NHS ester amide — primary amine × NHS ester
+- Oxime — aminooxy × aldehyde
+- Hydrazone — hydrazide × aldehyde
+
+**Strained/exotic** (UserWarning)
+- Thioester — thiol × carboxyl (S–C=O)
+- RCM alkene staple — terminal alkene × terminal alkene
+- Reductive amination — amine × non-carbonyl C
+- Sulfenamide — thiol × amine (S–N)
+
+### Example: click pair notation
+
+```python
+# CuAAC — alkyne on Pra (propargylglycine) and azide on AzK
+Sequence('ac-Pra.!1(4,4)-A-A-A-AzK.!1-am')
+
+# SPAAC — cyclooctyne on CyoAla, azide on AzAla (copper-free)
+Sequence('ac-CyoAla.!1(4,4)-G-G-AzAla.!1-am')
+
+# IEDDA — tetrazine on TzAla, TCO on TcoAla
+Sequence('ac-TzAla.!1(4,4)-A-A-TcoAla.!1-am')
+
+# Thiol-maleimide — Cys reacts with maleimide-alanine via SMIRKS reaction
+Sequence('ac-C.!1(4,4)-A-A-MalAla.!1-am')
+```
+
+---
+
 ## How the R-group system works
 
 Every monomer in the library has numbered R-groups (attachment points). The standard mapping for α-amino acids is:
@@ -373,25 +459,31 @@ pyPept-monomer-add --from-cabiln "K.boc(4,1)" --symbol Lys_Boc --name "Boc-lysin
 
 ---
 
-## CABILN vs old BILN crosslink notation
+## Legacy BILN crosslink notation
 
-Old BILN used bare integers: `C(1,3)-A-A-A-C(1,3)`. The `1` was the bond ID and the `3` was the R-group, but there was no delimiter — scanning left to right you couldn't tell which was which.
+Old BILN used bare integers: `C(1,3)-A-A-A-C(1,3)`. The `1` was the bond ID and the `3` was the R-group with no delimiter — scanning left to right you couldn't tell which was which.
 
-CABILN separates the bond marker with `.!`:
+CABILN separates them with `.!`:
 
 | Old BILN | CABILN equivalent |
 |----------|-------------------|
 | `C(1,3)-A-C(1,3)` | `C.!1(3,3)-A-C.!1` |
 | `K(2,4)-A-D(2,3)` | `K.!2(4,3)-A-D.!2` |
 
-Old BILN strings passed to `Sequence()` are **auto-converted** with a `DeprecationWarning`. Explicit conversion:
+Old BILN is accepted, but you must declare it explicitly — `Sequence()` without a format flag raises `ValueError` to avoid silent misparse:
 
 ```python
-from pyPept.sequence import biln_to_cabiln
+from pyPept.sequence import Sequence, biln_to_cabiln
 
-old = 'C(1,3)-A-A-A-C(1,3)'
-new = biln_to_cabiln(old)
-print(new)  # C.!1(3,3)-A-A-A-C.!1
+# Raises ValueError — old notation must be declared
+Sequence('C(1,3)-A-A-A-C(1,3)')
+
+# Pass fmt='biln' to auto-convert and continue
+seq = Sequence('C(1,3)-A-A-A-C(1,3)', fmt='biln')
+
+# Or convert upfront and use CABILN directly
+cabiln = biln_to_cabiln('C(1,3)-A-A-A-C(1,3)')
+seq = Sequence(cabiln)   # C.!1(3,3)-A-A-A-C.!1
 ```
 
 ---
@@ -405,7 +497,7 @@ print(new)  # C.!1(3,3)-A-A-A-C.!1
 | CABILN crosslinks `.!n(r,s)` | Works | New in this fork |
 | CABILN brackets `[.A(r,s).B(t,u)]` | Works | New in this fork |
 | CABILN branches `%%` | Works | New in this fork |
-| Old BILN crosslinks `C(1,3)` | Auto-converts | DeprecationWarning emitted |
+| Old BILN crosslinks `C(1,3)` | Requires `fmt='biln'` | Raises `ValueError` otherwise; auto-converts when declared |
 | FASTA `ACDEFGHIKLMNPQRSTVWY` | Works | Via `run_pyPept --fasta` |
 | HELM linear `PEPTIDE1{...}$$$$V2.0` | Works | Converter produces CABILN |
 | HELM crosslinks `$PEPTIDE1,PEPTIDE1,…` | Works | Converter emits `.!n(r,s)` CABILN |

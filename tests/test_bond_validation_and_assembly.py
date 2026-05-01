@@ -549,15 +549,19 @@ class TestInlineAttachments:
         with pytest.raises((ValueError, SystemExit)):
             Sequence('K.!1(3,3)-A-am')
 
-    def test_old_biln_crosslink_warns_and_converts(self):
-        """Old BILN bare-integer crosslink notation emits DeprecationWarning and auto-converts."""
-        with pytest.warns(DeprecationWarning, match='Old BILN'):
-            seq = Sequence('K(1,3)-A-K(1,3)-am')
+    def test_old_biln_raises_without_fmt(self):
+        """Old BILN bare-integer crosslink notation raises ValueError unless fmt='biln'."""
+        with pytest.raises(ValueError, match='Old BILN'):
+            Sequence('K(1,3)-A-K(1,3)-am')
+
+    def test_old_biln_converts_with_fmt_biln(self):
+        """Old BILN converts silently when fmt='biln' is passed."""
+        seq = Sequence('K(1,3)-A-K(1,3)-am', fmt='biln')
         assert seq is not None
 
-    def test_old_biln_warning_mentions_cabiln(self):
-        """DeprecationWarning for old BILN mentions the .!n(y,z) CABILN form."""
-        with pytest.warns(DeprecationWarning, match=r'\.!'):
+    def test_old_biln_error_mentions_fmt(self):
+        """ValueError for old BILN tells user to pass fmt='biln'."""
+        with pytest.raises(ValueError, match="fmt='biln'"):
             Sequence('K(1,3)-A-K(1,3)-am')
 
 
@@ -1287,27 +1291,22 @@ class TestRoundTrips:
         assert '.!2' in result
 
     # ------------------------------------------------------------------ #
-    # Old BILN → Sequence auto-conversion
+    # Old BILN → explicit fmt='biln' conversion
     # ------------------------------------------------------------------ #
 
-    def test_old_biln_auto_converts_with_warning(self):
-        """Sequence auto-converts old BILN and emits DeprecationWarning."""
-        import warnings
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter('always')
-            seq = Sequence('C(1,3)-A-A-A-C(1,3)')
-        assert any(issubclass(x.category, DeprecationWarning) for x in w)
-        assert seq is not None
+    def test_old_biln_raises_without_fmt(self):
+        """Old BILN notation raises ValueError when fmt='biln' not passed."""
+        with pytest.raises(ValueError, match='Old BILN'):
+            Sequence('C(1,3)-A-A-A-C(1,3)')
 
-    def test_old_biln_crosslink_assembles(self):
-        """Old BILN disulfide bridge assembles to a molecule with correct atom count."""
-        import warnings
-        with warnings.catch_warnings():
-            warnings.simplefilter('ignore')
-            romol = _romol('C(1,3)-A-A-A-C(1,3)')
-        assert romol is not None
-        # Cys-Ala-Ala-Ala-Cys disulfide: check we get a molecule, not None
+    def test_old_biln_crosslink_assembles_with_fmt(self):
+        """Old BILN disulfide assembles correctly when fmt='biln' is passed."""
+        seq = Sequence('C(1,3)-A-A-A-C(1,3)', fmt='biln')
+        assert seq is not None
+        from pyPept.molecule import Molecule
         from rdkit import Chem
+        romol = Molecule(seq).get_molecule(fmt='ROMol')
+        assert romol is not None
         assert Chem.MolToSmiles(romol) != ''
 
     # ------------------------------------------------------------------ #
@@ -2194,11 +2193,15 @@ class TestSequenceValidate:
         # 3 backbone bonds + 1 head-to-tail crosslink = 4 bonds
         assert len(report.bonds) == 4
 
-    def test_old_biln_notation_warns_and_converts(self):
-        """Old BILN K(1,3) crosslink syntax → DeprecationWarning + auto-convert, valid result."""
+    def test_old_biln_validate_fails_without_fmt(self):
+        """Old BILN K(1,3) without fmt='biln' → validate returns not-ok with error."""
         report = Sequence.validate('K(1,3)-A-K(1,3)')
-        # validate() captures warnings internally; check they appear in report.warnings
-        assert any('Old BILN' in w for w in report.warnings)
+        assert report.ok is False
+        assert any('Old BILN' in e for e in report.errors)
+
+    def test_old_biln_validate_ok_with_fmt_biln(self):
+        """Old BILN K(1,3) with fmt='biln' → validate returns ok."""
+        report = Sequence.validate('K(1,3)-A-K(1,3)', fmt='biln')
         assert report.ok is True
 
 

@@ -567,18 +567,22 @@ class Sequence:
 
     ############################################################
     def __init__(self, input_biln, path=SequenceConstants.def_path,
-                 monomer_lib=SequenceConstants.def_lib_filename):
+                 monomer_lib=SequenceConstants.def_lib_filename, fmt=None):
         """
-        Instantiate a pyPept.Sequence object with the input BILN sequence.
+        Instantiate a pyPept.Sequence object with the input BILN/CABILN sequence.
 
-        :param input_biln: BILN representation of the peptide
+        :param input_biln: CABILN sequence string (default), or old BILN when fmt='biln'.
         :type input_biln: str
         :param path: an override option to specify a new location of a monomer
                      library.
         :type path: str
         :param monomer_lib: an override option to specific a different monomer
                            library file name.
-        :type path: str
+        :type monomer_lib: str
+        :param fmt: pass ``'biln'`` to accept old BILN crosslink notation
+            (``Token(bondID,Rgroup)``), which is auto-converted to CABILN.
+            Without this flag, old BILN notation raises ``ValueError``.
+        :type fmt: str or None
         """
         # Variables to store the monomers and bonds
         self.s_inputbiln = input_biln
@@ -589,17 +593,15 @@ class Sequence:
         self.s_nmonomers = 0
         self.__is_valid = True
 
-        # Auto-convert old BILN bare-integer crosslink notation — e.g. K(1,3)-A-K(1,3).
-        # CABILN uses .!n(y,z) style; old notation is accepted with a deprecation warning.
+        # Old BILN bare-integer crosslink notation requires explicit opt-in via fmt='biln'.
         if _OLD_BILN_RE.search(input_biln):
             m = _OLD_BILN_RE.search(input_biln)
             tok, bid, rg = m.group(1), m.group(2), m.group(3)
-            warnings.warn(
-                f"Old BILN crosslink notation detected: {tok}({bid},{rg}). "
-                f"Auto-converting to CABILN .!n(y,z) form. "
-                f"Use biln_to_cabiln() to convert explicitly.",
-                DeprecationWarning, stacklevel=2,
-            )
+            if fmt != 'biln':
+                raise ValueError(
+                    f"Old BILN crosslink notation detected: {tok}({bid},{rg}). "
+                    f"Pass fmt='biln' to auto-convert, or call biln_to_cabiln() explicitly."
+                )
             input_biln = biln_to_cabiln(input_biln)
 
         # Expand .Token(host_r,cap_r) inline attachment notation before anything else.
@@ -963,7 +965,7 @@ class Sequence:
     ############################################################################
     @classmethod
     def validate(cls, biln, path=SequenceConstants.def_path,
-                 monomer_lib=SequenceConstants.def_lib_filename):
+                 monomer_lib=SequenceConstants.def_lib_filename, fmt=None):
         """Dry-run parse and chemistry-check a BILN/CABILN string.
 
         Constructs the Sequence, captures all warnings and errors, and returns
@@ -973,6 +975,7 @@ class Sequence:
         :param biln: BILN or CABILN sequence string
         :param path: monomer library package path (default: built-in)
         :param monomer_lib: monomer SDF filename (default: monomers.sdf)
+        :param fmt: pass ``'biln'`` to accept old BILN crosslink notation.
         :returns: ValidationReport
         """
         caught_warns = []
@@ -982,7 +985,7 @@ class Sequence:
         with warnings.catch_warnings(record=True) as w_list:
             warnings.simplefilter("always")
             try:
-                seq = cls(biln, path=path, monomer_lib=monomer_lib)
+                seq = cls(biln, path=path, monomer_lib=monomer_lib, fmt=fmt)
             except ValueError as exc:
                 errors.append(str(exc))
             except SystemExit as exc:
