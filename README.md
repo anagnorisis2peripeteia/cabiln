@@ -11,24 +11,27 @@
 
 ## Why CABILN?
 
-Plain BILN handles linear peptides well. For modified and cyclic peptides — disulfides, staples, fatty acid branches, click-chemistry conjugates — it has no standard notation, so you end up with separate files, hand-crafted CHUCKLES fragments, or nothing at all.
+BILN already handles crosslinks and cyclic peptides. CABILN adds three things BILN has no notation for: **sequential multi-step conjugation** (each reaction step refers to the last fragment, not the original residue), **sidechain branches** (a separate chain hanging off one residue), and **unambiguous crosslink syntax** (bond ID and R-group are visually separated so you can read the string without a decoder ring).
 
-CABILN extends BILN so that **any peptide you can synthesise has one unambiguous string**:
+The result is that complex peptides that previously required separate files or hand-crafted CHUCKLES fragments can be written as a single string:
 
 ```
-# GLP-1 agonist with C20 fatty acid lipidation on Lys sidechain
+# GLP-1 agonist — 39-residue backbone with a C20 fatty acid on Lys sidechain
+# (branch notation: %% splits the main chain from the pendant lipid chain)
 Y-Aib-Q-G-T-F-T-S-D-Y-S-I-aMeLeu-L-D-K.!1(4,2)-A-Q-Aib-A-F-I-E-Y-L-L-E-G-G-P-S-S-G-A-P-P-P-S-am%C20FA-gGlu-AEEA-!1
 
-# Cyclic disulfide-bridged peptide
-!1-C.!2(4,4)-A-G-K-A-C.!2(4,4)-!1
+# Maleimide conjugation then DBCO loading on Cys — two sequential reactions,
+# each step's R-group refers to the preceding fragment, not to Cys directly
+G-C[.Mal(4,1).DBCO(2,1)]-A-G-AzK-G
+
+# Cyclic peptide with a disulfide bridge — head-to-tail (!1) + sidechain crosslink (!2)
+# Second endpoint is just .!2 — R-groups are declared once on the first endpoint
+!1-C.!2(4,4)-A-G-K-A-C.!2-!1
 
 # Hydrocarbon-stapled helix (RCM, i,i+7)
 ac-A-S5.!1(4,4)-A-A-A-A-A-R8.!1(4,4)-G-am
 
-# SPAAC bioconjugate: cyclooctyne on Cys, azide-lysine handle
-G-C[.DBCO(4,1)]-A-G-AzK-G
-
-# Three-level protecting group sequence (full Fmoc-SPPS representation)
+# Full Fmoc-SPPS protection pattern — three residues, three different protecting groups
 fmoc-C.trt(4,1)-K.boc(4,1)-R.pbf(4,1)-am
 ```
 
@@ -71,8 +74,8 @@ seq = Sequence('!1-A-G-K-A-!1')
 # Lactam staple: Lys ε-amine (R4) → Asp sidechain carboxyl (R3)
 seq = Sequence('ac-K.!1(4,3)-A-A-A-D.!1(3,4)-am')
 
-# Disulfide bridge
-seq = Sequence('ac-C.!1(4,4)-A-G-A-C.!1(4,4)-am')
+# Disulfide bridge — first endpoint declares (r_self, r_other); second just .!1
+seq = Sequence('ac-C.!1(4,4)-A-G-A-C.!1-am')
 
 # Hydrocarbon staple (i, i+4): two olefinic residues, RCM closes the ring
 seq = Sequence('ac-A-S5.!1(4,4)-A-A-A-S5.!1(4,4)-G-am')
@@ -91,15 +94,7 @@ The bracket notation lets you chain modifications onto one residue in order. **E
 Host[.CapA(host_r, capA_r).CapB(capA_r, capB_r).CapC(capB_r, capC_r)]
 ```
 
-**One-step** — equivalent to the inline dot notation:
-
-```python
-# Cys (R4=thiol) capped with trityl (R1)
-seq = Sequence('fmoc-C[.trt(4,1)]-am')
-# identical to:  fmoc-C.trt(4,1)-am
-```
-
-**Two-step** — maleimide conjugation then DBCO on Cys thiol:
+**Two-step** — maleimide conjugation then DBCO loading on Cys thiol:
 
 ```python
 # Step 1: Mal occupies R4 of Cys (thiol → thioether), exposes R2
@@ -170,7 +165,7 @@ Sequence('fmoc-C.trt(4,1)-K.boc(4,1)-R.pbf(4,1)-am')
 
 ```python
 # Disulfide (thiol R4 ↔ thiol R4)
-Sequence('ac-C.!1(4,4)-A-G-A-C.!1(4,4)-am')
+Sequence('ac-C.!1(4,4)-A-G-A-C.!1-am')
 
 # Lactam staple (ε-amine R4 ↔ sidechain carboxyl R3)
 Sequence('ac-K.!1(4,3)-A-A-A-D.!1(3,4)-am')
@@ -189,8 +184,9 @@ SPAAC (copper-free click — cyclooctyne + azide):
 # Azide handle on Lys sidechain, ready for strain-promoted cycloaddition
 Sequence('G-AzK-G')
 
-# With DBCO already conjugated on Cys
-Sequence('G-C[.DBCO(4,1)]-A-G-AzK-G')
+# Two-step: maleimide thiol-Michael then DBCO loading; azide-Lys in the same chain
+# DBCO attaches to Mal R2, not to Cys — bracket notation makes the order explicit
+Sequence('G-C[.Mal(4,1).DBCO(2,1)]-A-G-AzK-G')
 ```
 
 IEDDA (tetrazine ligation — tetrazine + TCO):
@@ -285,7 +281,7 @@ from pyPept.sequence import Sequence
 from pyPept.molecule import Molecule
 from rdkit import Chem
 
-seq = Sequence('ac-C.!1(4,4)-A-G-A-C.!1(4,4)-am')
+seq = Sequence('ac-C.!1(4,4)-A-G-A-C.!1-am')
 mol = Molecule(seq)
 rdmol = mol.get_molecule(fmt='ROMol')
 print(Chem.MolToSmiles(rdmol))
