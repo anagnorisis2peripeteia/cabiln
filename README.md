@@ -11,7 +11,7 @@
 
 ## Why CABILN?
 
-Plain BILN handles linear peptides well. The moment you add a disulfide, a staple, a fatty acid branch, or a click-chemistry conjugate, the notation collapses — you end up with separate files, hand-crafted CHUCKLES fragments, or nothing at all.
+Plain BILN handles linear peptides well. For modified and cyclic peptides — disulfides, staples, fatty acid branches, click-chemistry conjugates — it has no standard notation, so you end up with separate files, hand-crafted CHUCKLES fragments, or nothing at all.
 
 CABILN extends BILN so that **any peptide you can synthesise has one unambiguous string**:
 
