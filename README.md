@@ -16,8 +16,8 @@ BILN already handles crosslinks and cyclic peptides. CABILN adds three things BI
 The result is that complex peptides that previously required separate files or hand-crafted CHUCKLES fragments can be written as a single string:
 
 ```
-# GLP-1 agonist — 39-residue backbone with C20 fatty acid on Lys via isopeptide linker
-# 3-step bracket: Lys R4 → gGlu γ-COOH (R4, isopeptide) → AEEA → C20FA
+# GLP-1 agonist — 39-residue backbone, C20 isopeptide lipidation on Lys
+# bracket reads synthesis order: K → gGlu(γ-COOH isopeptide) → AEEA → C20FA
 Y-Aib-Q-G-T-F-T-S-D-Y-S-I-aMeLeu-L-D-K[.gGlu(4,4).AEEA(1,2).C20FA(1,2)]-A-Q-Aib-A-F-I-E-Y-L-L-E-G-G-P-S-S-G-A-P-P-P-S-am
 
 # Maleimide conjugation then DBCO loading on Cys — two sequential reactions,
@@ -88,71 +88,64 @@ The `.!n(r1,r2)` suffix on the **first** endpoint names both R-groups of the bon
 
 ### 3 — Sequential bioconjugation bracket `Res[.A(r,s).B(t,u)…]`
 
-The bracket notation lets you chain modifications onto one residue in order. **Each cap's R-group refers to the fragment immediately before it**, not to the original residue. This mirrors how sequential conjugation actually works at the bench.
+The bracket notation chains modifications onto one residue in order. **Each step's R-group refers to the fragment immediately before it**, not to the original residue — so the string reads in the same order as the synthesis steps. Each bracket is independent, they can be mixed freely with crosslinks and branch notation, and multiple brackets can appear on the same peptide.
 
 ```
 Host[.CapA(host_r, capA_r).CapB(capA_r, capB_r).CapC(capB_r, capC_r)]
 ```
 
-**Two-step** — maleimide conjugation then DBCO loading on Cys thiol:
+**Two-step** — maleimide thiol-Michael then DBCO loading:
 
 ```python
-# Step 1: Mal occupies R4 of Cys (thiol → thioether), exposes R2
-# Step 2: DBCO occupies R2 of Mal, adds the strained cyclooctyne handle
+# Step 1: Mal R1 occupies Cys R4 (thiol → thioether), Mal R2 is now exposed
+# Step 2: DBCO R1 occupies Mal R2 — DBCO goes onto the maleimide, not onto Cys
 seq = Sequence('G-C[.Mal(4,1).DBCO(2,1)]-A')
 ```
 
-Why two steps? Because DBCO is going onto the maleimide, not onto Cys directly. The bracket makes the reaction sequence explicit and unambiguous.
-
-**Three-step** — isopeptide branch capped with amide:
+**Three-step** — fatty acid lipidation (semaglutide/retatrutide-type isopeptide linker):
 
 ```python
-# G backbone R3 → A at R1, A exposes R2 → G at R1, second G exposes R2 → am
-seq = Sequence('G[.A(3,1).G(2,1).am(2,1)]')
+# Step 1: gGlu R4 (γ-COOH) bonds to Lys R4 (ε-amine) — isopeptide
+# Step 2: AEEA R2 bonds to gGlu R1 (α-amine) — amide
+# Step 3: C20FA R2 bonds to AEEA R1 (amine) — amide to fatty diacid
+seq = Sequence('ac-K[.gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-am')
 ```
 
-**Multiple independent brackets on one peptide:**
+Reading the bracket left to right matches synthesis order from Lys outward: K → gGlu (isopeptide) → AEEA → C20FA.
+
+**Brackets compose freely with everything else:**
 
 ```python
-# Auto-incrementing bond IDs: 100 for C/trt, 101 for K/boc
-seq = Sequence('fmoc-C[.trt(4,1)]-G-K[.boc(4,1)]-am')
-```
-
-Brackets compose with crosslinks:
-
-```python
-# Maleimide conjugation on Cys, then head-to-tail cyclisation
+# Protected Cys with bracket, plus head-to-tail cyclisation
 seq = Sequence('!1-C[.Mal(4,1)]-A-G-K-!1')
+
+# Multiple independent brackets on one peptide (auto bond IDs: 100, 101, …)
+seq = Sequence('fmoc-C[.trt(4,1)]-G-K[.boc(4,1)]-am')
+
+# Bracket lipidation + disulfide staple on the same peptide
+seq = Sequence('ac-C.!1(4,4)-A-K[.gGlu(4,4).AEEA(1,2).C20FA(1,2)]-A-C.!1-am')
 ```
 
 ### 4 — Sidechain branch `mainchain%%branch`
 
-The `%%` separator splits the string into a main chain and a pendant chain that reads N→C through backbone R-groups (R1→R2 at each `-`). It is the right tool when the branch itself is a simple linear chain attaching at its **backbone N-terminus** to the main chain sidechain.
+The `%%` separator attaches a pendant chain to the main chain via a crosslink. The branch string reads N→C, bonding residues through their backbone R-groups (R1→R2 at each `-`).
 
 ```python
-# Simple PEG branch: Lys ε-amine (R4) → PEG chain N-terminus (R1)
+# PEG branch: Lys ε-amine (R4) → PEG chain N-terminus (R1)
 seq = Sequence('ac-K.!1(4,1)-G-am%!1-PEG-am')
 ```
 
-**Important:** because the branch reads purely N→C, any residue in the branch uses its backbone R-groups for the chain connections. If you need to route through a **sidechain R-group** of a branch residue (e.g. gGlu's γ-COOH is R4, not R1/R2), use the bracket notation instead — `%%` cannot express that.
-
-For the semaglutide/retatrutide-type isopeptide linker, the connectivity is:
-
-```
-Lys_R4 → gGlu_R4 (γ-COOH, isopeptide) → gGlu_R1 → AEEA → C20FA
-```
-
-The γ-COOH of gGlu is R4 (sidechain), so the 3-step bracket is needed:
+Branch and bracket are interchangeable when the pendant chain attaches via a **backbone R-group** of the junction residue. For sidechain attachment (e.g. gGlu's γ-COOH is R4), bracket is more natural because it reads proximal→distal from K; branch works too but the string order is reversed (distal→proximal) because C20FA — a diacid cap with no R1 — must lead the branch:
 
 ```python
-# Correct: 3-step bracket routes via gGlu γ-COOH (R4)
+# Bracket: reads K → gGlu → AEEA → C20FA (synthesis order)
 seq = Sequence('ac-K[.gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-am')
 
-# Wrong: branch notation reads gGlu backbone-to-backbone, γ-COOH never used
-# seq = Sequence('ac-K.!1(4,2)-G-am%C20FA-gGlu-AEEA-!1')  # different molecule
+# Branch: same molecule, string reads C20FA → AEEA → gGlu (reversed)
+seq = Sequence('ac-K.!1(4,4)-G-am%C20FA-AEEA-gGlu.!1')
 ```
 
-Full Retatrutide (GIP/GLP-1/glucagon triple agonist, 39 residues with C20 isopeptide lipidation):
+Full Retatrutide (GIP/GLP-1/glucagon triple agonist, 39 residues):
 
 ```python
 seq = Sequence('Y-Aib-Q-G-T-F-T-S-D-Y-S-I-aMeLeu-L-D-K[.gGlu(4,4).AEEA(1,2).C20FA(1,2)]-A-Q-Aib-A-F-I-E-Y-L-L-E-G-G-P-S-S-G-A-P-P-P-S-am')
@@ -241,11 +234,14 @@ Sequence('ac-pTyr-am')          # phosphotyrosine
 
 ### Fatty acid lipidation (GLP-1 agonists)
 
-Semaglutide/retatrutide-type lipidation routes through gGlu's γ-carboxyl (R4, sidechain), so the 3-step bracket is the correct notation — the `%%` branch notation would wire gGlu backbone-to-backbone and leave the γ-COOH unused:
+Semaglutide/retatrutide-type lipidation routes through gGlu's γ-carboxyl (R4). Both bracket and branch produce the same molecule; bracket reads in synthesis order, branch string is reversed because C20FA (no R1) must lead:
 
 ```python
-# Lys ε-amine → gGlu γ-COOH (isopeptide) → gGlu α-amine → AEEA → C20FA
+# Bracket — reads K → gGlu (isopeptide) → AEEA → C20FA
 seq = Sequence('ac-K[.gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-am')
+
+# Branch — same molecule, string reversed: C20FA → AEEA → gGlu ← K
+seq = Sequence('ac-K.!1(4,4)-G-am%C20FA-AEEA-gGlu.!1')
 ```
 
 ---
