@@ -17580,22 +17580,22 @@ $$$$
   9 11  2  0
 M  ISO  5   1   1   3   3   7   4   8   5  10   2
 M  END
->  <symbol>
+>  <symbol>  (353) 
 TL3
 
->  <m_abbr>
+>  <m_abbr>  (353) 
 TL3
 
->  <m_name>
+>  <m_name>  (353) 
 Trilinker-3
 
->  <m_type>
+>  <m_type>  (353) 
 aa
 
->  <m_subtype>
+>  <m_subtype>  (353) 
 modified
 
->  <m_Rgroups>
+>  <m_Rgroups>  (353) 
 [H],[OH],[H],[H],[H],None
 
 $$$$
@@ -17637,25 +17637,25 @@ $$$$
  12  6  1  0
 M  ISO  4   1   1   3   3  11   4  15   2
 M  END
->  <symbol>
+>  <symbol>  (354) 
 MalAla
 
->  <m_abbr>
+>  <m_abbr>  (354) 
 MalAla
 
->  <m_name>
+>  <m_name>  (354) 
 L-2-amino-3-maleimidopropanoic acid
 
->  <m_type>
+>  <m_type>  (354) 
 aa
 
->  <m_subtype>
+>  <m_subtype>  (354) 
 modified
 
->  <m_Rgroups>
+>  <m_Rgroups>  (354) 
 [H],[OH],[H],[H]
 
->  <m_chem_types>
+>  <m_chem_types>  (354) 
 1:backbone_n,2:backbone_c,3:backbone_n_mod,4:maleimide_c
 
 $$$$
@@ -17703,25 +17703,25 @@ $$$$
  15  9  1  0
 M  ISO  4   1   1   3   3  14   4  18   2
 M  END
->  <symbol>
+>  <symbol>  (355) 
 MalLys
 
->  <m_abbr>
+>  <m_abbr>  (355) 
 MalLys
 
->  <m_name>
+>  <m_name>  (355) 
 L-6-maleimido-lysine
 
->  <m_type>
+>  <m_type>  (355) 
 aa
 
->  <m_subtype>
+>  <m_subtype>  (355) 
 modified
 
->  <m_Rgroups>
+>  <m_Rgroups>  (355) 
 [H],[OH],[H],[H]
 
->  <m_chem_types>
+>  <m_chem_types>  (355) 
 1:backbone_n,2:backbone_c,3:backbone_n_mod,4:maleimide_c
 
 $$$$
@@ -17752,25 +17752,25 @@ $$$$
  10 11  3  0
 M  ISO  4   1   1   3   3   6   2   9   4
 M  END
->  <symbol>
+>  <symbol>  (356) 
 Pra
 
->  <m_abbr>
+>  <m_abbr>  (356) 
 Pra
 
->  <m_name>
+>  <m_name>  (356) 
 L-propargylglycine
 
->  <m_type>
+>  <m_type>  (356) 
 aa
 
->  <m_subtype>
+>  <m_subtype>  (356) 
 modified
 
->  <m_Rgroups>
+>  <m_Rgroups>  (356) 
 [H],[OH],[H],[H]
 
->  <m_chem_types>
+>  <m_chem_types>  (356) 
 1:backbone_n,2:backbone_c,3:backbone_n_mod,4:alkyne_c
 
 $$$$
@@ -17803,25 +17803,25 @@ $$$$
  10 12  2  0
 M  ISO  4   1   1   3   3   7   4  11   2
 M  END
->  <symbol>
+>  <symbol>  (357) 
 Hpg
 
->  <m_abbr>
+>  <m_abbr>  (357) 
 Hpg
 
->  <m_name>
+>  <m_name>  (357) 
 L-homopropargylglycine
 
->  <m_type>
+>  <m_type>  (357) 
 aa
 
->  <m_subtype>
+>  <m_subtype>  (357) 
 modified
 
->  <m_Rgroups>
+>  <m_Rgroups>  (357) 
 [H],[OH],[H],[H]
 
->  <m_chem_types>
+>  <m_chem_types>  (357) 
 1:backbone_n,2:backbone_c,3:backbone_n_mod,4:alkyne_c
 
 $$$$
@@ -17855,25 +17855,25 @@ $$$$
 M  CHG  2  11   1  12  -1
 M  ISO  4   1   1   3   3   6   2   9   4
 M  END
->  <symbol>
+>  <symbol>  (358) 
 AzAla
 
->  <m_abbr>
+>  <m_abbr>  (358) 
 AzAla
 
->  <m_name>
+>  <m_name>  (358) 
 L-azidoalanine
 
->  <m_type>
+>  <m_type>  (358) 
 aa
 
->  <m_subtype>
+>  <m_subtype>  (358) 
 modified
 
->  <m_Rgroups>
+>  <m_Rgroups>  (358) 
 [H],[OH],[H],[H]
 
->  <m_chem_types>
+>  <m_chem_types>  (358) 
 1:backbone_n,2:backbone_c,3:backbone_n_mod,4:azide_alpha_c
 
 $$$$
@@ -17909,25 +17909,25 @@ $$$$
 M  CHG  2   9   1  10  -1
 M  ISO  4   1   1   3   3   7   4  12   2
 M  END
->  <symbol>
+>  <symbol>  (359) 
 AzHal
 
->  <m_abbr>
+>  <m_abbr>  (359) 
 AzHal
 
->  <m_name>
+>  <m_name>  (359) 
 L-azidohomoalanine
 
->  <m_type>
+>  <m_type>  (359) 
 aa
 
->  <m_subtype>
+>  <m_subtype>  (359) 
 modified
 
->  <m_Rgroups>
+>  <m_Rgroups>  (359) 
 [H],[OH],[H],[H]
 
->  <m_chem_types>
+>  <m_chem_types>  (359) 
 1:backbone_n,2:backbone_c,3:backbone_n_mod,4:azide_alpha_c
 
 $$$$
@@ -17967,25 +17967,25 @@ $$$$
  15 10  1  0
 M  ISO  4   1   1   3   3   6   2   9   4
 M  END
->  <symbol>
+>  <symbol>  (360) 
 TzAla
 
->  <m_abbr>
+>  <m_abbr>  (360) 
 TzAla
 
->  <m_name>
+>  <m_name>  (360) 
 L-tetrazinyl-alanine
 
->  <m_type>
+>  <m_type>  (360) 
 aa
 
->  <m_subtype>
+>  <m_subtype>  (360) 
 modified
 
->  <m_Rgroups>
+>  <m_Rgroups>  (360) 
 [H],[OH],[H],[H]
 
->  <m_chem_types>
+>  <m_chem_types>  (360) 
 1:backbone_n,2:backbone_c,3:backbone_n_mod,4:tetrazine_c
 
 $$$$
@@ -18033,25 +18033,25 @@ $$$$
  16 11  1  0
 M  ISO  4   1   1   3   3  10   4  18   2
 M  END
->  <symbol>
+>  <symbol>  (361) 
 TzLys
 
->  <m_abbr>
+>  <m_abbr>  (361) 
 TzLys
 
->  <m_name>
+>  <m_name>  (361) 
 L-tetrazinyl-lysine
 
->  <m_type>
+>  <m_type>  (361) 
 aa
 
->  <m_subtype>
+>  <m_subtype>  (361) 
 modified
 
->  <m_Rgroups>
+>  <m_Rgroups>  (361) 
 [H],[OH],[H],[H]
 
->  <m_chem_types>
+>  <m_chem_types>  (361) 
 1:backbone_n,2:backbone_c,3:backbone_n_mod,4:tetrazine_c
 
 $$$$
@@ -18095,25 +18095,25 @@ $$$$
  17 10  1  0
 M  ISO  4   1   1   3   3   6   2   9   4
 M  END
->  <symbol>
+>  <symbol>  (362) 
 TcoAla
 
->  <m_abbr>
+>  <m_abbr>  (362) 
 TcoAla
 
->  <m_name>
+>  <m_name>  (362) 
 L-trans-cyclooctenyl-alanine
 
->  <m_type>
+>  <m_type>  (362) 
 aa
 
->  <m_subtype>
+>  <m_subtype>  (362) 
 modified
 
->  <m_Rgroups>
+>  <m_Rgroups>  (362) 
 [H],[OH],[H],[H]
 
->  <m_chem_types>
+>  <m_chem_types>  (362) 
 1:backbone_n,2:backbone_c,3:backbone_n_mod,4:tco_c
 
 $$$$
@@ -18163,25 +18163,25 @@ $$$$
  17 10  1  0
 M  ISO  4   1   1   3   3   9   4  19   2
 M  END
->  <symbol>
+>  <symbol>  (363) 
 TcoLys
 
->  <m_abbr>
+>  <m_abbr>  (363) 
 TcoLys
 
->  <m_name>
+>  <m_name>  (363) 
 L-trans-cyclooctenyl-lysine
 
->  <m_type>
+>  <m_type>  (363) 
 aa
 
->  <m_subtype>
+>  <m_subtype>  (363) 
 modified
 
->  <m_Rgroups>
+>  <m_Rgroups>  (363) 
 [H],[OH],[H],[H]
 
->  <m_chem_types>
+>  <m_chem_types>  (363) 
 1:backbone_n,2:backbone_c,3:backbone_n_mod,4:tco_c
 
 $$$$
@@ -18227,25 +18227,25 @@ $$$$
  14  6  1  0
 M  ISO  5   1   1   3   3  11   4  15   5  17   2
 M  END
->  <symbol>
+>  <symbol>  (364) 
 CyoAla
 
->  <m_abbr>
+>  <m_abbr>  (364) 
 CyoAla
 
->  <m_name>
+>  <m_name>  (364) 
 L-cyclooctyn-1-yl-alanine
 
->  <m_type>
+>  <m_type>  (364) 
 aa
 
->  <m_subtype>
+>  <m_subtype>  (364) 
 modified
 
->  <m_Rgroups>
+>  <m_Rgroups>  (364) 
 [H],[OH],[H],[H],[H]
 
->  <m_chem_types>
+>  <m_chem_types>  (364) 
 1:backbone_n,2:backbone_c,3:backbone_n_mod,4:cyclooctyne_c,5:cyclooctyne_c
 
 $$$$
@@ -18297,25 +18297,25 @@ $$$$
  17  9  1  0
 M  ISO  5   1   1   3   3  14   4  18   5  20   2
 M  END
->  <symbol>
+>  <symbol>  (365) 
 CyoLys
 
->  <m_abbr>
+>  <m_abbr>  (365) 
 CyoLys
 
->  <m_name>
+>  <m_name>  (365) 
 L-cyclooctyn-1-yl-lysine
 
->  <m_type>
+>  <m_type>  (365) 
 aa
 
->  <m_subtype>
+>  <m_subtype>  (365) 
 modified
 
->  <m_Rgroups>
+>  <m_Rgroups>  (365) 
 [H],[OH],[H],[H],[H]
 
->  <m_chem_types>
+>  <m_chem_types>  (365) 
 1:backbone_n,2:backbone_c,3:backbone_n_mod,4:cyclooctyne_c,5:cyclooctyne_c
 
 $$$$

@@ -79,10 +79,15 @@ def _append_mol_to_sdf(mol, sdf_path):
     :param sdf_path: path (str or Path) of the target SDF file.
     """
     mol_block = Chem.MolToMolBlock(mol)
-    with open(Path(sdf_path), 'a', encoding='utf-8') as f:
+    sdf_path = Path(sdf_path)
+    try:
+        record_num = sdf_path.read_text(encoding='utf-8').count('$$$$') + 1
+    except FileNotFoundError:
+        record_num = 1
+    with open(sdf_path, 'a', encoding='utf-8') as f:
         f.write(mol_block)
         for prop in mol.GetPropNames():
-            f.write(f">  <{prop}>\n{mol.GetProp(prop)}\n\n")
+            f.write(f">  <{prop}>  ({record_num}) \n{mol.GetProp(prop)}\n\n")
         f.write("$$$$\n")
 
 
