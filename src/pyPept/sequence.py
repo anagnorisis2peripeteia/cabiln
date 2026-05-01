@@ -88,6 +88,49 @@ _OLD_BILN_RE = re.compile(r'(?<![.\w])([A-Za-z]\w*)\((\d+),(\d+)\)')
 _BRACKET_RE = re.compile(r'\[([^\]]*)\]')
 
 
+def biln_to_cabiln(biln):
+    """Convert old BILN crosslink notation ``Token(bid,rg)`` to CABILN ``.!n(y,z)`` form.
+
+    Old BILN embeds bond IDs as bare integers inside residue names::
+
+        C(1,3)-A-A-A-C(1,3)   # bond 1, R3 on each Cys
+
+    CABILN uses inline dot notation::
+
+        C.!1(3,3)-A-A-A-C.!1  # first endpoint declares both R-groups; second is implicit
+
+    The conversion groups matches by bond ID, assigns the first occurrence as the
+    defining endpoint (with both R-groups), and the second as the implicit endpoint.
+
+    :param biln: BILN string, possibly containing old crosslink annotations.
+    :returns: equivalent CABILN string.
+    """
+    matches = list(_OLD_BILN_RE.finditer(biln))
+    if not matches:
+        return biln
+
+    bond_groups = {}
+    for m in matches:
+        bid = m.group(2)
+        bond_groups.setdefault(bid, []).append(m)
+
+    replacements = {}
+    for bid, endpoints in bond_groups.items():
+        if len(endpoints) != 2:
+            continue
+        m1, m2 = endpoints
+        tok1, rg1 = m1.group(1), m1.group(3)
+        tok2, rg2 = m2.group(1), m2.group(3)
+        replacements[m1.start()] = (m1, f'{tok1}.!{bid}({rg1},{rg2})')
+        replacements[m2.start()] = (m2, f'{tok2}.!{bid}')
+
+    result = biln
+    for pos in sorted(replacements, reverse=True):
+        m, replacement = replacements[pos]
+        result = result[:m.start()] + replacement + result[m.end():]
+    return result
+
+
 def _preprocess_cabiln(biln):
     """Normalise newline- or %-separated CABILN into a single %-delimited string."""
     biln = biln.strip()
@@ -546,16 +589,18 @@ class Sequence:
         self.s_nmonomers = 0
         self.__is_valid = True
 
-        # Reject old BILN bare-integer crosslink notation — e.g. K(1,3)-A-K(1,3).
-        # CABILN requires .!n(y,z) style.  Call biln_to_cabiln() to auto-convert.
+        # Auto-convert old BILN bare-integer crosslink notation — e.g. K(1,3)-A-K(1,3).
+        # CABILN uses .!n(y,z) style; old notation is accepted with a deprecation warning.
         if _OLD_BILN_RE.search(input_biln):
             m = _OLD_BILN_RE.search(input_biln)
             tok, bid, rg = m.group(1), m.group(2), m.group(3)
-            raise ValueError(
+            warnings.warn(
                 f"Old BILN crosslink notation detected: {tok}({bid},{rg}). "
-                "CABILN uses .!n(y,z) inline notation — e.g. "
-                f"{tok}.!{bid}({rg},{rg}) for a symmetric crosslink."
+                f"Auto-converting to CABILN .!n(y,z) form. "
+                f"Use biln_to_cabiln() to convert explicitly.",
+                DeprecationWarning, stacklevel=2,
             )
+            input_biln = biln_to_cabiln(input_biln)
 
         # Expand .Token(host_r,cap_r) inline attachment notation before anything else.
         # branch_rgroup maps each !x bond → partner rgroup z (reserved for Phase 2).

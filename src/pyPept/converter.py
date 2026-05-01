@@ -140,11 +140,14 @@ class Converter:
         chains = copy.deepcopy(self.polymerinfo["chains"])
         bonds = copy.deepcopy(self.polymerinfo["bonds"])
 
-        # move bond info into monomers
+        # move bond info into monomers using CABILN .!n(y,z) inline notation
         for ibond, bond in enumerate(bonds):
             c1_value, res1, rgroup1, c2_value, res2, rgroup2 = bond
-            chains[c1_value][res1] = f"{chains[c1_value][res1]}({ibond + 1},{rgroup1})"
-            chains[c2_value][res2] = f"{chains[c2_value][res2]}({ibond + 1},{rgroup2})"
+            bid = ibond + 1
+            chains[c1_value][res1] = (
+                f"{chains[c1_value][res1]}.!{bid}({rgroup1},{rgroup2})")
+            chains[c2_value][res2] = (
+                f"{chains[c2_value][res2]}.!{bid}")
 
         # chain everything together
         list_ofsimple_polymers = []

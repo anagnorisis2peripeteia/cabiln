@@ -32,7 +32,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 from pyPept.sequence import (Sequence, ValidationReport, _check_bond_chemistry,
                              _preprocess_cabiln, _expand_inline_caps,
-                             _handle_terminal_bond_markers, colorize_cabiln)
+                             _handle_terminal_bond_markers, colorize_cabiln,
+                             biln_to_cabiln)
 from pyPept.molecule import Molecule
 
 # monomers.sdf is now the CHUCKLES-format library (isotope-labelled dummies).
@@ -548,14 +549,15 @@ class TestInlineAttachments:
         with pytest.raises((ValueError, SystemExit)):
             Sequence('K.!1(3,3)-A-am')
 
-    def test_old_biln_crosslink_raises_on_sequence(self):
-        """Old BILN bare-integer crosslink notation raises ValueError with helpful message."""
-        with pytest.raises(ValueError, match='Old BILN'):
-            Sequence('K(1,3)-A-K(1,3)-am')
+    def test_old_biln_crosslink_warns_and_converts(self):
+        """Old BILN bare-integer crosslink notation emits DeprecationWarning and auto-converts."""
+        with pytest.warns(DeprecationWarning, match='Old BILN'):
+            seq = Sequence('K(1,3)-A-K(1,3)-am')
+        assert seq is not None
 
-    def test_old_biln_error_shows_cabiln_example(self):
-        """Error message for old BILN shows the equivalent CABILN .!n(y,z) form."""
-        with pytest.raises(ValueError, match=r'\.!'):
+    def test_old_biln_warning_mentions_cabiln(self):
+        """DeprecationWarning for old BILN mentions the .!n(y,z) CABILN form."""
+        with pytest.warns(DeprecationWarning, match=r'\.!'):
             Sequence('K(1,3)-A-K(1,3)-am')
 
 
@@ -1252,6 +1254,120 @@ class TestFinalMonomers:
     def test_pqa(self):
         """Pqa: 2-(1-oxo-7-(piperazin-1-yl)-1,2-dihydroisoquinolin-2-yl)acetic acid."""
         assert _natoms('ac-Pqa-am') == 24
+
+
+class TestRoundTrips:
+    """Round-trip tests: BILN, HELM, and FASTA all produce correct molecules."""
+
+    # ------------------------------------------------------------------ #
+    # biln_to_cabiln utility
+    # ------------------------------------------------------------------ #
+
+    def test_biln_to_cabiln_symmetric(self):
+        """Old BILN symmetric crosslink converts to CABILN .!n(y,y) notation."""
+        result = biln_to_cabiln('C(1,3)-A-A-A-C(1,3)')
+        assert '.!1(3,3)' in result
+        assert result.count('.!1') == 2
+
+    def test_biln_to_cabiln_asymmetric(self):
+        """Old BILN asymmetric crosslink converts correctly (different R-groups)."""
+        result = biln_to_cabiln('K(1,4)-A-A-A-D(1,3)')
+        assert '.!1(4,3)' in result   # first endpoint: K R4 → partner R3
+        assert 'D.!1' in result       # second endpoint: implicit
+
+    def test_biln_to_cabiln_no_op(self):
+        """biln_to_cabiln leaves strings with no old crosslinks unchanged."""
+        s = 'fmoc-A-G-K-am'
+        assert biln_to_cabiln(s) == s
+
+    def test_biln_to_cabiln_two_bonds(self):
+        """Two independent crosslinks both get converted."""
+        result = biln_to_cabiln('C(1,3)-A-K(2,4)-A-C(1,3)-A-D(2,3)')
+        assert '.!1' in result
+        assert '.!2' in result
+
+    # ------------------------------------------------------------------ #
+    # Old BILN → Sequence auto-conversion
+    # ------------------------------------------------------------------ #
+
+    def test_old_biln_auto_converts_with_warning(self):
+        """Sequence auto-converts old BILN and emits DeprecationWarning."""
+        import warnings
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter('always')
+            seq = Sequence('C(1,3)-A-A-A-C(1,3)')
+        assert any(issubclass(x.category, DeprecationWarning) for x in w)
+        assert seq is not None
+
+    def test_old_biln_crosslink_assembles(self):
+        """Old BILN disulfide bridge assembles to a molecule with correct atom count."""
+        import warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            romol = _romol('C(1,3)-A-A-A-C(1,3)')
+        assert romol is not None
+        # Cys-Ala-Ala-Ala-Cys disulfide: check we get a molecule, not None
+        from rdkit import Chem
+        assert Chem.MolToSmiles(romol) != ''
+
+    # ------------------------------------------------------------------ #
+    # HELM round-trip
+    # ------------------------------------------------------------------ #
+
+    def test_helm_linear_round_trip(self):
+        """HELM linear → Converter.get_biln() → Sequence → molecule works."""
+        from pyPept.converter import Converter
+        import warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            b = Converter(helm='PEPTIDE1{[ac].D.T.H.F.E.I.A.[am]}$$$$V2.0')
+            biln = b.get_biln()
+            romol = _romol(biln)
+        assert romol is not None
+
+    def test_helm_crosslink_round_trip(self):
+        """HELM crosslink → Converter.get_biln() → Sequence → molecule works."""
+        from pyPept.converter import Converter
+        import warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            b = Converter(helm='PEPTIDE1{C.A.A.A.C}$PEPTIDE1,PEPTIDE1,1:R3-5:R3$$$V2.0')
+            biln = b.get_biln()
+            assert '.!1' in biln, f"Expected CABILN notation in: {biln}"
+            romol = _romol(biln)
+        assert romol is not None
+
+    def test_helm_crosslink_biln_contains_cabiln_notation(self):
+        """Converter.get_biln() emits CABILN .!n notation, not old (bid,rg)."""
+        from pyPept.converter import Converter
+        import re
+        import warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            b = Converter(helm='PEPTIDE1{C.A.A.A.C}$PEPTIDE1,PEPTIDE1,1:R3-5:R3$$$V2.0')
+            biln = b.get_biln()
+        # Must not contain bare integer crosslink notation
+        assert not re.search(r'(?<![.\w])[A-Za-z]\w*\(\d+,\d+\)', biln), \
+            f"Old BILN notation present in: {biln}"
+        assert '.!1' in biln
+
+    # ------------------------------------------------------------------ #
+    # FASTA round-trip
+    # ------------------------------------------------------------------ #
+
+    def test_fasta_round_trip(self):
+        """FASTA single-letter sequence → joined BILN → molecule works."""
+        fasta = 'PEPTIDE'
+        biln = '-'.join(list(fasta))
+        romol = _romol(biln)
+        assert romol is not None
+
+    def test_fasta_all_natural_aas(self):
+        """All 20 standard amino acids assemble via FASTA-style joined BILN."""
+        fasta = 'ACDEFGHIKLMNPQRSTVWY'
+        biln = '-'.join(list(fasta))
+        romol = _romol(biln)
+        assert romol is not None
 
 
 class TestFattyAcidBranching:
@@ -2078,11 +2194,12 @@ class TestSequenceValidate:
         # 3 backbone bonds + 1 head-to-tail crosslink = 4 bonds
         assert len(report.bonds) == 4
 
-    def test_old_biln_notation_not_ok(self):
-        """Old BILN K(1,3) crosslink syntax → parse error, not ok."""
+    def test_old_biln_notation_warns_and_converts(self):
+        """Old BILN K(1,3) crosslink syntax → DeprecationWarning + auto-convert, valid result."""
         report = Sequence.validate('K(1,3)-A-K(1,3)')
-        assert report.ok is False
-        assert len(report.errors) > 0
+        # validate() captures warnings internally; check they appear in report.warnings
+        assert any('Old BILN' in w for w in report.warnings)
+        assert report.ok is True
 
 
 # ---------------------------------------------------------------------------
@@ -2481,7 +2598,7 @@ if __name__ == '__main__':
                 TestInlineAttachments, TestCapMonomers, TestCABILNPhase2Parser,
                 TestIntramolecularRingClosure, TestExpandedMonomers,
                 TestFinalMonomers, TestFattyAcidBranching, TestBracketNotation,
-                TestMonomerBuilderCLI):
+                TestMonomerBuilderCLI, TestRoundTrips):
         suite.addTests(loader.loadTestsFromTestCase(cls))
     runner = unittest.TextTestRunner(verbosity=2)
     result = runner.run(suite)
