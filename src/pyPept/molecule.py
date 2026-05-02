@@ -131,6 +131,7 @@ class Molecule:
         for m_idx, mol in enumerate(monomers_orig):
             rw = Chem.RWMol(mol)
             for atom in rw.GetAtoms():
+                atom.SetIntProp('_residue_idx', m_idx)
                 if atom.GetAtomicNum() == 0:
                     orig = atom.GetIsotope()      # 1-based slot index
                     atom.SetIsotope((m_idx + 1) * 100 + orig)
@@ -249,8 +250,13 @@ class Molecule:
                     nb.SetNoImplicit(False)
                 to_remove.append(atom.GetIdx())
             else:
-                emol.ReplaceAtom(atom.GetIdx(),
-                                 Chem.Atom(lg_mol.GetAtomWithIdx(0).GetAtomicNum()))
+                new_atom = Chem.Atom(lg_mol.GetAtomWithIdx(0).GetAtomicNum())
+                try:
+                    new_atom.SetIntProp('_residue_idx',
+                                        atom.GetIntProp('_residue_idx'))
+                except KeyError:
+                    pass
+                emol.ReplaceAtom(atom.GetIdx(), new_atom)
 
         for idx in sorted(set(to_remove), reverse=True):
             emol.RemoveAtom(idx)
@@ -461,6 +467,36 @@ class Molecule:
             mol = None
 
         return mol
+
+    ########################################################################################
+    def get_residue_atom_map(self):
+        """
+        Return {residue_idx: [atom_indices]} for the assembled molecule.
+
+        Uses the _residue_idx int property set during assembly.  Atoms that
+        lost the property (e.g. bond-junction atoms after SMIRKS) are assigned
+        to the residue of their first tagged neighbour.
+        """
+        if self.mol is None:
+            return {}
+        mapping = {}
+        orphans = []
+        for atom in self.mol.GetAtoms():
+            try:
+                res_idx = atom.GetIntProp('_residue_idx')
+                mapping.setdefault(res_idx, []).append(atom.GetIdx())
+            except KeyError:
+                orphans.append(atom.GetIdx())
+        for aidx in orphans:
+            atom = self.mol.GetAtomWithIdx(aidx)
+            for nb in atom.GetNeighbors():
+                try:
+                    res_idx = nb.GetIntProp('_residue_idx')
+                    mapping.setdefault(res_idx, []).append(aidx)
+                    break
+                except KeyError:
+                    continue
+        return mapping
 
     # End of the Molecule class declaration.
 

@@ -15,6 +15,9 @@ Controls
 --------
   Dark mode toggle  — moon icon in header; inverts the canvas colours.
   Zoom / pan        — scroll wheel to zoom; click-drag to pan; double-click to reset.
+  Library overlay   — searchable monomer browser; click abbreviation to insert.
+  Exports           — PNG (client-side) and MOL (server-side) download buttons.
+  Register page     — /register to add new monomers from plain SMILES.
 """
 
 __credits__ = ["Cameron Beesley"]
@@ -27,7 +30,7 @@ import webbrowser
 try:
     import uvicorn
     from fastapi import FastAPI
-    from fastapi.responses import HTMLResponse, JSONResponse
+    from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
     from pydantic import BaseModel
 except ImportError:
     raise SystemExit("pip install fastapi uvicorn  (then re-run)")
@@ -61,8 +64,9 @@ _HTML = r"""<!DOCTYPE html>
     display: flex;
     align-items: center;
     gap: 10px;
+    flex-wrap: wrap;
   }
-  header .title { flex: 1; }
+  header .title { flex: 1; min-width: 120px; }
   header span   { color: #3a5580; font-weight: 400; }
   .hbtn {
     background: #1a2640;
@@ -75,8 +79,11 @@ _HTML = r"""<!DOCTYPE html>
     transition: background .15s, color .15s;
     white-space: nowrap;
   }
-  .hbtn:hover       { background: #263550; color: #c8daf0; }
-  .hbtn.active      { background: #2a4a80; border-color: #4a6faa; color: #d8e8ff; }
+  .hbtn:hover        { background: #263550; color: #c8daf0; }
+  .hbtn.active       { background: #2a4a80; border-color: #4a6faa; color: #d8e8ff; }
+  .hbtn:disabled     { opacity: .35; cursor: default; pointer-events: none; }
+  .hbtn.green        { border-color: #1e5030; color: #5dba7a; }
+  .hbtn.green:hover  { background: #1a3828; color: #7dd098; }
 
   /* ── input bar ── */
   #input-bar {
@@ -130,7 +137,7 @@ _HTML = r"""<!DOCTYPE html>
   .statusbar.ok { color: #3dbe6c; }
 
   /* ── main area ── */
-  #main { flex: 1; display: flex; min-height: 0; }
+  #main { flex: 1; display: flex; min-height: 0; position: relative; }
 
   /* ── render mode ── */
   #render-pane {
@@ -221,14 +228,181 @@ _HTML = r"""<!DOCTYPE html>
   #compare-bar .nomatch { color: #d9534f; font-weight: 600; }
   #compare-bar .canon   { color: #7aaeff; font-size: 10.5px; flex: 1;
                           overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* ── monomer library sidebar ── */
+  #lib-panel {
+    width: 420px;
+    max-width: 50%;
+    background: #0d1422;
+    border-right: 1px solid #1e3050;
+    display: none;
+    flex-direction: column;
+    flex-shrink: 0;
+    overflow: hidden;
+  }
+  #lib-panel.open { display: flex; }
+
+  #lib-header {
+    flex-shrink: 0;
+    padding: 10px 14px 8px;
+    background: #0a1018;
+    border-bottom: 1px solid #1e3050;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  #lib-header span { flex: 1; font-size: 12px; color: #7aaeff; letter-spacing: .08em; }
+  #lib-search {
+    flex: 2;
+    background: #12192b;
+    border: 1px solid #1e3050;
+    border-radius: 4px;
+    color: #c8daf0;
+    padding: 4px 9px;
+    font-size: 12px;
+    font-family: "Cascadia Code", "Fira Mono", monospace;
+    outline: none;
+    transition: border-color .15s;
+  }
+  #lib-search:focus { border-color: #3a6fd8; }
+  #lib-close {
+    background: none;
+    border: none;
+    color: #4a6a9a;
+    font-size: 16px;
+    cursor: pointer;
+    padding: 2px 4px;
+    line-height: 1;
+  }
+  #lib-close:hover { color: #d8e8ff; }
+
+  #lib-count {
+    flex-shrink: 0;
+    padding: 4px 14px;
+    font-size: 10.5px;
+    color: #3a5580;
+    border-bottom: 1px solid #1e3050;
+  }
+
+  #lib-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 4px 0;
+  }
+  #lib-list::-webkit-scrollbar { width: 6px; }
+  #lib-list::-webkit-scrollbar-track { background: #0a1018; }
+  #lib-list::-webkit-scrollbar-thumb { background: #1e3050; border-radius: 3px; }
+
+  .lib-row {
+    display: grid;
+    grid-template-columns: 64px 1fr auto;
+    align-items: start;
+    gap: 6px;
+    padding: 6px 14px;
+    border-bottom: 1px solid #0d1830;
+    cursor: pointer;
+    transition: background .1s;
+  }
+  .lib-row:hover { background: #131f35; }
+  .lib-abbr {
+    font-family: "Cascadia Code", "Fira Mono", monospace;
+    font-size: 12px;
+    font-weight: 700;
+    color: #7aaeff;
+    word-break: break-all;
+  }
+  .lib-info { min-width: 0; }
+  .lib-name {
+    font-size: 11.5px;
+    color: #b0c8e0;
+    margin-bottom: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .lib-meta {
+    font-size: 10px;
+    color: #3a5580;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .lib-badge {
+    font-size: 9.5px;
+    padding: 1px 5px;
+    border-radius: 3px;
+    background: #1a2848;
+    color: #4a7ab0;
+    white-space: nowrap;
+    align-self: start;
+    margin-top: 1px;
+  }
+  .lib-badge.aa      { background: #1a3028; color: #4ab070; }
+  .lib-badge.cap     { background: #281a1a; color: #b07040; }
+  .lib-badge.protect { background: #28281a; color: #a8a040; }
+
+  /* ── monomer preview tooltip ── */
+  #lib-preview {
+    position: fixed;
+    z-index: 200;
+    background: #0a1018;
+    border: 1px solid #2a4070;
+    border-radius: 6px;
+    padding: 8px;
+    box-shadow: 0 8px 32px rgba(0,0,0,.6);
+    display: none;
+    pointer-events: none;
+    width: 240px;
+    height: 200px;
+  }
+  #lib-preview svg { width: 100%; height: 100%; display: block; }
+  #lib-preview.dark svg { filter: invert(1); }
+
+  /* ── residue chips ── */
+  #residue-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px;
+    padding: 2px 0;
+    min-height: 0;
+  }
+  .res-chip {
+    font-family: "Cascadia Code", "Fira Mono", monospace;
+    font-size: 11px;
+    padding: 1px 7px;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: opacity .15s, border-color .15s;
+    border: 1px solid transparent;
+    color: #d0dce8;
+  }
+  .res-chip:hover, .res-chip.hover {
+    border-color: rgba(255,255,255,.5);
+  }
+  #residue-chips.dimmed .res-chip:not(.hover) { opacity: .35; }
+
+  /* ── SVG residue highlighting ── */
+  #render-inner svg.has-highlight path:not(.res-hl),
+  #render-inner svg.has-highlight text:not(.res-hl) {
+    opacity: .12;
+    transition: opacity .15s;
+  }
+  #render-inner svg .res-hl { transition: opacity .15s; }
 </style>
 </head>
 <body>
 
 <header>
   <span class="title">CABILN Live Renderer <span>— pyPept</span></span>
-  <button id="btn-dark"   class="hbtn" title="Toggle dark canvas">🌙 Dark</button>
-  <button id="btn-verify" class="hbtn" title="SMILES vs CABILN comparison">⚖ Verify</button>
+  <button id="btn-lib"    class="hbtn green"  title="Browse monomer library">📋 Library</button>
+  <button id="btn-hl"     class="hbtn active" title="Toggle residue highlighting">🔗 Highlight</button>
+  <button id="btn-dark"   class="hbtn"        title="Toggle dark canvas">🌙 Dark</button>
+  <button id="btn-verify" class="hbtn"        title="SMILES vs CABILN comparison">⚖ Verify</button>
+  <button id="btn-png"    class="hbtn"        title="Download PNG" disabled>⬇ PNG</button>
+  <button id="btn-mol"    class="hbtn"        title="Download MOL file" disabled>⬇ MOL</button>
+  <a href="/register" target="_blank" style="text-decoration:none;">
+    <button class="hbtn green" title="Register a new monomer">＋ Register</button>
+  </a>
 </header>
 
 <!-- input bar (always visible) -->
@@ -240,10 +414,25 @@ _HTML = r"""<!DOCTYPE html>
               spellcheck="false" autocomplete="off"></textarea>
   </div>
   <div id="cabiln-status" class="statusbar"></div>
+  <div id="residue-chips"></div>
 </div>
 
-<!-- render mode -->
+<!-- main area -->
 <div id="main">
+
+  <!-- library sidebar (persistent until dismissed) -->
+  <div id="lib-panel">
+    <div id="lib-header">
+      <span>Monomer Library</span>
+      <input id="lib-search" type="text" placeholder="Search abbr / name / type…" autocomplete="off">
+      <button id="lib-close" title="Close">✕</button>
+    </div>
+    <div id="lib-count"></div>
+    <div id="lib-list"><div class="placeholder">Loading…</div></div>
+  </div>
+  <div id="lib-preview"></div>
+
+  <!-- render mode -->
   <div id="render-pane">
     <div id="render-canvas" class="canvas-wrap">
       <div class="canvas-inner" id="render-inner">
@@ -283,10 +472,26 @@ _HTML = r"""<!DOCTYPE html>
 // ─── state ────────────────────────────────────────────────────────────────────
 let darkMode   = false;
 let verifyMode = false;
+let hlEnabled  = true;
+let libLoaded  = false;
+let allMonomers = [];
 let cabilnTimer = null;
 let smilesTimer = null;
 let lastCabiln  = '';
 let lastSmiles  = '';
+let lastSvg     = '';
+let lastMolBlock = '';
+let residueMap  = {};
+let atomToRes   = {};
+let residueList = [];
+let previewCache = {};
+let previewTimer = null;
+
+const RES_COLORS = [
+  '#2a5080','#2a8050','#802a50','#806a2a','#502a80',
+  '#2a6080','#80502a','#2a8070','#6a2a80','#80802a',
+  '#3a6080','#3a8060','#603a50','#706a3a','#403a70',
+];
 
 // ─── elements ─────────────────────────────────────────────────────────────────
 const cabilnInput   = document.getElementById('cabiln-input');
@@ -300,6 +505,17 @@ const smilesInner   = document.getElementById('smiles-inner');
 const compareBar    = document.getElementById('compare-bar');
 const btnDark       = document.getElementById('btn-dark');
 const btnVerify     = document.getElementById('btn-verify');
+const btnLib        = document.getElementById('btn-lib');
+const btnHl         = document.getElementById('btn-hl');
+const btnPng        = document.getElementById('btn-png');
+const btnMol        = document.getElementById('btn-mol');
+const libPanel      = document.getElementById('lib-panel');
+const libSearch     = document.getElementById('lib-search');
+const libClose      = document.getElementById('lib-close');
+const libList       = document.getElementById('lib-list');
+const libCount      = document.getElementById('lib-count');
+const libPreview    = document.getElementById('lib-preview');
+const resChips      = document.getElementById('residue-chips');
 
 // ─── dark mode ────────────────────────────────────────────────────────────────
 btnDark.addEventListener('click', () => {
@@ -308,6 +524,14 @@ btnDark.addEventListener('click', () => {
   for (const el of document.querySelectorAll('.canvas-wrap')) {
     el.classList.toggle('dark', darkMode);
   }
+  libPreview.classList.toggle('dark', darkMode);
+});
+
+// ─── highlight toggle ─────────────────────────────────────────────────────────
+btnHl.addEventListener('click', () => {
+  hlEnabled = !hlEnabled;
+  btnHl.classList.toggle('active', hlEnabled);
+  if (!hlEnabled) clearHighlight();
 });
 
 // ─── verify mode ──────────────────────────────────────────────────────────────
@@ -319,6 +543,196 @@ btnVerify.addEventListener('click', () => {
   compareBar.style.display = verifyMode ? '' : 'none';
   if (verifyMode) triggerVerify();
 });
+
+// ─── library sidebar (persistent) ────────────────────────────────────────────
+function openLib() {
+  libPanel.classList.add('open');
+  btnLib.classList.add('active');
+  if (!libLoaded) loadMonomers();
+  else libSearch.focus();
+}
+function closeLib() {
+  libPanel.classList.remove('open');
+  btnLib.classList.remove('active');
+  hidePreview();
+}
+
+btnLib.addEventListener('click', () =>
+  libPanel.classList.contains('open') ? closeLib() : openLib());
+libClose.addEventListener('click', closeLib);
+
+libSearch.addEventListener('input', () => renderLibList(libSearch.value.trim().toLowerCase()));
+
+async function loadMonomers() {
+  libList.innerHTML = '<div class="placeholder">Loading…</div>';
+  try {
+    const res = await fetch('/monomers');
+    allMonomers = await res.json();
+    libLoaded = true;
+    renderLibList('');
+    libSearch.focus();
+  } catch (e) {
+    libList.innerHTML = '<div class="placeholder err">Failed to load monomers</div>';
+  }
+}
+
+function renderLibList(q) {
+  const filtered = q
+    ? allMonomers.filter(m =>
+        m.abbr.toLowerCase().includes(q) ||
+        m.name.toLowerCase().includes(q) ||
+        m.type.toLowerCase().includes(q) ||
+        (m.chem_types || '').toLowerCase().includes(q)
+      )
+    : allMonomers;
+
+  libCount.textContent = `${filtered.length} / ${allMonomers.length} monomers`;
+
+  if (!filtered.length) {
+    libList.innerHTML = '<div class="placeholder">No matches</div>';
+    return;
+  }
+
+  const rows = filtered.map(m => {
+    const badge = m.subtype === 'modified' || m.subtype === 'natural'
+      ? `<span class="lib-badge aa">${m.type}</span>`
+      : m.type === 'cap' && m.subtype === 'protecting'
+      ? `<span class="lib-badge protect">cap</span>`
+      : `<span class="lib-badge cap">${m.type}</span>`;
+
+    const lg = m.leaving ? `  LG: ${escHtml(m.leaving)}` : '';
+    return `<div class="lib-row" data-abbr="${escAttr(m.abbr)}">
+      <div class="lib-abbr">${escHtml(m.abbr)}</div>
+      <div class="lib-info">
+        <div class="lib-name" title="${escAttr(m.name)}">${escHtml(m.name)}</div>
+        <div class="lib-meta">${escHtml(m.chem_types || '')}${lg}</div>
+      </div>
+      ${badge}
+    </div>`;
+  });
+  libList.innerHTML = rows.join('');
+
+  libList.querySelectorAll('.lib-row').forEach(row => {
+    row.addEventListener('click', () => insertAbbr(row.dataset.abbr));
+    row.addEventListener('mouseenter', e => startPreview(row.dataset.abbr, row));
+    row.addEventListener('mouseleave', () => hidePreview());
+  });
+}
+
+function insertAbbr(abbr) {
+  const ta = cabilnInput;
+  const start = ta.selectionStart;
+  const end   = ta.selectionEnd;
+  const val   = ta.value;
+  const before = val.slice(0, start);
+  const after  = val.slice(end);
+  const needDash = before.length > 0 && !before.endsWith('-') && !before.endsWith('\n');
+  const insert = (needDash ? '-' : '') + abbr;
+  ta.value = before + insert + after;
+  const newPos = start + insert.length;
+  ta.setSelectionRange(newPos, newPos);
+  ta.focus();
+  ta.dispatchEvent(new Event('input'));
+}
+
+// ─── monomer preview tooltip ──────────────────────────────────────────────────
+function startPreview(abbr, row) {
+  clearTimeout(previewTimer);
+  previewTimer = setTimeout(async () => {
+    if (previewCache[abbr]) {
+      showPreview(previewCache[abbr], row);
+      return;
+    }
+    try {
+      const res = await fetch(`/monomer_svg?abbr=${encodeURIComponent(abbr)}`);
+      const data = await res.json();
+      if (data.svg) {
+        previewCache[abbr] = data.svg;
+        showPreview(data.svg, row);
+      }
+    } catch (e) { /* silent */ }
+  }, 200);
+}
+
+function showPreview(svg, row) {
+  libPreview.innerHTML = svg;
+  const rect = row.getBoundingClientRect();
+  libPreview.style.left = (rect.right + 8) + 'px';
+  libPreview.style.top  = Math.max(8, rect.top - 40) + 'px';
+  libPreview.style.display = 'block';
+}
+
+function hidePreview() {
+  clearTimeout(previewTimer);
+  libPreview.style.display = 'none';
+}
+
+// ─── residue chips + bidirectional highlighting ───────────────────────────────
+function buildResidueUI(resMap, residues) {
+  residueMap = resMap || {};
+  residueList = residues || [];
+  atomToRes = {};
+  for (const [rIdx, atoms] of Object.entries(residueMap)) {
+    for (const aidx of atoms) atomToRes[aidx] = parseInt(rIdx);
+  }
+
+  resChips.innerHTML = '';
+  if (!residueList.length) return;
+
+  residueList.forEach((r, i) => {
+    const chip = document.createElement('span');
+    chip.className = 'res-chip';
+    chip.textContent = r.abbr;
+    chip.dataset.residue = r.idx;
+    chip.style.background = RES_COLORS[i % RES_COLORS.length];
+    chip.addEventListener('mouseenter', () => highlightResidue(r.idx));
+    chip.addEventListener('mouseleave', clearHighlight);
+    resChips.appendChild(chip);
+  });
+
+  wireUpSvgHover();
+}
+
+function highlightResidue(rIdx) {
+  if (!hlEnabled) return;
+  const atoms = residueMap[rIdx] || [];
+  const svg = document.querySelector('#render-inner svg');
+  if (!svg) return;
+
+  svg.classList.add('has-highlight');
+  for (const aidx of atoms) {
+    svg.querySelectorAll(`.atom-${aidx}`).forEach(el =>
+      el.classList.add('res-hl'));
+  }
+
+  resChips.classList.add('dimmed');
+  resChips.querySelectorAll('.res-chip').forEach(c =>
+    c.classList.toggle('hover', parseInt(c.dataset.residue) === rIdx));
+}
+
+function clearHighlight() {
+  const svg = document.querySelector('#render-inner svg');
+  if (svg) {
+    svg.classList.remove('has-highlight');
+    svg.querySelectorAll('.res-hl').forEach(el => el.classList.remove('res-hl'));
+  }
+  resChips.classList.remove('dimmed');
+  resChips.querySelectorAll('.res-chip.hover').forEach(c => c.classList.remove('hover'));
+}
+
+function wireUpSvgHover() {
+  const svg = document.querySelector('#render-inner svg');
+  if (!svg) return;
+  svg.addEventListener('mouseover', e => {
+    if (!hlEnabled) return;
+    const cls = (e.target.getAttribute('class') || '');
+    const m = cls.match(/atom-(\d+)/);
+    if (!m) return;
+    const rIdx = atomToRes[parseInt(m[1])];
+    if (rIdx !== undefined) highlightResidue(rIdx);
+  });
+  svg.addEventListener('mouseleave', clearHighlight);
+}
 
 // ─── zoom / pan (shared, wired per canvas) ────────────────────────────────────
 function makeZoomable(canvas, inner) {
@@ -363,6 +777,54 @@ makeZoomable(renderCanvas, renderInner);
 makeZoomable(document.getElementById('smiles-canvas'), smilesInner);
 makeZoomable(document.getElementById('verify-canvas'), verifyInner);
 
+// ─── PNG download (client-side SVG → canvas → PNG) ────────────────────────────
+btnPng.addEventListener('click', () => {
+  if (!lastSvg) return;
+  const blob = new Blob([lastSvg], { type: 'image/svg+xml;charset=utf-8' });
+  const url  = URL.createObjectURL(blob);
+  const img  = new Image();
+  img.onload = () => {
+    const w = img.naturalWidth  || 1200;
+    const h = img.naturalHeight || 900;
+    const cv = document.createElement('canvas');
+    cv.width = w; cv.height = h;
+    const ctx = cv.getContext('2d');
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, w, h);
+    ctx.drawImage(img, 0, 0);
+    const a = document.createElement('a');
+    a.download = 'structure.png';
+    a.href = cv.toDataURL('image/png');
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+  img.onerror = () => URL.revokeObjectURL(url);
+  img.src = url;
+});
+
+// ─── MOL download (server-side mol block) ────────────────────────────────────
+btnMol.addEventListener('click', async () => {
+  if (!lastMolBlock) return;
+  const blob = new Blob([lastMolBlock], { type: 'chemical/x-mdl-molfile' });
+  const a = document.createElement('a');
+  a.download = 'structure.mol';
+  a.href = URL.createObjectURL(blob);
+  a.click();
+});
+
+function setExportReady(svg, molBlock) {
+  lastSvg      = svg || '';
+  lastMolBlock = molBlock || '';
+  btnPng.disabled = !lastSvg;
+  btnMol.disabled = !lastMolBlock;
+}
+
+function clearExports() {
+  lastSvg = lastMolBlock = '';
+  btnPng.disabled = true;
+  btnMol.disabled = true;
+}
+
 // ─── render helpers ───────────────────────────────────────────────────────────
 function canvasSize(el) {
   return { w: Math.max(el.clientWidth || 600, 400),
@@ -371,7 +833,6 @@ function canvasSize(el) {
 
 function setInner(inner, html) {
   inner.innerHTML = html;
-  // reset transform on content change
   inner.style.transform = '';
 }
 
@@ -396,6 +857,9 @@ function resetCabiln() {
   cabilnStatus.textContent = '';
   cabilnStatus.className = 'statusbar';
   setInner(renderInner, '<div class="placeholder">Start typing a sequence…</div>');
+  clearExports();
+  resChips.innerHTML = '';
+  residueMap = {}; atomToRes = {}; residueList = [];
   if (verifyMode) {
     setInner(verifyInner, '<div class="placeholder">Waiting for CABILN…</div>');
     compareBar.innerHTML = '';
@@ -419,12 +883,16 @@ async function doRenderCabiln(seq) {
       cabilnStatus.textContent = data.error;
       cabilnStatus.className = 'statusbar';
       cabilnInput.className = 'err';
+      clearExports();
+      resChips.innerHTML = '';
     } else {
       setInner(renderInner, data.svg);
       if (verifyMode) setInner(verifyInner, data.svg);
       cabilnStatus.textContent = data.info || '';
       cabilnStatus.className = 'statusbar ok';
       cabilnInput.className = 'ok';
+      setExportReady(data.svg, data.mol_block);
+      buildResidueUI(data.residue_map, data.residues);
       if (verifyMode && lastSmiles) triggerVerify();
     }
   } catch (e) {
@@ -495,9 +963,9 @@ async function triggerVerify() {
       : '<span class="nomatch">✗ MISMATCH</span>';
     compareBar.innerHTML =
       badge +
-      `<span class="canon" title="SMILES canonical: ${escHtml(data.smiles_canonical)}">` +
+      `<span class="canon" title="SMILES canonical: ${escAttr(data.smiles_canonical)}">` +
       `SMILES: ${escHtml(data.smiles_canonical.slice(0, 80))}${data.smiles_canonical.length > 80 ? '…' : ''}</span>` +
-      `<span class="canon" title="CABILN canonical: ${escHtml(data.cabiln_canonical)}">` +
+      `<span class="canon" title="CABILN canonical: ${escAttr(data.cabiln_canonical)}">` +
       `CABILN: ${escHtml(data.cabiln_canonical.slice(0, 80))}${data.cabiln_canonical.length > 80 ? '…' : ''}</span>`;
   } catch (e) {
     compareBar.innerHTML = '<span class="nomatch">Verify error</span>';
@@ -505,7 +973,297 @@ async function triggerVerify() {
 }
 
 function escHtml(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function escAttr(s) { return escHtml(s); }
+</script>
+</body>
+</html>
+"""
+
+# ── Registration page HTML ────────────────────────────────────────────────────
+
+_REGISTER_HTML = r"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Register Monomer — pyPept</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    min-height: 100%;
+    font-family: system-ui, -apple-system, sans-serif;
+    background: #12192b;
+    color: #d0dce8;
+  }
+  header {
+    padding: 10px 20px;
+    background: #0d1422;
+    border-bottom: 1px solid #1e3050;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  header a { color: #4a7ab0; font-size: 12px; text-decoration: none; }
+  header a:hover { color: #7aaeff; }
+  header .title { flex: 1; font-size: 14px; color: #7aaeff; letter-spacing: .07em; }
+
+  .page { max-width: 860px; margin: 0 auto; padding: 24px 20px; }
+
+  .card {
+    background: #0d1422;
+    border: 1px solid #1e3050;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+  .card h2 { font-size: 13px; color: #7aaeff; letter-spacing: .08em; margin-bottom: 14px; }
+
+  .field { margin-bottom: 14px; }
+  .field label { display: block; font-size: 11px; color: #4a7ab0; margin-bottom: 5px; letter-spacing: .1em; text-transform: uppercase; }
+  .field input, .field select, .field textarea {
+    width: 100%;
+    background: #0a1018;
+    border: 1px solid #1e3050;
+    border-radius: 5px;
+    color: #c8daf0;
+    padding: 7px 11px;
+    font-family: "Cascadia Code", "Fira Mono", monospace;
+    font-size: 13px;
+    outline: none;
+    transition: border-color .15s;
+  }
+  .field input:focus, .field select:focus, .field textarea:focus { border-color: #3a6fd8; }
+  .field input.err, .field textarea.err { border-color: #d9534f; }
+  .field input.ok,  .field textarea.ok  { border-color: #28a745; }
+  .field textarea { height: 62px; resize: vertical; }
+  .field select option { background: #0d1422; }
+
+  .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+  .btn {
+    padding: 8px 20px;
+    border-radius: 6px;
+    font-size: 13px;
+    cursor: pointer;
+    border: 1px solid;
+    transition: background .15s, color .15s;
+  }
+  .btn-primary { background: #1e3a70; border-color: #3a6fd8; color: #c8daf0; }
+  .btn-primary:hover { background: #2a4e90; }
+  .btn-success { background: #1a3828; border-color: #28a745; color: #5dba7a; }
+  .btn-success:hover { background: #1f4830; }
+  .btn:disabled { opacity: .35; cursor: default; }
+
+  #preview-section { display: none; }
+
+  #preview-canvas {
+    background: #fff;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 280px;
+    margin-bottom: 14px;
+    overflow: hidden;
+  }
+  #preview-canvas svg { max-width: 100%; display: block; }
+
+  .detected-types {
+    background: #0a1018;
+    border: 1px solid #1e3050;
+    border-radius: 5px;
+    padding: 10px 14px;
+    font-family: "Cascadia Code", "Fira Mono", monospace;
+    font-size: 12px;
+    color: #7aaeff;
+    margin-bottom: 14px;
+  }
+  .detected-types .slot { color: #3dbe6c; }
+  .detected-types .lg   { color: #a0b8d0; font-size: 11px; }
+
+  #status-msg {
+    margin-top: 10px;
+    padding: 8px 14px;
+    border-radius: 5px;
+    font-size: 12px;
+    display: none;
+  }
+  #status-msg.ok  { background: #1a3828; border: 1px solid #28a745; color: #5dba7a; }
+  #status-msg.err { background: #28181a; border: 1px solid #d9534f; color: #e07080; }
+</style>
+</head>
+<body>
+<header>
+  <span class="title">Register Monomer <span style="color:#3a5580">— pyPept</span></span>
+  <a href="/">← Back to Renderer</a>
+</header>
+
+<div class="page">
+  <div class="card">
+    <h2>STEP 1 — SMILES INPUT</h2>
+    <div class="field">
+      <label>Full monomer SMILES (all atoms, including leaving groups)</label>
+      <textarea id="smiles-in" placeholder="e.g.  NCC(=O)O  (glycine)  or  O=C(O)CN1C(=O)C=CC1=O  (Mal-Gly)" spellcheck="false" autocomplete="off"></textarea>
+    </div>
+    <button class="btn btn-primary" id="btn-preview">Preview &amp; detect R-groups</button>
+  </div>
+
+  <div id="preview-section">
+    <div class="card">
+      <h2>STEP 2 — DETECTED R-GROUPS &amp; PREVIEW</h2>
+      <div id="preview-canvas"><div style="color:#b0bec5;font-size:13px">…</div></div>
+      <div id="detected-display" class="detected-types"></div>
+      <div class="field">
+        <label>CHUCKLES (auto-generated — edit only if needed)</label>
+        <textarea id="chuckles-out" spellcheck="false" autocomplete="off"></textarea>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>STEP 3 — METADATA</h2>
+      <div class="field-row">
+        <div class="field">
+          <label>Abbreviation (unique token)</label>
+          <input id="abbr-in" type="text" placeholder="e.g.  MalGly" autocomplete="off">
+        </div>
+        <div class="field">
+          <label>Full name</label>
+          <input id="name-in" type="text" placeholder="e.g.  Maleimidoglycine" autocomplete="off">
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Type</label>
+          <select id="type-in">
+            <option value="aa">aa</option>
+            <option value="cap">cap</option>
+            <option value="linker">linker</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Subtype</label>
+          <select id="subtype-in">
+            <option value="natural">natural</option>
+            <option value="modified">modified</option>
+            <option value="cap">cap</option>
+            <option value="protecting">protecting</option>
+            <option value="label">label</option>
+            <option value="linker">linker</option>
+          </select>
+        </div>
+      </div>
+      <button class="btn btn-success" id="btn-register" disabled>Register monomer</button>
+      <div id="status-msg"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+let detectedData = null;
+
+const smilesIn   = document.getElementById('smiles-in');
+const btnPreview = document.getElementById('btn-preview');
+const prevSec    = document.getElementById('preview-section');
+const prevCanvas = document.getElementById('preview-canvas');
+const detDisp    = document.getElementById('detected-display');
+const chucklesOut= document.getElementById('chuckles-out');
+const abbrIn     = document.getElementById('abbr-in');
+const nameIn     = document.getElementById('name-in');
+const typeIn     = document.getElementById('type-in');
+const subtypeIn  = document.getElementById('subtype-in');
+const btnRegister= document.getElementById('btn-register');
+const statusMsg  = document.getElementById('status-msg');
+
+btnPreview.addEventListener('click', async () => {
+  const smi = smilesIn.value.trim();
+  if (!smi) return;
+  btnPreview.disabled = true;
+  btnPreview.textContent = 'Detecting…';
+  prevCanvas.innerHTML = '<div style="color:#b0bec5;font-size:13px">Analysing…</div>';
+  detDisp.innerHTML = '';
+  prevSec.style.display = '';
+  try {
+    const res  = await fetch('/preview_monomer', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ smiles: smi })
+    });
+    const data = await res.json();
+    if (data.error) {
+      prevCanvas.innerHTML = `<div style="color:#d9534f;font-size:13px;padding:20px">${escHtml(data.error)}</div>`;
+      smilesIn.className = 'err';
+      btnRegister.disabled = true;
+    } else {
+      detectedData = data;
+      prevCanvas.innerHTML = data.svg;
+      chucklesOut.value = data.chuckles;
+      smilesIn.className = 'ok';
+      renderDetected(data.chem_types, data.leaving);
+      btnRegister.disabled = false;
+    }
+  } catch (e) {
+    prevCanvas.innerHTML = '<div style="color:#d9534f;font-size:13px;padding:20px">Server error</div>';
+  } finally {
+    btnPreview.disabled = false;
+    btnPreview.textContent = 'Preview & detect R-groups';
+  }
+});
+
+function renderDetected(chem_types, leaving) {
+  const lines = Object.entries(chem_types).sort(([a],[b]) => +a - +b).map(([slot, ct]) => {
+    const lg = leaving[slot] ? `<span class="lg">  LG: ${escHtml(leaving[slot])}</span>` : '';
+    return `<div><span class="slot">R${slot}</span>  ${escHtml(ct)}${lg}</div>`;
+  });
+  detDisp.innerHTML = lines.join('');
+}
+
+btnRegister.addEventListener('click', async () => {
+  const abbr = abbrIn.value.trim();
+  const name = nameIn.value.trim();
+  if (!abbr || !name || !detectedData) {
+    showStatus('err', 'Please fill in abbreviation and name.');
+    return;
+  }
+  btnRegister.disabled = true;
+  btnRegister.textContent = 'Registering…';
+  try {
+    const res  = await fetch('/register_monomer', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        chuckles: chucklesOut.value.trim() || detectedData.chuckles,
+        chem_types: detectedData.chem_types,
+        leaving: detectedData.leaving,
+        abbr,
+        name,
+        type:    typeIn.value,
+        subtype: subtypeIn.value,
+      })
+    });
+    const data = await res.json();
+    if (data.error) {
+      showStatus('err', data.error);
+    } else {
+      showStatus('ok', `${abbr} registered successfully. Monomer count: ${data.total}`);
+      btnRegister.textContent = '✓ Registered';
+    }
+  } catch (e) {
+    showStatus('err', 'Server error');
+  } finally {
+    if (btnRegister.textContent !== '✓ Registered') btnRegister.disabled = false;
+    if (btnRegister.textContent !== '✓ Registered') btnRegister.textContent = 'Register monomer';
+  }
+});
+
+function showStatus(cls, msg) {
+  statusMsg.className = cls;
+  statusMsg.textContent = msg;
+  statusMsg.style.display = '';
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 </script>
 </body>
@@ -531,6 +1289,11 @@ def _draw_mol(romol, width: int, height: int) -> str:
     return drawer.GetDrawingText()
 
 
+def _mol_block(romol) -> str:
+    from rdkit.Chem import MolToMolBlock
+    return MolToMolBlock(romol)
+
+
 def _canon(romol) -> str:
     from rdkit.Chem import MolToSmiles
     return MolToSmiles(romol, canonical=True)
@@ -552,12 +1315,83 @@ class _VerifyReq(BaseModel):
     smiles: str
     cabiln: str
 
+class _PreviewReq(BaseModel):
+    smiles: str
+    width:  int = 640
+    height: int = 440
+
+class _RegisterReq(BaseModel):
+    chuckles:   str
+    chem_types: dict
+    leaving:    dict
+    abbr:       str
+    name:       str
+    type:       str = "aa"
+    subtype:    str = "modified"
+
 
 # ── routes ────────────────────────────────────────────────────────────────────
 
 @app.get("/", response_class=HTMLResponse)
 async def index():
     return _HTML
+
+
+@app.get("/register", response_class=HTMLResponse)
+async def register_page():
+    return _REGISTER_HTML
+
+
+@app.get("/monomers")
+async def list_monomers():
+    try:
+        from rdkit import Chem
+        import sys, pathlib
+        sys.path.insert(0, str(pathlib.Path(__file__).parent.parent / 'src'))
+        sdf_path = pathlib.Path(__file__).parent.parent / 'src' / 'pyPept' / 'data' / 'monomers.sdf'
+        suppl = Chem.SDMolSupplier(str(sdf_path), removeHs=False)
+        monomers = []
+        for mol in suppl:
+            if mol is None:
+                continue
+            p = mol.GetPropsAsDict()
+            abbr = p.get('m_abbr', '') or p.get('symbol', '')
+            if not abbr:
+                continue
+            # Build a human-readable leaving-group string from m_Rgroups
+            rgroups = p.get('m_Rgroups', '')
+            slots   = [r.strip() for r in rgroups.split(',')]
+            lg_parts = [f"R{i+1}:{slots[i]}" for i in range(len(slots))
+                        if slots[i] not in ('None', '', 'none')]
+            monomers.append({
+                'abbr':      abbr,
+                'name':      p.get('m_name', ''),
+                'type':      p.get('m_type', ''),
+                'subtype':   p.get('m_subtype', ''),
+                'chem_types': p.get('m_chem_types', ''),
+                'leaving':   ', '.join(lg_parts),
+            })
+        return monomers
+    except Exception as exc:
+        return JSONResponse({"error": str(exc)}, status_code=500)
+
+
+@app.get("/monomer_svg")
+async def monomer_svg(abbr: str, width: int = 220, height: int = 180):
+    try:
+        from rdkit import Chem
+        import pathlib
+        sdf_path = pathlib.Path(__file__).parent.parent / 'src' / 'pyPept' / 'data' / 'monomers.sdf'
+        suppl = Chem.SDMolSupplier(str(sdf_path), removeHs=False)
+        for mol in suppl:
+            if mol is None:
+                continue
+            if mol.GetPropsAsDict().get('m_abbr', '') == abbr:
+                svg = _draw_mol(mol, width, height)
+                return {"svg": svg}
+        return JSONResponse({"error": f"Monomer '{abbr}' not found"}, status_code=404)
+    except Exception as exc:
+        return JSONResponse({"error": str(exc).split('\n')[0]}, status_code=500)
 
 
 @app.post("/render")
@@ -573,9 +1407,18 @@ async def render(req: _CabilnReq):
         if romol is None:
             return JSONResponse({"error": "Assembly produced no molecule"}, status_code=400)
 
-        w, h = max(400, req.width), max(300, req.height)
-        svg  = _draw_mol(romol, w, h)
-        return {"svg": svg, "info": f"{romol.GetNumAtoms()} atoms · MW {ExactMolWt(romol):.2f}"}
+        w, h  = max(400, req.width), max(300, req.height)
+        svg   = _draw_mol(romol, w, h)
+        block = _mol_block(romol)
+
+        res_map = mol.get_residue_atom_map()
+        residues = [{"idx": i, "abbr": m.get("m_abbr", f"?{i}")}
+                    for i, m in enumerate(seq.s_monomers)]
+
+        return {"svg": svg, "mol_block": block,
+                "info": f"{romol.GetNumAtoms()} atoms · MW {ExactMolWt(romol):.2f}",
+                "residue_map": {str(k): v for k, v in res_map.items()},
+                "residues": residues}
 
     except Exception as exc:
         return JSONResponse({"error": str(exc).split('\n')[0]}, status_code=400)
@@ -610,8 +1453,8 @@ async def verify(req: _VerifyReq):
         if smiles_mol is None:
             return JSONResponse({"error": "Invalid SMILES"}, status_code=400)
 
-        seq   = Sequence(req.cabiln)
-        mol   = Molecule(seq)
+        seq        = Sequence(req.cabiln)
+        mol        = Molecule(seq)
         cabiln_mol = mol.get_molecule(fmt='ROMol')
         if cabiln_mol is None:
             return JSONResponse({"error": "CABILN assembly produced no molecule"}, status_code=400)
@@ -619,10 +1462,96 @@ async def verify(req: _VerifyReq):
         smi_canon    = _canon(smiles_mol)
         cabiln_canon = _canon(cabiln_mol)
         return {
-            "match":           smi_canon == cabiln_canon,
+            "match":            smi_canon == cabiln_canon,
             "smiles_canonical": smi_canon,
             "cabiln_canonical": cabiln_canon,
         }
+
+    except Exception as exc:
+        return JSONResponse({"error": str(exc).split('\n')[0]}, status_code=400)
+
+
+@app.post("/preview_monomer")
+async def preview_monomer(req: _PreviewReq):
+    try:
+        import sys, pathlib
+        sys.path.insert(0, str(pathlib.Path(__file__).parent.parent / 'src'))
+        from pyPept.interfaces.monomer_pipeline import pre_activate, ActivationError
+
+        result = pre_activate(req.smiles)
+
+        from rdkit import Chem
+        mol = Chem.MolFromSmiles(result.chuckles)
+        if mol is None:
+            return JSONResponse({"error": "Generated CHUCKLES is invalid"}, status_code=400)
+
+        svg = _draw_mol(mol, req.width, req.height)
+        return {
+            "chuckles":   result.chuckles,
+            "chem_types": {str(k): v for k, v in result.chem_types.items()},
+            "leaving":    {str(k): v for k, v in result.leaving.items()},
+            "svg":        svg,
+        }
+
+    except Exception as exc:
+        return JSONResponse({"error": str(exc).split('\n')[0]}, status_code=400)
+
+
+@app.post("/register_monomer")
+async def register_monomer(req: _RegisterReq):
+    try:
+        import sys, pathlib
+        sys.path.insert(0, str(pathlib.Path(__file__).parent.parent / 'src'))
+        from rdkit import Chem
+        from rdkit.Chem import SDWriter, rdDepictor
+
+        sdf_path = pathlib.Path(__file__).parent.parent / 'src' / 'pyPept' / 'data' / 'monomers.sdf'
+
+        # Check for duplicate abbreviation
+        suppl = Chem.SDMolSupplier(str(sdf_path), removeHs=False)
+        existing = {m.GetPropsAsDict().get('m_abbr', '') for m in suppl if m}
+        if req.abbr in existing:
+            return JSONResponse({"error": f"Abbreviation '{req.abbr}' already exists in library"}, status_code=400)
+
+        mol = Chem.MolFromSmiles(req.chuckles)
+        if mol is None:
+            return JSONResponse({"error": "Invalid CHUCKLES SMILES"}, status_code=400)
+
+        rdDepictor.SetPreferCoordGen(True)
+        rdDepictor.Compute2DCoords(mol)
+
+        # Format m_Rgroups (6 positions)
+        rgroups_list = ['None'] * 6
+        for slot_s, lg in req.leaving.items():
+            slot = int(slot_s) - 1
+            if 0 <= slot < 6:
+                rgroups_list[slot] = lg
+        rgroups_str = ','.join(rgroups_list)
+
+        # Format m_chem_types
+        chem_types_str = ','.join(
+            f"{slot}:{ct}" for slot, ct in
+            sorted(req.chem_types.items(), key=lambda x: int(x[0]))
+        )
+
+        mol.SetProp('m_abbr',      req.abbr)
+        mol.SetProp('symbol',      req.abbr)
+        mol.SetProp('m_name',      req.name)
+        mol.SetProp('m_type',      req.type)
+        mol.SetProp('m_subtype',   req.subtype)
+        mol.SetProp('m_Rgroups',   rgroups_str)
+        mol.SetProp('m_chem_types', chem_types_str)
+
+        with open(sdf_path, 'a') as fh:
+            writer = SDWriter(fh)
+            writer.SetKekulize(False)
+            writer.write(mol)
+            writer.close()
+
+        # Count total monomers
+        suppl2 = Chem.SDMolSupplier(str(sdf_path), removeHs=False)
+        total = sum(1 for m in suppl2 if m)
+        return {"ok": True, "total": total}
 
     except Exception as exc:
         return JSONResponse({"error": str(exc).split('\n')[0]}, status_code=400)

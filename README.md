@@ -146,10 +146,16 @@ seq = Sequence('ac-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-am')
 seq = Sequence('ac-K.!1(4,4)-G-am%C20FA-AEEA-gGlu.!1')
 ```
 
-Full Retatrutide (GIP/GLP-1/glucagon triple agonist, 39 residues):
+Full Retatrutide (GIP/GLP-1/glucagon triple agonist, 39 residues) — bracket notation (synthesis order):
 
 ```python
 seq = Sequence('Y-Aib-Q-G-T-F-T-S-D-Y-S-I-aMeLeu-L-D-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-A-Q-Aib-A-F-I-E-Y-L-L-E-G-G-P-S-S-G-A-P-P-P-S-am')
+```
+
+Branch notation (same molecule — fatty acid chain reversed, C20FA leads because it has no R1):
+
+```python
+seq = Sequence('Y-Aib-Q-G-T-F-T-S-D-Y-S-I-aMeLeu-L-D-K.!1(4,4)-A-Q-Aib-A-F-I-E-Y-L-L-E-G-G-P-S-S-G-A-P-P-P-S-am%C20FA-AEEA-gGlu.!1')
 ```
 
 ---
@@ -270,6 +276,30 @@ seq = Sequence('ac-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-am')
 # Branch — same molecule, string reversed: C20FA → AEEA → gGlu ← K
 seq = Sequence('ac-K.!1(4,4)-G-am%C20FA-AEEA-gGlu.!1')
 ```
+
+---
+
+## Bicyclic peptides
+
+Two simultaneous crosslinks on a single chain produce a bicyclic topology. CABILN represents each ring with an independent crosslink label; the notation composes without extra syntax.
+
+**SFTI-1 (Sunflower Trypsin Inhibitor-1)** — 14-residue head-to-tail cyclic peptide with an internal disulfide, prototypical of the naturally occurring bicyclic Bowman-Birk scaffold:
+
+```python
+# !1 closes the head-to-tail backbone ring (N→C peptide bond)
+# !2 closes a disulfide bridge between the two Cys residues (R4↔R4)
+seq = Sequence('!1-G-R-C.!2(4,4)-T-K-S-I-P-P-I-C.!2-F-P-D-!1')
+```
+
+**Bicycle Therapeutics-style bicyclic peptides** use two cysteine bridges and a trifunctional crosslinker (e.g. TBMB — 1,3,5-triacryloyl-1,3,5-triazinane, or TATA) that bridges three cysteine thiols. The result is two loops of user-defined length sharing the crosslinker as a hub. With three Cys residues:
+
+```python
+# Two independent thioether crosslinks anchored at three cysteines
+# loop1 = Cys1–TBMB–Cys3  |  loop2 = Cys2–TBMB–Cys3
+seq = Sequence('ac-C.!1(4,4)-X1-X2-C.!2(4,4)-X3-X4-C.!1!2-am')
+```
+
+The third Cys closing both `!1` and `!2` simultaneously pins the two loops to the same hub atom. Each `-Xi-` stretch is a user-defined diversity region.
 
 ---
 
