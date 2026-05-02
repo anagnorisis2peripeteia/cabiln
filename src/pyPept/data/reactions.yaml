@@ -106,7 +106,7 @@
   slot_b: 4
   take_largest: true
   steps:
-    - "[4*]C[C:2](=[O:3])ON1C(=O)CCC1=O.[4*][N:5] >> [N:5][C:2](=[O:3])"
+    - "[4*][C:1][C:2](=[O:3])ON1C(=O)CCC1=O.[4*][N:5] >> [N:5][C:2](=[O:3])[C:1]"
 
 - id: oxime_ligation
   description: Oxime ligation; aminooxy + aldehyde → C=N-O (water implicit)
@@ -139,7 +139,7 @@
     (Gillingham-Lab approach) to avoid formal-charge carry-over that causes
     kekulization failures in RDKit.
   steps:
-    - "[4*]C[C:2]#[CH:3].[4*][C:5][N]=[N+]=[N-] >> [C:5][n]1[n][n][c:3][c:2]1"
+    - "[4*][C:1][C:2]#[CH:3].[4*][C:5][N]=[N+]=[N-] >> [C:5][n]1[n][n][c:2]([C:1])[c:3]1"
 
 - id: spaac_triazole
   description: SPAAC; strained cyclooctyne + organic azide → 1,2,3-triazole (copper-free bioorthogonal)
@@ -154,25 +154,23 @@
     Produces one regioisomer; ring atoms bonded to C:2/C:3 via unmapped bonds
     are preserved, giving the fused bicyclic triazole for DBCO/BCN substrates.
   steps:
-    - "[4*]C[C:2]#[C:3].[4*][C:5][N]=[N+]=[N-] >> [C:5][n]1[n][n][c:3][c:2]1"
+    - "[4*][C:1][C:2]#[C:3].[4*][C:5][N]=[N+]=[N-] >> [C:5][n]1[n][n][c:2]([C:1])[c:3]1"
 
 - id: iedda_tetrazine_tco
   description: >
-    IEDDA; s-tetrazine + trans-cyclooctene (TCO) → dihydropyridazine via
-    two-step [4+2] then retro-[4+2] N2 expulsion.
+    IEDDA; s-tetrazine + trans-cyclooctene (TCO) → dihydropyridazine fused to
+    the TCO ring. Net transformation: [4+2] cycloaddition then retro-[4+2] N2
+    expulsion, combined into one SMIRKS step to avoid kekulization of the
+    bicyclic intermediate. Atom maps: C:1/C:4 = tetrazine ring carbons,
+    N:2/N:3 = expelled N2, N:7/N:8 = remaining tetrazine N-N, C:5/C:6 = TCO
+    alkene, C:11/C:12 = sp3 alpha carbons (Rule 2 attachment points).
   reactant_pairs:
     - [tetrazine_c, tco_c]
   slot_a: 4
   slot_b: 4
   take_largest: true
-  notes: >
-    Step 1 uses [#6]/[#7] (any carbon/nitrogen) so the SMIRKS matches aromatic
-    tetrazine (c/n in RDKit) as well as Kekulé C/N representations. The ~ any-bond
-    handles aromatic and single/double bonds alike. [4*] on sp3 α-carbon of each
-    component (Rule 2 — high-valence reacting atoms).
   steps:
-    - "[4*]C[#6:1]~[#7:2]~[#7:3]~[#6:4].[4*]C[C:5]=[C:6] >> [C:1]1[N:2][N:3][C:4][C:6][C:5]1"
-    - "[C:1]1[N:2][N:3][C:4][C:6][C:5]1 >> [C:1]=[C:5][C:6]=[C:4].[N:2]#[N:3]"
+    - "[4*][C:11][c:1]1[n:2][n:3][c:4][n:7][n:8]1.[4*][C:12][C:5]=[C:6] >> [C:11][C:1]1=[C:5]([C:12])[C:6]=[C:4][N:7][N:8]1.[N:2]=[N:3]"
 
 # ── POST-TRANSLATIONAL MODIFICATIONS ─────────────────────────────────────────
 
@@ -220,6 +218,19 @@
   slot_b: 4
   steps:
     - "[3*][N:1].[4*][C:2](=[O:3]) >> [N:1][C:2](=[O:3])"
+
+- id: backbone_n_alkylation
+  description: >
+    N-alkylation of a secondary backbone amide nitrogen (R3 slot) by an
+    N-terminal carbon (R1 slot). Used for backbone N-methylation and other
+    N-alkyl amino acid assembly; e.g. coupling an N-methyl cap (Dmb, meA)
+    to a proline-type nitrogen.
+  reactant_pairs:
+    - [backbone_n_mod, carbon]
+  slot_a: 3
+  slot_b: 1
+  steps:
+    - "[3*][N:1].[1*][C:3] >> [N:1][C:3]"
 
 # ── UNBOUND SITE RESTORATION ─────────────────────────────────────────────────
 # Applied to terminal dummy atoms that were never consumed by a bond reaction.

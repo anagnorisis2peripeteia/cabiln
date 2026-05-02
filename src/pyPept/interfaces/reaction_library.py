@@ -115,6 +115,7 @@ _EXOTIC_SMARTS = [
 _HEURISTIC_TYPES = frozenset({
     'backbone_n', 'backbone_c', 'backbone_o', 'backbone_n_mod',
     'amine_secondary',  # falls through to amine_primary element heuristic
+    'carbon',           # plain sp3 C without carbonyl; heuristic fallback at end of infer_chem_type
 })
 _registry_types = {ct for ct, *_, lo in _CHEM_TYPE_REGISTRY if not lo}
 _bond_types = {ct for e in REACTIONS.values() for pair in e.get('reactant_pairs', []) for ct in pair}
@@ -143,11 +144,11 @@ def infer_chem_type(mol, attach_idx: int, slot: int = None) -> str:
     if slot is None:
         slot = _slot_for_attachment(mol, attach_idx)  # 0-based
 
-    # ── Backbone slots (slot 0 = R1, slot 1 = R2) ────────────────────────────
-    if slot == 0:
+    # ── Backbone slots (1-indexed: slot 1 = R1, slot 2 = R2, slot 3 = R3) ────
+    if slot == 1:
         if sym == 7: return 'backbone_n'
         if sym == 8: return 'backbone_o'
-    if slot == 1:
+    if slot == 2:
         if sym == 6: return 'backbone_c'
 
     # ── SMARTS-based detection (covers thiol, selenol, and all exotic types) ───
@@ -164,7 +165,7 @@ def infer_chem_type(mol, attach_idx: int, slot: int = None) -> str:
             nb.GetAtomicNum() == 0 and nb.GetIsotope() == 1
             for nb in atom.GetNeighbors()
         )
-        if slot == 2 and has_r1_dummy:
+        if slot == 3 and has_r1_dummy:
             return 'backbone_n_mod'
         return 'amine_primary'
 

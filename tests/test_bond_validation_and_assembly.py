@@ -1574,16 +1574,17 @@ class TestIEDDA:
         ct = infer_chem_type(mol, attach_idx, slot=3)
         assert ct == 'tco_c', f"Expected tco_c, got {ct}"
 
-    def test_iedda_smirks_step1(self):
-        """IEDDA step-1 SMIRKS produces the [4+2] bicyclic adduct."""
+    def test_iedda_smirks(self):
+        """IEDDA combined SMIRKS produces sanitizable dihydropyridazine + N2 fragment."""
         from pyPept.interfaces.reaction_library import REACTIONS
         from rdkit.Chem import AllChem
         entry = REACTIONS['iedda_tetrazine_tco']
+        assert len(entry['steps']) == 1, "iedda_tetrazine_tco should have one combined step"
         smirks = entry['steps'][0]
         targeted = smirks.replace('[4*]', '[400*]', 1).replace('[4*]', '[401*]', 1)
         rxn = AllChem.ReactionFromSmarts(targeted)
         assert rxn is not None
-        # model tetrazine with [400*] on methyl; model cycloalkene with [401*] on exo-C
+        # model: tetrazine methyl cap [400*]Cc1nncnn1; cyclooctene [401*] on exo-C
         tz = Chem.MolFromSmiles('[400*]Cc1nncnn1')
         tco = Chem.MolFromSmiles('C1CC([401*])C=CCCCC1')
         if tz is None or tco is None:
@@ -1591,7 +1592,14 @@ class TestIEDDA:
         prods = rxn.RunReactants((tz, tco))
         if not prods:
             prods = rxn.RunReactants((tco, tz))
-        assert prods, "IEDDA step-1 SMIRKS produced no products with model molecules"
+        assert prods, "IEDDA SMIRKS produced no products with model molecules"
+        # all product fragments must sanitize without kekulization error
+        for prod_set in prods[:1]:
+            for p in prod_set:
+                Chem.SanitizeMol(p)  # raises on failure
+        # take_largest keeps main ring; N=N fragment is a small byproduct
+        main_atoms = max(len(p.GetAtoms()) for p in prods[0])
+        assert main_atoms > 4, f"Main product too small ({main_atoms} atoms)"
 
 
 class TestPipelineLabelling:

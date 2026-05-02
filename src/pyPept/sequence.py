@@ -948,9 +948,14 @@ class Sequence:
 
         :return: filtered bond list with unique bonds only
         """
-        bonds = self.s_bonds
-        bonds = [list(x) for x in set(tuple(x) for x in bonds)]
-        self.s_bonds = bonds
+        seen = set()
+        unique = []
+        for b in self.s_bonds:
+            key = tuple(b)
+            if key not in seen:
+                seen.add(key)
+                unique.append(b)
+        self.s_bonds = unique
 
     ############################################################################
     def is_valid(self):

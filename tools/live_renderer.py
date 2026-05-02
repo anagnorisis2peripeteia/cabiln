@@ -281,6 +281,8 @@ def _open_browser():
 
 
 if __name__ == "__main__":
-    print("CABILN Live Renderer  →  http://localhost:8732")
+    print("CABILN Live Renderer")
+    print("  Local     ->  http://localhost:8732")
+    print("  Tailscale ->  http://100.119.0.78:8732")
     threading.Thread(target=_open_browser, daemon=True).start()
-    uvicorn.run(app, host="127.0.0.1", port=8732, log_level="warning")
+    uvicorn.run(app, host="0.0.0.0", port=8732, log_level="warning")
