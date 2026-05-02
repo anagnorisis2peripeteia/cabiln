@@ -66,8 +66,8 @@ for _entry in REACTIONS.values():
 # (chem_type, pre_smarts, pre_lg, infer_smarts, label_only)
 _CHEM_TYPE_REGISTRY = [
     # ── Sulfur / selenium ────────────────────────────────────────────────────
-    ('thiol',             '[SX2H1:1]',                              '[H]',  '[SX2H1:1]',                              False),
-    ('selenol',           '[SeX2H1:1]',                             '[H]',  '[SeX2H1:1]',                             False),
+    ('thiol',             '[SX2H1:1]',                              '[H]',  '[SX2;H0,H1:1]',                          False),
+    ('selenol',           '[SeX2H1:1]',                             '[H]',  '[SeX2;H0,H1:1]',                         False),
     # ── Alkyl halide — !H0 covers CH2 (pre) and CH1 after dummy took one H ──
     ('alkyl_halide_c',    '[CX4;!H0:1][Cl,Br,I]',                  '[H]',  '[CX4;!H0:1][Cl,Br,I]',                  False),
     # ── Nitrogen nucleophiles — most-specific first ───────────────────────────
@@ -78,7 +78,7 @@ _CHEM_TYPE_REGISTRY = [
     ('amine_primary',     '[NX3;H2:1]',                             '[H]',  '[NX3;H2:1]',                             False),
     ('guanidinium',       '[NX3;H1:1][CX3](=N)',                   '[H]',  '[NX3;H1:1][CX3](=N)',                    True),
     # ── Carboxyl / oxygen ────────────────────────────────────────────────────
-    ('carboxyl',          '[CX3:1](=O)[OX2H1]',                   '[OH]',  '[CX3:1](=O)[OX2H1]',                    False),
+    ('carboxyl',          '[OX2H1:1][CX3](=O)',                    '[H]',   '[OX2H0:1][CX3](=O)',                    False),
     ('hydroxyl_phenolic', '[OX2H1:1][c]',                           '[H]',  '[OX2H1:1][c]',                           True),
     ('hydroxyl',          '[OX2H1:1][CX4]',                        '[H]',  '[OX2H1:1][CX4]',                         False),
     # ── Aromatic / amide N-H (label-only) ────────────────────────────────────
@@ -100,7 +100,8 @@ _CHEM_TYPE_REGISTRY = [
     ('aldehyde',          '[CX3H1:1](=O)[!#7]',                   '[H]',  '[CX3;H0,H1:1](=O)[!#7]',                False),
     ('nhs_ester',         '[CX4;!H0:1]C(=O)ON1C(=O)CCC1=O',      '[H]',  '[CX4;!H0:1]C(=O)ON1C(=O)CCC1=O',       False),
     # maleimide_c: ring alkene CH1 (pre) → CH0 after dummy
-    ('maleimide_c',       '[CH1:1]1=[C][C](=[O])[N][C]1=[O]',    '[H]',  '[CH0,CH1:1]1=[C][C](=[O])[N][C]1=[O]', False),
+    # infer_smarts adds ([*]) so the dummy-bearing vinyl C is match[0] not the other vinyl C
+    ('maleimide_c',       '[CH1:1]1=[C][C](=[O])[N][C]1=[O]',    '[H]',  '[CH0,CH1:1]([*])1=[C][C](=[O])[N][C]1=[O]', False),
 ]
 
 # Derived detection lists — do not edit directly.

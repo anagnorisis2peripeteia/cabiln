@@ -286,19 +286,25 @@ def find_sidechain_slots(mol, assigned_atoms, start_slot=4):
     next_slot = start_slot
     seen = set(assigned_atoms)
     pre_scan = frozenset(seen)  # backbone atoms — excluded from second-H pass
+    protected = set()  # non-attachment atoms in multi-atom SMARTS — off-limits
+    first_ct = {}      # atom_idx -> first assigned chem_type
 
     for patt, leaving, chem_type in _SC_PATTERNS:
         for match in mol.GetSubstructMatches(patt):
             idx = match[0]
-            if idx not in seen:
+            if idx not in seen and idx not in protected:
                 slots[next_slot] = (idx, leaving, chem_type)
                 seen.add(idx)
+                first_ct[idx] = chem_type
                 next_slot += 1
+                for other_idx in match[1:]:
+                    protected.add(other_idx)
 
     # Second H on sidechain primary amines only (not backbone atoms).
     for match in mol.GetSubstructMatches(_SECOND_H_PAT):
         idx = match[0]
-        if idx in seen and idx not in pre_scan:
+        if (idx in seen and idx not in pre_scan
+                and first_ct.get(idx) == 'amine_primary'):
             slots[next_slot] = (idx, '[H]', 'amine_secondary')
             next_slot += 1
 
@@ -393,10 +399,21 @@ def pre_activate(smiles, slot_overrides=None, leaving_overrides=None):
             backbone[slot] = backbone[1]
             backbone_chem_types[slot] = 'backbone_n_mod'
 
+    # Exclude the backbone COOH OH oxygen so the O-attachment carboxyl
+    # pre_smarts ([OX2H1][CX3](=O)) doesn't spuriously fire on it.
+    _bb_excluded = set(backbone.values())
+    if 2 in backbone:
+        _c = mol.GetAtomWithIdx(backbone[2])
+        for _nb in _c.GetNeighbors():
+            if _nb.GetAtomicNum() == 8:
+                _bond = mol.GetBondBetweenAtoms(backbone[2], _nb.GetIdx())
+                if _bond.GetBondTypeAsDouble() == 1.0:
+                    _bb_excluded.add(_nb.GetIdx())
+
     # Sidechains fill slots immediately after backbone — no gaps.
     sidechain = find_sidechain_slots(
         mol,
-        assigned_atoms=backbone.values(),
+        assigned_atoms=_bb_excluded,
         start_slot=max(backbone.keys()) + 1,
     )
     slots = {**backbone,

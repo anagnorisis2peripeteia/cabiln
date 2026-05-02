@@ -1987,8 +1987,8 @@ class TestImideAcylationDirect:
         """N-C(=O) bond formed between backbone amide N and sidechain carboxyl."""
         from pyPept.interfaces.reaction_library import REACTIONS, run_bond_smirks
         entry = REACTIONS['imide_n_acylation']
-        frag1 = Chem.MolFromSmiles('[400*]NC')      # backbone N (R3): [3*][N:1]
-        frag2 = Chem.MolFromSmiles('[401*]C(=O)C')  # sidechain carboxyl: [4*][C:2](=[O:3])
+        frag1 = Chem.MolFromSmiles('[400*]NC')       # backbone N (R3): [3*][N:1]
+        frag2 = Chem.MolFromSmiles('[401*]OC(=O)C')  # sidechain carboxyl O-attach: [4*][O][C:2](=[O:3])
         assert frag1 and frag2
         prod = run_bond_smirks(frag1, frag2, 400, 401, entry, intramolecular=False)
         smi = Chem.MolToSmiles(prod)
@@ -2001,8 +2001,8 @@ class TestImideAcylationDirect:
         """Intramolecular closure gives 5-membered succinimide ring."""
         from pyPept.interfaces.reaction_library import REACTIONS, run_bond_smirks
         entry = REACTIONS['imide_n_acylation']
-        # Chain: [400*]N-C(=O)-CH2-CH2-C([401*])=O → 5-membered ring on closure
-        mol = Chem.MolFromSmiles('[400*]NC(=O)CCC([401*])=O')
+        # Chain: [400*]N-C(=O)-CH2-CH2-C(=O)O[401*] → 5-membered ring on closure
+        mol = Chem.MolFromSmiles('[400*]NC(=O)CCC(=O)O[401*]')
         if mol is None:
             pytest.skip("Model SMILES failed to parse")
         prod = run_bond_smirks(mol, mol, 400, 401, entry, intramolecular=True)
@@ -2019,7 +2019,7 @@ class TestThioesterDirect:
         from pyPept.interfaces.reaction_library import REACTION_INDEX
         entry = REACTION_INDEX.get(('thiol', 'carboxyl'))
         assert entry is not None
-        assert entry['id'] == 'thioester'
+        assert entry['id'] == 'thioester_sc'
 
     def test_thioester_smirks_direct(self):
         from pyPept.interfaces.reaction_library import REACTIONS, run_bond_smirks
@@ -2769,6 +2769,1649 @@ class TestNewMonomersV110:
         assert entry.get('take_largest') is True, "IEDDA must have take_largest=True (N2 byproduct)"
 
 
+class TestMonomerPreActivate:
+    """Monomer-level tests: pre_activate on raw SMILES verifies R-group placement.
+
+    For each amino acid, checks that the CHUCKLES dummy atoms land on the
+    correct attachment atoms (O for carboxyl, S for thiol, etc.) with the
+    right leaving group and chem_type.
+    """
+
+    @staticmethod
+    def _slot_map(chuckles):
+        """Parse CHUCKLES -> {slot_isotope: neighbor_atomic_num}."""
+        mol = Chem.MolFromSmiles(chuckles)
+        assert mol is not None, f"Bad CHUCKLES: {chuckles}"
+        result = {}
+        for atom in mol.GetAtoms():
+            if atom.GetAtomicNum() == 0:
+                iso = atom.GetIsotope()
+                nbs = list(atom.GetNeighbors())
+                assert len(nbs) == 1, f"Dummy {iso} has {len(nbs)} neighbors"
+                result[iso] = nbs[0].GetAtomicNum()
+        return result
+
+    @staticmethod
+    def _verify_attachment_context(chuckles, slot, chem_type):
+        """Verify the chemical environment around the attachment atom is correct.
+
+        Goes beyond element-type checking to confirm the dummy is on the
+        structurally correct atom — e.g. the hydroxyl O of a carboxyl, not
+        the carbonyl O.
+        """
+        mol = Chem.MolFromSmiles(chuckles)
+        dummy = next(a for a in mol.GetAtoms()
+                     if a.GetAtomicNum() == 0 and a.GetIsotope() == slot)
+        attach = next(iter(dummy.GetNeighbors()))
+
+        if chem_type == 'carboxyl':
+            assert attach.GetAtomicNum() == 8, \
+                f"Carboxyl slot {slot}: dummy should be on O, got {attach.GetSymbol()}"
+            c_nbs = [nb for nb in attach.GetNeighbors()
+                     if nb.GetAtomicNum() == 6 and nb.GetIdx() != dummy.GetIdx()]
+            has_carbonyl_partner = any(
+                any(mol.GetBondBetweenAtoms(c.GetIdx(), o.GetIdx()).GetBondTypeAsDouble() == 2.0
+                    for o in c.GetNeighbors()
+                    if o.GetAtomicNum() == 8 and o.GetIdx() != attach.GetIdx())
+                for c in c_nbs)
+            assert has_carbonyl_partner, \
+                f"Carboxyl slot {slot}: O must be single-bonded to C(=O) [O-attachment]"
+
+        elif chem_type == 'aldehyde':
+            assert attach.GetAtomicNum() == 6, \
+                f"Aldehyde slot {slot}: dummy should be on C, got {attach.GetSymbol()}"
+            has_co = any(
+                mol.GetBondBetweenAtoms(attach.GetIdx(), nb.GetIdx()).GetBondTypeAsDouble() == 2.0
+                for nb in attach.GetNeighbors() if nb.GetAtomicNum() == 8)
+            assert has_co, \
+                f"Aldehyde slot {slot}: C must have =O double bond [C-attachment]"
+
+        elif chem_type == 'backbone_c':
+            assert attach.GetAtomicNum() == 6
+            has_co = any(
+                mol.GetBondBetweenAtoms(attach.GetIdx(), nb.GetIdx()).GetBondTypeAsDouble() == 2.0
+                for nb in attach.GetNeighbors() if nb.GetAtomicNum() == 8)
+            assert has_co, f"Backbone C slot {slot}: must be carbonyl C with =O"
+
+        elif chem_type == 'thiol':
+            assert attach.GetAtomicNum() == 16
+            heavy = [nb for nb in attach.GetNeighbors()
+                     if nb.GetAtomicNum() > 1]
+            assert len(heavy) == 1, \
+                f"Thiol slot {slot}: S should have 1 heavy neighbor, got {len(heavy)}"
+
+        elif chem_type == 'selenol':
+            assert attach.GetAtomicNum() == 34
+            heavy = [nb for nb in attach.GetNeighbors()
+                     if nb.GetAtomicNum() > 1]
+            assert len(heavy) == 1, \
+                f"Selenol slot {slot}: Se should have 1 heavy neighbor, got {len(heavy)}"
+
+        elif chem_type == 'terminal_alkene':
+            assert attach.GetAtomicNum() == 6
+            has_cc_double = any(
+                mol.GetBondBetweenAtoms(attach.GetIdx(), nb.GetIdx()).GetBondTypeAsDouble() == 2.0
+                for nb in attach.GetNeighbors() if nb.GetAtomicNum() == 6)
+            assert has_cc_double, \
+                f"Terminal alkene slot {slot}: C must have C=C double bond"
+
+        elif chem_type == 'hydroxyl':
+            assert attach.GetAtomicNum() == 8
+            c_nbs = [nb for nb in attach.GetNeighbors()
+                     if nb.GetAtomicNum() == 6 and nb.GetIdx() != dummy.GetIdx()]
+            assert any(not nb.GetIsAromatic() for nb in c_nbs), \
+                f"Hydroxyl slot {slot}: O must be bonded to aliphatic C"
+
+        elif chem_type == 'hydroxyl_phenolic':
+            assert attach.GetAtomicNum() == 8
+            has_aromatic = any(nb.GetIsAromatic()
+                              for nb in attach.GetNeighbors()
+                              if nb.GetAtomicNum() == 6)
+            assert has_aromatic, \
+                f"Hydroxyl_phenolic slot {slot}: O must be bonded to aromatic C"
+
+        elif chem_type == 'phosphate_p':
+            assert attach.GetAtomicNum() == 15
+            has_po = any(
+                mol.GetBondBetweenAtoms(attach.GetIdx(), nb.GetIdx()).GetBondTypeAsDouble() == 2.0
+                for nb in attach.GetNeighbors() if nb.GetAtomicNum() == 8)
+            assert has_po, f"Phosphate slot {slot}: P must have P=O"
+
+        elif chem_type == 'alkyl_halide_c':
+            assert attach.GetAtomicNum() == 6
+            has_halide = any(nb.GetAtomicNum() in (17, 35, 53)
+                            for nb in attach.GetNeighbors())
+            assert has_halide, \
+                f"Alkyl halide slot {slot}: C must be bonded to Cl/Br/I"
+
+        elif chem_type == 'aminooxy':
+            assert attach.GetAtomicNum() == 7
+            has_o_nb = any(nb.GetAtomicNum() == 8
+                          for nb in attach.GetNeighbors()
+                          if nb.GetIdx() != dummy.GetIdx())
+            assert has_o_nb, \
+                f"Aminooxy slot {slot}: N must be bonded to O"
+
+        elif chem_type == 'hydrazide':
+            assert attach.GetAtomicNum() == 7
+            has_n_nb = any(nb.GetAtomicNum() == 7
+                          for nb in attach.GetNeighbors()
+                          if nb.GetIdx() != dummy.GetIdx())
+            assert has_n_nb, \
+                f"Hydrazide slot {slot}: N must be bonded to another N"
+
+        elif chem_type == 'maleimide_c':
+            assert attach.GetAtomicNum() == 6
+            assert attach.IsInRing(), \
+                f"Maleimide slot {slot}: C must be in ring"
+
+        elif chem_type == 'backbone_n':
+            assert attach.GetAtomicNum() == 7
+
+        elif chem_type == 'backbone_n_mod':
+            assert attach.GetAtomicNum() == 7
+
+    def _check(self, smiles, expect_slots=None, expect_lg=None, expect_ct=None):
+        from pyPept.interfaces.monomer_pipeline import pre_activate
+        r = pre_activate(smiles)
+        smap = self._slot_map(r.chuckles)
+
+        if expect_slots is not None:
+            assert len(smap) == len(expect_slots), (
+                f"Expected {len(expect_slots)} dummies, got {len(smap)}: {smap}")
+            for slot, expected_elem in expect_slots.items():
+                assert slot in smap, f"Missing slot {slot} in CHUCKLES"
+                assert smap[slot] == expected_elem, (
+                    f"Slot {slot}: expected element {expected_elem}, got {smap[slot]}")
+
+        if expect_lg:
+            for slot, lg in expect_lg.items():
+                assert r.leaving.get(slot) == lg, (
+                    f"Slot {slot}: expected LG {lg!r}, got {r.leaving.get(slot)!r}")
+
+        if expect_ct:
+            for slot, ct in expect_ct.items():
+                assert r.chem_types.get(slot) == ct, (
+                    f"Slot {slot}: expected ct {ct!r}, got {r.chem_types.get(slot)!r}")
+                self._verify_attachment_context(r.chuckles, slot, ct)
+
+        return r
+
+    # ── Carboxyl sidechain: O-attachment (dummy on hydroxyl O) ───────────────
+
+    def test_asp_carboxyl_on_oxygen(self):
+        """Asp: slot 4 dummy lands on sidechain carboxyl O, not C."""
+        self._check('N[C@@H](CC(=O)O)C(=O)O',
+                     {1: 7, 2: 6, 3: 7, 4: 8},
+                     expect_lg={4: '[H]'}, expect_ct={4: 'carboxyl'})
+
+    def test_glu_carboxyl_on_oxygen(self):
+        """Glu: slot 4 dummy on sidechain carboxyl O."""
+        self._check('N[C@@H](CCC(=O)O)C(=O)O',
+                     {1: 7, 2: 6, 3: 7, 4: 8},
+                     expect_lg={4: '[H]'}, expect_ct={4: 'carboxyl'})
+
+    def test_d_asp_carboxyl_on_oxygen(self):
+        """D-Asp: O-attachment matches L-Asp."""
+        self._check('N[C@H](CC(=O)O)C(=O)O',
+                     {1: 7, 2: 6, 3: 7, 4: 8},
+                     expect_lg={4: '[H]'}, expect_ct={4: 'carboxyl'})
+
+    def test_d_glu_carboxyl_on_oxygen(self):
+        """D-Glu: O-attachment matches L-Glu."""
+        self._check('N[C@H](CCC(=O)O)C(=O)O',
+                     {1: 7, 2: 6, 3: 7, 4: 8},
+                     expect_lg={4: '[H]'}, expect_ct={4: 'carboxyl'})
+
+    def test_asp_backbone_cooh_oh_excluded(self):
+        """Asp: backbone COOH OH is not spuriously labelled as carboxyl."""
+        r = self._check('N[C@@H](CC(=O)O)C(=O)O',
+                         {1: 7, 2: 6, 3: 7, 4: 8})
+        carboxyl_slots = [s for s, ct in r.chem_types.items() if ct == 'carboxyl']
+        assert len(carboxyl_slots) == 1, f"Expected 1 carboxyl slot, got {carboxyl_slots}"
+
+    def test_glu_backbone_cooh_oh_excluded(self):
+        """Glu: backbone COOH OH excluded from sidechain detection."""
+        r = self._check('N[C@@H](CCC(=O)O)C(=O)O',
+                         {1: 7, 2: 6, 3: 7, 4: 8})
+        carboxyl_slots = [s for s, ct in r.chem_types.items() if ct == 'carboxyl']
+        assert len(carboxyl_slots) == 1
+
+    # ── Thiol sidechain ──────────────────────────────────────────────────────
+
+    def test_cys_thiol_on_sulfur(self):
+        """Cys: slot 4 dummy on thiol S."""
+        self._check('N[C@@H](CS)C(=O)O',
+                     {1: 7, 2: 6, 3: 7, 4: 16},
+                     expect_lg={4: '[H]'}, expect_ct={4: 'thiol'})
+
+    def test_d_cys_thiol_on_sulfur(self):
+        """D-Cys: same thiol slot as L-Cys."""
+        self._check('N[C@H](CS)C(=O)O',
+                     {1: 7, 2: 6, 3: 7, 4: 16},
+                     expect_lg={4: '[H]'}, expect_ct={4: 'thiol'})
+
+    # ── Selenol sidechain ────────────────────────────────────────────────────
+
+    def test_sec_selenol_on_selenium(self):
+        """Sec (selenocysteine): slot 4 dummy on Se."""
+        self._check('N[C@@H](C[SeH])C(=O)O',
+                     {1: 7, 2: 6, 3: 7, 4: 34},
+                     expect_lg={4: '[H]'}, expect_ct={4: 'selenol'})
+
+    # ── Hydroxyl sidechain ───────────────────────────────────────────────────
+
+    def test_ser_hydroxyl_on_oxygen(self):
+        """Ser: slot 4 dummy on hydroxyl O."""
+        self._check('N[C@@H](CO)C(=O)O',
+                     {1: 7, 2: 6, 3: 7, 4: 8},
+                     expect_lg={4: '[H]'}, expect_ct={4: 'hydroxyl'})
+
+    def test_thr_hydroxyl_on_oxygen(self):
+        """Thr: slot 4 dummy on hydroxyl O."""
+        self._check('N[C@@H]([C@@H](O)C)C(=O)O',
+                     {1: 7, 2: 6, 3: 7, 4: 8},
+                     expect_lg={4: '[H]'}, expect_ct={4: 'hydroxyl'})
+
+    # ── Amine sidechain ──────────────────────────────────────────────────────
+
+    def test_lys_amine_primary_on_nitrogen(self):
+        """Lys: epsilon-NH2 -> amine_primary + amine_secondary (two H slots)."""
+        r = self._check('N[C@@H](CCCCN)C(=O)O',
+                         {1: 7, 2: 6, 3: 7, 4: 7, 5: 7},
+                         expect_ct={4: 'amine_primary', 5: 'amine_secondary'})
+
+    def test_orn_amine_primary_on_nitrogen(self):
+        """Orn: delta-NH2 same amine_primary + amine_secondary."""
+        self._check('N[C@@H](CCCN)C(=O)O',
+                     {1: 7, 2: 6, 3: 7, 4: 7, 5: 7},
+                     expect_ct={4: 'amine_primary', 5: 'amine_secondary'})
+
+    # ── Aromatic NH sidechain ────────────────────────────────────────────────
+
+    def test_trp_aromatic_nh(self):
+        """Trp: indole NH detected as aromatic_nh."""
+        self._check('N[C@@H](Cc1c[nH]c2ccccc12)C(=O)O',
+                     {1: 7, 2: 6, 3: 7, 4: 7},
+                     expect_ct={4: 'aromatic_nh'})
+
+    def test_his_aromatic_nh(self):
+        """His: imidazole NH detected as aromatic_nh."""
+        self._check('N[C@@H](Cc1cnc[nH]1)C(=O)O',
+                     {1: 7, 2: 6, 3: 7, 4: 7},
+                     expect_ct={4: 'aromatic_nh'})
+
+    # ── Phenolic hydroxyl ────────────────────────────────────────────────────
+
+    def test_tyr_phenolic_oh(self):
+        """Tyr: phenolic OH detected as hydroxyl_phenolic on O."""
+        self._check('N[C@@H](Cc1ccc(O)cc1)C(=O)O',
+                     {1: 7, 2: 6, 3: 7, 4: 8},
+                     expect_ct={4: 'hydroxyl_phenolic'})
+
+    # ── Amide sidechain (NH2 matches amine_primary) ──────────────────────────
+
+    def test_asn_amide_nh2(self):
+        """Asn: amide NH2 matches amine_primary (H2), plus amine_secondary."""
+        self._check('N[C@@H](CC(=O)N)C(=O)O',
+                     {1: 7, 2: 6, 3: 7, 4: 7, 5: 7},
+                     expect_ct={4: 'amine_primary', 5: 'amine_secondary'})
+
+    def test_gln_amide_nh2(self):
+        """Gln: same amide NH2 pattern as Asn."""
+        self._check('N[C@@H](CCC(=O)N)C(=O)O',
+                     {1: 7, 2: 6, 3: 7, 4: 7, 5: 7},
+                     expect_ct={4: 'amine_primary', 5: 'amine_secondary'})
+
+    # ── No sidechain reactive group ──────────────────────────────────────────
+
+    def test_ala_no_sidechain(self):
+        """Ala: methyl sidechain -> 3 backbone slots only."""
+        self._check('N[C@@H](C)C(=O)O', {1: 7, 2: 6, 3: 7},
+                     expect_ct={1: 'backbone_n', 2: 'backbone_c', 3: 'backbone_n_mod'})
+
+    def test_gly_no_sidechain(self):
+        """Gly: no sidechain -> 3 backbone slots only."""
+        self._check('NCC(=O)O', {1: 7, 2: 6, 3: 7})
+
+    def test_val_no_sidechain(self):
+        """Val: isopropyl sidechain has no reactive group."""
+        self._check('N[C@@H](C(C)C)C(=O)O', {1: 7, 2: 6, 3: 7})
+
+    def test_leu_no_sidechain(self):
+        """Leu: isobutyl sidechain has no reactive group."""
+        self._check('N[C@@H](CC(C)C)C(=O)O', {1: 7, 2: 6, 3: 7})
+
+    def test_ile_no_sidechain(self):
+        """Ile: sec-butyl sidechain has no reactive group."""
+        self._check('N[C@@H]([C@@H](C)CC)C(=O)O', {1: 7, 2: 6, 3: 7})
+
+    def test_phe_no_sidechain(self):
+        """Phe: benzyl sidechain has no reactive group."""
+        self._check('N[C@@H](Cc1ccccc1)C(=O)O', {1: 7, 2: 6, 3: 7})
+
+    def test_met_thioether_not_thiol(self):
+        """Met: thioether S-CH3 is NOT detected as thiol -> 3 backbone slots only."""
+        self._check('N[C@@H](CCSC)C(=O)O', {1: 7, 2: 6, 3: 7})
+
+    # ── Pro: no backbone_n_mod (ring N has 1H) ───────────────────────────────
+
+    def test_pro_no_backbone_n_mod(self):
+        """Pro: ring N has only 1H -> no backbone_n_mod -> 2 dummies."""
+        self._check('OC(=O)[C@@H]1CCCN1', {1: 7, 2: 6},
+                     expect_ct={1: 'backbone_n', 2: 'backbone_c'})
+
+    # ── Alpha-methyl AAs ─────────────────────────────────────────────────────
+
+    def test_aib_alpha_methyl_no_sidechain(self):
+        """Aib: alpha-aminoisobutyric acid, backbone only, no sidechain."""
+        self._check('CC(N)(C)C(=O)O', {1: 7, 2: 6, 3: 7})
+
+    # ── Backbone slot verification ───────────────────────────────────────────
+
+    def test_backbone_n_leaving_is_h(self):
+        """Slot 1 (backbone_n) LG is always [H]."""
+        r = self._check('N[C@@H](C)C(=O)O', {1: 7, 2: 6, 3: 7})
+        assert r.leaving[1] == '[H]'
+
+    def test_backbone_c_leaving_is_oh(self):
+        """Slot 2 (backbone_c) LG is always [OH]."""
+        r = self._check('N[C@@H](C)C(=O)O', {1: 7, 2: 6, 3: 7})
+        assert r.leaving[2] == '[OH]'
+
+    def test_backbone_n_mod_leaving_is_h(self):
+        """Slot 3 (backbone_n_mod) LG is [H]."""
+        r = self._check('N[C@@H](C)C(=O)O', {1: 7, 2: 6, 3: 7})
+        assert r.leaving[3] == '[H]'
+        assert r.chem_types[3] == 'backbone_n_mod'
+
+    # ── D-isomer parity: same slot structure as L ────────────────────────────
+
+    def test_d_ala_same_as_l_ala(self):
+        """D-Ala: same 3-slot structure as L-Ala."""
+        self._check('N[C@H](C)C(=O)O', {1: 7, 2: 6, 3: 7})
+
+    def test_d_ser_same_as_l_ser(self):
+        """D-Ser: same hydroxyl slot as L-Ser."""
+        self._check('N[C@H](CO)C(=O)O',
+                     {1: 7, 2: 6, 3: 7, 4: 8},
+                     expect_ct={4: 'hydroxyl'})
+
+    def test_d_lys_same_as_l_lys(self):
+        """D-Lys: same amine slots as L-Lys."""
+        self._check('N[C@H](CCCCN)C(=O)O',
+                     {1: 7, 2: 6, 3: 7, 4: 7, 5: 7},
+                     expect_ct={4: 'amine_primary', 5: 'amine_secondary'})
+
+    # ── Thiol: 3 more (total 5) ──────────────────────────────────────────────
+
+    def test_homocysteine_thiol(self):
+        """Homocysteine: 2-carbon sidechain thiol."""
+        self._check('N[C@@H](CCS)C(=O)O',
+                     {1: 7, 2: 6, 3: 7, 4: 16},
+                     expect_lg={4: '[H]'}, expect_ct={4: 'thiol'})
+
+    def test_d_homocysteine_thiol(self):
+        """D-Homocysteine: D-isomer 2C sidechain thiol."""
+        self._check('N[C@H](CCS)C(=O)O',
+                     {1: 7, 2: 6, 3: 7, 4: 16},
+                     expect_ct={4: 'thiol'})
+
+    def test_mercaptonorvaline_thiol(self):
+        """3-carbon sidechain thiol on norvaline scaffold."""
+        self._check('N[C@@H](CCCS)C(=O)O',
+                     {1: 7, 2: 6, 3: 7, 4: 16},
+                     expect_ct={4: 'thiol'})
+
+    # ── Selenol: 4 more (total 5) ────────────────────────────────────────────
+
+    def test_d_sec_selenol(self):
+        """D-Sec: selenol on D-isomer."""
+        self._check('N[C@H](C[SeH])C(=O)O',
+                     {1: 7, 2: 6, 3: 7, 4: 34},
+                     expect_lg={4: '[H]'}, expect_ct={4: 'selenol'})
+
+    def test_homoselenocysteine_selenol(self):
+        """Homo-Sec: 2C sidechain selenol."""
+        self._check('N[C@@H](CC[SeH])C(=O)O',
+                     {1: 7, 2: 6, 3: 7, 4: 34},
+                     expect_ct={4: 'selenol'})
+
+    def test_d_homoselenocysteine_selenol(self):
+        """D-homo-Sec."""
+        self._check('N[C@H](CC[SeH])C(=O)O',
+                     {1: 7, 2: 6, 3: 7, 4: 34},
+                     expect_ct={4: 'selenol'})
+
+    def test_long_chain_selenol(self):
+        """3C sidechain selenol."""
+        self._check('N[C@@H](CCC[SeH])C(=O)O',
+                     {1: 7, 2: 6, 3: 7, 4: 34},
+                     expect_ct={4: 'selenol'})
+
+    # ── Alkyl halide: 5 new ──────────────────────────────────────────────────
+
+    def test_chloroalanine_alkyl_halide(self):
+        """3-Chloro-Ala: Cl on beta-C, dummy on same C."""
+        self._check('N[C@@H](CCl)C(=O)O',
+                     {1: 7, 2: 6, 3: 7, 4: 6},
+                     expect_lg={4: '[H]'}, expect_ct={4: 'alkyl_halide_c'})
+
+    def test_bromoalanine_alkyl_halide(self):
+        """3-Bromo-Ala: Br variant."""
+        self._check('N[C@@H](CBr)C(=O)O',
+                     {1: 7, 2: 6, 3: 7, 4: 6},
+                     expect_ct={4: 'alkyl_halide_c'})
+
+    def test_iodoalanine_alkyl_halide(self):
+        """3-Iodo-Ala: I variant."""
+        self._check('N[C@@H](CI)C(=O)O',
+                     {1: 7, 2: 6, 3: 7, 4: 6},
+                     expect_ct={4: 'alkyl_halide_c'})
+
+    def test_d_chloroalanine_alkyl_halide(self):
+        """D-3-Chloro-Ala."""
+        self._check('N[C@H](CCl)C(=O)O',
+                     {1: 7, 2: 6, 3: 7, 4: 6},
+                     expect_ct={4: 'alkyl_halide_c'})
+
+    def test_chlorohomoalanine_alkyl_halide(self):
+        """4-Chloro-homoAla: longer chain Cl."""
+        self._check('N[C@@H](CCCl)C(=O)O',
+                     {1: 7, 2: 6, 3: 7, 4: 6},
+                     expect_ct={4: 'alkyl_halide_c'})
+
+    # ── Aminooxy: 5 new ──────────────────────────────────────────────────────
+
+    def test_aminooxy_gamma(self):
+        """Aminooxy on gamma-C sidechain."""
+        r = self._check('NOCC[C@@H](N)C(=O)O', expect_ct={4: 'aminooxy'})
+        smap = self._slot_map(r.chuckles)
+        assert smap[4] == 7
+
+    def test_aminooxy_d_isomer(self):
+        """D-isomer aminooxy."""
+        r = self._check('NOCC[C@H](N)C(=O)O', expect_ct={4: 'aminooxy'})
+        smap = self._slot_map(r.chuckles)
+        assert smap[4] == 7
+
+    def test_aminooxy_beta(self):
+        """Aminooxy on beta sidechain (Ser-like)."""
+        r = self._check('N[C@@H](CON)C(=O)O', expect_ct={4: 'aminooxy'})
+        smap = self._slot_map(r.chuckles)
+        assert smap[4] == 7
+
+    def test_aminooxy_delta(self):
+        """Aminooxy on delta-C sidechain."""
+        r = self._check('NOCCC[C@@H](N)C(=O)O', expect_ct={4: 'aminooxy'})
+        smap = self._slot_map(r.chuckles)
+        assert smap[4] == 7
+
+    def test_aminooxy_homo(self):
+        """Aminooxy on 2C sidechain."""
+        r = self._check('N[C@@H](CCON)C(=O)O', expect_ct={4: 'aminooxy'})
+        smap = self._slot_map(r.chuckles)
+        assert smap[4] == 7
+
+    # ── Hydrazide: 5 new ─────────────────────────────────────────────────────
+
+    def test_glu_hydrazide(self):
+        """Glu-hydrazide: -C(=O)NHNH2 sidechain."""
+        self._check('N[C@@H](CCC(=O)NN)C(=O)O',
+                     expect_ct={4: 'hydrazide'})
+
+    def test_asp_hydrazide(self):
+        """Asp-hydrazide: shorter chain."""
+        self._check('N[C@@H](CC(=O)NN)C(=O)O',
+                     expect_ct={4: 'hydrazide'})
+
+    def test_d_glu_hydrazide(self):
+        """D-Glu-hydrazide."""
+        self._check('N[C@H](CCC(=O)NN)C(=O)O',
+                     expect_ct={4: 'hydrazide'})
+
+    def test_d_asp_hydrazide(self):
+        """D-Asp-hydrazide."""
+        self._check('N[C@H](CC(=O)NN)C(=O)O',
+                     expect_ct={4: 'hydrazide'})
+
+    def test_long_chain_hydrazide(self):
+        """Longer chain hydrazide."""
+        self._check('N[C@@H](CCCC(=O)NN)C(=O)O',
+                     expect_ct={4: 'hydrazide'})
+
+    # ── Amine primary: 3 more (total 5) ──────────────────────────────────────
+
+    def test_dab_amine_primary(self):
+        """Dab (2,4-diaminobutyric acid): short chain amine."""
+        self._check('N[C@@H](CCN)C(=O)O',
+                     {1: 7, 2: 6, 3: 7, 4: 7, 5: 7},
+                     expect_ct={4: 'amine_primary', 5: 'amine_secondary'})
+
+    def test_dap_amine_primary(self):
+        """Dap (2,3-diaminopropionic acid): shortest amine sidechain."""
+        self._check('N[C@@H](CN)C(=O)O',
+                     {1: 7, 2: 6, 3: 7, 4: 7, 5: 7},
+                     expect_ct={4: 'amine_primary', 5: 'amine_secondary'})
+
+    def test_d_orn_amine_primary(self):
+        """D-Orn: D-isomer delta-amine."""
+        self._check('N[C@H](CCCN)C(=O)O',
+                     {1: 7, 2: 6, 3: 7, 4: 7, 5: 7},
+                     expect_ct={4: 'amine_primary'})
+
+    # ── Guanidinium: 5 new ───────────────────────────────────────────────────
+
+    def test_arg_guanidinium_slots(self):
+        """Arg: guanidinium label_only + terminal amine_primary."""
+        r = self._check('N[C@@H](CCCNC(=N)N)C(=O)O')
+        assert 'guanidinium' in r.chem_types.values()
+        assert 'amine_primary' in r.chem_types.values()
+
+    def test_d_arg_guanidinium(self):
+        """D-Arg: same guanidinium + amine_primary slots."""
+        r = self._check('N[C@H](CCCNC(=N)N)C(=O)O')
+        assert 'guanidinium' in r.chem_types.values()
+        assert 'amine_primary' in r.chem_types.values()
+
+    def test_arg_guanidinium_on_nitrogen(self):
+        """Arg: guanidinium dummy attaches to N (element 7)."""
+        r = self._check('N[C@@H](CCCNC(=N)N)C(=O)O')
+        smap = self._slot_map(r.chuckles)
+        guan_slot = [s for s, ct in r.chem_types.items() if ct == 'guanidinium'][0]
+        assert smap[guan_slot] == 7
+
+    def test_homoarg_guanidinium(self):
+        """Homoarginine: longer chain to guanidinium."""
+        r = self._check('N[C@@H](CCCCNC(=N)N)C(=O)O')
+        assert 'guanidinium' in r.chem_types.values()
+
+    def test_arg_guanidinium_lg_is_h(self):
+        """Arg: guanidinium leaving group is [H]."""
+        r = self._check('N[C@@H](CCCNC(=N)N)C(=O)O')
+        guan_slot = [s for s, ct in r.chem_types.items() if ct == 'guanidinium'][0]
+        assert r.leaving[guan_slot] == '[H]'
+
+    # ── Hydroxyl phenolic: 4 more (total 5) ──────────────────────────────────
+
+    def test_d_tyr_phenolic_oh(self):
+        """D-Tyr: phenolic OH."""
+        self._check('N[C@H](Cc1ccc(O)cc1)C(=O)O',
+                     {1: 7, 2: 6, 3: 7, 4: 8},
+                     expect_ct={4: 'hydroxyl_phenolic'})
+
+    def test_3f_tyr_phenolic_oh(self):
+        """3-Fluoro-Tyr: substituted phenol still detected."""
+        self._check('N[C@@H](Cc1cc(F)c(O)cc1)C(=O)O',
+                     expect_ct={4: 'hydroxyl_phenolic'})
+
+    def test_3cl_tyr_phenolic_oh(self):
+        """3-Chloro-Tyr: Cl-substituted phenol."""
+        self._check('N[C@@H](Cc1cc(Cl)c(O)cc1)C(=O)O',
+                     expect_ct={4: 'hydroxyl_phenolic'})
+
+    def test_dopa_two_phenolic_oh(self):
+        """DOPA (3,4-dihydroxyphenylalanine): two phenolic OHs detected."""
+        r = self._check('N[C@@H](Cc1cc(O)c(O)cc1)C(=O)O')
+        phenol_slots = [s for s, ct in r.chem_types.items() if ct == 'hydroxyl_phenolic']
+        assert len(phenol_slots) == 2
+
+    # ── Hydroxyl: 3 more (total 5) ───────────────────────────────────────────
+
+    def test_homoserine_hydroxyl(self):
+        """Homoserine: 2C sidechain hydroxyl."""
+        self._check('N[C@@H](CCO)C(=O)O',
+                     {1: 7, 2: 6, 3: 7, 4: 8},
+                     expect_ct={4: 'hydroxyl'})
+
+    def test_d_thr_hydroxyl(self):
+        """D-Thr: hydroxyl on D-isomer."""
+        self._check('N[C@H]([C@H](O)C)C(=O)O',
+                     {1: 7, 2: 6, 3: 7, 4: 8},
+                     expect_ct={4: 'hydroxyl'})
+
+    def test_d_ser_hydroxyl(self):
+        """D-Ser: hydroxyl on D-Ser."""
+        self._check('N[C@H](CO)C(=O)O',
+                     {1: 7, 2: 6, 3: 7, 4: 8},
+                     expect_ct={4: 'hydroxyl'})
+
+    # ── Aromatic NH: 3 more (total 5) ────────────────────────────────────────
+
+    def test_d_trp_aromatic_nh(self):
+        """D-Trp: indole NH."""
+        self._check('N[C@H](Cc1c[nH]c2ccccc12)C(=O)O',
+                     {1: 7, 2: 6, 3: 7, 4: 7},
+                     expect_ct={4: 'aromatic_nh'})
+
+    def test_d_his_aromatic_nh(self):
+        """D-His: imidazole NH."""
+        self._check('N[C@H](Cc1cnc[nH]1)C(=O)O',
+                     {1: 7, 2: 6, 3: 7, 4: 7},
+                     expect_ct={4: 'aromatic_nh'})
+
+    def test_5f_trp_aromatic_nh(self):
+        """5-Fluoro-Trp: substituted indole still detected as aromatic_nh."""
+        self._check('N[C@@H](Cc1c[nH]c2cc(F)ccc12)C(=O)O',
+                     {1: 7, 2: 6, 3: 7, 4: 7},
+                     expect_ct={4: 'aromatic_nh'})
+
+    # ── Amide NH (label_only, secondary amide): 5 new ────────────────────────
+
+    def test_nme_gln_amide_nh(self):
+        """N-methyl-glutamine: sidechain -C(=O)NHCH3 gives amide_nh."""
+        r = self._check('N[C@@H](CCC(=O)NC)C(=O)O')
+        assert 'amide_nh' in r.chem_types.values()
+        smap = self._slot_map(r.chuckles)
+        amide_slot = [s for s, ct in r.chem_types.items() if ct == 'amide_nh'][0]
+        assert smap[amide_slot] == 7
+
+    def test_nme_asn_amide_nh(self):
+        """N-methyl-asparagine: shorter chain amide_nh."""
+        r = self._check('N[C@@H](CC(=O)NC)C(=O)O')
+        assert 'amide_nh' in r.chem_types.values()
+
+    def test_net_gln_amide_nh(self):
+        """N-ethyl-glutamine."""
+        r = self._check('N[C@@H](CCC(=O)NCC)C(=O)O')
+        assert 'amide_nh' in r.chem_types.values()
+
+    def test_d_nme_gln_amide_nh(self):
+        """D-N-methyl-glutamine."""
+        r = self._check('N[C@H](CCC(=O)NC)C(=O)O')
+        assert 'amide_nh' in r.chem_types.values()
+
+    def test_long_chain_amide_nh(self):
+        """Long chain secondary amide."""
+        r = self._check('N[C@@H](CCCC(=O)NC)C(=O)O')
+        assert 'amide_nh' in r.chem_types.values()
+
+    # ── Phosphate P: 5 new ───────────────────────────────────────────────────
+
+    def test_phosphoserine_phosphate(self):
+        """pSer: phosphate on serine OH."""
+        r = self._check('N[C@@H](COP(=O)(O)O)C(=O)O')
+        assert 'phosphate_p' in r.chem_types.values()
+        smap = self._slot_map(r.chuckles)
+        p_slot = [s for s, ct in r.chem_types.items() if ct == 'phosphate_p'][0]
+        assert smap[p_slot] == 15
+
+    def test_phosphothreonine_phosphate(self):
+        """pThr: phosphate on threonine OH."""
+        r = self._check('N[C@@H]([C@@H](OP(=O)(O)O)C)C(=O)O')
+        assert 'phosphate_p' in r.chem_types.values()
+
+    def test_phosphotyrosine_phosphate(self):
+        """pTyr: phosphate on phenolic OH."""
+        r = self._check('N[C@@H](Cc1ccc(OP(=O)(O)O)cc1)C(=O)O')
+        assert 'phosphate_p' in r.chem_types.values()
+
+    def test_d_phosphoserine_phosphate(self):
+        """D-pSer."""
+        r = self._check('N[C@H](COP(=O)(O)O)C(=O)O')
+        assert 'phosphate_p' in r.chem_types.values()
+
+    def test_phosphoserine_lg_is_oh(self):
+        """pSer: phosphate leaving group is [OH]."""
+        r = self._check('N[C@@H](COP(=O)(O)O)C(=O)O')
+        p_slot = [s for s, ct in r.chem_types.items() if ct == 'phosphate_p'][0]
+        assert r.leaving[p_slot] == '[OH]'
+
+    # ── Alkyne C (CuAAC): 5 new ──────────────────────────────────────────────
+
+    def test_propargylglycine_alkyne(self):
+        """Pra (propargylglycine): 1C spacer to terminal alkyne."""
+        self._check('N[C@@H](CC#C)C(=O)O',
+                     expect_ct={4: 'alkyne_c'})
+
+    def test_homopropargylglycine_alkyne(self):
+        """Hpg: 2C spacer."""
+        self._check('N[C@@H](CCC#C)C(=O)O',
+                     expect_ct={4: 'alkyne_c'})
+
+    def test_3c_spacer_alkyne(self):
+        """3C spacer to terminal alkyne."""
+        self._check('N[C@@H](CCCC#C)C(=O)O',
+                     expect_ct={4: 'alkyne_c'})
+
+    def test_d_propargylglycine_alkyne(self):
+        """D-Pra."""
+        self._check('N[C@H](CC#C)C(=O)O',
+                     expect_ct={4: 'alkyne_c'})
+
+    def test_alkyne_dummy_on_carbon(self):
+        """Alkyne: dummy lands on sp3 C (element 6)."""
+        r = self._check('N[C@@H](CC#C)C(=O)O')
+        smap = self._slot_map(r.chuckles)
+        alk_slot = [s for s, ct in r.chem_types.items() if ct == 'alkyne_c'][0]
+        assert smap[alk_slot] == 6
+
+    # ── Azide alpha C (SPAAC/CuAAC): 5 new ──────────────────────────────────
+
+    def test_azidoalanine_azide(self):
+        """AzAla: 1C spacer to organic azide."""
+        self._check('N[C@@H](CN=[N+]=[N-])C(=O)O',
+                     expect_ct={4: 'azide_alpha_c'})
+
+    def test_azidohomoalanine_azide(self):
+        """AzHal: 2C spacer."""
+        self._check('N[C@@H](CCN=[N+]=[N-])C(=O)O',
+                     expect_ct={4: 'azide_alpha_c'})
+
+    def test_azidoornithine_azide(self):
+        """AzOrn: 3C spacer."""
+        self._check('N[C@@H](CCCN=[N+]=[N-])C(=O)O',
+                     expect_ct={4: 'azide_alpha_c'})
+
+    def test_azidolysine_azide(self):
+        """AzK: 4C spacer."""
+        self._check('N[C@@H](CCCCN=[N+]=[N-])C(=O)O',
+                     expect_ct={4: 'azide_alpha_c'})
+
+    def test_d_azidoalanine_azide(self):
+        """D-AzAla."""
+        self._check('N[C@H](CN=[N+]=[N-])C(=O)O',
+                     expect_ct={4: 'azide_alpha_c'})
+
+    # ── Terminal alkene (RCM stapling): 5 new ────────────────────────────────
+
+    def test_octenoic_terminal_alkene(self):
+        """S5-type RCM: 4C sidechain with terminal alkene."""
+        self._check('N[C@@H](CCCC=C)C(=O)O',
+                     expect_ct={4: 'terminal_alkene'})
+
+    def test_pentenoic_terminal_alkene(self):
+        """Shorter 2C sidechain alkene."""
+        self._check('N[C@@H](CC=C)C(=O)O',
+                     expect_ct={4: 'terminal_alkene'})
+
+    def test_hexenoic_terminal_alkene(self):
+        """3C sidechain alkene."""
+        self._check('N[C@@H](CCC=C)C(=O)O',
+                     expect_ct={4: 'terminal_alkene'})
+
+    def test_d_octenoic_terminal_alkene(self):
+        """D-isomer 4C sidechain alkene."""
+        self._check('N[C@H](CCCC=C)C(=O)O',
+                     expect_ct={4: 'terminal_alkene'})
+
+    def test_terminal_alkene_dummy_on_carbon(self):
+        """Terminal alkene: dummy on internal vinyl C (element 6)."""
+        r = self._check('N[C@@H](CCCC=C)C(=O)O')
+        smap = self._slot_map(r.chuckles)
+        alk_slot = [s for s, ct in r.chem_types.items() if ct == 'terminal_alkene'][0]
+        assert smap[alk_slot] == 6
+
+    # ── Tetrazine C (iEDDA): 5 new ───────────────────────────────────────────
+
+    def test_tetrazine_1c_spacer(self):
+        """TzAla: 1C spacer to s-tetrazine ring."""
+        self._check('N[C@@H](Cc1nncnn1)C(=O)O',
+                     expect_ct={4: 'tetrazine_c'})
+
+    def test_tetrazine_2c_spacer(self):
+        """TzAbu: 2C spacer."""
+        self._check('N[C@@H](CCc1nncnn1)C(=O)O',
+                     expect_ct={4: 'tetrazine_c'})
+
+    def test_tetrazine_5c_spacer(self):
+        """TzLys: 5C spacer."""
+        self._check('N[C@@H](CCCCCc1nncnn1)C(=O)O',
+                     expect_ct={4: 'tetrazine_c'})
+
+    def test_d_tetrazine(self):
+        """D-TzAla."""
+        self._check('N[C@H](Cc1nncnn1)C(=O)O',
+                     expect_ct={4: 'tetrazine_c'})
+
+    def test_tetrazine_dummy_on_carbon(self):
+        """Tetrazine: dummy on sp3 C (element 6)."""
+        r = self._check('N[C@@H](Cc1nncnn1)C(=O)O')
+        smap = self._slot_map(r.chuckles)
+        tz_slot = [s for s, ct in r.chem_types.items() if ct == 'tetrazine_c'][0]
+        assert smap[tz_slot] == 6
+
+    # ── TCO C (trans-cyclooctene, iEDDA partner): 5 new ──────────────────────
+
+    def test_tco_1c_linker(self):
+        """TcoAla: 1C linker to cyclooctene ring alkene."""
+        self._check('N[C@@H](CC1=CCCCCCC1)C(=O)O',
+                     expect_ct={4: 'tco_c'})
+
+    def test_tco_2c_linker(self):
+        """TcoAbu: 2C linker."""
+        self._check('N[C@@H](CCC1=CCCCCCC1)C(=O)O',
+                     expect_ct={4: 'tco_c'})
+
+    def test_tco_4c_linker(self):
+        """TcoLys: 4C linker."""
+        self._check('N[C@@H](CCCCC1=CCCCCCC1)C(=O)O',
+                     expect_ct={4: 'tco_c'})
+
+    def test_d_tco(self):
+        """D-TcoAla."""
+        self._check('N[C@H](CC1=CCCCCCC1)C(=O)O',
+                     expect_ct={4: 'tco_c'})
+
+    def test_tco_dummy_exocyclic(self):
+        """TCO: dummy on exocyclic sp3 C, not in ring."""
+        r = self._check('N[C@@H](CC1=CCCCCCC1)C(=O)O')
+        mol = Chem.MolFromSmiles(r.chuckles)
+        tco_slot = [s for s, ct in r.chem_types.items() if ct == 'tco_c'][0]
+        dummy = next(a for a in mol.GetAtoms()
+                     if a.GetAtomicNum() == 0 and a.GetIsotope() == tco_slot)
+        nb = next(iter(dummy.GetNeighbors()))
+        assert not nb.IsInRing(), "TCO dummy should be on exocyclic C"
+
+    # ── Cyclooctyne C (SPAAC): 5 new ────────────────────────────────────────
+
+    def test_cyclooctyne_1c_linker(self):
+        """CyoAla: 1C linker to cyclooctyne ring."""
+        self._check('N[C@@H](CC1CCCCC#CC1)C(=O)O',
+                     expect_ct={4: 'cyclooctyne_c'})
+
+    def test_cyclooctyne_2c_linker(self):
+        """CyoAbu: 2C linker."""
+        self._check('N[C@@H](CCC1CCCCC#CC1)C(=O)O',
+                     expect_ct={4: 'cyclooctyne_c'})
+
+    def test_cyclooctyne_4c_linker(self):
+        """CyoLys: 4C linker."""
+        self._check('N[C@@H](CCCCC1CCCCC#CC1)C(=O)O',
+                     expect_ct={4: 'cyclooctyne_c'})
+
+    def test_d_cyclooctyne(self):
+        """D-CyoAla."""
+        self._check('N[C@H](CC1CCCCC#CC1)C(=O)O',
+                     expect_ct={4: 'cyclooctyne_c'})
+
+    def test_cyclooctyne_dummy_on_carbon(self):
+        """Cyclooctyne: dummy on ring sp3 C (element 6)."""
+        r = self._check('N[C@@H](CC1CCCCC#CC1)C(=O)O')
+        smap = self._slot_map(r.chuckles)
+        cyo_slot = [s for s, ct in r.chem_types.items() if ct == 'cyclooctyne_c'][0]
+        assert smap[cyo_slot] == 6
+
+    # ── Aldehyde: 5 new ──────────────────────────────────────────────────────
+
+    def test_formylphe_aldehyde(self):
+        """4-Formyl-Phe: aldehyde CHO on para position."""
+        self._check('N[C@@H](Cc1ccc(C=O)cc1)C(=O)O',
+                     expect_ct={4: 'aldehyde'})
+
+    def test_d_formylphe_aldehyde(self):
+        """D-4-formyl-Phe."""
+        self._check('N[C@H](Cc1ccc(C=O)cc1)C(=O)O',
+                     expect_ct={4: 'aldehyde'})
+
+    def test_aliphatic_aldehyde(self):
+        """Aliphatic sidechain aldehyde."""
+        self._check('N[C@@H](CCC=O)C(=O)O',
+                     expect_ct={4: 'aldehyde'})
+
+    def test_long_aliphatic_aldehyde(self):
+        """Longer aliphatic aldehyde sidechain."""
+        self._check('N[C@@H](CCCC=O)C(=O)O',
+                     expect_ct={4: 'aldehyde'})
+
+    def test_aldehyde_dummy_on_carbon(self):
+        """Aldehyde: dummy on aldehyde C (element 6)."""
+        r = self._check('N[C@@H](Cc1ccc(C=O)cc1)C(=O)O')
+        smap = self._slot_map(r.chuckles)
+        ald_slot = [s for s, ct in r.chem_types.items() if ct == 'aldehyde'][0]
+        assert smap[ald_slot] == 6
+
+    # ── NHS ester: 5 new ─────────────────────────────────────────────────────
+
+    def test_nhs_asp_ester(self):
+        """NhsAsp: NHS ester on Asp-length sidechain."""
+        self._check('N[C@@H](CC(=O)ON1C(=O)CCC1=O)C(=O)O',
+                     expect_ct={4: 'nhs_ester'})
+
+    def test_nhs_glu_ester(self):
+        """NhsGlu: NHS ester on Glu-length sidechain."""
+        self._check('N[C@@H](CCC(=O)ON1C(=O)CCC1=O)C(=O)O',
+                     expect_ct={4: 'nhs_ester'})
+
+    def test_nhs_nva_ester(self):
+        """NhsNva: NHS ester on Nva-length sidechain."""
+        self._check('N[C@@H](CCCC(=O)ON1C(=O)CCC1=O)C(=O)O',
+                     expect_ct={4: 'nhs_ester'})
+
+    def test_d_nhs_asp_ester(self):
+        """D-NhsAsp."""
+        self._check('N[C@H](CC(=O)ON1C(=O)CCC1=O)C(=O)O',
+                     expect_ct={4: 'nhs_ester'})
+
+    def test_nhs_ester_dummy_on_carbon(self):
+        """NHS ester: dummy on sp3 C (element 6)."""
+        r = self._check('N[C@@H](CC(=O)ON1C(=O)CCC1=O)C(=O)O')
+        smap = self._slot_map(r.chuckles)
+        nhs_slot = [s for s, ct in r.chem_types.items() if ct == 'nhs_ester'][0]
+        assert smap[nhs_slot] == 6
+
+    # ── Maleimide C: 5 new ───────────────────────────────────────────────────
+
+    def test_lys_maleimide(self):
+        """Lys-maleimide: maleimide ring on epsilon-N chain."""
+        self._check('N[C@@H](CCCCN1C(=O)C=CC1=O)C(=O)O',
+                     expect_ct={4: 'maleimide_c'})
+
+    def test_short_maleimide(self):
+        """Shorter 2C linker to maleimide."""
+        self._check('N[C@@H](CCN1C(=O)C=CC1=O)C(=O)O',
+                     expect_ct={4: 'maleimide_c'})
+
+    def test_medium_maleimide(self):
+        """3C linker to maleimide."""
+        self._check('N[C@@H](CCCN1C(=O)C=CC1=O)C(=O)O',
+                     expect_ct={4: 'maleimide_c'})
+
+    def test_d_lys_maleimide(self):
+        """D-Lys-maleimide."""
+        self._check('N[C@H](CCCCN1C(=O)C=CC1=O)C(=O)O',
+                     expect_ct={4: 'maleimide_c'})
+
+    def test_maleimide_dummy_on_carbon(self):
+        """Maleimide: dummy on ring vinyl C (element 6)."""
+        r = self._check('N[C@@H](CCCCN1C(=O)C=CC1=O)C(=O)O')
+        smap = self._slot_map(r.chuckles)
+        mal_slot = [s for s, ct in r.chem_types.items() if ct == 'maleimide_c'][0]
+        assert smap[mal_slot] == 6
+
+    # ── Amine secondary (second-H pass): 3 more (total 5 with Lys+Orn) ──────
+
+    def test_dab_amine_secondary(self):
+        """Dab: epsilon-NH2 gives amine_secondary on second H."""
+        r = self._check('N[C@@H](CCN)C(=O)O',
+                         expect_ct={5: 'amine_secondary'})
+        assert r.leaving[5] == '[H]'
+
+    def test_dap_amine_secondary(self):
+        """Dap: NH2 gives amine_secondary."""
+        r = self._check('N[C@@H](CN)C(=O)O',
+                         expect_ct={5: 'amine_secondary'})
+
+    def test_d_lys_amine_secondary(self):
+        """D-Lys: second-H pass fires on D-isomer too."""
+        self._check('N[C@H](CCCCN)C(=O)O',
+                     expect_ct={5: 'amine_secondary'})
+
+    # ── No sidechain: negative controls ──────────────────────────────────────
+
+    def test_nle_no_sidechain(self):
+        """Norleucine: n-butyl sidechain, no reactive group."""
+        self._check('N[C@@H](CCCC)C(=O)O', {1: 7, 2: 6, 3: 7})
+
+    def test_nva_no_sidechain(self):
+        """Norvaline: n-propyl sidechain, no reactive group."""
+        self._check('N[C@@H](CCC)C(=O)O', {1: 7, 2: 6, 3: 7})
+
+
+class TestRestoreRgroups:
+    """Edge-case tests for __restore_and_remove_rgroups in molecule.py.
+
+    Covers every restore path:
+      - O-attachment carboxyl (LG=[H]): dummy removed, implicit H on O restored
+      - C-attachment carboxyl (LG=[OH]): dummy swapped for O atom → COOH
+      - Backbone N (LG=[H]): dummy removed → free NH2
+      - Backbone C (LG=[OH]): dummy swapped for O → free COOH
+      - Thiol (LG=[H]): dummy removed → free SH
+      - Amine (LG=[H]): dummy removed → free NH2
+    Also verifies carboxyl consumed by crosslinks is NOT restored.
+    """
+
+    ACID  = Chem.MolFromSmarts('[CX3](=[O])[OX2H1]')   # free carboxylic acid
+    THIOL = Chem.MolFromSmarts('[SX2H1]')                # free thiol
+    NH2   = Chem.MolFromSmarts('[NX3H2][CX4]')          # aliphatic primary amine
+
+    def _romol(self, biln, fmt=None):
+        seq = Sequence(biln) if fmt is None else Sequence(biln, fmt=fmt)
+        return Molecule(seq).get_molecule(fmt='ROMol')
+
+    def _counts(self, biln, fmt=None):
+        m = self._romol(biln, fmt)
+        return {
+            'acid':  len(m.GetSubstructMatches(self.ACID)),
+            'thiol': len(m.GetSubstructMatches(self.THIOL)),
+            'nh2':   len(m.GetSubstructMatches(self.NH2)),
+            'dummy': sum(1 for a in m.GetAtoms() if a.GetAtomicNum() == 0),
+        }
+
+    # ── Group 1: O-attachment carboxyl (slot 4, LG=[H]) ──────────────────────
+
+    def test_hasp_o_attach_carboxyl_restores(self):
+        """hAsp slot-4 O-attachment carboxyl (LG=[H]) restores to free COOH."""
+        c = self._counts('ac-hAsp-am')
+        assert c['acid'] == 1 and c['dummy'] == 0
+
+    def test_d_hasp_o_attach_carboxyl_restores(self):
+        """D_hAsp D-isomer slot-4 O-attachment carboxyl restores correctly."""
+        c = self._counts('ac-D_hAsp-am')
+        assert c['acid'] == 1 and c['dummy'] == 0
+
+    def test_hglu_o_attach_carboxyl_restores(self):
+        """hGlu slot-4 O-attachment carboxyl (LG=[H]) restores to free COOH."""
+        c = self._counts('ac-hGlu-am')
+        assert c['acid'] == 1 and c['dummy'] == 0
+
+    def test_d_hglu_o_attach_carboxyl_restores(self):
+        """D_hGlu D-isomer slot-4 O-attachment carboxyl restores correctly."""
+        c = self._counts('ac-D_hGlu-am')
+        assert c['acid'] == 1 and c['dummy'] == 0
+
+    def test_b3hasp_o_attach_carboxyl_restores(self):
+        """b3hAsp (beta-3-homo-Asp) slot-4 O-attachment carboxyl restores."""
+        c = self._counts('ac-b3hAsp-am')
+        assert c['acid'] == 1 and c['dummy'] == 0
+
+    def test_d_b3hasp_o_attach_carboxyl_restores(self):
+        """D_b3hAsp D-isomer slot-4 O-attachment carboxyl restores correctly."""
+        c = self._counts('ac-D_b3hAsp-am')
+        assert c['acid'] == 1 and c['dummy'] == 0
+
+    def test_b3hglu_o_attach_carboxyl_restores(self):
+        """b3hGlu (beta-3-homo-Glu) slot-4 O-attachment carboxyl restores."""
+        c = self._counts('ac-b3hGlu-am')
+        assert c['acid'] == 1 and c['dummy'] == 0
+
+    def test_d_b3hglu_o_attach_carboxyl_restores(self):
+        """D_b3hGlu D-isomer slot-4 O-attachment carboxyl restores correctly."""
+        c = self._counts('ac-D_b3hGlu-am')
+        assert c['acid'] == 1 and c['dummy'] == 0
+
+    def test_ameasp_o_attach_carboxyl_restores(self):
+        """aMeAsp (alpha-methyl-Asp) slot-4 O-attachment carboxyl restores."""
+        c = self._counts('ac-aMeAsp-am')
+        assert c['acid'] == 1 and c['dummy'] == 0
+
+    def test_ameglu_o_attach_carboxyl_restores(self):
+        """aMeGlu (alpha-methyl-Glu) slot-4 O-attachment carboxyl restores."""
+        c = self._counts('ac-aMeGlu-am')
+        assert c['acid'] == 1 and c['dummy'] == 0
+
+    def test_d_med_slot3_o_attach_carboxyl_restores(self):
+        """D_meD (NMe-D-Asp) slot-3 O-attachment carboxyl restores to free COOH."""
+        c = self._counts('ac-D_meD-am')
+        assert c['acid'] == 1 and c['dummy'] == 0
+
+    def test_d_mee_slot3_o_attach_carboxyl_restores(self):
+        """D_meE (NMe-D-Glu) slot-3 O-attachment carboxyl restores to free COOH."""
+        c = self._counts('ac-D_meE-am')
+        assert c['acid'] == 1 and c['dummy'] == 0
+
+    # ── Group 2: C-attachment carboxyl (LG=[OH], dummy atom → O atom) ────────
+
+    def test_asp_c_attach_carboxyl_restores(self):
+        """Standard Asp (D): slot-4 C-attachment carboxyl (LG=[OH]) restored via atom swap."""
+        c = self._counts('ac-D-am')
+        assert c['acid'] == 1 and c['dummy'] == 0
+
+    def test_glu_c_attach_carboxyl_restores(self):
+        """Standard Glu (E): slot-4 C-attachment carboxyl (LG=[OH]) restored via atom swap."""
+        c = self._counts('ac-E-am')
+        assert c['acid'] == 1 and c['dummy'] == 0
+
+    # ── Group 3: Backbone N and C terminus restore ────────────────────────────
+
+    def test_free_n_terminus_restores_amine(self):
+        """Free N-terminus (backbone_n, LG=[H]): dummy removed → NH2 present on G."""
+        c = self._counts('G')
+        assert c['nh2'] == 1 and c['dummy'] == 0
+
+    def test_free_c_terminus_restores_carboxyl(self):
+        """Free C-terminus (backbone_c, LG=[OH]): dummy swapped for O → free COOH on G."""
+        c = self._counts('G')
+        assert c['acid'] == 1 and c['dummy'] == 0
+
+    def test_n_cap_suppresses_n_terminus_amine(self):
+        """ac cap bonds to backbone-N slot; no free aliphatic NH2 remains in ac-G-am."""
+        c = self._counts('ac-G-am')
+        assert c['nh2'] == 0 and c['dummy'] == 0
+
+    def test_c_cap_suppresses_c_terminus_acid(self):
+        """am cap bonds to backbone-C slot; no free COOH remains in ac-G-am."""
+        c = self._counts('ac-G-am')
+        assert c['acid'] == 0 and c['dummy'] == 0
+
+    def test_both_caps_suppress_both_termini(self):
+        """ac-G-am: both termini capped — no free NH2, no free COOH, no dummies."""
+        c = self._counts('ac-G-am')
+        assert c['acid'] == 0 and c['nh2'] == 0 and c['dummy'] == 0
+
+    def test_free_thiol_restores_on_cysteine(self):
+        """Cys (C): slot-4 thiol (LG=[H]) dummy removed → free SH present; no spurious acid."""
+        c = self._counts('ac-C-am')
+        assert c['thiol'] == 1 and c['acid'] == 0 and c['dummy'] == 0
+
+    def test_free_amine_restores_on_lysine(self):
+        """Lys (K): epsilon-amine (LG=[H]) dummies removed → 1 free NH2; no spurious acid."""
+        c = self._counts('ac-K-am')
+        assert c['nh2'] == 1 and c['acid'] == 0 and c['dummy'] == 0
+
+    # ── Group 4: Multi-residue carboxyl accumulation ──────────────────────────
+
+    def test_triple_asp_three_carboxyls_restored(self):
+        """Three Asp residues: each slot-4 COOH restored independently → 3 free acids."""
+        c = self._counts('ac-D-D-D-am')
+        assert c['acid'] == 3 and c['dummy'] == 0
+
+    def test_five_asp_five_carboxyls_restored(self):
+        """Five Asp residues: 5 independent slot-4 restores → exactly 5 free acids."""
+        c = self._counts('ac-D-D-D-D-D-am')
+        assert c['acid'] == 5 and c['dummy'] == 0
+
+    def test_mixed_hasp_hglu_two_carboxyls(self):
+        """hAsp + hGlu (both O-attachment slot-4): 2 sidechain COOHs restored."""
+        c = self._counts('ac-hAsp-hGlu-am')
+        assert c['acid'] == 2 and c['dummy'] == 0
+
+    def test_asp_glu_two_carboxyls_restored(self):
+        """Standard Asp + Glu (both C-attachment slot-4): 2 sidechain COOHs restored."""
+        c = self._counts('ac-D-E-am')
+        assert c['acid'] == 2 and c['dummy'] == 0
+
+    # ── Group 5: Orthogonal restore and crosslink interactions ────────────────
+
+    def test_cys_and_asp_independent_restore(self):
+        """Cys thiol and Asp carboxyl restored independently: 1 thiol + 1 COOH."""
+        c = self._counts('ac-C-D-am')
+        assert c['thiol'] == 1 and c['acid'] == 1 and c['dummy'] == 0
+
+    def test_disulfide_eliminates_thiols_but_asp_cooh_survives(self):
+        """Disulfide crosslink consumes both Cys thiols; Asp sidechain COOH still restored."""
+        import warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            c = self._counts('ac-C.!1(4,4)-D-C.!1-am')
+        assert c['thiol'] == 0 and c['acid'] == 1 and c['dummy'] == 0
+
+    def test_lactam_crosslink_consumes_carboxyl_not_restored(self):
+        """K-D sidechain amide crosslink: Asp slot-4 COOH bonded → not restored as free acid."""
+        import warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            c = self._counts('ac-K.!1(4,4)-G-D.!1-am')
+        assert c['acid'] == 0 and c['dummy'] == 0
+
+    # ── Group 6: D/L isomer parity ────────────────────────────────────────────
+
+    def test_d_hasp_and_l_hasp_same_acid_count(self):
+        """D_hAsp and hAsp are stereoisomers: restore yields identical COOH count."""
+        assert self._counts('ac-hAsp-am')['acid'] == self._counts('ac-D_hAsp-am')['acid'] == 1
+
+    def test_d_b3hglu_and_l_b3hglu_same_acid_count(self):
+        """D_b3hGlu and b3hGlu: D-isomer restore identical to L-isomer."""
+        assert self._counts('ac-b3hGlu-am')['acid'] == self._counts('ac-D_b3hGlu-am')['acid'] == 1
+
+    # ── Group 7: No dummy atoms remain in any assembled product ───────────────
+
+    def test_no_dummies_simple_tripeptide(self):
+        """A-G-A: free termini both restored; no residual dummy atoms in product."""
+        c = self._counts('A-G-A')
+        assert c['dummy'] == 0
+
+    def test_no_dummies_complex_mixed_sequence(self):
+        """ac-D-K-C-hAsp-am: all four restore paths exercised; zero residual dummies."""
+        c = self._counts('ac-D-K-C-hAsp-am')
+        assert c['acid'] == 2 and c['thiol'] == 1 and c['nh2'] == 1 and c['dummy'] == 0
+
+    def test_no_dummies_after_disulfide_crosslink(self):
+        """Disulfide crosslinked product: crosslink bonds consumed all S dummies; no leakage."""
+        import warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            c = self._counts('ac-C.!1(4,4)-A-C.!1-am')
+        assert c['dummy'] == 0
+
+    # ── Group 8: Hydroxyl restore ────────────────────────────────────────────
+
+    def _extended_counts(self, biln, fmt=None):
+        m = self._romol(biln, fmt)
+        hydroxyl = Chem.MolFromSmarts('[OX2H1][CX4]')
+        phenol = Chem.MolFromSmarts('[OX2H1][c]')
+        ar_nh = Chem.MolFromSmarts('[nH]')
+        return {
+            'acid':    len(m.GetSubstructMatches(self.ACID)),
+            'thiol':   len(m.GetSubstructMatches(self.THIOL)),
+            'nh2':     len(m.GetSubstructMatches(self.NH2)),
+            'dummy':   sum(1 for a in m.GetAtoms() if a.GetAtomicNum() == 0),
+            'hydroxyl': len(m.GetSubstructMatches(hydroxyl)),
+            'phenol':  len(m.GetSubstructMatches(phenol)),
+            'ar_nh':   len(m.GetSubstructMatches(ar_nh)),
+        }
+
+    def test_ser_hydroxyl_restores(self):
+        """Ser: sidechain hydroxyl (LG=[H]) restored to free OH."""
+        c = self._extended_counts('ac-S-am')
+        assert c['hydroxyl'] == 1 and c['acid'] == 0 and c['dummy'] == 0
+
+    def test_thr_hydroxyl_restores(self):
+        """Thr: sidechain hydroxyl restored to free OH."""
+        c = self._extended_counts('ac-T-am')
+        assert c['hydroxyl'] == 1 and c['acid'] == 0 and c['dummy'] == 0
+
+    def test_tyr_phenolic_oh_restores(self):
+        """Tyr: phenolic OH (LG=[H]) restored."""
+        c = self._extended_counts('ac-Y-am')
+        assert c['phenol'] == 1 and c['dummy'] == 0
+
+    # ── Group 9: Aromatic NH restore ─────────────────────────────────────────
+
+    def test_trp_indole_nh_restores(self):
+        """Trp: indole NH (aromatic_nh, LG=[H]) restored."""
+        c = self._extended_counts('ac-W-am')
+        assert c['ar_nh'] == 1 and c['dummy'] == 0
+
+    def test_his_imidazole_nh_restores(self):
+        """His: imidazole NH restored."""
+        c = self._extended_counts('ac-H-am')
+        assert c['ar_nh'] == 1 and c['dummy'] == 0
+
+    # ── Group 10: Thioether is NOT reactive ──────────────────────────────────
+
+    def test_met_thioether_not_thiol(self):
+        """Met: thioether S-CH3 does not produce a thiol restore site."""
+        c = self._counts('ac-M-am')
+        assert c['thiol'] == 0 and c['dummy'] == 0
+
+    # ── Group 11: Free termini (no caps) ─────────────────────────────────────
+
+    def test_single_gly_free_termini(self):
+        """G alone: 1 free NH2 + 1 free COOH from backbone termini."""
+        c = self._counts('G')
+        assert c['nh2'] == 1 and c['acid'] == 1 and c['dummy'] == 0
+
+    def test_single_asp_free_termini(self):
+        """D alone: 1 NH2 + 2 COOHs (backbone + sidechain)."""
+        c = self._counts('D')
+        assert c['nh2'] == 1 and c['acid'] == 2 and c['dummy'] == 0
+
+    def test_single_glu_free_termini(self):
+        """E alone: 1 NH2 + 2 COOHs (backbone + sidechain)."""
+        c = self._counts('E')
+        assert c['nh2'] == 1 and c['acid'] == 2 and c['dummy'] == 0
+
+    def test_single_cys_free_termini(self):
+        """C alone: 1 NH2 + 1 COOH + 1 SH from free termini + thiol."""
+        c = self._counts('C')
+        assert c['nh2'] == 1 and c['acid'] == 1 and c['thiol'] == 1 and c['dummy'] == 0
+
+    def test_free_n_terminus_tripeptide(self):
+        """A-G-D (no caps): 1 free NH2 (N-term) + 2 COOHs (C-term + Asp sidechain)."""
+        c = self._counts('A-G-D')
+        assert c['nh2'] == 1 and c['acid'] == 2 and c['dummy'] == 0
+
+    # ── Group 12: One cap only ───────────────────────────────────────────────
+
+    def test_ac_only_suppresses_nh2(self):
+        """ac-D (N-cap only): 0 NH2, 2 COOHs (backbone + sidechain)."""
+        c = self._counts('ac-D')
+        assert c['nh2'] == 0 and c['acid'] == 2 and c['dummy'] == 0
+
+    def test_am_only_suppresses_c_term_acid(self):
+        """D-am (C-cap only): 1 NH2, 1 COOH (sidechain only; C-term capped)."""
+        c = self._counts('D-am')
+        assert c['nh2'] == 1 and c['acid'] == 1 and c['dummy'] == 0
+
+    # ── Group 13: Long homopolymer accumulation ──────────────────────────────
+
+    def test_ten_asp_ten_carboxyls(self):
+        """10 Asp residues: 10 sidechain COOHs restored independently."""
+        c = self._counts('ac-D-D-D-D-D-D-D-D-D-D-am')
+        assert c['acid'] == 10 and c['dummy'] == 0
+
+    def test_five_cys_five_thiols(self):
+        """5 Cys residues: 5 free thiols restored."""
+        c = self._counts('ac-C-C-C-C-C-am')
+        assert c['thiol'] == 5 and c['dummy'] == 0
+
+    # ── Group 14: Mixed functional group accumulation ────────────────────────
+
+    def test_mixed_acid_thiol_amine(self):
+        """ac-C-D-K-am: 1 thiol + 1 acid + 1 amine, all restored independently."""
+        c = self._counts('ac-C-D-K-am')
+        assert c['thiol'] == 1 and c['acid'] == 1 and c['nh2'] == 1 and c['dummy'] == 0
+
+    def test_mixed_hydroxyl_acid_thiol(self):
+        """ac-S-D-C-am: 1 hydroxyl + 1 acid + 1 thiol."""
+        c = self._extended_counts('ac-S-D-C-am')
+        assert c['hydroxyl'] == 1 and c['acid'] == 1 and c['thiol'] == 1 and c['dummy'] == 0
+
+    def test_mixed_aromatic_nh_acid(self):
+        """ac-W-D-am: 1 indole NH + 1 acid."""
+        c = self._extended_counts('ac-W-D-am')
+        assert c['ar_nh'] == 1 and c['acid'] == 1 and c['dummy'] == 0
+
+    # ── Group 15: All-inert sequences (no sidechain restore needed) ──────────
+
+    def test_all_ala_no_sidechain_restore(self):
+        """ac-A-A-A-am: no sidechain reactive groups -> all backbone dummies consumed."""
+        c = self._counts('ac-A-A-A-am')
+        assert c['acid'] == 0 and c['thiol'] == 0 and c['nh2'] == 0 and c['dummy'] == 0
+
+    def test_all_gly_no_sidechain_restore(self):
+        """ac-G-G-G-am: same as all-Ala."""
+        c = self._counts('ac-G-G-G-am')
+        assert c['acid'] == 0 and c['thiol'] == 0 and c['nh2'] == 0 and c['dummy'] == 0
+
+    # ── Group 16: Beta amino acid restore ────────────────────────────────────
+
+    def test_beta_homo_asp_glu_mix(self):
+        """b3hAsp + b3hGlu: both O-attachment carboxyl, 2 COOHs restored."""
+        c = self._counts('ac-b3hAsp-b3hGlu-am')
+        assert c['acid'] == 2 and c['dummy'] == 0
+
+    def test_beta_and_standard_asp_mix(self):
+        """b3hAsp + D (standard Asp): 2 COOHs, one from each attachment convention."""
+        c = self._counts('ac-b3hAsp-D-am')
+        assert c['acid'] == 2 and c['dummy'] == 0
+
+    # ── Group 17: Alpha-methyl variants ──────────────────────────────────────
+
+    def test_ameasp_and_standard_glu_mix(self):
+        """aMeAsp + E: both have sidechain carboxyl; 2 COOHs restored."""
+        c = self._counts('ac-aMeAsp-E-am')
+        assert c['acid'] == 2 and c['dummy'] == 0
+
+    def test_ameglu_o_attach_restores(self):
+        """aMeGlu standalone: 1 sidechain COOH restored."""
+        c = self._counts('ac-aMeGlu-am')
+        assert c['acid'] == 1 and c['dummy'] == 0
+
+    # ── Group 18: D-isomer exhaustive parity ─────────────────────────────────
+
+    def test_d_hglu_and_l_hglu_acid_parity(self):
+        """D_hGlu vs hGlu: identical COOH count."""
+        assert self._counts('ac-hGlu-am')['acid'] == self._counts('ac-D_hGlu-am')['acid'] == 1
+
+    def test_d_b3hasp_and_l_b3hasp_acid_parity(self):
+        """D_b3hAsp vs b3hAsp: identical COOH count."""
+        assert self._counts('ac-b3hAsp-am')['acid'] == self._counts('ac-D_b3hAsp-am')['acid'] == 1
+
+    def test_d_med_d_mee_parity(self):
+        """NMe-D-Asp vs NMe-D-Glu: each has 1 sidechain COOH."""
+        assert self._counts('ac-D_meD-am')['acid'] == 1
+        assert self._counts('ac-D_meE-am')['acid'] == 1
+
+    # ── Group 19: Crosslink consuming one carboxyl, leaving others intact ────
+
+    def test_lactam_consumes_one_asp_other_survives(self):
+        """K-D-D crosslink: lactam consumes first D carboxyl; second D carboxyl survives."""
+        import warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            c = self._counts('ac-K.!1(4,4)-D.!1-D-am')
+        assert c['acid'] == 1 and c['dummy'] == 0
+
+    def test_disulfide_crosslink_acid_and_amine_survive(self):
+        """C-D-K-C disulfide: SS bond consumes thiols; Asp COOH and Lys NH2 survive."""
+        import warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            c = self._counts('ac-C.!1(4,4)-D-K-C.!1-am')
+        assert c['thiol'] == 0 and c['acid'] == 1 and c['nh2'] == 1 and c['dummy'] == 0
+
+    # ── Group 20: Atom-count parity between D/L assembled products ───────────
+
+    def test_d_l_asp_heavy_atom_count_equal(self):
+        """ac-D-am vs ac-D_hAsp-am: D-isomer has same heavy atom count as L."""
+        m_l = self._romol('ac-hAsp-am')
+        m_d = self._romol('ac-D_hAsp-am')
+        assert m_l.GetNumHeavyAtoms() == m_d.GetNumHeavyAtoms()
+
+    def test_d_l_glu_heavy_atom_count_equal(self):
+        """hGlu vs D_hGlu: same heavy atom count."""
+        m_l = self._romol('ac-hGlu-am')
+        m_d = self._romol('ac-D_hGlu-am')
+        assert m_l.GetNumHeavyAtoms() == m_d.GetNumHeavyAtoms()
+
+
+class TestReactionPairSMIRKS:
+    """Fire every REACTION_INDEX entry's SMIRKS on pre_activate'd monomers.
+
+    Uses real monomer SMILES through pre_activate to get correctly-placed
+    dummies, then feeds those into run_bond_smirks.  This validates the full
+    pipeline: auto-assignment -> SMIRKS -> product.
+    """
+
+    _MODEL_MONOMERS = {
+        'backbone_n':       'N[C@@H](C)C(=O)O',
+        'backbone_c':       'N[C@@H](C)C(=O)O',
+        'backbone_n_mod':   'N[C@@H](C)C(=O)O',
+        'thiol':            'N[C@@H](CS)C(=O)O',
+        'selenol':          'N[C@@H](C[SeH])C(=O)O',
+        'carboxyl':         'N[C@@H](CC(=O)O)C(=O)O',
+        'amine_primary':    'N[C@@H](CCCCN)C(=O)O',
+        'amine_secondary':  'N[C@@H](CCCCN)C(=O)O',
+        'hydroxyl':         'N[C@@H](CO)C(=O)O',
+        'alkyl_halide_c':   'N[C@@H](CCl)C(=O)O',
+        'aminooxy':         'NOCC[C@@H](N)C(=O)O',
+        'hydrazide':        'N[C@@H](CCC(=O)NN)C(=O)O',
+        'aldehyde':         'N[C@@H](Cc1ccc(C=O)cc1)C(=O)O',
+        'maleimide_c':      'N[C@@H](CCCCN1C(=O)C=CC1=O)C(=O)O',
+        'nhs_ester':        'N[C@@H](CC(=O)ON1C(=O)CCC1=O)C(=O)O',
+        'alkyne_c':         'N[C@@H](CC#C)C(=O)O',
+        'azide_alpha_c':    'N[C@@H](CN=[N+]=[N-])C(=O)O',
+        'terminal_alkene':  'N[C@@H](CCCC=C)C(=O)O',
+        'tetrazine_c':      'N[C@@H](Cc1nncnn1)C(=O)O',
+        'tco_c':            'N[C@@H](CC1=CCCCCCC1)C(=O)O',
+        'cyclooctyne_c':    'N[C@@H](CC1CCCCC#CC1)C(=O)O',
+        'phosphate_p':      'N[C@@H](COP(=O)(O)O)C(=O)O',
+    }
+
+    # backbone_o and carbon are backbone-level types assigned by heuristic,
+    # not auto-assigned by pre_activate on standalone SMILES
+    _FALLBACK_FRAGS = {
+        'backbone_o':       '[{iso}*]OCC',
+        'carbon':           '[{iso}*]CCC',
+    }
+
+    def _make_frag(self, ct, iso):
+        if ct in self._FALLBACK_FRAGS:
+            smi = self._FALLBACK_FRAGS[ct].format(iso=iso)
+            mol = Chem.MolFromSmiles(smi)
+            assert mol is not None, f"Bad fallback fragment for {ct}"
+            return mol
+
+        from pyPept.interfaces.monomer_pipeline import pre_activate
+        smiles = self._MODEL_MONOMERS.get(ct)
+        if smiles is None:
+            pytest.skip(f"No model monomer for chem_type {ct!r}")
+
+        r = pre_activate(smiles)
+        mol = Chem.RWMol(Chem.MolFromSmiles(r.chuckles))
+        assert mol is not None, f"Bad CHUCKLES for {ct}: {r.chuckles}"
+
+        slot = next((s for s, c in r.chem_types.items() if c == ct), None)
+        assert slot is not None, \
+            f"pre_activate did not assign {ct!r} to {smiles}; got {r.chem_types}"
+
+        for atom in mol.GetAtoms():
+            if atom.GetAtomicNum() == 0 and atom.GetIsotope() == slot:
+                atom.SetIsotope(iso)
+                break
+        else:
+            raise AssertionError(
+                f"No dummy with isotope {slot} in CHUCKLES for {ct}")
+
+        return mol.GetMol()
+
+    def _run_pair(self, ct_a, ct_b):
+        from pyPept.interfaces.reaction_library import REACTION_INDEX, run_bond_smirks
+        entry = REACTION_INDEX.get((ct_a, ct_b))
+        assert entry is not None, f"No REACTION_INDEX entry for ({ct_a}, {ct_b})"
+
+        iso_a, iso_b = 400, 401
+        frag_a = self._make_frag(ct_a, iso_a)
+        frag_b = self._make_frag(ct_b, iso_b)
+
+        prod = run_bond_smirks(frag_a, frag_b, iso_a, iso_b, entry,
+                               intramolecular=False)
+        assert prod is not None, \
+            f"SMIRKS produced no product for ({ct_a}, {ct_b}) [{entry['id']}]"
+        target_dummies = [a for a in prod.GetAtoms()
+                         if a.GetAtomicNum() == 0
+                         and a.GetIsotope() in (iso_a, iso_b)]
+        assert not target_dummies, \
+            f"Target dummies not consumed in ({ct_a}, {ct_b}): " \
+            f"{Chem.MolToSmiles(prod)}"
+        return prod
+
+    # ── Backbone bonds ───────────────────────────────────────────────────────
+
+    def test_backbone_amide_n_c(self):
+        """backbone_n + backbone_c -> amide bond."""
+        self._run_pair('backbone_n', 'backbone_c')
+
+    def test_backbone_amide_amine_c(self):
+        """amine_primary + backbone_c -> amide bond."""
+        self._run_pair('amine_primary', 'backbone_c')
+
+    def test_backbone_ester_o_c(self):
+        """backbone_o + backbone_c -> ester bond."""
+        self._run_pair('backbone_o', 'backbone_c')
+
+    # ── Sidechain / crosslink bonds ──────────────────────────────────────────
+
+    def test_sidechain_amide(self):
+        """amine_primary + carboxyl -> sidechain amide."""
+        self._run_pair('amine_primary', 'carboxyl')
+
+    def test_disulfide(self):
+        """thiol + thiol -> disulfide."""
+        self._run_pair('thiol', 'thiol')
+
+    def test_diselenide(self):
+        """selenol + selenol -> diselenide."""
+        self._run_pair('selenol', 'selenol')
+
+    def test_thioester_backbone(self):
+        """thiol + backbone_c -> thioester."""
+        self._run_pair('thiol', 'backbone_c')
+
+    def test_thioester_sidechain(self):
+        """thiol + carboxyl -> sidechain thioester (O-attachment)."""
+        self._run_pair('thiol', 'carboxyl')
+
+    def test_thioether_halide(self):
+        """thiol + alkyl_halide_c -> thioether."""
+        self._run_pair('thiol', 'alkyl_halide_c')
+
+    def test_thiol_maleimide(self):
+        """thiol + maleimide_c -> thioether (Michael addition)."""
+        self._run_pair('thiol', 'maleimide_c')
+
+    def test_nhs_ester_amine_primary(self):
+        """amine_primary + nhs_ester -> amide."""
+        self._run_pair('amine_primary', 'nhs_ester')
+
+    def test_nhs_ester_amine_secondary(self):
+        """amine_secondary + nhs_ester -> amide."""
+        self._run_pair('amine_secondary', 'nhs_ester')
+
+    def test_oxime_ligation(self):
+        """aminooxy + aldehyde -> oxime."""
+        self._run_pair('aminooxy', 'aldehyde')
+
+    def test_hydrazone(self):
+        """hydrazide + aldehyde -> hydrazone."""
+        self._run_pair('hydrazide', 'aldehyde')
+
+    # ── Click chemistry ──────────────────────────────────────────────────────
+
+    def test_cuaac_triazole(self):
+        """alkyne_c + azide_alpha_c -> 1,2,3-triazole."""
+        self._run_pair('alkyne_c', 'azide_alpha_c')
+
+    def test_spaac_triazole(self):
+        """cyclooctyne_c + azide_alpha_c -> triazole (copper-free)."""
+        self._run_pair('cyclooctyne_c', 'azide_alpha_c')
+
+    @pytest.mark.xfail(reason="SMIRKS bug: unmapped ring bonds on cyclic TCO "
+                        "cause C valence overflow in dihydropyridazine product")
+    def test_iedda_tetrazine_tco(self):
+        """tetrazine_c + tco_c -> dihydropyridazine (iEDDA)."""
+        self._run_pair('tetrazine_c', 'tco_c')
+
+    # ── PTM and stapling ─────────────────────────────────────────────────────
+
+    def test_phosphorylation(self):
+        """hydroxyl + phosphate_p -> phosphate ester."""
+        self._run_pair('hydroxyl', 'phosphate_p')
+
+    def test_rcm_alkene(self):
+        """terminal_alkene + terminal_alkene -> internal alkene (RCM)."""
+        self._run_pair('terminal_alkene', 'terminal_alkene')
+
+    def test_imide_n_acylation(self):
+        """backbone_n_mod + carboxyl -> imide (N-acylation)."""
+        self._run_pair('backbone_n_mod', 'carboxyl')
+
+    def test_backbone_n_alkylation(self):
+        """backbone_n_mod + carbon -> N-alkylation."""
+        self._run_pair('backbone_n_mod', 'carbon')
+
+    # ── Reverse direction: REACTION_INDEX stores both orders ─────────────────
+
+    def test_reverse_sidechain_amide(self):
+        """carboxyl + amine_primary (reverse order) routes to same reaction."""
+        self._run_pair('carboxyl', 'amine_primary')
+
+    def test_reverse_thioester_sc(self):
+        """carboxyl + thiol (reverse order) routes to thioester_sc."""
+        self._run_pair('carboxyl', 'thiol')
+
+    def test_reverse_oxime(self):
+        """aldehyde + aminooxy (reverse order)."""
+        self._run_pair('aldehyde', 'aminooxy')
+
+    # ── Exhaustive: every unique pair in REACTION_INDEX fires ────────────────
+
+    def test_all_reaction_pairs_fire(self):
+        """Iterate REACTION_INDEX: every (ct_a, ct_b) pair produces a valid product."""
+        from pyPept.interfaces.reaction_library import REACTION_INDEX, run_bond_smirks
+
+        KNOWN_XFAIL = {
+            ('tetrazine_c', 'tco_c'),
+        }
+
+        seen = set()
+        failures = []
+        for (ct_a, ct_b), entry in REACTION_INDEX.items():
+            pair_key = tuple(sorted([ct_a, ct_b]))
+            if pair_key in seen:
+                continue
+            seen.add(pair_key)
+
+            if (ct_a, ct_b) in KNOWN_XFAIL or (ct_b, ct_a) in KNOWN_XFAIL:
+                continue
+
+            ALL_TYPES = {**self._MODEL_MONOMERS, **self._FALLBACK_FRAGS}
+            if ct_a not in ALL_TYPES or ct_b not in ALL_TYPES:
+                continue
+
+            try:
+                iso_a, iso_b = 400, 401
+                frag_a = self._make_frag(ct_a, iso_a)
+                frag_b = self._make_frag(ct_b, iso_b)
+                prod = run_bond_smirks(frag_a, frag_b, iso_a, iso_b, entry,
+                                       intramolecular=False)
+                if prod is None:
+                    failures.append(f"({ct_a}, {ct_b}) [{entry['id']}]: no product")
+                elif any(a.GetAtomicNum() == 0
+                         and a.GetIsotope() in (iso_a, iso_b)
+                         for a in prod.GetAtoms()):
+                    failures.append(
+                        f"({ct_a}, {ct_b}) [{entry['id']}]: target dummies "
+                        f"not consumed in {Chem.MolToSmiles(prod)}")
+            except Exception as exc:
+                failures.append(f"({ct_a}, {ct_b}) [{entry['id']}]: {exc}")
+
+        assert not failures, \
+            f"{len(failures)} reaction pair(s) failed:\n" + "\n".join(failures)
+
+
 # ---------------------------------------------------------------------------
 # Standalone runner
 # ---------------------------------------------------------------------------
@@ -2781,7 +4424,9 @@ if __name__ == '__main__':
                 TestInlineAttachments, TestCapMonomers, TestCABILNPhase2Parser,
                 TestIntramolecularRingClosure, TestExpandedMonomers,
                 TestFinalMonomers, TestFattyAcidBranching, TestBracketNotation,
-                TestMonomerBuilderCLI, TestRoundTrips):
+                TestMonomerBuilderCLI, TestRoundTrips,
+                TestMonomerPreActivate, TestRestoreRgroups,
+                TestReactionPairSMIRKS):
         suite.addTests(loader.loadTestsFromTestCase(cls))
     runner = unittest.TextTestRunner(verbosity=2)
     result = runner.run(suite)
