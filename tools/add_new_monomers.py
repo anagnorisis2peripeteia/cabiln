@@ -43,7 +43,7 @@ NEW_MONOMERS = [
         "1:backbone_n,2:backbone_c,3:backbone_n_mod,4:aminooxy",
     ),
     (
-        "[1*]N([3*])[C@@H](Cc1ccc([4*]C=O)cc1)C([2*])=O",
+        "[1*]N([3*])[C@@H](Cc1ccc(C([4*])=O)cc1)C([2*])=O",
         "Ald",
         "L-4-formylphenylalanine",
         "aa", "modified",

@@ -2598,6 +2598,178 @@ class TestMonomerBuilderCLI(_unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
+# New monomers added in v1.1.0b0: Tz, TCO, Mal, Aoa, Ald, Dmb
+# ---------------------------------------------------------------------------
+
+class TestNewMonomersV110:
+    """Integration tests for the 6 monomers added in v1.1.0b0."""
+
+    # ── chem-type detection ────────────────────────────────────────────────
+
+    def test_tz_chem_type_detected(self):
+        """Tz monomer exposes tetrazine_c at R4."""
+        from pyPept.interfaces.reaction_library import infer_chem_type
+        # Tz CHUCKLES: [2*]C(=O)C([4*])c1nncnn1 — sp3 CH bonded to tetrazine
+        mol = Chem.MolFromSmiles('C([400*])(C(=O)O)c1nncnn1')
+        assert mol is not None, "Tz model SMILES failed to parse"
+        attach_idx = next(
+            nb.GetIdx()
+            for a in mol.GetAtoms() if a.GetAtomicNum() == 0 and a.GetIsotope() == 400
+            for nb in a.GetNeighbors()
+        )
+        ct = infer_chem_type(mol, attach_idx, slot=4)
+        assert ct == 'tetrazine_c', f"Expected tetrazine_c, got {ct!r}"
+
+    def test_tco_chem_type_detected(self):
+        """TCO monomer exposes tco_c at R4."""
+        from pyPept.interfaces.reaction_library import infer_chem_type
+        # TCO CHUCKLES: [2*]C(=O)CC([4*])C1=CCCCCCC1 — exocyclic sp3 C bonded to ring alkene
+        mol = Chem.MolFromSmiles('C([400*])(CC(=O)O)C1=CCCCCCC1')
+        assert mol is not None, "TCO model SMILES failed to parse"
+        attach_idx = next(
+            nb.GetIdx()
+            for a in mol.GetAtoms() if a.GetAtomicNum() == 0 and a.GetIsotope() == 400
+            for nb in a.GetNeighbors()
+        )
+        ct = infer_chem_type(mol, attach_idx, slot=4)
+        assert ct == 'tco_c', f"Expected tco_c, got {ct!r}"
+
+    def test_mal_chem_type_detected(self):
+        """Mal monomer exposes maleimide_c at R4."""
+        from pyPept.interfaces.reaction_library import infer_chem_type
+        # Mal: vinyl C of maleimide ring
+        mol = Chem.MolFromSmiles('[400*]C1=CC(=O)NC1=O')
+        assert mol is not None, "Mal model SMILES failed to parse"
+        attach_idx = next(
+            nb.GetIdx()
+            for a in mol.GetAtoms() if a.GetAtomicNum() == 0 and a.GetIsotope() == 400
+            for nb in a.GetNeighbors()
+        )
+        ct = infer_chem_type(mol, attach_idx, slot=4)
+        assert ct == 'maleimide_c', f"Expected maleimide_c, got {ct!r}"
+
+    def test_aoa_chem_type_detected(self):
+        """Aoa monomer exposes aminooxy at R4."""
+        from pyPept.interfaces.reaction_library import infer_chem_type
+        mol = Chem.MolFromSmiles('[400*][NH]OCC')
+        assert mol is not None, "Aoa model SMILES failed to parse"
+        attach_idx = next(
+            nb.GetIdx()
+            for a in mol.GetAtoms() if a.GetAtomicNum() == 0 and a.GetIsotope() == 400
+            for nb in a.GetNeighbors()
+        )
+        ct = infer_chem_type(mol, attach_idx, slot=4)
+        assert ct == 'aminooxy', f"Expected aminooxy, got {ct!r}"
+
+    def test_ald_chem_type_detected(self):
+        """Ald monomer exposes aldehyde at R4."""
+        from pyPept.interfaces.reaction_library import infer_chem_type
+        mol = Chem.MolFromSmiles('[400*][CH]=O')
+        assert mol is not None, "Ald model SMILES failed to parse"
+        attach_idx = next(
+            nb.GetIdx()
+            for a in mol.GetAtoms() if a.GetAtomicNum() == 0 and a.GetIsotope() == 400
+            for nb in a.GetNeighbors()
+        )
+        ct = infer_chem_type(mol, attach_idx, slot=4)
+        assert ct == 'aldehyde', f"Expected aldehyde, got {ct!r}"
+
+    def test_dmb_chem_type_carbon(self):
+        """Dmb monomer exposes carbon at R1."""
+        from pyPept.interfaces.reaction_library import infer_chem_type
+        # Dmb: [1*]Cc1ccc(OC)cc1OC — benzylic sp3 C
+        mol = Chem.MolFromSmiles('[100*]Cc1ccc(OC)cc1OC')
+        assert mol is not None, "Dmb model SMILES failed to parse"
+        attach_idx = next(
+            nb.GetIdx()
+            for a in mol.GetAtoms() if a.GetAtomicNum() == 0 and a.GetIsotope() == 100
+            for nb in a.GetNeighbors()
+        )
+        ct = infer_chem_type(mol, attach_idx, slot=1)
+        assert ct == 'carbon', f"Expected carbon, got {ct!r}"
+
+    # ── assembly integration ───────────────────────────────────────────────
+
+    def test_tz_cap_on_lys_assembles(self):
+        """fmoc-K.Tz(4,2)-am: amide links K ε-amine to Tz carbonyl; tetrazine ring intact."""
+        mol = _romol('fmoc-K.Tz(4,2)-am')
+        assert mol is not None, "Assembly returned None for K.Tz peptide"
+        dummies = [a for a in mol.GetAtoms() if a.GetAtomicNum() == 0]
+        assert dummies == [], f"Unreacted dummies in K.Tz product: {[a.GetIsotope() for a in dummies]}"
+        tz_ring = Chem.MolFromSmarts('c1nncnn1')
+        assert mol.HasSubstructMatch(tz_ring), "Tetrazine ring missing from K.Tz product"
+
+    def test_tco_cap_on_lys_assembles(self):
+        """fmoc-K.TCO(4,2)-am: amide links K ε-amine to TCO carbonyl; cyclooctene intact."""
+        mol = _romol('fmoc-K.TCO(4,2)-am')
+        assert mol is not None, "Assembly returned None for K.TCO peptide"
+        dummies = [a for a in mol.GetAtoms() if a.GetAtomicNum() == 0]
+        assert dummies == [], f"Unreacted dummies in K.TCO product: {[a.GetIsotope() for a in dummies]}"
+        # Trans-cyclooctene: 8-membered ring with one double bond
+        ring_alkene = Chem.MolFromSmarts('[r8]=[r8]')
+        assert mol.HasSubstructMatch(ring_alkene), "Cyclooctene ring alkene missing from K.TCO product"
+
+    def test_mal_cap_on_lys_assembles(self):
+        """fmoc-K.Mal(4,2)-am: amide links K ε-amine to Mal carbonyl; succinimide ring intact."""
+        mol = _romol('fmoc-K.Mal(4,2)-am')
+        assert mol is not None, "Assembly returned None for K.Mal peptide"
+        dummies = [a for a in mol.GetAtoms() if a.GetAtomicNum() == 0]
+        assert dummies == [], f"Unreacted dummies in K.Mal product: {[a.GetIsotope() for a in dummies]}"
+        maleimide = Chem.MolFromSmarts('C1=CC(=O)NC1=O')
+        assert mol.HasSubstructMatch(maleimide), "Maleimide ring missing from K.Mal product"
+
+    def test_mal_thiol_michael_smirks(self):
+        """Thiol-maleimide routes to thiol_maleimide in REACTION_INDEX (SMIRKS-level)."""
+        from pyPept.interfaces.reaction_library import REACTION_INDEX
+        entry = REACTION_INDEX.get(('thiol', 'maleimide_c'))
+        assert entry is not None, "No REACTION_INDEX entry for (thiol, maleimide_c)"
+        assert entry['id'] == 'thiol_maleimide'
+
+    def test_aoa_peptide_assembles(self):
+        """fmoc-A-Aoa-G-am: Aoa backbone incorporation, all dummies consumed."""
+        mol = _romol('fmoc-A-Aoa-G-am')
+        assert mol is not None
+        dummies = [a for a in mol.GetAtoms() if a.GetAtomicNum() == 0]
+        assert dummies == [], f"Unreacted dummies in Aoa peptide: {[a.GetIsotope() for a in dummies]}"
+        aminooxy = Chem.MolFromSmarts('[N][O]')
+        assert mol.HasSubstructMatch(aminooxy), "Aminooxy N-O missing from Aoa peptide"
+
+    def test_ald_peptide_assembles(self):
+        """fmoc-A-Ald-G-am: Ald backbone incorporation, aldehyde sidechain intact."""
+        mol = _romol('fmoc-A-Ald-G-am')
+        assert mol is not None
+        dummies = [a for a in mol.GetAtoms() if a.GetAtomicNum() == 0]
+        assert dummies == [], f"Unreacted dummies in Ald peptide: {[a.GetIsotope() for a in dummies]}"
+        aldehyde = Chem.MolFromSmarts('[CH]=O')
+        assert mol.HasSubstructMatch(aldehyde), "Aldehyde group missing from Ald peptide"
+
+    def test_aoa_ald_oxime_macrocycle(self):
+        """fmoc-A-Aoa.!1(4,4)-G-Ald.!1-am: oxime macrocyclisation gives O-N=C linkage."""
+        mol = _romol('fmoc-A-Aoa.!1(4,4)-G-Ald.!1-am')
+        assert mol is not None
+        dummies = [a for a in mol.GetAtoms() if a.GetAtomicNum() == 0]
+        assert dummies == [], f"Unreacted dummies in oxime macrocycle: {[a.GetIsotope() for a in dummies]}"
+        oxime = Chem.MolFromSmarts('[O][N]=[C]')
+        assert mol.HasSubstructMatch(oxime), "Oxime O-N=C missing from Aoa-Ald macrocycle"
+        assert mol.GetRingInfo().NumRings() >= 1, "Expected macrocycle ring"
+
+    def test_tz_iedda_in_reaction_index(self):
+        """REACTION_INDEX routes (tetrazine_c, tco_c) → iedda_tetrazine_tco."""
+        from pyPept.interfaces.reaction_library import REACTION_INDEX
+        entry = REACTION_INDEX.get(('tetrazine_c', 'tco_c'))
+        assert entry is not None
+        assert entry['id'] == 'iedda_tetrazine_tco'
+
+    def test_tz_tco_iedda_reaction_index(self):
+        """REACTION_INDEX routes (tetrazine_c, tco_c) → iedda_tetrazine_tco (routing check)."""
+        from pyPept.interfaces.reaction_library import REACTION_INDEX
+        entry = REACTION_INDEX.get(('tetrazine_c', 'tco_c'))
+        assert entry is not None
+        assert entry['id'] == 'iedda_tetrazine_tco'
+        assert entry.get('take_largest') is True, "IEDDA must have take_largest=True (N2 byproduct)"
+
+
+# ---------------------------------------------------------------------------
 # Standalone runner
 # ---------------------------------------------------------------------------
 
