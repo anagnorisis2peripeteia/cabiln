@@ -411,19 +411,27 @@ def _parse_bracket_items(bracket_content):
 def cabiln_to_branch(cabiln):
     """Convert CABILN bracket notation to branch (%) notation.
 
-    Only N→C brackets (all ``(2,1)`` continuations) are converted.
-    They produce simple positional branches with ``.(r,r)`` on the host::
+    All (2,1) continuations — positional branch, anchor at N-term::
 
-        K.[G(4,1).A(2,1).am(2,1)]-G-am
-        →  K.(4,1)-G-am%G-A(2,1)-am(2,1)
+        K.[G(4,1).A(2,1).am(2,1)]-G-am  →  K.(4,1)-G-am%G-A-am
 
-    Brackets with ``(1,2)`` or mixed continuations are left as-is,
-    since the monomers lack standard N/C terminus connectivity and
-    cannot be written as a valid N→C branch.
+    All (1,2) continuations — reversed chain, anchor at C-term with crosslink::
+
+        K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-am
+        →  K.!1(4,4)-G-am%C20FA-AEEA-gGlu.!1
+
+    Mixed (has both (2,1) and (1,2) after the anchor) — anchor in middle,
+    crosslink, N-term side reversed::
+
+        K.[gGlu(4,4).L(2,1).A(1,2)]-G-am  →  K.!1(4,4)-G-am%A-gGlu.!1-L
+
+    Single-monomer brackets stay inline. ``{}`` brackets are immune.
     """
     result = cabiln
     branches = []
     search_start = 0
+    existing_tags = set(int(x) for x in _re.findall(r'!\s*(\d+)', cabiln))
+    _xlink_ctr = [max(existing_tags, default=0) + 1]
 
     while True:
         m = _re.search(r'\.([\[{])([^\]}\]]+)[\]}]', result[search_start:])
@@ -439,28 +447,59 @@ def cabiln_to_branch(cabiln):
         bracket_content = m.group(2)
         items = _parse_bracket_items(bracket_content)
         if not items or items[0][1] is None:
-            break
+            search_start = m_end
+            continue
         anchor_abbr, r_host, r_branch = items[0]
 
-        cont = [(rp, rt) for _, rp, rt in items[1:] if rp and rt]
-        all_21 = len(items) <= 1 or all(
-            rp == '2' and rt == '1' for rp, rt in cont)
-
-        if not all_21:
+        if len(items) < 2:
             search_start = m_end
             continue
 
-        host_marker = f'.({r_host},{r_branch})'
-        branch_parts = [anchor_abbr]
-        for abbr, rp, rt in items[1:]:
-            if rp and rt:
-                branch_parts.append(f'{abbr}({rp},{rt})')
-            else:
-                branch_parts.append(abbr)
-        branch_str = '-'.join(branch_parts)
+        cont = [(rp, rt) for _, rp, rt in items[1:] if rp and rt]
+        all_21 = cont and all(rp == '2' and rt == '1' for rp, rt in cont)
+        all_12 = cont and all(rp == '1' and rt == '2' for rp, rt in cont)
 
-        result = result[:m_start] + host_marker + result[m_end:]
-        branches.append(branch_str)
+        if all_21:
+            host_marker = f'.({r_host},{r_branch})'
+            branch_parts = [anchor_abbr] + [abbr for abbr, _, _ in items[1:]]
+            branch_str = '-'.join(branch_parts)
+            result = result[:m_start] + host_marker + result[m_end:]
+            branches.append(branch_str)
+        elif all_12:
+            tag = f'!{_xlink_ctr[0]}'
+            _xlink_ctr[0] += 1
+            host_marker = f'.{tag}({r_host},{r_branch})'
+            reversed_cont = [abbr for abbr, _, _ in items[1:]][::-1]
+            branch_parts = reversed_cont + [f'{anchor_abbr}.{tag}']
+            branch_str = '-'.join(branch_parts)
+            result = result[:m_start] + host_marker + result[m_end:]
+            branches.append(branch_str)
+        elif cont:
+            after = []
+            before = []
+            hit_12 = False
+            for abbr, rp, rt in items[1:]:
+                if rp == '2' and rt == '1' and not hit_12:
+                    after.append(abbr)
+                elif rp == '1' and rt == '2':
+                    hit_12 = True
+                    before.append(abbr)
+                else:
+                    break
+            else:
+                tag = f'!{_xlink_ctr[0]}'
+                _xlink_ctr[0] += 1
+                host_marker = f'.{tag}({r_host},{r_branch})'
+                branch_parts = before[::-1] + [f'{anchor_abbr}.{tag}'] + after
+                branch_str = '-'.join(branch_parts)
+                result = result[:m_start] + host_marker + result[m_end:]
+                branches.append(branch_str)
+                continue
+            search_start = m_end
+            continue
+        else:
+            search_start = m_end
+            continue
 
     if branches:
         result += '%' + '%'.join(branches)

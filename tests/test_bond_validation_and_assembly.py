@@ -4465,11 +4465,11 @@ class TestNotationConversion:
 
     @pytest.mark.parametrize("label,branch", [
         ("NH2_branch",
-         "ac-A-K.(4,1)-G-am%G-A(2,1)-am(2,1)"),
+         "ac-A-K.(4,1)-G-am%G-A-am"),
         ("COOH_branch",
-         "A-D.(4,1)-A-am%G-A(2,1)-am(2,1)"),
+         "A-D.(4,1)-A-am%G-A-am"),
         ("disulfide_branch",
-         "ac-C.(4,4)-A-G-am%C-A(2,1)-am(2,1)"),
+         "ac-C.(4,4)-A-G-am%C-A-am"),
     ])
     def test_branch_roundtrip(self, label, branch):
         from pyPept.sequence import cabiln_to_bracket, cabiln_to_branch
@@ -4481,14 +4481,14 @@ class TestNotationConversion:
             f"  bracket -> branch:  {back!r}"
         )
 
-    def test_crosslink_branch_to_bracket_one_way(self):
-        """Crosslink !n branches convert to (1,2) bracket — one-way only."""
+    def test_crosslink_branch_to_bracket_roundtrip(self):
+        """Crosslink !n branches convert to (1,2) bracket and back."""
         from pyPept.sequence import cabiln_to_bracket, cabiln_to_branch
-        branch = "ac-K.!1(4,4)-G-am%C20FA-AEEA(2,1)-gGlu(2,1).!1"
+        branch = "ac-K.!1(4,4)-G-am%C20FA-AEEA-gGlu.!1"
         bracket = cabiln_to_bracket(branch)
         assert bracket == "ac-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-am"
         back = cabiln_to_branch(bracket)
-        assert back == bracket, "(1,2) bracket should stay as bracket"
+        assert back == "ac-K.!1(4,4)-G-am%C20FA-AEEA-gGlu.!1"
 
     # ------------------------------------------------------------------
     # Bracket -> Branch -> Bracket  (bracket notation is canonical input)
@@ -4497,19 +4497,19 @@ class TestNotationConversion:
     @pytest.mark.parametrize("label,bracket,expected_branch", [
         ("bracket_COOH",
          "A-D.[G(4,1).A(2,1).am(2,1)]-A-am",
-         "A-D.(4,1)-A-am%G-A(2,1)-am(2,1)"),
+         "A-D.(4,1)-A-am%G-A-am"),
 
         ("bracket_NH2",
          "ac-A-K.[G(4,1).A(2,1).am(2,1)]-G-am",
-         "ac-A-K.(4,1)-G-am%G-A(2,1)-am(2,1)"),
+         "ac-A-K.(4,1)-G-am%G-A-am"),
 
         ("bracket_disulfide",
          "ac-C.[C(4,4).A(2,1).am(2,1)]-A-G-am",
-         "ac-C.(4,4)-A-G-am%C-A(2,1)-am(2,1)"),
+         "ac-C.(4,4)-A-G-am%C-A-am"),
 
         ("bracket_single_monomer",
          "ac-K.[A(4,2)]-G-am",
-         "ac-K.(4,2)-G-am%A"),
+         "ac-K.[A(4,2)]-G-am"),
     ])
     def test_bracket_to_branch(self, label, bracket, expected_branch):
         from pyPept.sequence import cabiln_to_branch
@@ -4557,7 +4557,7 @@ class TestNotationConversion:
 
     def test_two_branches_roundtrip(self):
         from pyPept.sequence import cabiln_to_bracket, cabiln_to_branch
-        branch = "ac-C.(4,4)-A-K.(4,1)-G-am%C-A(2,1)-am(2,1)%G-am(2,1)"
+        branch = "ac-C.(4,4)-A-K.(4,1)-G-am%C-A-am%G-am"
         bracket = cabiln_to_bracket(branch)
         assert "[" in bracket and "]" in bracket
         back = cabiln_to_branch(bracket)
@@ -4584,12 +4584,14 @@ class TestNotationConversion:
     # Crosslink + branch coexistence
     # ------------------------------------------------------------------
 
-    def test_crosslink_plus_bracket_preserved(self):
-        """(1,2) bracket inside crosslinked sequence stays as bracket."""
+    def test_crosslink_plus_bracket_converts(self):
+        """(1,2) bracket converts to reversed chain with crosslink anchor."""
         from pyPept.sequence import cabiln_to_branch
         bracket = "!1-A-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-A-!1"
         result = cabiln_to_branch(bracket)
-        assert result == bracket, f"(1,2) bracket should stay unchanged: {result}"
+        assert result == "!1-A-K.!2(4,4)-G-A-!1%C20FA-AEEA-gGlu.!2", (
+            f"(1,2) bracket should convert to reversed crosslink branch: {result}"
+        )
 
     # ------------------------------------------------------------------
     # Unannotated continuation defaults to (2,1)
@@ -4604,19 +4606,25 @@ class TestNotationConversion:
         )
 
     # ------------------------------------------------------------------
-    # (1,2) brackets stay as bracket — no branch conversion
+    # (1,2) brackets convert to reversed crosslink branch
     # ------------------------------------------------------------------
 
-    @pytest.mark.parametrize("label, bracket", [
-        ("lipid_linker_12", "K.[C20FA(4,4).AEEA(1,2).gGlu(1,2)]-G-am"),
-        ("two_monomer_12", "ac-A.[C(4,4).G(1,2)]-am"),
-        ("lipid_correct", "ac-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-am"),
+    @pytest.mark.parametrize("label, bracket, expected_branch", [
+        ("lipid_linker_12",
+         "K.[C20FA(4,4).AEEA(1,2).gGlu(1,2)]-G-am",
+         "K.!1(4,4)-G-am%gGlu-AEEA-C20FA.!1"),
+        ("two_monomer_12",
+         "ac-A.[C(4,4).G(1,2)]-am",
+         "ac-A.!1(4,4)-am%G-C.!1"),
+        ("lipid_correct",
+         "ac-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-am",
+         "ac-K.!1(4,4)-G-am%C20FA-AEEA-gGlu.!1"),
     ])
-    def test_12_bracket_stays_as_bracket(self, label, bracket):
+    def test_12_bracket_converts_to_reversed_branch(self, label, bracket, expected_branch):
         from pyPept.sequence import cabiln_to_branch
         result = cabiln_to_branch(bracket)
-        assert result == bracket, (
-            f"{label}: (1,2) bracket should stay unchanged, got {result!r}"
+        assert result == expected_branch, (
+            f"{label}: expected {expected_branch!r}, got {result!r}"
         )
 
     @pytest.mark.parametrize("label, branch, expected_bracket", [
@@ -4649,12 +4657,12 @@ class TestNotationConversion:
     # Branch: anchor at midpoint → need crosslink for the N-terminal arm
     # ------------------------------------------------------------------
 
-    def test_12_lipid_bracket_stays(self):
-        """(1,2) lipid linker bracket stays as bracket — no branch conversion."""
+    def test_12_lipid_bracket_converts(self):
+        """(1,2) lipid linker bracket converts to reversed crosslink branch."""
         from pyPept.sequence import cabiln_to_branch
         bracket = "K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-am"
         result = cabiln_to_branch(bracket)
-        assert result == bracket, f"Should stay as bracket: {result}"
+        assert result == "K.!1(4,4)-G-am%C20FA-AEEA-gGlu.!1", f"Got: {result}"
 
 
 class TestBracketBranchEquivalence:
@@ -4690,16 +4698,16 @@ class TestBracketBranchEquivalence:
     @pytest.mark.parametrize("label,bracket,branch", [
         ("disulfide_branch",
          "ac-C.[C(4,4).A(2,1).am(2,1)]-A-G-am",
-         "ac-C.(4,4)-A-G-am%C-A(2,1)-am(2,1)"),
+         "ac-C.(4,4)-A-G-am%C-A-am"),
         ("NH2_branch",
          "ac-A-K.[G(4,1).A(2,1).am(2,1)]-G-am",
-         "ac-A-K.(4,1)-G-am%G-A(2,1)-am(2,1)"),
+         "ac-A-K.(4,1)-G-am%G-A-am"),
         ("COOH_branch",
          "A-D.[G(4,1).A(2,1).am(2,1)]-A-am",
-         "A-D.(4,1)-A-am%G-A(2,1)-am(2,1)"),
+         "A-D.(4,1)-A-am%G-A-am"),
     ])
     def test_branch_converts_then_assembles_same(self, label, bracket, branch):
-        """Branch with (r,r) annotations -> convert to bracket -> assemble, compare."""
+        """Branch without annotations -> convert to bracket -> assemble, compare."""
         from pyPept.sequence import cabiln_to_bracket
         converted = cabiln_to_bracket(branch)
         assert converted == bracket, f"{label}: conversion mismatch: {converted} != {bracket}"
