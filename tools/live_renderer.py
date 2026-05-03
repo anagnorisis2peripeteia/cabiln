@@ -1066,13 +1066,14 @@ function buildResidueUI(resMap, residues, chains, cabiln, bracketGroups, crossli
     appendXlinks(rIdx);
   }
 
-  if (hasBranch || chainData.length > 1) {
+  if (hasBranch) {
     chainData.forEach((chain, ci) => {
       if (chainData.length > 1) resChips.appendChild(makeSeparator('%', chain.residues));
       chain.residues.forEach(rIdx => appendResidueWithBrackets(rIdx));
     });
-  } else if (chainData.length === 1 && groups.length) {
-    chainData[0].residues.forEach(rIdx => appendResidueWithBrackets(rIdx));
+  } else if (groups.length) {
+    const mainChain = chainData.length ? chainData[0].residues : [];
+    mainChain.forEach(rIdx => appendResidueWithBrackets(rIdx));
   } else {
     const allIds = chainData.flatMap(c => c.residues);
     allIds.forEach(rIdx => {
