@@ -543,7 +543,12 @@ def cabiln_to_bracket(cabiln):
             positional.append(bs)
 
     # --- Phase 1: crosslink branches (.!n anchor in the branch) ---
+    unconverted_crosslink = []
     for branch_seg in crosslink:
+        all_tags = _re.findall(r'\.(!\d+)', branch_seg)
+        if len(set(all_tags)) > 1:
+            unconverted_crosslink.append(branch_seg)
+            continue
         tag_m = _re.search(r'\.(!\d+)', branch_seg)
         if not tag_m:
             continue
@@ -620,6 +625,8 @@ def cabiln_to_bracket(cabiln):
         main_seg = (main_seg[:host_m.start()] + bracket_str
                     + main_seg[host_m.end():])
 
+    if unconverted_crosslink:
+        main_seg += '%' + '%'.join(unconverted_crosslink)
     return main_seg
 
 
