@@ -380,6 +380,134 @@ _HTML = r"""<!DOCTYPE html>
   #lib-preview .prev-pane svg { width: 100%; height: 100%; display: block; }
   #lib-preview.dark .prev-pane svg { filter: invert(1); }
 
+  /* ── build panel ── */
+  #build-panel {
+    display: none;
+    flex-shrink: 0;
+    background: #0d1422;
+    border-top: 2px solid #2a4070;
+    padding: 8px 14px;
+  }
+  #build-panel.open { display: block; }
+  #build-panel .build-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 6px;
+  }
+  #build-panel .build-header span {
+    font-size: 11px;
+    color: #7aaeff;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+  }
+  #build-panel .build-header .build-hint {
+    font-size: 10px;
+    color: #3a5580;
+    text-transform: none;
+    letter-spacing: normal;
+    flex: 1;
+  }
+  .build-boxes {
+    display: flex;
+    gap: 12px;
+    align-items: stretch;
+    min-height: 180px;
+  }
+  .build-box {
+    flex: 1;
+    background: #0a1018;
+    border: 1px solid #1e3050;
+    border-radius: 6px;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    position: relative;
+  }
+  .build-box .box-label {
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: .1em;
+    color: #3a5580;
+    padding: 5px 10px 0;
+  }
+  .build-box .box-abbr {
+    font-family: "Cascadia Code", "Fira Mono", monospace;
+    font-size: 14px;
+    font-weight: 700;
+    color: #7aaeff;
+    padding: 2px 10px;
+  }
+  .build-box .box-svg {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100px;
+    overflow: hidden;
+  }
+  .build-box .box-svg svg { max-width: 100%; max-height: 100%; display: block; }
+  .build-box.dark .box-svg svg { filter: invert(1); }
+  .build-box .box-placeholder {
+    color: #3a5580;
+    font-size: 11px;
+    text-align: center;
+    padding: 12px;
+  }
+  .rgroup-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 6px 10px 8px;
+    border-top: 1px solid #1e3050;
+  }
+  .rgroup-btn {
+    font-family: "Cascadia Code", "Fira Mono", monospace;
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    border: 1px solid #2a4070;
+    background: #1a2640;
+    color: #8ab4e8;
+    cursor: pointer;
+    transition: all .15s;
+  }
+  .rgroup-btn:hover { background: #263550; color: #c8daf0; border-color: #4a6faa; }
+  .rgroup-btn.selected { background: #2a5a90; border-color: #5a9ae0; color: #fff; box-shadow: 0 0 6px rgba(90,154,224,.4); }
+  .rgroup-btn.used { opacity: .25; cursor: default; pointer-events: none; text-decoration: line-through; }
+  .build-arrow {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-width: 60px;
+    gap: 6px;
+  }
+  .build-arrow .arrow-icon {
+    font-size: 24px;
+    color: #3a5580;
+  }
+  .build-connect-btn {
+    font-size: 10px;
+    padding: 4px 12px;
+    border-radius: 4px;
+    border: 1px solid #1e5030;
+    background: #1a3828;
+    color: #5dba7a;
+    cursor: pointer;
+    transition: all .15s;
+  }
+  .build-connect-btn:hover { background: #264a38; color: #7dd098; }
+  .build-connect-btn:disabled { opacity: .3; cursor: default; pointer-events: none; }
+  .build-status {
+    font-size: 10px;
+    color: #3a5580;
+    text-align: center;
+    min-height: 14px;
+  }
+  .build-status.valid { color: #3dbe6c; }
+  .build-status.invalid { color: #d9534f; }
+
   /* ── residue chips ── */
   #residue-chips {
     display: flex;
@@ -420,6 +548,7 @@ _HTML = r"""<!DOCTYPE html>
   <button id="btn-hl"     class="hbtn active" title="Toggle residue highlighting">🔗 Highlight</button>
   <button id="btn-dark"   class="hbtn"        title="Toggle dark canvas">🌙 Dark</button>
   <button id="btn-verify" class="hbtn"        title="SMILES vs CABILN comparison">⚖ Verify</button>
+  <button id="btn-build"  class="hbtn green" title="Visual peptide builder">🔧 Build</button>
   <button id="btn-to-bracket" class="hbtn" title="Convert to bracket notation">→[ ]</button>
   <button id="btn-to-branch"  class="hbtn" title="Convert to branch (%) notation">→%</button>
   <button id="btn-png"    class="hbtn"        title="Download PNG" disabled>⬇ PNG</button>
@@ -439,6 +568,38 @@ _HTML = r"""<!DOCTYPE html>
   </div>
   <div id="cabiln-status" class="statusbar"></div>
   <div id="residue-chips"></div>
+</div>
+
+<!-- build panel -->
+<div id="build-panel">
+  <div class="build-header">
+    <span>Build by Connection</span>
+    <span class="build-hint" id="build-hint">Select a chip on the sequence, then right-click a monomer in the library</span>
+    <button id="build-close" style="background:none;border:none;color:#4a6a9a;font-size:16px;cursor:pointer;padding:2px 4px;">✕</button>
+  </div>
+  <div class="build-boxes">
+    <div class="build-box" id="build-left">
+      <div class="box-label">Current residue</div>
+      <div class="box-abbr" id="build-left-abbr">—</div>
+      <div class="box-svg" id="build-left-svg">
+        <div class="box-placeholder">Click a chip above</div>
+      </div>
+      <div class="rgroup-buttons" id="build-left-rgroups"></div>
+    </div>
+    <div class="build-arrow">
+      <div class="arrow-icon">⟷</div>
+      <button class="build-connect-btn" id="build-connect" disabled>Connect</button>
+      <div class="build-status" id="build-status"></div>
+    </div>
+    <div class="build-box" id="build-right">
+      <div class="box-label">New monomer</div>
+      <div class="box-abbr" id="build-right-abbr">—</div>
+      <div class="box-svg" id="build-right-svg">
+        <div class="box-placeholder">Right-click from library</div>
+      </div>
+      <div class="rgroup-buttons" id="build-right-rgroups"></div>
+    </div>
+  </div>
 </div>
 
 <!-- main area -->
@@ -508,6 +669,10 @@ let atomToRes   = {};
 let residueList = [];
 let previewCache = {};
 let previewTimer = null;
+let buildMode    = false;
+let buildLeft    = null;  // { abbr, rgroups: [{slot, chem_type, used}], selectedSlot }
+let buildRight   = null;  // { abbr, rgroups: [{slot, chem_type}], selectedSlot }
+let buildLeftRIdx = null;
 
 const RES_COLORS = [
   '#2a5080','#2a8050','#802a50','#806a2a','#502a80',
@@ -540,6 +705,18 @@ const libList       = document.getElementById('lib-list');
 const libCount      = document.getElementById('lib-count');
 const libPreview    = document.getElementById('lib-preview');
 const resChips      = document.getElementById('residue-chips');
+const buildPanel    = document.getElementById('build-panel');
+const btnBuild      = document.getElementById('btn-build');
+const buildClose    = document.getElementById('build-close');
+const buildConnect  = document.getElementById('build-connect');
+const buildStatus   = document.getElementById('build-status');
+const buildHint     = document.getElementById('build-hint');
+const buildLeftAbbr = document.getElementById('build-left-abbr');
+const buildLeftSvg  = document.getElementById('build-left-svg');
+const buildLeftRg   = document.getElementById('build-left-rgroups');
+const buildRightAbbr= document.getElementById('build-right-abbr');
+const buildRightSvg = document.getElementById('build-right-svg');
+const buildRightRg  = document.getElementById('build-right-rgroups');
 
 // ─── dark mode ────────────────────────────────────────────────────────────────
 btnDark.addEventListener('click', () => {
@@ -549,11 +726,13 @@ btnDark.addEventListener('click', () => {
     el.classList.toggle('dark', darkMode);
   }
   libPreview.classList.toggle('dark', darkMode);
+  document.querySelectorAll('.build-box').forEach(el => el.classList.toggle('dark', darkMode));
 });
 // apply dark mode on load
 btnDark.classList.add('active');
 document.querySelectorAll('.canvas-wrap').forEach(el => el.classList.add('dark'));
 libPreview.classList.add('dark');
+document.querySelectorAll('.build-box').forEach(el => el.classList.add('dark'));
 
 // ─── highlight toggle ─────────────────────────────────────────────────────────
 btnHl.addEventListener('click', () => {
@@ -640,7 +819,29 @@ function renderLibList(q) {
   libList.innerHTML = rows.join('');
 
   libList.querySelectorAll('.lib-row').forEach(row => {
-    row.addEventListener('click', () => insertAbbr(row.dataset.abbr));
+    row.addEventListener('click', () => {
+      if (buildMode) {
+        if (!cabilnInput.value.trim()) {
+          // No sequence yet — insert as first monomer
+          cabilnInput.value = row.dataset.abbr;
+          cabilnInput.dispatchEvent(new Event('input'));
+          buildHint.textContent = 'First monomer added — click its chip, then right-click another monomer';
+        } else if (!buildLeft) {
+          // Sequence exists but no chip selected — prompt
+          buildHint.textContent = 'Click a chip on the sequence first, then click a library monomer';
+        } else {
+          loadBuildRight(row.dataset.abbr);
+        }
+      } else {
+        insertAbbr(row.dataset.abbr);
+      }
+    });
+    row.addEventListener('contextmenu', e => {
+      if (buildMode) {
+        e.preventDefault();
+        loadBuildRight(row.dataset.abbr);
+      }
+    });
     row.addEventListener('mouseenter', e => startPreview(row.dataset.abbr, row));
     row.addEventListener('mouseleave', () => hidePreview());
   });
@@ -775,6 +976,15 @@ function buildResidueUI(resMap, residues, chains, cabiln, bracketGroups, crossli
       chip.addEventListener('mouseenter', () => highlightResidue(r.idx));
     }
     chip.addEventListener('mouseleave', clearHighlight);
+    chip.addEventListener('click', () => {
+      if (buildMode) {
+        loadBuildLeft(r.abbr, r.idx);
+        chip.style.outline = '2px solid #5a9ae0';
+        resChips.querySelectorAll('.res-chip').forEach(c => {
+          if (c !== chip) c.style.outline = '';
+        });
+      }
+    });
     return chip;
   }
 
@@ -997,6 +1207,206 @@ btnMol.addEventListener('click', async () => {
   a.download = 'structure.mol';
   a.href = URL.createObjectURL(blob);
   a.click();
+});
+
+// ─── build mode ──────────────────────────────────────────────────────────────
+function openBuild() {
+  buildMode = true;
+  buildPanel.classList.add('open');
+  btnBuild.classList.add('active');
+  if (!libPanel.classList.contains('open')) openLib();
+  clearBuild();
+}
+function closeBuild() {
+  buildMode = false;
+  buildPanel.classList.remove('open');
+  btnBuild.classList.remove('active');
+  clearBuild();
+}
+function clearBuild() {
+  buildLeft = null; buildRight = null; buildLeftRIdx = null;
+  buildLeftAbbr.textContent = '—';
+  buildLeftSvg.innerHTML = '<div class="box-placeholder">Click a chip above</div>';
+  buildLeftRg.innerHTML = '';
+  buildRightAbbr.textContent = '—';
+  buildRightSvg.innerHTML = '<div class="box-placeholder">Right-click from library</div>';
+  buildRightRg.innerHTML = '';
+  buildConnect.disabled = true;
+  buildStatus.textContent = '';
+  buildStatus.className = 'build-status';
+  buildHint.textContent = 'Select a chip on the sequence, then right-click a monomer in the library';
+}
+
+btnBuild.addEventListener('click', () => buildMode ? closeBuild() : openBuild());
+buildClose.addEventListener('click', closeBuild);
+
+async function loadBuildLeft(abbr, rIdx) {
+  buildLeftRIdx = rIdx;
+  buildLeftAbbr.textContent = abbr;
+  buildLeftSvg.innerHTML = '<div class="spinner"></div>';
+  buildLeftRg.innerHTML = '';
+  buildLeft = null;
+  buildConnect.disabled = true;
+  buildStatus.textContent = '';
+
+  try {
+    const res = await fetch(`/monomer_rgroups?abbr=${encodeURIComponent(abbr)}&residue_idx=${rIdx}&cabiln=${encodeURIComponent(cabilnInput.value.trim())}`);
+    const data = await res.json();
+    if (data.error) {
+      buildLeftSvg.innerHTML = `<div class="box-placeholder">${escHtml(data.error)}</div>`;
+      return;
+    }
+    buildLeftSvg.innerHTML = data.svg || '';
+    buildLeft = { abbr, rgroups: data.rgroups || [], selectedSlot: null };
+    renderRgroupButtons(buildLeftRg, buildLeft, 'left');
+    buildHint.textContent = buildRight ? 'Select R-groups to connect' : 'Now right-click a monomer in the library';
+  } catch (e) {
+    buildLeftSvg.innerHTML = '<div class="box-placeholder">Error loading monomer</div>';
+  }
+}
+
+async function loadBuildRight(abbr) {
+  buildRightAbbr.textContent = abbr;
+  buildRightSvg.innerHTML = '<div class="spinner"></div>';
+  buildRightRg.innerHTML = '';
+  buildRight = null;
+  buildConnect.disabled = true;
+  buildStatus.textContent = '';
+
+  try {
+    const res = await fetch(`/monomer_rgroups?abbr=${encodeURIComponent(abbr)}`);
+    const data = await res.json();
+    if (data.error) {
+      buildRightSvg.innerHTML = `<div class="box-placeholder">${escHtml(data.error)}</div>`;
+      return;
+    }
+    buildRightSvg.innerHTML = data.svg || '';
+    buildRight = { abbr, rgroups: data.rgroups || [], selectedSlot: null };
+    renderRgroupButtons(buildRightRg, buildRight, 'right');
+    buildHint.textContent = 'Select R-groups to connect';
+  } catch (e) {
+    buildRightSvg.innerHTML = '<div class="box-placeholder">Error loading monomer</div>';
+  }
+}
+
+function renderRgroupButtons(container, state, side) {
+  container.innerHTML = '';
+  state.rgroups.forEach(rg => {
+    const btn = document.createElement('button');
+    btn.className = 'rgroup-btn';
+    if (rg.used) btn.classList.add('used');
+    if (state.selectedSlot === rg.slot) btn.classList.add('selected');
+    btn.textContent = `R${rg.slot} ${rg.chem_type || ''}`;
+    btn.title = `R${rg.slot}: ${rg.chem_type || 'unknown'}${rg.leaving ? ' (LG: ' + rg.leaving + ')' : ''}`;
+    if (!rg.used) {
+      btn.addEventListener('click', () => selectRgroup(side, rg.slot));
+    }
+    container.appendChild(btn);
+  });
+}
+
+function selectRgroup(side, slot) {
+  if (side === 'left' && buildLeft) {
+    buildLeft.selectedSlot = buildLeft.selectedSlot === slot ? null : slot;
+    renderRgroupButtons(buildLeftRg, buildLeft, 'left');
+  } else if (side === 'right' && buildRight) {
+    buildRight.selectedSlot = buildRight.selectedSlot === slot ? null : slot;
+    renderRgroupButtons(buildRightRg, buildRight, 'right');
+  }
+  checkBuildValidity();
+}
+
+async function checkBuildValidity() {
+  if (!buildLeft?.selectedSlot || !buildRight?.selectedSlot) {
+    buildConnect.disabled = true;
+    buildStatus.textContent = '';
+    buildStatus.className = 'build-status';
+    return;
+  }
+
+  const leftRg = buildLeft.rgroups.find(r => r.slot === buildLeft.selectedSlot);
+  const rightRg = buildRight.rgroups.find(r => r.slot === buildRight.selectedSlot);
+  if (!leftRg || !rightRg) return;
+
+  buildStatus.textContent = 'Checking bond...';
+  buildStatus.className = 'build-status';
+
+  try {
+    const res = await fetch('/validate_bond', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        chem_type_a: leftRg.chem_type,
+        chem_type_b: rightRg.chem_type,
+        abbr_a: buildLeft.abbr,
+        slot_a: buildLeft.selectedSlot,
+        abbr_b: buildRight.abbr,
+        slot_b: buildRight.selectedSlot
+      })
+    });
+    const data = await res.json();
+    if (data.valid) {
+      buildStatus.textContent = `Valid: ${data.reaction || 'bond'} (R${buildLeft.selectedSlot}↔R${buildRight.selectedSlot})`;
+      buildStatus.className = 'build-status valid';
+      buildConnect.disabled = false;
+    } else {
+      buildStatus.textContent = data.reason || 'No compatible reaction found';
+      buildStatus.className = 'build-status invalid';
+      buildConnect.disabled = true;
+    }
+  } catch (e) {
+    buildStatus.textContent = 'Validation error';
+    buildStatus.className = 'build-status invalid';
+    buildConnect.disabled = true;
+  }
+}
+
+buildConnect.addEventListener('click', async () => {
+  if (!buildLeft || !buildRight || !buildLeft.selectedSlot || !buildRight.selectedSlot) return;
+
+  const val = cabilnInput.value.trim();
+  const rHost = buildLeft.selectedSlot;
+  const rNew = buildRight.selectedSlot;
+  const newAbbr = buildRight.abbr;
+
+  buildConnect.disabled = true;
+  buildStatus.textContent = 'Inserting...';
+  buildStatus.className = 'build-status';
+
+  try {
+    const res = await fetch('/insert_bond', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        cabiln: val,
+        host_residue_idx: buildLeftRIdx ?? 0,
+        new_abbr: newAbbr,
+        r_host: rHost,
+        r_new: rNew
+      })
+    });
+    const data = await res.json();
+    if (data.error) {
+      buildStatus.textContent = data.error;
+      buildStatus.className = 'build-status invalid';
+      return;
+    }
+    cabilnInput.value = data.result;
+    cabilnInput.dispatchEvent(new Event('input'));
+
+    // Clear right side for next addition
+    buildRight = null;
+    buildRightAbbr.textContent = '—';
+    buildRightSvg.innerHTML = '<div class="box-placeholder">Right-click from library</div>';
+    buildRightRg.innerHTML = '';
+    buildConnect.disabled = true;
+    buildStatus.textContent = '';
+    buildStatus.className = 'build-status';
+    buildHint.textContent = 'Connection added — select a chip and right-click another monomer';
+  } catch (e) {
+    buildStatus.textContent = 'Insert failed';
+    buildStatus.className = 'build-status invalid';
+  }
 });
 
 // ─── notation conversion ──────────────────────────────────────────────────────
@@ -1694,6 +2104,181 @@ async def convert_notation(req: _ConvertReq):
                                 status_code=400)
     except Exception as exc:
         return JSONResponse({"error": str(exc).split('\n')[0]}, status_code=400)
+
+
+@app.get("/monomer_rgroups")
+async def monomer_rgroups(abbr: str, residue_idx: int = -1, cabiln: str = ''):
+    """Return R-group info for a monomer, with used slots marked if in a sequence."""
+    try:
+        from rdkit import Chem
+        import pathlib
+        sdf_path = pathlib.Path(__file__).parent.parent / 'src' / 'pyPept' / 'data' / 'monomers.sdf'
+        suppl = Chem.SDMolSupplier(str(sdf_path), removeHs=False)
+
+        target_mol = None
+        for mol in suppl:
+            if mol is None:
+                continue
+            if mol.GetPropsAsDict().get('m_abbr', '') == abbr:
+                target_mol = mol
+                break
+        if target_mol is None:
+            return JSONResponse({"error": f"Monomer '{abbr}' not found"}, status_code=404)
+
+        props = target_mol.GetPropsAsDict()
+        chem_types_str = props.get('m_chem_types', '')
+        rgroups_str = props.get('m_Rgroups', '')
+
+        ct_map = {}
+        for part in chem_types_str.split(','):
+            part = part.strip()
+            if ':' in part:
+                slot_s, ct = part.split(':', 1)
+                try:
+                    ct_map[int(slot_s)] = ct.strip()
+                except ValueError:
+                    pass
+
+        lg_list = [s.strip() for s in rgroups_str.split(',')]
+
+        rgroups = []
+        for i, lg in enumerate(lg_list):
+            slot = i + 1
+            if lg in ('None', 'none', ''):
+                continue
+            rgroups.append({
+                'slot': slot,
+                'chem_type': ct_map.get(slot, ''),
+                'leaving': lg,
+                'used': False
+            })
+
+        # If we have a sequence context, mark which R-groups are already used
+        if cabiln.strip() and residue_idx >= 0:
+            try:
+                from pyPept.sequence import Sequence
+                seq = Sequence(cabiln)
+                used_slots = set()
+                for bond in seq.s_bonds:
+                    m1, slot1_idx, m2, slot2_idx = bond[0], bond[1], bond[2], bond[3]
+                    s1 = bond[4] if len(bond) > 4 else None
+                    s2 = bond[5] if len(bond) > 4 else None
+                    if m1 == residue_idx and s1 is not None:
+                        used_slots.add(s1)
+                    if m2 == residue_idx and s2 is not None:
+                        used_slots.add(s2)
+                for rg in rgroups:
+                    if rg['slot'] in used_slots:
+                        rg['used'] = True
+            except Exception:
+                pass
+
+        svg = _draw_mol(target_mol, 180, 140)
+        return {"svg": svg, "rgroups": rgroups, "abbr": abbr}
+
+    except Exception as exc:
+        return JSONResponse({"error": str(exc).split('\n')[0]}, status_code=500)
+
+
+class _InsertBondReq(BaseModel):
+    cabiln: str
+    host_residue_idx: int
+    new_abbr: str
+    r_host: int
+    r_new: int
+
+@app.post("/insert_bond")
+async def insert_bond(req: _InsertBondReq):
+    """Insert a bracket branch at the given host residue in CABILN notation."""
+    import re
+    try:
+        cabiln = req.cabiln.strip()
+        if not cabiln:
+            return {"result": req.new_abbr}
+
+        is_backbone = (req.r_host == 2 and req.r_new == 1)
+        if is_backbone:
+            return {"result": cabiln + '-' + req.new_abbr}
+
+        # Parse the CABILN string to locate the host monomer token
+        # The approach: walk the CABILN text token by token, counting monomer
+        # positions, and insert the bracket at the right spot.
+        bracket = f'.[{req.new_abbr}({req.r_host},{req.r_new})]'
+
+        # Tokenize by '-' but respect bracket depth
+        tokens = []
+        depth = 0
+        current = ''
+        for ch in cabiln:
+            if ch == '[':
+                depth += 1
+            elif ch == ']':
+                depth -= 1
+            if ch == '-' and depth == 0:
+                tokens.append(current)
+                current = ''
+            else:
+                current += ch
+        if current:
+            tokens.append(current)
+
+        # Count monomer indices: each token that isn't purely a bracket group
+        # contributes one monomer index. But bracket branches also add
+        # monomers (they're on separate chains). We need the main-chain position.
+        # The simplest approach: find which token textually matches the Nth
+        # main-chain monomer. Bracket-internal monomers don't count as tokens.
+        main_idx = 0
+        insert_at = -1
+        for i, tok in enumerate(tokens):
+            # A token might have brackets attached: e.g. "K.[A(4,1)]"
+            # The main monomer is the part before any ".[" or ".(" marker
+            base = re.split(r'\.\[|\.\(|\.!', tok)[0]
+            # Skip crosslink-only tags like "!1"
+            if re.match(r'^!\d+$', base):
+                main_idx += 1
+                if main_idx - 1 == req.host_residue_idx:
+                    insert_at = i
+                continue
+            if main_idx == req.host_residue_idx:
+                insert_at = i
+                break
+            main_idx += 1
+
+        if insert_at >= 0:
+            tokens[insert_at] = tokens[insert_at] + bracket
+        else:
+            tokens[-1] = tokens[-1] + bracket
+
+        return {"result": '-'.join(tokens)}
+
+    except Exception as exc:
+        return JSONResponse({"error": str(exc).split('\n')[0]}, status_code=500)
+
+
+class _ValidateBondReq(BaseModel):
+    chem_type_a: str
+    chem_type_b: str
+    abbr_a: str = ''
+    slot_a: int = 0
+    abbr_b: str = ''
+    slot_b: int = 0
+
+@app.post("/validate_bond")
+async def validate_bond(req: _ValidateBondReq):
+    """Check if a bond between two R-group chemistry types is valid."""
+    try:
+        from pyPept.interfaces.reaction_library import REACTION_INDEX
+        entry = REACTION_INDEX.get((req.chem_type_a, req.chem_type_b))
+        if entry is None:
+            entry = REACTION_INDEX.get((req.chem_type_b, req.chem_type_a))
+        if entry:
+            return {"valid": True, "reaction": entry.get('id', 'unknown'),
+                    "description": entry.get('description', '')}
+        else:
+            return {"valid": False,
+                    "reason": f"No reaction for {req.chem_type_a} + {req.chem_type_b}"}
+    except Exception as exc:
+        return JSONResponse({"error": str(exc).split('\n')[0]}, status_code=500)
 
 
 def _build_bracket_groups(seq, chain_ids):
