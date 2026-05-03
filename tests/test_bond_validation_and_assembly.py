@@ -4433,8 +4433,8 @@ class TestNotationConversion:
 
     @pytest.mark.parametrize("label,branch,expected_bracket", [
         ("lipid_linker",
-         "ac-C.(4,4)-A-G-am%gGlu-AEEA(2,1)-C20FA(2,1)",
-         "ac-C.[gGlu(4,4).AEEA(2,1).C20FA(2,1)]-A-G-am"),
+         "ac-K.!1(4,4)-G-am%C20FA-AEEA(2,1)-gGlu(2,1).!1",
+         "ac-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-am"),
 
         ("NH2_branch",
          "ac-A-K.(4,1)-G-am%G-A(2,1)-am(2,1)",
@@ -4465,7 +4465,7 @@ class TestNotationConversion:
 
     @pytest.mark.parametrize("label,branch", [
         ("lipid_linker",
-         "ac-C.(4,4)-A-G-am%gGlu-AEEA(2,1)-C20FA(2,1)"),
+         "ac-K.!1(4,4)-G-am%C20FA-AEEA(2,1)-gGlu(2,1).!1"),
         ("NH2_branch",
          "ac-A-K.(4,1)-G-am%G-A(2,1)-am(2,1)"),
         ("COOH_branch",
@@ -4489,8 +4489,8 @@ class TestNotationConversion:
 
     @pytest.mark.parametrize("label,bracket,expected_branch", [
         ("bracket_lipid_linker",
-         "ac-C.[gGlu(4,4).AEEA(2,1).C20FA(2,1)]-A-G-am",
-         "ac-C.(4,4)-A-G-am%gGlu-AEEA(2,1)-C20FA(2,1)"),
+         "ac-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-am",
+         "ac-K.!1(4,4)-G-am%C20FA-AEEA(2,1)-gGlu(2,1).!1"),
 
         ("bracket_COOH",
          "A-D.[G(4,1).A(2,1).am(2,1)]-A-am",
@@ -4517,7 +4517,7 @@ class TestNotationConversion:
 
     @pytest.mark.parametrize("label,bracket", [
         ("bracket_lipid_linker",
-         "ac-C.[gGlu(4,4).AEEA(2,1).C20FA(2,1)]-A-G-am"),
+         "ac-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-am"),
         ("bracket_COOH",
          "A-D.[G(4,1).A(2,1).am(2,1)]-A-am"),
         ("bracket_NH2",
@@ -4585,10 +4585,10 @@ class TestNotationConversion:
 
     def test_crosslink_plus_branch_roundtrip(self):
         from pyPept.sequence import cabiln_to_bracket, cabiln_to_branch
-        bracket = "!1-A-K.[gGlu(4,4).AEEA(2,1).C20FA(2,1)]-G-A-!1"
+        bracket = "!1-A-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-A-!1"
         branch = cabiln_to_branch(bracket)
         assert "!1" in branch, "Crosslink !1 should be preserved"
-        assert ".(4,4)" in branch, "Branch marker should use .(r,r) not .!n(r,r)"
+        assert "(4,4)" in branch, "Branch attachment (4,4) should be present"
         back = cabiln_to_bracket(branch)
         assert back == bracket, (
             f"Crosslink+branch roundtrip failed:\n"
@@ -4722,19 +4722,82 @@ class TestNotationConversion:
     # Branch: anchor at midpoint → need crosslink for the N-terminal arm
     # ------------------------------------------------------------------
 
-    def test_midpoint_anchor_bracket_to_branch(self):
-        """A bracket branch where the anchor is in the middle.
-
-        After the anchor: (2,1) = N→C continuation
-        Then switches to (1,2) = C→N continuation from anchor's other side.
-        This is a midpoint anchor topology — the branch grows in both
-        directions from the anchor monomer.
-        """
+    def test_reversed_lipid_bracket_to_branch(self):
+        """Reversed (1,2) lipid linker bracket converts to !n crosslink branch."""
         from pyPept.sequence import cabiln_to_branch
-        bracket = "K.[gGlu(4,4).AEEA(2,1).C20FA(2,1)]-G-am"
+        bracket = "K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-am"
         branch = cabiln_to_branch(bracket)
         assert "%" in branch, "Should produce branch notation"
-        assert ".(4,4)" in branch, "Simple N→C should use positional .(r,r)"
+        assert "(4,4)" in branch, "Branch attachment (4,4) should be present"
+
+
+class TestBracketBranchEquivalence:
+    """Assembly-level tests: bracket and branch forms produce identical SMILES."""
+
+    @staticmethod
+    def _smiles(cabiln):
+        from pyPept.sequence import Sequence
+        from pyPept.molecule import Molecule
+        seq = Sequence(cabiln)
+        mol = Molecule(seq)
+        romol = mol.get_molecule(fmt="ROMol")
+        from rdkit.Chem import MolToSmiles
+        return MolToSmiles(romol)
+
+    @pytest.mark.parametrize("label,bracket,branch", [
+        ("lipid_linker",
+         "ac-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-am",
+         "ac-K.!1(4,4)-G-am%C20FA-AEEA-gGlu.!1"),
+        ("TBMB_crosslinker",
+         "ac-C.!1(4,4)-A-A-C.!2(4,5)-A-A-C.!3(4,6)-am%TBMB.!1.!2.!3",
+         "ac-C.!1(4,4)-A-A-C.!2(4,5)-A-A-C.!3(4,6)-am%TBMB.!1.!2.!3"),
+    ])
+    def test_bracket_branch_same_smiles(self, label, bracket, branch):
+        smi_bracket = self._smiles(bracket)
+        smi_branch = self._smiles(branch)
+        assert smi_bracket == smi_branch, (
+            f"{label}: SMILES mismatch\n"
+            f"  bracket ({bracket}): {smi_bracket}\n"
+            f"  branch  ({branch}):  {smi_branch}"
+        )
+
+    @pytest.mark.parametrize("label,bracket,branch", [
+        ("disulfide_branch",
+         "ac-C.[C(4,4).A(2,1).am(2,1)]-A-G-am",
+         "ac-C.(4,4)-A-G-am%C-A(2,1)-am(2,1)"),
+        ("NH2_branch",
+         "ac-A-K.[G(4,1).A(2,1).am(2,1)]-G-am",
+         "ac-A-K.(4,1)-G-am%G-A(2,1)-am(2,1)"),
+        ("COOH_branch",
+         "A-D.[G(4,1).A(2,1).am(2,1)]-A-am",
+         "A-D.(4,1)-A-am%G-A(2,1)-am(2,1)"),
+    ])
+    def test_branch_converts_then_assembles_same(self, label, bracket, branch):
+        """Branch with (r,r) annotations -> convert to bracket -> assemble, compare."""
+        from pyPept.sequence import cabiln_to_bracket
+        converted = cabiln_to_bracket(branch)
+        assert converted == bracket, f"{label}: conversion mismatch: {converted} != {bracket}"
+        smi = self._smiles(bracket)
+        assert smi, f"{label}: bracket form should assemble"
+
+    def test_lipid_linker_converter_and_assembly(self):
+        """Converter roundtrip + assembly via bracket for lipid linker."""
+        from pyPept.sequence import cabiln_to_branch, cabiln_to_bracket
+        bracket = "ac-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-am"
+        branch = cabiln_to_branch(bracket)
+        bracket_back = cabiln_to_bracket(branch)
+        assert bracket_back == bracket, f"Roundtrip failed: {bracket} -> {branch} -> {bracket_back}"
+        smi1 = self._smiles(bracket)
+        smi2 = self._smiles(bracket_back)
+        assert smi1 == smi2, f"Assembly mismatch after roundtrip: {smi1} vs {smi2}"
+
+    def test_retatrutide_bracket_assembles(self):
+        """Full retatrutide with (1,2) lipid linker bracket assembles."""
+        cabiln = ("Y-Aib-Q-G-T-F-T-S-D-Y-S-I-aMeLeu-L-D-"
+                  "K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-A-Q-Aib-A-F-I-E-"
+                  "Y-L-L-E-G-G-P-S-S-G-A-P-P-P-S-am")
+        smi = self._smiles(cabiln)
+        assert smi and len(smi) > 100, f"Retatrutide should produce a large SMILES: {smi}"
 
 
 if __name__ == '__main__':
@@ -4747,7 +4810,8 @@ if __name__ == '__main__':
                 TestFinalMonomers, TestFattyAcidBranching, TestBracketNotation,
                 TestMonomerBuilderCLI, TestRoundTrips,
                 TestMonomerPreActivate, TestRestoreRgroups,
-                TestReactionPairSMIRKS, TestNotationConversion):
+                TestReactionPairSMIRKS, TestNotationConversion,
+                TestBracketBranchEquivalence):
         suite.addTests(loader.loadTestsFromTestCase(cls))
     runner = unittest.TextTestRunner(verbosity=2)
     result = runner.run(suite)
