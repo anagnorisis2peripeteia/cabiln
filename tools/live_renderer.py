@@ -25,7 +25,10 @@ __license__ = "MIT"
 
 import threading
 import time
+import uuid
 import webbrowser
+
+_SERVER_ID = uuid.uuid4().hex[:8]
 
 try:
     import uvicorn
@@ -1622,6 +1625,19 @@ function escHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 function escAttr(s) { return escHtml(s); }
+
+// Auto-reload on server restart
+(function(){
+  let sid = null;
+  setInterval(async () => {
+    try {
+      const r = await fetch('/server_id');
+      const id = await r.text();
+      if (sid === null) { sid = id; return; }
+      if (id !== sid) location.reload();
+    } catch(e) {}
+  }, 5000);
+})();
 </script>
 </body>
 </html>
@@ -1977,6 +1993,11 @@ class _RegisterReq(BaseModel):
 
 
 # ── routes ────────────────────────────────────────────────────────────────────
+
+@app.get("/server_id")
+async def server_id():
+    return PlainTextResponse(_SERVER_ID)
+
 
 @app.get("/", response_class=HTMLResponse)
 async def index():
