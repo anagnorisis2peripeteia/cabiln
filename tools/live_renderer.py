@@ -1041,43 +1041,37 @@ function buildResidueUI(resMap, residues, chains, cabiln, bracketGroups, crossli
     xlinks.forEach(g => resChips.appendChild(makeXlinkChip(g.tag, g.members)));
   }
 
-  const useBranch = cabiln && cabiln.includes('%') && !cabiln.includes('[');
-  const useBracket = cabiln && cabiln.includes('[');
+  const hasBranch = cabiln && cabiln.includes('%');
+  const groups = bracketGroups || [];
+  const groupByHost = {};
+  groups.forEach(g => { groupByHost[g.host] = g.members; });
+  const branchSet = new Set();
+  groups.forEach(g => g.members.forEach(m => branchSet.add(m)));
 
-  if (useBranch) {
-    chainData.forEach((chain, ci) => {
-      if (ci > 0) resChips.appendChild(makeSeparator('%', chain.residues));
-      chain.residues.forEach(rIdx => {
-        const chip = makeChip(rIdx);
-        if (chip) resChips.appendChild(chip);
-        appendXlinks(rIdx);
+  function appendResidueWithBrackets(rIdx) {
+    if (branchSet.has(rIdx)) return;
+    const chip = makeChip(rIdx);
+    if (chip) resChips.appendChild(chip);
+    const members = groupByHost[rIdx];
+    if (members && members.length) {
+      const groupWithHost = [rIdx, ...members];
+      resChips.appendChild(makeSeparator('[', groupWithHost));
+      members.forEach(mIdx => {
+        const mc = makeChip(mIdx);
+        if (mc) resChips.appendChild(mc);
       });
-    });
-  } else if (useBracket) {
-    const groups = bracketGroups || [];
-    const groupByHost = {};
-    groups.forEach(g => { groupByHost[g.host] = g.members; });
-    const branchSet = new Set();
-    groups.forEach(g => g.members.forEach(m => branchSet.add(m)));
+      resChips.appendChild(makeSeparator(']', groupWithHost));
+    }
+    appendXlinks(rIdx);
+  }
 
-    const mainChain = chainData.length ? chainData[0].residues : [];
-    mainChain.forEach(rIdx => {
-      if (branchSet.has(rIdx)) return;
-      const chip = makeChip(rIdx);
-      if (chip) resChips.appendChild(chip);
-
-      const members = groupByHost[rIdx];
-      if (members && members.length) {
-        const groupWithHost = [rIdx, ...members];
-        resChips.appendChild(makeSeparator('[', groupWithHost));
-        members.forEach(mIdx => {
-          const mc = makeChip(mIdx);
-          if (mc) resChips.appendChild(mc);
-        });
-        resChips.appendChild(makeSeparator(']', groupWithHost));
-      }
-      appendXlinks(rIdx);
+  if (hasBranch || chainData.length > 1) {
+    chainData.forEach((chain, ci) => {
+      if (chainData.length > 1) resChips.appendChild(makeSeparator('%', chain.residues));
+      chain.residues.forEach(rIdx => appendResidueWithBrackets(rIdx));
     });
+  } else if (chainData.length === 1 && groups.length) {
+    chainData[0].residues.forEach(rIdx => appendResidueWithBrackets(rIdx));
   } else {
     const allIds = chainData.flatMap(c => c.residues);
     allIds.forEach(rIdx => {
