@@ -1440,11 +1440,12 @@ async function convertNotation(target) {
       body: JSON.stringify({ cabiln: val, target })
     });
     const data = await res.json();
-    if (data.result && data.result !== val) {
+    if (data.error) { console.error('convert error:', data.error); return; }
+    if (data.result) {
       cabilnInput.value = data.result;
       cabilnInput.dispatchEvent(new Event('input'));
     }
-  } catch (e) { /* silent */ }
+  } catch (e) { console.error('convertNotation error:', e); }
 }
 btnToBracket.addEventListener('click', () => convertNotation('bracket'));
 btnToBranch.addEventListener('click', () => convertNotation('branch'));
