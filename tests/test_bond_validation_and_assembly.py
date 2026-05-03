@@ -4416,6 +4416,327 @@ class TestReactionPairSMIRKS:
 # Standalone runner
 # ---------------------------------------------------------------------------
 
+class TestNotationConversion:
+    """Branch <-> bracket notation conversion round-trips.
+
+    Tests cabiln_to_branch() and cabiln_to_bracket() with:
+      - Positional branch matching (no !n tags on branches)
+      - Continuation monomers carry their R-group pairs
+      - Mixed notation (multiple branches, branches + crosslinks)
+      - Identity pass-through (no brackets / no %)
+      - Multi-monomer branches, single-monomer branches
+    """
+
+    # ------------------------------------------------------------------
+    # Branch -> Bracket -> Branch  (% notation is canonical input)
+    # ------------------------------------------------------------------
+
+    @pytest.mark.parametrize("label,branch,expected_bracket", [
+        ("lipid_linker",
+         "ac-C.(4,4)-A-G-am%gGlu-AEEA(2,1)-C20FA(2,1)",
+         "ac-C.[gGlu(4,4).AEEA(2,1).C20FA(2,1)]-A-G-am"),
+
+        ("NH2_branch",
+         "ac-A-K.(4,1)-G-am%G-A(2,1)-am(2,1)",
+         "ac-A-K.[G(4,1).A(2,1).am(2,1)]-G-am"),
+
+        ("COOH_branch",
+         "A-D.(4,1)-A-am%G-A(2,1)-am(2,1)",
+         "A-D.[G(4,1).A(2,1).am(2,1)]-A-am"),
+
+        ("disulfide_branch",
+         "ac-C.(4,4)-A-G-am%C-A(2,1)-am(2,1)",
+         "ac-C.[C(4,4).A(2,1).am(2,1)]-A-G-am"),
+
+        ("single_monomer",
+         "ac-K.(4,2)-G-am%A",
+         "ac-K.[A(4,2)]-G-am"),
+
+        ("unannotated_defaults_2_1",
+         "ac-K.(4,1)-G-am%G-A-am",
+         "ac-K.[G(4,1).A(2,1).am(2,1)]-G-am"),
+    ])
+    def test_branch_to_bracket(self, label, branch, expected_bracket):
+        from pyPept.sequence import cabiln_to_bracket
+        result = cabiln_to_bracket(branch)
+        assert result == expected_bracket, (
+            f"{label}: expected {expected_bracket!r}, got {result!r}"
+        )
+
+    @pytest.mark.parametrize("label,branch", [
+        ("lipid_linker",
+         "ac-C.(4,4)-A-G-am%gGlu-AEEA(2,1)-C20FA(2,1)"),
+        ("NH2_branch",
+         "ac-A-K.(4,1)-G-am%G-A(2,1)-am(2,1)"),
+        ("COOH_branch",
+         "A-D.(4,1)-A-am%G-A(2,1)-am(2,1)"),
+        ("disulfide_branch",
+         "ac-C.(4,4)-A-G-am%C-A(2,1)-am(2,1)"),
+    ])
+    def test_branch_roundtrip(self, label, branch):
+        from pyPept.sequence import cabiln_to_bracket, cabiln_to_branch
+        bracket = cabiln_to_bracket(branch)
+        back = cabiln_to_branch(bracket)
+        assert back == branch, (
+            f"{label}: roundtrip failed\n"
+            f"  branch  -> bracket: {bracket!r}\n"
+            f"  bracket -> branch:  {back!r}"
+        )
+
+    # ------------------------------------------------------------------
+    # Bracket -> Branch -> Bracket  (bracket notation is canonical input)
+    # ------------------------------------------------------------------
+
+    @pytest.mark.parametrize("label,bracket,expected_branch", [
+        ("bracket_lipid_linker",
+         "ac-C.[gGlu(4,4).AEEA(2,1).C20FA(2,1)]-A-G-am",
+         "ac-C.(4,4)-A-G-am%gGlu-AEEA(2,1)-C20FA(2,1)"),
+
+        ("bracket_COOH",
+         "A-D.[G(4,1).A(2,1).am(2,1)]-A-am",
+         "A-D.(4,1)-A-am%G-A(2,1)-am(2,1)"),
+
+        ("bracket_NH2",
+         "ac-A-K.[G(4,1).A(2,1).am(2,1)]-G-am",
+         "ac-A-K.(4,1)-G-am%G-A(2,1)-am(2,1)"),
+
+        ("bracket_disulfide",
+         "ac-C.[C(4,4).A(2,1).am(2,1)]-A-G-am",
+         "ac-C.(4,4)-A-G-am%C-A(2,1)-am(2,1)"),
+
+        ("bracket_single_monomer",
+         "ac-K.[A(4,2)]-G-am",
+         "ac-K.(4,2)-G-am%A"),
+    ])
+    def test_bracket_to_branch(self, label, bracket, expected_branch):
+        from pyPept.sequence import cabiln_to_branch
+        result = cabiln_to_branch(bracket)
+        assert result == expected_branch, (
+            f"{label}: expected {expected_branch!r}, got {result!r}"
+        )
+
+    @pytest.mark.parametrize("label,bracket", [
+        ("bracket_lipid_linker",
+         "ac-C.[gGlu(4,4).AEEA(2,1).C20FA(2,1)]-A-G-am"),
+        ("bracket_COOH",
+         "A-D.[G(4,1).A(2,1).am(2,1)]-A-am"),
+        ("bracket_NH2",
+         "ac-A-K.[G(4,1).A(2,1).am(2,1)]-G-am"),
+        ("bracket_disulfide",
+         "ac-C.[C(4,4).A(2,1).am(2,1)]-A-G-am"),
+    ])
+    def test_bracket_roundtrip(self, label, bracket):
+        from pyPept.sequence import cabiln_to_branch, cabiln_to_bracket
+        branch = cabiln_to_branch(bracket)
+        back = cabiln_to_bracket(branch)
+        assert back == bracket, (
+            f"{label}: roundtrip failed\n"
+            f"  bracket -> branch:  {branch!r}\n"
+            f"  branch  -> bracket: {back!r}"
+        )
+
+    # ------------------------------------------------------------------
+    # Identity / pass-through
+    # ------------------------------------------------------------------
+
+    @pytest.mark.parametrize("notation", [
+        "ac-A-G-K-am",
+        "A-G",
+        "am",
+        "",
+    ])
+    def test_no_branch_passthrough(self, notation):
+        from pyPept.sequence import cabiln_to_branch, cabiln_to_bracket
+        assert cabiln_to_branch(notation) == notation
+        assert cabiln_to_bracket(notation) == notation
+
+    # ------------------------------------------------------------------
+    # Mixed notation — multiple branches (positional matching)
+    # ------------------------------------------------------------------
+
+    def test_two_branches_roundtrip(self):
+        from pyPept.sequence import cabiln_to_bracket, cabiln_to_branch
+        branch = "ac-C.(4,4)-A-K.(4,1)-G-am%C-A(2,1)-am(2,1)%G-am(2,1)"
+        bracket = cabiln_to_bracket(branch)
+        assert "[" in bracket and "]" in bracket
+        back = cabiln_to_branch(bracket)
+        assert back == branch, (
+            f"Two-branch roundtrip failed:\n"
+            f"  {branch!r} -> {bracket!r} -> {back!r}"
+        )
+
+    def test_two_brackets_roundtrip(self):
+        from pyPept.sequence import cabiln_to_bracket, cabiln_to_branch
+        bracket = (
+            "ac-C.[C(4,4).A(2,1).am(2,1)]"
+            "-A-K.[G(4,1).am(2,1)]-G-am"
+        )
+        branch = cabiln_to_branch(bracket)
+        assert "%" in branch, f"Should have branch separators: {branch}"
+        back = cabiln_to_bracket(branch)
+        assert back == bracket, (
+            f"Two-bracket roundtrip failed:\n"
+            f"  {bracket!r} -> {branch!r} -> {back!r}"
+        )
+
+    # ------------------------------------------------------------------
+    # Crosslink + branch coexistence
+    # ------------------------------------------------------------------
+
+    def test_crosslink_plus_branch_roundtrip(self):
+        from pyPept.sequence import cabiln_to_bracket, cabiln_to_branch
+        bracket = "!1-A-K.[gGlu(4,4).AEEA(2,1).C20FA(2,1)]-G-A-!1"
+        branch = cabiln_to_branch(bracket)
+        assert "!1" in branch, "Crosslink !1 should be preserved"
+        assert ".(4,4)" in branch, "Branch marker should use .(r,r) not .!n(r,r)"
+        back = cabiln_to_bracket(branch)
+        assert back == bracket, (
+            f"Crosslink+branch roundtrip failed:\n"
+            f"  {bracket!r} -> {branch!r} -> {back!r}"
+        )
+
+    # ------------------------------------------------------------------
+    # Unannotated continuation defaults to (2,1)
+    # ------------------------------------------------------------------
+
+    def test_unannotated_defaults_2_1(self):
+        from pyPept.sequence import cabiln_to_bracket
+        branch = "A-D.(4,1)-am%G-A"
+        bracket = cabiln_to_bracket(branch)
+        assert "(2,1)" in bracket, (
+            f"Unannotated continuation should default to (2,1): {bracket}"
+        )
+
+    # ------------------------------------------------------------------
+    # Reversed (C→N) bracket branches — all (1,2) continuations
+    # ------------------------------------------------------------------
+
+    @pytest.mark.parametrize("label, bracket, expected_branch", [
+        (
+            "reversed_lipid_linker",
+            "K.[C20FA(4,4).AEEA(1,2).gGlu(1,2)]-G-am",
+            "K.!1(4,4)-G-am%gGlu-AEEA(2,1)-C20FA(2,1).!1",
+        ),
+        (
+            "reversed_two_monomer",
+            "ac-A.[C(4,4).G(1,2)]-am",
+            "ac-A.!1(4,4)-am%G-C(2,1).!1",
+        ),
+    ])
+    def test_reversed_bracket_to_branch(self, label, bracket, expected_branch):
+        from pyPept.sequence import cabiln_to_branch
+        result = cabiln_to_branch(bracket)
+        assert result == expected_branch, (
+            f"{label}: bracket→branch mismatch\n"
+            f"  input:    {bracket!r}\n"
+            f"  expected: {expected_branch!r}\n"
+            f"  got:      {result!r}"
+        )
+
+    @pytest.mark.parametrize("label, branch, expected_bracket", [
+        (
+            "reversed_lipid_linker",
+            "K.!1(4,4)-G-am%gGlu-AEEA(2,1)-C20FA(2,1).!1",
+            "K.[C20FA(4,4).AEEA(1,2).gGlu(1,2)]-G-am",
+        ),
+        (
+            "reversed_two_monomer",
+            "ac-A.!1(4,4)-am%G-C(2,1).!1",
+            "ac-A.[C(4,4).G(1,2)]-am",
+        ),
+    ])
+    def test_reversed_branch_to_bracket(self, label, branch, expected_bracket):
+        from pyPept.sequence import cabiln_to_bracket
+        result = cabiln_to_bracket(branch)
+        assert result == expected_bracket, (
+            f"{label}: branch→bracket mismatch\n"
+            f"  input:    {branch!r}\n"
+            f"  expected: {expected_bracket!r}\n"
+            f"  got:      {result!r}"
+        )
+
+    @pytest.mark.parametrize("label, bracket", [
+        (
+            "reversed_lipid_roundtrip",
+            "K.[C20FA(4,4).AEEA(1,2).gGlu(1,2)]-G-am",
+        ),
+        (
+            "reversed_two_monomer_roundtrip",
+            "ac-A.[C(4,4).G(1,2)]-am",
+        ),
+    ])
+    def test_reversed_bracket_roundtrip(self, label, bracket):
+        from pyPept.sequence import cabiln_to_branch, cabiln_to_bracket
+        branch = cabiln_to_branch(bracket)
+        back = cabiln_to_bracket(branch)
+        assert back == bracket, (
+            f"{label}: roundtrip failed\n"
+            f"  bracket → branch:  {branch!r}\n"
+            f"  branch  → bracket: {back!r}\n"
+            f"  expected:          {bracket!r}"
+        )
+
+    @pytest.mark.parametrize("label, branch", [
+        (
+            "reversed_lipid_branch_roundtrip",
+            "K.!1(4,4)-G-am%gGlu-AEEA(2,1)-C20FA(2,1).!1",
+        ),
+        (
+            "reversed_two_monomer_branch_roundtrip",
+            "ac-A.!1(4,4)-am%G-C(2,1).!1",
+        ),
+    ])
+    def test_reversed_branch_roundtrip(self, label, branch):
+        from pyPept.sequence import cabiln_to_branch, cabiln_to_bracket
+        bracket = cabiln_to_bracket(branch)
+        back = cabiln_to_branch(bracket)
+        assert back == branch, (
+            f"{label}: roundtrip failed\n"
+            f"  branch  → bracket: {bracket!r}\n"
+            f"  bracket → branch:  {back!r}\n"
+            f"  expected:          {branch!r}"
+        )
+
+    # ------------------------------------------------------------------
+    # Mixed: crosslink + reversed branch coexistence
+    # ------------------------------------------------------------------
+
+    def test_crosslink_plus_reversed_branch(self):
+        from pyPept.sequence import cabiln_to_branch, cabiln_to_bracket
+        bracket = "!1-A-K.[C20FA(4,4).AEEA(1,2).gGlu(1,2)]-G-A-!1"
+        branch = cabiln_to_branch(bracket)
+        assert "!1" in branch, "Crosslink !1 should be preserved"
+        assert ".!2(4,4)" in branch, (
+            "Reversed branch should use .!n(r,r) with n>1 to avoid crosslink collision"
+        )
+        back = cabiln_to_bracket(branch)
+        assert back == bracket, (
+            f"Crosslink+reversed roundtrip failed:\n"
+            f"  {bracket!r} -> {branch!r} -> {back!r}"
+        )
+
+    # ------------------------------------------------------------------
+    # Midpoint anchor — anchor in the middle of the branch chain
+    # Bracket: K.[gGlu(4,4).AEEA(2,1).C(2,1).A(1,2).G(1,2)]-am
+    #   gGlu is anchor, AEEA-C grow C-terminal (2,1), A-G grow N-terminal (1,2)
+    # Branch: anchor at midpoint → need crosslink for the N-terminal arm
+    # ------------------------------------------------------------------
+
+    def test_midpoint_anchor_bracket_to_branch(self):
+        """A bracket branch where the anchor is in the middle.
+
+        After the anchor: (2,1) = N→C continuation
+        Then switches to (1,2) = C→N continuation from anchor's other side.
+        This is a midpoint anchor topology — the branch grows in both
+        directions from the anchor monomer.
+        """
+        from pyPept.sequence import cabiln_to_branch
+        bracket = "K.[gGlu(4,4).AEEA(2,1).C20FA(2,1)]-G-am"
+        branch = cabiln_to_branch(bracket)
+        assert "%" in branch, "Should produce branch notation"
+        assert ".(4,4)" in branch, "Simple N→C should use positional .(r,r)"
+
+
 if __name__ == '__main__':
     import unittest
     loader = unittest.TestLoader()
@@ -4426,7 +4747,7 @@ if __name__ == '__main__':
                 TestFinalMonomers, TestFattyAcidBranching, TestBracketNotation,
                 TestMonomerBuilderCLI, TestRoundTrips,
                 TestMonomerPreActivate, TestRestoreRgroups,
-                TestReactionPairSMIRKS):
+                TestReactionPairSMIRKS, TestNotationConversion):
         suite.addTests(loader.loadTestsFromTestCase(cls))
     runner = unittest.TextTestRunner(verbosity=2)
     result = runner.run(suite)

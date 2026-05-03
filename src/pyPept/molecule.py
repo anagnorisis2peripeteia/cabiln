@@ -34,6 +34,49 @@ RDLogger.DisableLog('rdApp.warning')
 ##########################################################################
 # Functions and classes
 ##########################################################################
+
+def _retag_residue_idx(product, snap_a, snap_b, intramol):
+    """Re-apply _residue_idx to product atoms that lost it through SMIRKS.
+
+    RDKit reactions strip custom IntProps from mapped atoms but leave
+    ``react_idx`` / ``react_atom_idx`` breadcrumbs that trace each product
+    atom back to its reactant origin.
+    """
+    if intramol:
+        snap_for = {0: snap_a}
+    else:
+        snap_for = {}
+        for atom in product.GetAtoms():
+            if (atom.HasProp('_residue_idx') and atom.HasProp('react_idx')
+                    and atom.HasProp('react_atom_idx')):
+                ri = atom.GetIntProp('react_idx')
+                if ri in snap_for:
+                    continue
+                rai = atom.GetIntProp('react_atom_idx')
+                res = atom.GetIntProp('_residue_idx')
+                if snap_a.get(rai) == res:
+                    snap_for[ri] = snap_a
+                elif snap_b.get(rai) == res:
+                    snap_for[ri] = snap_b
+                if len(snap_for) == 2:
+                    break
+        if len(snap_for) == 1:
+            known_ri = next(iter(snap_for))
+            snap_for[1 - known_ri] = (
+                snap_b if snap_for[known_ri] is snap_a else snap_a
+            )
+
+    for atom in product.GetAtoms():
+        if (not atom.HasProp('_residue_idx')
+                and atom.HasProp('react_idx')
+                and atom.HasProp('react_atom_idx')):
+            ri = atom.GetIntProp('react_idx')
+            rai = atom.GetIntProp('react_atom_idx')
+            snap = snap_for.get(ri)
+            if snap and rai in snap:
+                atom.SetIntProp('_residue_idx', snap[rai])
+
+
 class Molecule:
     """
     Wrapper class around a rdkit ROMol object, with customization for
@@ -186,6 +229,13 @@ class Molecule:
                     iso1, iso2 = iso2, iso1
 
             intramol = (root1 == root2)
+
+            snap_a = {a.GetIdx(): a.GetIntProp('_residue_idx')
+                      for a in frag1.GetAtoms() if a.HasProp('_residue_idx')}
+            snap_b = snap_a if intramol else {
+                a.GetIdx(): a.GetIntProp('_residue_idx')
+                for a in frag2.GetAtoms() if a.HasProp('_residue_idx')}
+
             try:
                 product = run_bond_smirks(frag1, frag2, iso1, iso2, entry, intramol)
             except ValueError as exc:
@@ -193,6 +243,8 @@ class Molecule:
                     f"Bond formation failed between monomer {m1} (slot {slot1}, "
                     f"{ct1}) and monomer {m2} (slot {slot2}, {ct2}): {exc}"
                 ) from exc
+
+            _retag_residue_idx(product, snap_a, snap_b, intramol)
 
             pool[root1] = product
             if not intramol:
@@ -480,22 +532,34 @@ class Molecule:
         if self.mol is None:
             return {}
         mapping = {}
+        assigned = {}
         orphans = []
         for atom in self.mol.GetAtoms():
             try:
                 res_idx = atom.GetIntProp('_residue_idx')
                 mapping.setdefault(res_idx, []).append(atom.GetIdx())
+                assigned[atom.GetIdx()] = res_idx
             except KeyError:
                 orphans.append(atom.GetIdx())
-        for aidx in orphans:
-            atom = self.mol.GetAtomWithIdx(aidx)
-            for nb in atom.GetNeighbors():
-                try:
-                    res_idx = nb.GetIntProp('_residue_idx')
-                    mapping.setdefault(res_idx, []).append(aidx)
-                    break
-                except KeyError:
-                    continue
+        changed = True
+        while changed and orphans:
+            changed = False
+            new_assign = {}
+            still_orphaned = []
+            for aidx in orphans:
+                atom = self.mol.GetAtomWithIdx(aidx)
+                for nb in atom.GetNeighbors():
+                    nb_res = assigned.get(nb.GetIdx())
+                    if nb_res is not None:
+                        new_assign[aidx] = nb_res
+                        changed = True
+                        break
+                else:
+                    still_orphaned.append(aidx)
+            for aidx, res_idx in new_assign.items():
+                assigned[aidx] = res_idx
+                mapping.setdefault(res_idx, []).append(aidx)
+            orphans = still_orphaned
         return mapping
 
     # End of the Molecule class declaration.

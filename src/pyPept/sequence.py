@@ -392,6 +392,212 @@ def colorize_cabiln(biln, use_ansi=True):
     return ''.join(result)
 
 
+import re as _re
+
+
+def _parse_bracket_items(bracket_content):
+    """Parse bracket content into list of (abbr, r_prev, r_this) tuples."""
+    parts = bracket_content.split('.')
+    items = []
+    for p in parts:
+        pm = _re.match(r'([^(]+)\((\d+),(\d+)\)', p)
+        if pm:
+            items.append((pm.group(1), pm.group(2), pm.group(3)))
+        else:
+            items.append((p, None, None))
+    return items
+
+
+def cabiln_to_branch(cabiln):
+    """Convert CABILN bracket notation to branch (%) notation.
+
+    N→C brackets (all ``(2,1)`` continuations) produce simple positional
+    branches with ``.(r,r)`` on the host::
+
+        K.[gGlu(4,4).AEEA(2,1).C20FA(2,1)]-G-am
+        →  K.(4,4)-G-am%gGlu-AEEA(2,1)-C20FA(2,1)
+
+    C→N brackets (all ``(1,2)`` continuations) are reversed to N→C and
+    the anchor (now at the end) uses a crosslink ``!n`` back to the host::
+
+        K.[C20FA(4,4).AEEA(1,2).gGlu(1,2)]-G-am
+        →  K.!2(4,4)-G-am%gGlu-AEEA(2,1)-C20FA(2,1).!2
+
+    Mixed R-group brackets are kept in bracket order with annotations.
+    ``!n`` tags are reserved for crosslinks.
+    """
+    result = cabiln
+    branches = []
+    existing_tags = {int(x) for x in _re.findall(r'!(\d+)', cabiln)}
+    next_tag = max(existing_tags, default=0) + 1
+
+    while True:
+        m = _re.search(r'\.\[([^\]]+)\]', result)
+        if not m:
+            break
+        bracket_content = m.group(1)
+        items = _parse_bracket_items(bracket_content)
+        if not items or items[0][1] is None:
+            break
+        anchor_abbr, r_host, r_branch = items[0]
+
+        cont = [(rp, rt) for _, rp, rt in items[1:] if rp and rt]
+        all_21 = len(items) <= 1 or all(rp == '2' and rt == '1' for rp, rt in cont)
+        all_12 = len(items) > 1 and all(rp == '1' and rt == '2' for rp, rt in cont)
+
+        if all_21 or (not all_12 and not all_21 and len(items) > 1):
+            # N→C or mixed: anchor at start, simple .(r,r) branch
+            host_marker = f'.({r_host},{r_branch})'
+            branch_parts = [anchor_abbr]
+            for abbr, rp, rt in items[1:]:
+                if rp and rt:
+                    branch_parts.append(f'{abbr}({rp},{rt})')
+                else:
+                    branch_parts.append(abbr)
+            branch_str = '-'.join(branch_parts)
+        else:
+            # All (1,2): C→N from anchor → reverse to N→C, crosslink anchor
+            tag = f'!{next_tag}'
+            next_tag += 1
+            host_marker = f'.{tag}({r_host},{r_branch})'
+            rev = list(reversed(items))
+            branch_parts = []
+            for i, (abbr, rp, rt) in enumerate(rev):
+                if i == 0:
+                    branch_parts.append(abbr)
+                elif i == len(rev) - 1:
+                    branch_parts.append(f'{abbr}(2,1).{tag}')
+                else:
+                    branch_parts.append(f'{abbr}(2,1)')
+            branch_str = '-'.join(branch_parts)
+
+        before = result[:m.start()]
+        after = result[m.end():]
+        result = before + host_marker + after
+        branches.append(branch_str)
+
+    if branches:
+        result += '%' + '%'.join(branches)
+    return result
+
+
+def cabiln_to_bracket(cabiln):
+    """Convert CABILN branch (%) notation to bracket notation.
+
+    Simple positional branches (``.(r,r)`` marker, first monomer is anchor)::
+
+        K.(4,4)-G-am%gGlu-AEEA(2,1)-C20FA(2,1)
+        →  K.[gGlu(4,4).AEEA(2,1).C20FA(2,1)]-G-am
+
+    Crosslink branches (``.!n(r,r)`` marker, anchor tagged ``.!n`` in the
+    branch — may be at the end or midpoint)::
+
+        K.!1(4,4)-G-am%gGlu-AEEA(2,1)-C20FA(2,1).!1
+        →  K.[C20FA(4,4).AEEA(1,2).gGlu(1,2)]-G-am
+
+    Unannotated continuation monomers default to ``(2,1)`` (N→C).
+    """
+    if '%' not in cabiln and '\n' not in cabiln:
+        return cabiln
+
+    segments = _re.split(r'[%\n]', cabiln)
+    segments = [s.strip() for s in segments if s.strip()]
+    if len(segments) < 2:
+        return cabiln
+
+    main_seg = segments[0]
+    branch_segs = segments[1:]
+
+    # Separate branches: crosslink-connected vs positional
+    positional = []
+    crosslink = []
+    for bs in branch_segs:
+        if _re.search(r'\.!\d+', bs):
+            crosslink.append(bs)
+        else:
+            positional.append(bs)
+
+    # --- Phase 1: crosslink branches (.!n anchor in the branch) ---
+    for branch_seg in crosslink:
+        tag_m = _re.search(r'\.(!\d+)', branch_seg)
+        if not tag_m:
+            continue
+        tag = tag_m.group(1)
+        host_pat = _re.escape(f'.{tag}') + r'\((\d+),(\d+)\)'
+        host_m = _re.search(host_pat, main_seg)
+        if not host_m:
+            continue
+        r_host, r_branch = host_m.group(1), host_m.group(2)
+
+        raw_parts = _re.split(r'(?<!\()[-](?!\))', branch_seg)
+        raw_parts = [p.strip() for p in raw_parts if p.strip()]
+
+        # Find which monomer is the anchor (has .!n)
+        anchor_idx = None
+        parsed = []
+        for j, rp in enumerate(raw_parts):
+            if f'.{tag}' in rp:
+                anchor_idx = j
+            clean = _re.sub(r'\.' + _re.escape(tag), '', rp)
+            rg_m = _re.search(r'\((\d+),(\d+)\)', clean)
+            abbr = _re.sub(r'\([^)]*\)', '', clean).strip()
+            if rg_m:
+                parsed.append((abbr, rg_m.group(1), rg_m.group(2)))
+            else:
+                parsed.append((abbr, None, None))
+        if anchor_idx is None:
+            continue
+
+        # Build bracket: anchor first, then C-terminal side, then N-terminal
+        bracket_items = [f'{parsed[anchor_idx][0]}({r_host},{r_branch})']
+
+        # After anchor (C-terminal side in N→C branch) — keep R-groups
+        for j in range(anchor_idx + 1, len(parsed)):
+            abbr, rp, rt = parsed[j]
+            bracket_items.append(
+                f'{abbr}({rp},{rt})' if rp and rt else f'{abbr}(2,1)')
+
+        # Before anchor (N-terminal side) — reverse order, swap R-groups
+        for j in range(anchor_idx - 1, -1, -1):
+            abbr = parsed[j][0]
+            nxt = parsed[j + 1]
+            if nxt[1] and nxt[2]:
+                bracket_items.append(f'{abbr}({nxt[2]},{nxt[1]})')
+            else:
+                bracket_items.append(f'{abbr}(1,2)')
+
+        bracket_str = '.[' + '.'.join(bracket_items) + ']'
+        main_seg = (main_seg[:host_m.start()] + bracket_str
+                    + main_seg[host_m.end():])
+
+    # --- Phase 2: positional branches (.(r,r) marker) ---
+    for branch_seg in positional:
+        host_m = _re.search(r'\.\((\d+),(\d+)\)', main_seg)
+        if not host_m:
+            break
+        r_host, r_branch = host_m.group(1), host_m.group(2)
+
+        branch_parts = _re.split(r'(?<!\()[-](?!\))', branch_seg)
+        branch_parts = [p.strip() for p in branch_parts if p.strip()]
+
+        bracket_items = []
+        for i, bp in enumerate(branch_parts):
+            if i == 0:
+                abbr = _re.sub(r'\([^)]*\)', '', bp).strip()
+                bracket_items.append(f'{abbr}({r_host},{r_branch})')
+            else:
+                if '(' in bp:
+                    bracket_items.append(bp)
+                else:
+                    bracket_items.append(f'{bp}(2,1)')
+        bracket_str = '.[' + '.'.join(bracket_items) + ']'
+
+        main_seg = (main_seg[:host_m.start()] + bracket_str
+                    + main_seg[host_m.end():])
+
+    return main_seg
+
+
 def _check_bond_chemistry(mol1, at1, mol2, at2, bond_label=''):
     """
     Validate the proposed inter-monomer bond.

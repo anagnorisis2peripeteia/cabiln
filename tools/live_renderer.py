@@ -152,6 +152,7 @@ _HTML = r"""<!DOCTYPE html>
     flex: 1;
     display: flex;
     min-height: 0;
+    border-left: 1px solid #1e3050;
   }
   .vpanel {
     flex: 1;
@@ -348,15 +349,36 @@ _HTML = r"""<!DOCTYPE html>
     background: #0a1018;
     border: 1px solid #2a4070;
     border-radius: 6px;
-    padding: 8px;
+    padding: 0;
     box-shadow: 0 8px 32px rgba(0,0,0,.6);
     display: none;
     pointer-events: none;
-    width: 240px;
-    height: 200px;
+    width: 480px;
+    overflow: hidden;
   }
-  #lib-preview svg { width: 100%; height: 100%; display: block; }
-  #lib-preview.dark svg { filter: invert(1); }
+  #lib-preview .prev-row {
+    display: flex;
+  }
+  #lib-preview .prev-pane {
+    flex: 1;
+    height: 200px;
+    position: relative;
+    overflow: hidden;
+  }
+  #lib-preview .prev-pane + .prev-pane {
+    border-left: 1px solid #1e3050;
+  }
+  #lib-preview .prev-label {
+    position: absolute;
+    top: 4px; left: 6px;
+    font-size: 9px;
+    color: #5a7aa0;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    z-index: 1;
+  }
+  #lib-preview .prev-pane svg { width: 100%; height: 100%; display: block; }
+  #lib-preview.dark .prev-pane svg { filter: invert(1); }
 
   /* ── residue chips ── */
   #residue-chips {
@@ -398,6 +420,8 @@ _HTML = r"""<!DOCTYPE html>
   <button id="btn-hl"     class="hbtn active" title="Toggle residue highlighting">🔗 Highlight</button>
   <button id="btn-dark"   class="hbtn"        title="Toggle dark canvas">🌙 Dark</button>
   <button id="btn-verify" class="hbtn"        title="SMILES vs CABILN comparison">⚖ Verify</button>
+  <button id="btn-to-bracket" class="hbtn" title="Convert to bracket notation">→[ ]</button>
+  <button id="btn-to-branch"  class="hbtn" title="Convert to branch (%) notation">→%</button>
   <button id="btn-png"    class="hbtn"        title="Download PNG" disabled>⬇ PNG</button>
   <button id="btn-mol"    class="hbtn"        title="Download MOL file" disabled>⬇ MOL</button>
   <a href="/register" target="_blank" style="text-decoration:none;">
@@ -441,24 +465,22 @@ _HTML = r"""<!DOCTYPE html>
     </div>
   </div>
 
-  <!-- verify mode (hidden by default) -->
+  <!-- verify reference pane (hidden by default, shown beside render-pane) -->
   <div id="verify-pane" style="display:none;">
-    <div class="vpanel">
-      <span class="seq-label">SMILES</span>
-      <textarea id="smiles-input" placeholder="Paste reference SMILES here…"
+    <div class="vpanel" style="border-right:none;">
+      <div style="display:flex;gap:6px;align-items:center;">
+        <span class="seq-label" style="flex:none;">Reference</span>
+        <label class="hbtn" style="font-size:11px;padding:2px 8px;cursor:pointer;margin:0;">
+          📂 .mol
+          <input type="file" id="mol-upload" accept=".mol,.sdf" style="display:none;">
+        </label>
+      </div>
+      <textarea id="smiles-input" placeholder="Paste SMILES, BILN, or HELM here…"
                 spellcheck="false" autocomplete="off"></textarea>
       <div id="smiles-status" class="statusbar"></div>
       <div id="smiles-canvas" class="canvas-wrap">
         <div class="canvas-inner" id="smiles-inner">
-          <div class="placeholder">Enter a SMILES string…</div>
-        </div>
-      </div>
-    </div>
-    <div class="vpanel">
-      <span class="seq-label">CABILN (generated)</span>
-      <div id="verify-canvas" class="canvas-wrap">
-        <div class="canvas-inner" id="verify-inner">
-          <div class="placeholder">Waiting for CABILN…</div>
+          <div class="placeholder">Paste SMILES or upload .mol to compare…</div>
         </div>
       </div>
     </div>
@@ -470,7 +492,7 @@ _HTML = r"""<!DOCTYPE html>
 
 <script>
 // ─── state ────────────────────────────────────────────────────────────────────
-let darkMode   = false;
+let darkMode   = true;
 let verifyMode = false;
 let hlEnabled  = true;
 let libLoaded  = false;
@@ -498,7 +520,7 @@ const cabilnInput   = document.getElementById('cabiln-input');
 const cabilnStatus  = document.getElementById('cabiln-status');
 const renderInner   = document.getElementById('render-inner');
 const renderCanvas  = document.getElementById('render-canvas');
-const verifyInner   = document.getElementById('verify-inner');
+const molUpload     = document.getElementById('mol-upload');
 const smilesInput   = document.getElementById('smiles-input');
 const smilesStatus  = document.getElementById('smiles-status');
 const smilesInner   = document.getElementById('smiles-inner');
@@ -509,6 +531,8 @@ const btnLib        = document.getElementById('btn-lib');
 const btnHl         = document.getElementById('btn-hl');
 const btnPng        = document.getElementById('btn-png');
 const btnMol        = document.getElementById('btn-mol');
+const btnToBracket  = document.getElementById('btn-to-bracket');
+const btnToBranch   = document.getElementById('btn-to-branch');
 const libPanel      = document.getElementById('lib-panel');
 const libSearch     = document.getElementById('lib-search');
 const libClose      = document.getElementById('lib-close');
@@ -526,6 +550,10 @@ btnDark.addEventListener('click', () => {
   }
   libPreview.classList.toggle('dark', darkMode);
 });
+// apply dark mode on load
+btnDark.classList.add('active');
+document.querySelectorAll('.canvas-wrap').forEach(el => el.classList.add('dark'));
+libPreview.classList.add('dark');
 
 // ─── highlight toggle ─────────────────────────────────────────────────────────
 btnHl.addEventListener('click', () => {
@@ -538,7 +566,6 @@ btnHl.addEventListener('click', () => {
 btnVerify.addEventListener('click', () => {
   verifyMode = !verifyMode;
   btnVerify.classList.toggle('active', verifyMode);
-  document.getElementById('render-pane').style.display = verifyMode ? 'none' : '';
   document.getElementById('verify-pane').style.display = verifyMode ? '' : 'none';
   compareBar.style.display = verifyMode ? '' : 'none';
   if (verifyMode) triggerVerify();
@@ -647,18 +674,28 @@ function startPreview(abbr, row) {
       const res = await fetch(`/monomer_svg?abbr=${encodeURIComponent(abbr)}`);
       const data = await res.json();
       if (data.svg) {
-        previewCache[abbr] = data.svg;
-        showPreview(data.svg, row);
+        previewCache[abbr] = data;
+        showPreview(data, row);
       }
     } catch (e) { /* silent */ }
   }, 200);
 }
 
-function showPreview(svg, row) {
-  libPreview.innerHTML = svg;
+function showPreview(data, row) {
+  const restored = data.svg_restored || data.svg;
+  libPreview.innerHTML = `<div class="prev-row">
+    <div class="prev-pane"><span class="prev-label">Monomer</span>${restored}</div>
+    <div class="prev-pane"><span class="prev-label">R-groups</span>${data.svg}</div>
+  </div>`;
   const rect = row.getBoundingClientRect();
+  const previewH = 202;
+  let top = Math.max(8, rect.top - 40);
+  if (top + previewH > window.innerHeight - 8) {
+    top = window.innerHeight - 8 - previewH;
+  }
+  top = Math.max(8, top);
   libPreview.style.left = (rect.right + 8) + 'px';
-  libPreview.style.top  = Math.max(8, rect.top - 40) + 'px';
+  libPreview.style.top  = top + 'px';
   libPreview.style.display = 'block';
 }
 
@@ -668,33 +705,168 @@ function hidePreview() {
 }
 
 // ─── residue chips + bidirectional highlighting ───────────────────────────────
-function buildResidueUI(resMap, residues) {
+let chainData = [];
+let xlinkByRes = {};
+
+function highlightGroup(idxList) {
+  if (!hlEnabled) return;
+  clearHighlight();
+  activeRIdx = -999;
+  const svg = document.querySelector('#render-inner svg');
+  if (!svg) return;
+  svg.classList.add('has-highlight');
+  for (const rIdx of idxList) {
+    const atoms = residueMap[rIdx] || [];
+    for (const aidx of atoms) {
+      svg.querySelectorAll(`.atom-${aidx}`).forEach(el =>
+        el.classList.add('res-hl'));
+    }
+  }
+  resChips.classList.add('dimmed');
+  resChips.querySelectorAll('.res-chip').forEach(c => {
+    const ri = parseInt(c.dataset.residue);
+    c.classList.toggle('hover', idxList.includes(ri));
+  });
+  resChips.querySelectorAll('.branch-chip').forEach(c => {
+    const cm = JSON.parse(c.dataset.members || '[]');
+    c.classList.toggle('hover', cm.some(m => idxList.includes(m)));
+  });
+}
+
+function buildResidueUI(resMap, residues, chains, cabiln, bracketGroups, crosslinkGroups) {
   residueMap = resMap || {};
   residueList = residues || [];
+  chainData = chains || [];
   atomToRes = {};
   for (const [rIdx, atoms] of Object.entries(residueMap)) {
     for (const aidx of atoms) atomToRes[aidx] = parseInt(rIdx);
   }
 
   resChips.innerHTML = '';
+  resChips.style.position = '';
+  resChips.style.paddingLeft = '';
   if (!residueList.length) return;
 
-  residueList.forEach((r, i) => {
+  const resById = {};
+  residueList.forEach((r, i) => { resById[r.idx] = { ...r, colorIdx: i }; });
+
+  const xlinkByMember = {};
+  (crosslinkGroups || []).forEach(g => {
+    g.members.forEach(mIdx => {
+      if (!xlinkByMember[mIdx]) xlinkByMember[mIdx] = [];
+      xlinkByMember[mIdx].push(g);
+    });
+  });
+  xlinkByRes = xlinkByMember;
+
+  function makeChip(rIdx) {
+    const r = resById[rIdx];
+    if (!r) return null;
     const chip = document.createElement('span');
     chip.className = 'res-chip';
     chip.textContent = r.abbr;
     chip.dataset.residue = r.idx;
-    chip.style.background = RES_COLORS[i % RES_COLORS.length];
-    chip.addEventListener('mouseenter', () => highlightResidue(r.idx));
+    chip.style.background = RES_COLORS[r.colorIdx % RES_COLORS.length];
+    const xlinks = xlinkByMember[r.idx];
+    if (xlinks && xlinks.length) {
+      const allMembers = [...new Set(xlinks.flatMap(g => g.members))];
+      chip.addEventListener('mouseenter', () => highlightGroup(allMembers));
+    } else {
+      chip.addEventListener('mouseenter', () => highlightResidue(r.idx));
+    }
     chip.addEventListener('mouseleave', clearHighlight);
-    resChips.appendChild(chip);
-  });
+    return chip;
+  }
+
+  function makeSeparator(text, memberIdxs) {
+    const el = document.createElement('span');
+    el.className = 'res-chip branch-chip';
+    el.style.background = '#3a3a50';
+    el.style.fontWeight = '700';
+    el.textContent = text;
+    el.dataset.members = JSON.stringify(memberIdxs || []);
+    if (memberIdxs && memberIdxs.length) {
+      el.addEventListener('mouseenter', () => highlightGroup(memberIdxs));
+      el.addEventListener('mouseleave', clearHighlight);
+    }
+    return el;
+  }
+
+  function makeXlinkChip(tag, members) {
+    const el = document.createElement('span');
+    el.className = 'res-chip branch-chip xlink-chip';
+    el.style.background = '#503a4a';
+    el.style.fontWeight = '700';
+    el.style.fontSize = '0.8em';
+    el.textContent = tag;
+    el.dataset.members = JSON.stringify(members);
+    el.addEventListener('mouseenter', () => highlightGroup(members));
+    el.addEventListener('mouseleave', clearHighlight);
+    return el;
+  }
+
+  function appendXlinks(rIdx) {
+    const xlinks = xlinkByMember[rIdx];
+    if (!xlinks) return;
+    xlinks.forEach(g => resChips.appendChild(makeXlinkChip(g.tag, g.members)));
+  }
+
+  const useBranch = cabiln && cabiln.includes('%') && !cabiln.includes('[');
+  const useBracket = cabiln && cabiln.includes('[');
+
+  if (useBranch) {
+    chainData.forEach((chain, ci) => {
+      if (ci > 0) resChips.appendChild(makeSeparator('%', chain.residues));
+      chain.residues.forEach(rIdx => {
+        const chip = makeChip(rIdx);
+        if (chip) resChips.appendChild(chip);
+        appendXlinks(rIdx);
+      });
+    });
+  } else if (useBracket) {
+    const groups = bracketGroups || [];
+    const groupByHost = {};
+    groups.forEach(g => { groupByHost[g.host] = g.members; });
+    const branchSet = new Set();
+    groups.forEach(g => g.members.forEach(m => branchSet.add(m)));
+
+    const mainChain = chainData.length ? chainData[0].residues : [];
+    mainChain.forEach(rIdx => {
+      if (branchSet.has(rIdx)) return;
+      const chip = makeChip(rIdx);
+      if (chip) resChips.appendChild(chip);
+
+      const members = groupByHost[rIdx];
+      if (members && members.length) {
+        const groupWithHost = [rIdx, ...members];
+        resChips.appendChild(makeSeparator('[', groupWithHost));
+        members.forEach(mIdx => {
+          const mc = makeChip(mIdx);
+          if (mc) resChips.appendChild(mc);
+        });
+        resChips.appendChild(makeSeparator(']', groupWithHost));
+      }
+      appendXlinks(rIdx);
+    });
+  } else {
+    const allIds = chainData.flatMap(c => c.residues);
+    allIds.forEach(rIdx => {
+      const chip = makeChip(rIdx);
+      if (chip) resChips.appendChild(chip);
+      appendXlinks(rIdx);
+    });
+  }
 
   wireUpSvgHover();
 }
 
+let activeRIdx = null;
+
 function highlightResidue(rIdx) {
   if (!hlEnabled) return;
+  if (rIdx === activeRIdx) return;
+  clearHighlight();
+  activeRIdx = rIdx;
   const atoms = residueMap[rIdx] || [];
   const svg = document.querySelector('#render-inner svg');
   if (!svg) return;
@@ -711,6 +883,7 @@ function highlightResidue(rIdx) {
 }
 
 function clearHighlight() {
+  activeRIdx = null;
   const svg = document.querySelector('#render-inner svg');
   if (svg) {
     svg.classList.remove('has-highlight');
@@ -723,13 +896,28 @@ function clearHighlight() {
 function wireUpSvgHover() {
   const svg = document.querySelector('#render-inner svg');
   if (!svg) return;
-  svg.addEventListener('mouseover', e => {
+  svg.addEventListener('mousemove', e => {
     if (!hlEnabled) return;
-    const cls = (e.target.getAttribute('class') || '');
-    const m = cls.match(/atom-(\d+)/);
-    if (!m) return;
-    const rIdx = atomToRes[parseInt(m[1])];
-    if (rIdx !== undefined) highlightResidue(rIdx);
+    let el = e.target;
+    while (el && el !== svg) {
+      const cls = (el.getAttribute('class') || '');
+      const m = cls.match(/atom-(\d+)/);
+      if (m) {
+        const rIdx = atomToRes[parseInt(m[1])];
+        if (rIdx !== undefined) {
+          const xlinks = xlinkByRes[rIdx];
+          if (xlinks && xlinks.length) {
+            const allMembers = [...new Set(xlinks.flatMap(g => g.members))];
+            highlightGroup(allMembers);
+          } else {
+            highlightResidue(rIdx);
+          }
+          return;
+        }
+      }
+      el = el.parentElement;
+    }
+    clearHighlight();
   });
   svg.addEventListener('mouseleave', clearHighlight);
 }
@@ -775,7 +963,6 @@ function makeZoomable(canvas, inner) {
 
 makeZoomable(renderCanvas, renderInner);
 makeZoomable(document.getElementById('smiles-canvas'), smilesInner);
-makeZoomable(document.getElementById('verify-canvas'), verifyInner);
 
 // ─── PNG download (client-side SVG → canvas → PNG) ────────────────────────────
 btnPng.addEventListener('click', () => {
@@ -812,6 +999,26 @@ btnMol.addEventListener('click', async () => {
   a.click();
 });
 
+// ─── notation conversion ──────────────────────────────────────────────────────
+async function convertNotation(target) {
+  const val = cabilnInput.value.trim();
+  if (!val) return;
+  try {
+    const res = await fetch('/convert_notation', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ cabiln: val, target })
+    });
+    const data = await res.json();
+    if (data.result && data.result !== val) {
+      cabilnInput.value = data.result;
+      cabilnInput.dispatchEvent(new Event('input'));
+    }
+  } catch (e) { /* silent */ }
+}
+btnToBracket.addEventListener('click', () => convertNotation('bracket'));
+btnToBranch.addEventListener('click', () => convertNotation('branch'));
+
 function setExportReady(svg, molBlock) {
   lastSvg      = svg || '';
   lastMolBlock = molBlock || '';
@@ -847,7 +1054,6 @@ cabilnInput.addEventListener('input', () => {
   if (seq === lastCabiln) return;
   if (!seq) { resetCabiln(); return; }
   showSpinner(renderInner);
-  if (verifyMode) showSpinner(verifyInner);
   cabilnTimer = setTimeout(() => doRenderCabiln(seq), 300);
 });
 
@@ -861,7 +1067,6 @@ function resetCabiln() {
   resChips.innerHTML = '';
   residueMap = {}; atomToRes = {}; residueList = [];
   if (verifyMode) {
-    setInner(verifyInner, '<div class="placeholder">Waiting for CABILN…</div>');
     compareBar.innerHTML = '';
   }
 }
@@ -879,7 +1084,6 @@ async function doRenderCabiln(seq) {
     if (data.error) {
       const html = `<div class="placeholder err">${escHtml(data.error)}</div>`;
       setInner(renderInner, html);
-      if (verifyMode) setInner(verifyInner, html);
       cabilnStatus.textContent = data.error;
       cabilnStatus.className = 'statusbar';
       cabilnInput.className = 'err';
@@ -887,12 +1091,11 @@ async function doRenderCabiln(seq) {
       resChips.innerHTML = '';
     } else {
       setInner(renderInner, data.svg);
-      if (verifyMode) setInner(verifyInner, data.svg);
       cabilnStatus.textContent = data.info || '';
       cabilnStatus.className = 'statusbar ok';
       cabilnInput.className = 'ok';
       setExportReady(data.svg, data.mol_block);
-      buildResidueUI(data.residue_map, data.residues);
+      buildResidueUI(data.residue_map, data.residues, data.chains, data.cabiln_echo, data.bracket_groups, data.crosslink_groups);
       if (verifyMode && lastSmiles) triggerVerify();
     }
   } catch (e) {
@@ -901,29 +1104,61 @@ async function doRenderCabiln(seq) {
   }
 }
 
-// ─── SMILES render (verify mode) ─────────────────────────────────────────────
+// ─── reference render (verify mode) — auto-detects SMILES / BILN / HELM ─────
 smilesInput.addEventListener('input', () => {
   clearTimeout(smilesTimer);
-  const smi = smilesInput.value.trim();
-  if (smi === lastSmiles) return;
-  if (!smi) {
+  const txt = smilesInput.value.trim();
+  if (txt === lastSmiles) return;
+  if (!txt) {
     lastSmiles = '';
-    setInner(smilesInner, '<div class="placeholder">Enter a SMILES string…</div>');
+    setInner(smilesInner, '<div class="placeholder">Paste SMILES, BILN, or HELM…</div>');
     compareBar.innerHTML = '';
     return;
   }
   showSpinner(smilesInner);
-  smilesTimer = setTimeout(() => doRenderSmiles(smi), 300);
+  smilesTimer = setTimeout(() => doRenderRef(txt), 300);
 });
 
-async function doRenderSmiles(smi) {
-  lastSmiles = smi;
-  const { w, h } = canvasSize(document.getElementById('smiles-canvas'));
+molUpload.addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const text = await file.text();
+  showSpinner(smilesInner);
+  smilesStatus.textContent = `Loaded: ${file.name}`;
+  smilesStatus.className = 'statusbar ok';
   try {
-    const res  = await fetch('/render_smiles', {
+    const { w, h } = canvasSize(document.getElementById('smiles-canvas'));
+    const res = await fetch('/render_mol', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ smiles: smi, width: w, height: h })
+      body: JSON.stringify({ mol_block: text, width: w, height: h })
+    });
+    const data = await res.json();
+    if (data.error) {
+      setInner(smilesInner, `<div class="placeholder err">${escHtml(data.error)}</div>`);
+      smilesStatus.textContent = data.error;
+      smilesStatus.className = 'statusbar';
+    } else {
+      setInner(smilesInner, data.svg);
+      lastSmiles = data.smiles || '';
+      smilesInput.value = lastSmiles;
+      smilesInput.className = 'ok';
+      if (lastCabiln) triggerVerify();
+    }
+  } catch (err) {
+    smilesStatus.textContent = 'Failed to render .mol file';
+    smilesStatus.className = 'statusbar';
+  }
+  molUpload.value = '';
+});
+
+async function doRenderRef(txt) {
+  const { w, h } = canvasSize(document.getElementById('smiles-canvas'));
+  try {
+    const res = await fetch('/render_reference', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ input: txt, width: w, height: h })
     });
     const data = await res.json();
     if (data.error) {
@@ -933,7 +1168,8 @@ async function doRenderSmiles(smi) {
       smilesInput.className = 'err';
     } else {
       setInner(smilesInner, data.svg);
-      smilesStatus.textContent = data.info || '';
+      lastSmiles = data.smiles || '';
+      smilesStatus.textContent = `${data.format}: ${data.info || ''}`;
       smilesStatus.className = 'statusbar ok';
       smilesInput.className = 'ok';
       if (lastCabiln) triggerVerify();
@@ -1376,6 +1612,51 @@ async def list_monomers():
         return JSONResponse({"error": str(exc)}, status_code=500)
 
 
+def _restore_leaving_groups(mol):
+    """Replace dummy atoms with their leaving groups to produce the standalone monomer."""
+    from rdkit import Chem
+    props = mol.GetPropsAsDict()
+    rgroups = props.get('m_Rgroups', '')
+    slots = [r.strip() for r in rgroups.split(',')]
+
+    emol = Chem.RWMol(Chem.RWMol(mol))
+    to_remove = []
+    for atom in emol.GetAtoms():
+        if atom.GetAtomicNum() != 0:
+            continue
+        iso = atom.GetIsotope()
+        if iso < 1 or iso > len(slots):
+            continue
+        lg_smi = slots[iso - 1]
+        if lg_smi in ('None', 'none', ''):
+            continue
+        lg_mol = Chem.MolFromSmiles(lg_smi, sanitize=True)
+        if lg_mol is None:
+            continue
+        if lg_smi == '[H]':
+            nb = atom.GetNeighbors()[0] if atom.GetNeighbors() else None
+            if nb:
+                nb.SetNumExplicitHs(nb.GetNumExplicitHs() + 1)
+                nb.SetNoImplicit(False)
+            to_remove.append(atom.GetIdx())
+        elif lg_smi == '[OH]':
+            new_atom = Chem.Atom(8)
+            new_atom.SetNumExplicitHs(1)
+            emol.ReplaceAtom(atom.GetIdx(), new_atom)
+        else:
+            new_atom = Chem.Atom(lg_mol.GetAtomWithIdx(0).GetAtomicNum())
+            emol.ReplaceAtom(atom.GetIdx(), new_atom)
+
+    for idx in sorted(set(to_remove), reverse=True):
+        emol.RemoveAtom(idx)
+
+    try:
+        Chem.SanitizeMol(emol)
+    except Exception:
+        pass
+    return emol.GetMol()
+
+
 @app.get("/monomer_svg")
 async def monomer_svg(abbr: str, width: int = 220, height: int = 180):
     try:
@@ -1388,10 +1669,91 @@ async def monomer_svg(abbr: str, width: int = 220, height: int = 180):
                 continue
             if mol.GetPropsAsDict().get('m_abbr', '') == abbr:
                 svg = _draw_mol(mol, width, height)
-                return {"svg": svg}
+                restored = _restore_leaving_groups(mol)
+                svg_restored = _draw_mol(restored, width, height)
+                return {"svg": svg, "svg_restored": svg_restored}
         return JSONResponse({"error": f"Monomer '{abbr}' not found"}, status_code=404)
     except Exception as exc:
         return JSONResponse({"error": str(exc).split('\n')[0]}, status_code=500)
+
+
+class _ConvertReq(BaseModel):
+    cabiln: str
+    target: str  # "bracket" or "branch"
+
+@app.post("/convert_notation")
+async def convert_notation(req: _ConvertReq):
+    from pyPept.sequence import cabiln_to_bracket, cabiln_to_branch
+    try:
+        if req.target == 'bracket':
+            return {"result": cabiln_to_bracket(req.cabiln)}
+        elif req.target == 'branch':
+            return {"result": cabiln_to_branch(req.cabiln)}
+        else:
+            return JSONResponse({"error": "target must be 'bracket' or 'branch'"},
+                                status_code=400)
+    except Exception as exc:
+        return JSONResponse({"error": str(exc).split('\n')[0]}, status_code=400)
+
+
+def _build_bracket_groups(seq, chain_ids):
+    """Identify bracket branch groups and their host monomers."""
+    if not chain_ids or len(chain_ids) < 2:
+        return []
+    main_set = set(chain_ids[0])
+    branch_set = set()
+    for ci in range(1, len(chain_ids)):
+        branch_set.update(chain_ids[ci])
+    if not branch_set:
+        return []
+
+    host_of = {}
+    for bond in seq.s_bonds:
+        m1, m2 = bond[0], bond[2]
+        if m1 in main_set and m2 in branch_set:
+            host_of[m2] = m1
+        elif m2 in main_set and m1 in branch_set:
+            host_of[m1] = m2
+
+    resolved = True
+    while resolved:
+        resolved = False
+        for idx in branch_set:
+            if idx in host_of:
+                continue
+            for bond in seq.s_bonds:
+                m1, m2 = bond[0], bond[2]
+                peer = m2 if m1 == idx else (m1 if m2 == idx else None)
+                if peer is not None and peer in host_of:
+                    host_of[idx] = host_of[peer]
+                    resolved = True
+                    break
+
+    from collections import defaultdict
+    groups = defaultdict(list)
+    for idx, host in host_of.items():
+        groups[host].append(idx)
+    return [{"host": h, "members": sorted(members)}
+            for h, members in groups.items()]
+
+
+def _build_crosslink_groups(seq):
+    """Extract crosslink !n pairs from the parsed BILN."""
+    import re
+    biln = seq.s_biln
+    chains = biln.split('.')
+    m_idx = 0
+    tag_to_monomers = {}
+    for chain in chains:
+        residues = chain.split('-')
+        for res in residues:
+            for m in re.finditer(r'\((!\w+),\d+\)', res):
+                tag = m.group(1)
+                tag_to_monomers.setdefault(tag, []).append(m_idx)
+            m_idx += 1
+    return [{"tag": tag, "members": mems}
+            for tag, mems in tag_to_monomers.items()
+            if len(mems) == 2]
 
 
 @app.post("/render")
@@ -1415,12 +1777,22 @@ async def render(req: _CabilnReq):
         residues = [{"idx": i, "abbr": m.get("m_abbr", f"?{i}")}
                     for i, m in enumerate(seq.s_monomers)]
 
+        chain_ids = seq.s_chains.get('s_monomerIDs', [])
+        chains = [{"idx": ci, "residues": ids} for ci, ids in enumerate(chain_ids)]
+
+        bracket_groups = _build_bracket_groups(seq, chain_ids)
+        crosslink_groups = _build_crosslink_groups(seq)
+
         return {"svg": svg, "mol_block": block,
                 "info": f"{romol.GetNumAtoms()} atoms · MW {ExactMolWt(romol):.2f}",
                 "residue_map": {str(k): v for k, v in res_map.items()},
-                "residues": residues}
+                "residues": residues,
+                "chains": chains,
+                "bracket_groups": bracket_groups,
+                "crosslink_groups": crosslink_groups,
+                "cabiln_echo": req.cabiln}
 
-    except Exception as exc:
+    except (Exception, SystemExit) as exc:
         return JSONResponse({"error": str(exc).split('\n')[0]}, status_code=400)
 
 
@@ -1437,6 +1809,102 @@ async def render_smiles(req: _SmilesReq):
         w, h = max(400, req.width), max(300, req.height)
         svg  = _draw_mol(romol, w, h)
         return {"svg": svg, "info": f"{romol.GetNumAtoms()} atoms · MW {ExactMolWt(romol):.2f}"}
+
+    except Exception as exc:
+        return JSONResponse({"error": str(exc).split('\n')[0]}, status_code=400)
+
+
+class _ReferenceReq(BaseModel):
+    input: str
+    width: int = 960
+    height: int = 680
+
+
+@app.post("/render_reference")
+async def render_reference(req: _ReferenceReq):
+    """Auto-detect input format (SMILES, old BILN, HELM, CABILN) and render."""
+    from rdkit import Chem
+    from rdkit.Chem.Descriptors import ExactMolWt
+
+    txt = req.input.strip()
+    w, h = max(400, req.width), max(300, req.height)
+    romol = None
+    fmt = None
+
+    romol = Chem.MolFromSmiles(txt)
+    if romol is not None:
+        fmt = 'SMILES'
+
+    if romol is None and 'PEPTIDE' in txt.upper() and '$' in txt:
+        try:
+            import sys, pathlib
+            sys.path.insert(0, str(pathlib.Path(__file__).parent.parent / 'src'))
+            from pyPept.converter import Converter
+            from pyPept.sequence import Sequence
+            from pyPept.molecule import Molecule
+            conv = Converter(helm=txt)
+            biln = conv.get_biln()
+            seq = Sequence(biln, fmt='biln')
+            mol = Molecule(seq)
+            romol = mol.get_molecule(fmt='ROMol')
+            fmt = 'HELM'
+        except Exception:
+            pass
+
+    if romol is None:
+        try:
+            from pyPept.sequence import Sequence
+            from pyPept.molecule import Molecule
+            seq = Sequence(txt, fmt='biln')
+            mol = Molecule(seq)
+            romol = mol.get_molecule(fmt='ROMol')
+            fmt = 'BILN'
+        except Exception:
+            pass
+
+    if romol is None:
+        try:
+            from pyPept.sequence import Sequence
+            from pyPept.molecule import Molecule
+            seq = Sequence(txt)
+            mol = Molecule(seq)
+            romol = mol.get_molecule(fmt='ROMol')
+            fmt = 'CABILN'
+        except Exception:
+            pass
+
+    if romol is None:
+        return JSONResponse(
+            {"error": "Could not parse as SMILES, BILN, HELM, or CABILN"},
+            status_code=400)
+
+    svg = _draw_mol(romol, w, h)
+    smiles = Chem.MolToSmiles(romol)
+    return {"svg": svg, "smiles": smiles, "format": fmt,
+            "info": f"{romol.GetNumAtoms()} atoms · MW {ExactMolWt(romol):.2f}"}
+
+
+class _MolBlockReq(BaseModel):
+    mol_block: str
+    width: int = 960
+    height: int = 680
+
+
+@app.post("/render_mol")
+async def render_mol(req: _MolBlockReq):
+    try:
+        from rdkit import Chem
+        from rdkit.Chem.Descriptors import ExactMolWt
+
+        romol = Chem.MolFromMolBlock(req.mol_block)
+        if romol is None:
+            return JSONResponse({"error": "Invalid .mol data"}, status_code=400)
+
+        w, h = max(400, req.width), max(300, req.height)
+        svg = _draw_mol(romol, w, h)
+        smiles = Chem.MolToSmiles(romol)
+        return {"svg": svg, "smiles": smiles,
+                "info": f"{romol.GetNumAtoms()} atoms · MW {ExactMolWt(romol):.2f}"}
 
     except Exception as exc:
         return JSONResponse({"error": str(exc).split('\n')[0]}, status_code=400)

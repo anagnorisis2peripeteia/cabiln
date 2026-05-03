@@ -18,7 +18,7 @@ The result is that complex peptides that previously required separate files or h
 ```
 # GLP-1 agonist — 39-residue backbone, C20 isopeptide lipidation on Lys
 # bracket reads synthesis order: K → gGlu(γ-COOH isopeptide) → AEEA → C20FA
-Y-Aib-Q-G-T-F-T-S-D-Y-S-I-aMeLeu-L-D-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-A-Q-Aib-A-F-I-E-Y-L-L-E-G-G-P-S-S-G-A-P-P-P-S-am
+Y-Aib-Q-G-T-F-T-S-D-Y-S-I-aMeLeu-L-D-K.[gGlu(4,4).AEEA(2,1).C20FA(2,1)]-A-Q-Aib-A-F-I-E-Y-L-L-E-G-G-P-S-S-G-A-P-P-P-S-am
 
 # Maleimide conjugation then DBCO loading on Cys — two sequential reactions,
 # each step's R-group refers to the preceding fragment, not to Cys directly
@@ -108,7 +108,7 @@ seq = Sequence('G-C.[Mal(4,1).DBCO(2,1)]-A')
 # Step 1: gGlu R4 (γ-COOH) bonds to Lys R4 (ε-amine) — isopeptide
 # Step 2: AEEA R2 bonds to gGlu R1 (α-amine) — amide
 # Step 3: C20FA R2 bonds to AEEA R1 (amine) — amide to fatty diacid
-seq = Sequence('ac-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-am')
+seq = Sequence('ac-K.[gGlu(4,4).AEEA(2,1).C20FA(2,1)]-G-am')
 ```
 
 Reading the bracket left to right matches synthesis order from Lys outward: K → gGlu (isopeptide) → AEEA → C20FA.
@@ -124,7 +124,7 @@ seq = Sequence('!1-C.[Mal(4,1)]-A-G-K-!1')
 seq = Sequence('fmoc-C.trt(4,1)-G-K.boc(4,1)-am')
 
 # Bracket lipidation + disulfide staple on the same peptide
-seq = Sequence('ac-C.!1(4,4)-A-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-A-C.!1-am')
+seq = Sequence('ac-C.!1(4,4)-A-K.[gGlu(4,4).AEEA(2,1).C20FA(2,1)]-A-C.!1-am')
 ```
 
 ### 4 — Sidechain branch `mainchain%%branch`
@@ -140,7 +140,7 @@ Branch and bracket are interchangeable when the pendant chain attaches via a **b
 
 ```python
 # Bracket: reads K → gGlu → AEEA → C20FA (synthesis order)
-seq = Sequence('ac-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-am')
+seq = Sequence('ac-K.[gGlu(4,4).AEEA(2,1).C20FA(2,1)]-G-am')
 
 # Branch: same molecule, string reads C20FA → AEEA → gGlu (reversed)
 seq = Sequence('ac-K.!1(4,4)-G-am%C20FA-AEEA-gGlu.!1')
@@ -149,7 +149,7 @@ seq = Sequence('ac-K.!1(4,4)-G-am%C20FA-AEEA-gGlu.!1')
 Full Retatrutide (GIP/GLP-1/glucagon triple agonist, 39 residues) — bracket notation (synthesis order):
 
 ```python
-seq = Sequence('Y-Aib-Q-G-T-F-T-S-D-Y-S-I-aMeLeu-L-D-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-A-Q-Aib-A-F-I-E-Y-L-L-E-G-G-P-S-S-G-A-P-P-P-S-am')
+seq = Sequence('Y-Aib-Q-G-T-F-T-S-D-Y-S-I-aMeLeu-L-D-K.[gGlu(4,4).AEEA(2,1).C20FA(2,1)]-A-Q-Aib-A-F-I-E-Y-L-L-E-G-G-P-S-S-G-A-P-P-P-S-am')
 ```
 
 Branch notation (same molecule — fatty acid chain reversed, C20FA leads because it has no R1):
@@ -166,7 +166,7 @@ The four extensions compose freely. Any crosslink, bracket, and branch can appea
 
 ```python
 # Disulfide staple + 3-step lipidation on the same peptide
-Sequence('ac-C.!1(4,4)-A-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-A-C.!1-am')
+Sequence('ac-C.!1(4,4)-A-K.[gGlu(4,4).AEEA(2,1).C20FA(2,1)]-A-C.!1-am')
 #              ^---disulfide crosslink---^  ^---isopeptide lipid linker---^
 
 # Full Fmoc-SPPS protection: Pbf on Arg, Boc on Lys, disulfide between two Cys
@@ -174,11 +174,11 @@ Sequence('fmoc-R.pbf(4,1)-A-C.!1(4,4)-K.boc(4,1)-A-C.!1-am')
 #               ^Arg guard  ^-disulfide-^  ^Lys guard  ^2nd Cys
 
 # Hydrocarbon staple (RCM, i,i+4) plus isopeptide lipidation on the same helix
-Sequence('ac-S5.!1(4,4)-A-A-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-A-S5.!1-am')
+Sequence('ac-S5.!1(4,4)-A-A-K.[gGlu(4,4).AEEA(2,1).C20FA(2,1)]-A-S5.!1-am')
 #              ^-------RCM staple-------^  ^--------lipid linker--------^
 
 # Cyclic peptide with lipidation inside the ring
-Sequence('!1-A-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-A-!1')
+Sequence('!1-A-K.[gGlu(4,4).AEEA(2,1).C20FA(2,1)]-G-A-!1')
 #          ^head-to-tail cycle^  ^lipidation bracket^
 ```
 
@@ -271,7 +271,7 @@ Semaglutide/retatrutide-type lipidation routes through gGlu's γ-carboxyl (R4). 
 
 ```python
 # Bracket — reads K → gGlu (isopeptide) → AEEA → C20FA
-seq = Sequence('ac-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-am')
+seq = Sequence('ac-K.[gGlu(4,4).AEEA(2,1).C20FA(2,1)]-G-am')
 
 # Branch — same molecule, string reversed: C20FA → AEEA → gGlu ← K
 seq = Sequence('ac-K.!1(4,4)-G-am%C20FA-AEEA-gGlu.!1')
@@ -291,15 +291,15 @@ Two simultaneous crosslinks on a single chain produce a bicyclic topology. CABIL
 seq = Sequence('!1-G-R-C.!2(4,4)-T-K-S-I-P-P-I-C.!2-F-P-D-!1')
 ```
 
-**Bicycle Therapeutics-style bicyclic peptides** use two cysteine bridges and a trifunctional crosslinker (e.g. TBMB — 1,3,5-triacryloyl-1,3,5-triazinane, or TATA) that bridges three cysteine thiols. The result is two loops of user-defined length sharing the crosslinker as a hub. With three Cys residues:
+**Bicyclic peptides** with two crosslinks use four reactive residues — two pairs, each closed by its own bond ID. This gives two loops sharing a backbone segment:
 
 ```python
-# Two independent thioether crosslinks anchored at three cysteines
-# loop1 = Cys1–TBMB–Cys3  |  loop2 = Cys2–TBMB–Cys3
-seq = Sequence('ac-C.!1(4,4)-X1-X2-C.!2(4,4)-X3-X4-C.!1!2-am')
+# Two independent thioether crosslinks — dialkylation bicycle
+# loop1 = Cys1–ClAcAla1  |  loop2 = Cys2–ClAcAla2
+seq = Sequence('ac-C.!1(4,4)-A-A-ClAcAla.!1-G-C.!2(4,4)-A-A-ClAcAla.!2-am')
 ```
 
-The third Cys closing both `!1` and `!2` simultaneously pins the two loops to the same hub atom. Each `-Xi-` stretch is a user-defined diversity region.
+Each `-A-A-` stretch is a user-defined diversity region. Trifunctional hub crosslinkers (e.g. TBMB bridging three Cys thiols) require a custom monomer with three R-groups — register one via `monomer_pipeline` and reference it as a bracket branch.
 
 ---
 
@@ -426,7 +426,7 @@ Sequence('ac-C.!1(4,4)-C.!2(4,4)-A-G-A-C.!2-C.!1-am')
 Sequence('!1-C.!2(4,4)-A-G-A-C.!2-!1')
 
 # 5. Disulfide + isopeptide lipidation on same peptide
-Sequence('ac-C.!1(4,4)-A-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-A-C.!1-am')
+Sequence('ac-C.!1(4,4)-A-K.[gGlu(4,4).AEEA(2,1).C20FA(2,1)]-A-C.!1-am')
 ```
 
 </details>
@@ -488,7 +488,7 @@ Sequence('!1-C.!2(4,4)-A-G-ClAcAla.!2-!1')
 Sequence('ac-C.!1(4,4)-A-ClAcAla.!1-G-C.!2(4,4)-A-ClAcAla.!2-am')
 
 # 5. Thioether + lipidation
-Sequence('ac-C.!1(4,4)-A-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-A-ClAcAla.!1-am')
+Sequence('ac-C.!1(4,4)-A-K.[gGlu(4,4).AEEA(2,1).C20FA(2,1)]-A-ClAcAla.!1-am')
 ```
 
 </details>
@@ -550,7 +550,7 @@ Sequence('ac-K.!1(4,4)-A-K.!2(4,4)-G-GlyNHS.!1-A-GlyNHS.!2-am')
 Sequence('!1-K.!2(4,4)-A-G-GlyNHS.!2-!1')
 
 # 5. NHS amide + lipidation on same peptide
-Sequence('ac-K.!1(4,4)-A-GlyNHS.!1-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-am')
+Sequence('ac-K.!1(4,4)-A-GlyNHS.!1-K.[gGlu(4,4).AEEA(2,1).C20FA(2,1)]-am')
 ```
 
 </details>
@@ -643,7 +643,7 @@ Sequence('ac-A-Pra.!1(4,4)-G-AzAla.!1-A-am')
 Sequence('ac-Pra.!1(4,4)-A-Pra.!2(4,4)-A-AzK.!1-G-AzAla.!2-am')
 
 # 5. CuAAC + isopeptide lipidation
-Sequence('ac-Pra.!1(4,4)-A-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-A-AzK.!1-am')
+Sequence('ac-Pra.!1(4,4)-A-K.[gGlu(4,4).AEEA(2,1).C20FA(2,1)]-A-AzK.!1-am')
 ```
 
 </details>
@@ -752,7 +752,7 @@ Sequence('ac-A-S5.!1(4,4)-A-A-A-A-A-R8.!1-G-am')
 Sequence('ac-S5.!1(4,4)-A-A-A-S5.!1-am')
 
 # 4. Hydrocarbon staple + isopeptide lipidation — stapled GLP-1 analogue motif
-Sequence('ac-S5.!1(4,4)-A-A-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-A-S5.!1-am')
+Sequence('ac-S5.!1(4,4)-A-A-K.[gGlu(4,4).AEEA(2,1).C20FA(2,1)]-A-S5.!1-am')
 
 # 5. Staple + disulfide — orthogonal RCM and thiol crosslinks
 Sequence('ac-C.!1(4,4)-A-S5.!2(4,4)-A-A-A-S5.!2-A-C.!1-am')
