@@ -1035,10 +1035,30 @@ function buildResidueUI(resMap, residues, chains, cabiln, bracketGroups, crossli
     return el;
   }
 
+  const nTermXlinkTags = new Set();
+  if (cabiln) {
+    for (const seg of cabiln.split(/[%\n]/)) {
+      const m = seg.trim().match(/^(!\d+)-/);
+      if (m) nTermXlinkTags.add(m[1]);
+    }
+  }
+
+  function prependXlinks(rIdx) {
+    const xlinks = xlinkByMember[rIdx];
+    if (!xlinks) return;
+    xlinks.forEach(g => {
+      if (nTermXlinkTags.has(g.tag))
+        resChips.appendChild(makeXlinkChip(g.tag, g.members));
+    });
+  }
+
   function appendXlinks(rIdx) {
     const xlinks = xlinkByMember[rIdx];
     if (!xlinks) return;
-    xlinks.forEach(g => resChips.appendChild(makeXlinkChip(g.tag, g.members)));
+    xlinks.forEach(g => {
+      if (!nTermXlinkTags.has(g.tag))
+        resChips.appendChild(makeXlinkChip(g.tag, g.members));
+    });
   }
 
   const hasBranch = cabiln && cabiln.includes('%');
@@ -1050,6 +1070,7 @@ function buildResidueUI(resMap, residues, chains, cabiln, bracketGroups, crossli
 
   function appendResidueWithBrackets(rIdx) {
     if (branchSet.has(rIdx)) return;
+    prependXlinks(rIdx);
     const chip = makeChip(rIdx);
     if (chip) resChips.appendChild(chip);
     const members = groupByHost[rIdx];
@@ -1070,6 +1091,7 @@ function buildResidueUI(resMap, residues, chains, cabiln, bracketGroups, crossli
     chainData.forEach((chain, ci) => {
       if (chainData.length > 1) resChips.appendChild(makeSeparator('%', chain.residues));
       chain.residues.forEach(rIdx => {
+        prependXlinks(rIdx);
         const chip = makeChip(rIdx);
         if (chip) resChips.appendChild(chip);
         appendXlinks(rIdx);
@@ -1081,6 +1103,7 @@ function buildResidueUI(resMap, residues, chains, cabiln, bracketGroups, crossli
   } else {
     const allIds = chainData.flatMap(c => c.residues);
     allIds.forEach(rIdx => {
+      prependXlinks(rIdx);
       const chip = makeChip(rIdx);
       if (chip) resChips.appendChild(chip);
       appendXlinks(rIdx);
