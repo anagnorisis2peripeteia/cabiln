@@ -1069,7 +1069,11 @@ function buildResidueUI(resMap, residues, chains, cabiln, bracketGroups, crossli
   if (hasBranch) {
     chainData.forEach((chain, ci) => {
       if (chainData.length > 1) resChips.appendChild(makeSeparator('%', chain.residues));
-      chain.residues.forEach(rIdx => appendResidueWithBrackets(rIdx));
+      chain.residues.forEach(rIdx => {
+        const chip = makeChip(rIdx);
+        if (chip) resChips.appendChild(chip);
+        appendXlinks(rIdx);
+      });
     });
   } else if (groups.length) {
     const mainChain = chainData.length ? chainData[0].residues : [];
