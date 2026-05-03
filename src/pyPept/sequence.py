@@ -411,30 +411,27 @@ def _parse_bracket_items(bracket_content):
 def cabiln_to_branch(cabiln):
     """Convert CABILN bracket notation to branch (%) notation.
 
-    N→C brackets (all ``(2,1)`` continuations) produce simple positional
-    branches with ``.(r,r)`` on the host::
+    Only N→C brackets (all ``(2,1)`` continuations) are converted.
+    They produce simple positional branches with ``.(r,r)`` on the host::
 
-        K.[gGlu(4,4).AEEA(2,1).C20FA(2,1)]-G-am
-        →  K.(4,4)-G-am%gGlu-AEEA(2,1)-C20FA(2,1)
+        K.[G(4,1).A(2,1).am(2,1)]-G-am
+        →  K.(4,1)-G-am%G-A(2,1)-am(2,1)
 
-    C→N brackets (all ``(1,2)`` continuations) are reversed to N→C and
-    the anchor (now at the end) uses a crosslink ``!n`` back to the host::
-
-        K.[C20FA(4,4).AEEA(1,2).gGlu(1,2)]-G-am
-        →  K.!2(4,4)-G-am%gGlu-AEEA(2,1)-C20FA(2,1).!2
-
-    Mixed R-group brackets are kept in bracket order with annotations.
-    ``!n`` tags are reserved for crosslinks.
+    Brackets with ``(1,2)`` or mixed continuations are left as-is,
+    since the monomers lack standard N/C terminus connectivity and
+    cannot be written as a valid N→C branch.
     """
     result = cabiln
     branches = []
-    existing_tags = {int(x) for x in _re.findall(r'!(\d+)', cabiln)}
-    next_tag = max(existing_tags, default=0) + 1
+    search_start = 0
 
     while True:
-        m = _re.search(r'\.\[([^\]]+)\]', result)
+        m = _re.search(r'\.\[([^\]]+)\]', result[search_start:])
         if not m:
             break
+        m_start = search_start + m.start()
+        m_end = search_start + m.end()
+
         bracket_content = m.group(1)
         items = _parse_bracket_items(bracket_content)
         if not items or items[0][1] is None:
@@ -442,38 +439,23 @@ def cabiln_to_branch(cabiln):
         anchor_abbr, r_host, r_branch = items[0]
 
         cont = [(rp, rt) for _, rp, rt in items[1:] if rp and rt]
-        all_21 = len(items) <= 1 or all(rp == '2' and rt == '1' for rp, rt in cont)
-        all_12 = len(items) > 1 and all(rp == '1' and rt == '2' for rp, rt in cont)
+        all_21 = len(items) <= 1 or all(
+            rp == '2' and rt == '1' for rp, rt in cont)
 
-        if all_21 or (not all_12 and not all_21 and len(items) > 1):
-            # N→C or mixed: anchor at start, simple .(r,r) branch
-            host_marker = f'.({r_host},{r_branch})'
-            branch_parts = [anchor_abbr]
-            for abbr, rp, rt in items[1:]:
-                if rp and rt:
-                    branch_parts.append(f'{abbr}({rp},{rt})')
-                else:
-                    branch_parts.append(abbr)
-            branch_str = '-'.join(branch_parts)
-        else:
-            # All (1,2): C→N from anchor → reverse to N→C, crosslink anchor
-            tag = f'!{next_tag}'
-            next_tag += 1
-            host_marker = f'.{tag}({r_host},{r_branch})'
-            rev = list(reversed(items))
-            branch_parts = []
-            for i, (abbr, rp, rt) in enumerate(rev):
-                if i == 0:
-                    branch_parts.append(abbr)
-                elif i == len(rev) - 1:
-                    branch_parts.append(f'{abbr}(2,1).{tag}')
-                else:
-                    branch_parts.append(f'{abbr}(2,1)')
-            branch_str = '-'.join(branch_parts)
+        if not all_21:
+            search_start = m_end
+            continue
 
-        before = result[:m.start()]
-        after = result[m.end():]
-        result = before + host_marker + after
+        host_marker = f'.({r_host},{r_branch})'
+        branch_parts = [anchor_abbr]
+        for abbr, rp, rt in items[1:]:
+            if rp and rt:
+                branch_parts.append(f'{abbr}({rp},{rt})')
+            else:
+                branch_parts.append(abbr)
+        branch_str = '-'.join(branch_parts)
+
+        result = result[:m_start] + host_marker + result[m_end:]
         branches.append(branch_str)
 
     if branches:
