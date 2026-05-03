@@ -886,11 +886,20 @@ function startPreview(abbr, row) {
 }
 
 function showPreview(data, row) {
-  const restored = data.svg_restored || data.svg;
-  libPreview.innerHTML = `<div class="prev-row">
-    <div class="prev-pane"><span class="prev-label">Monomer</span>${restored}</div>
-    <div class="prev-pane"><span class="prev-label">R-groups</span>${data.svg}</div>
-  </div>`;
+  let html;
+  if (data.degenerate) {
+    html = `<div class="prev-row">
+      <div class="prev-pane"><span class="prev-label">N-term</span>${data.svg_nterm}</div>
+      <div class="prev-pane"><span class="prev-label">C-term</span>${data.svg_cterm}</div>
+    </div>`;
+  } else {
+    const restored = data.svg_restored || data.svg;
+    html = `<div class="prev-row">
+      <div class="prev-pane"><span class="prev-label">Monomer</span>${restored}</div>
+      <div class="prev-pane"><span class="prev-label">R-groups</span>${data.svg}</div>
+    </div>`;
+  }
+  libPreview.innerHTML = html;
   const rect = row.getBoundingClientRect();
   const previewH = 202;
   let top = Math.max(8, rect.top - 40);
@@ -2088,6 +2097,50 @@ def _restore_leaving_groups(mol):
     return emol.GetMol()
 
 
+def _restore_one_slot(mol, keep_slot):
+    """Restore all dummies except keep_slot; remove keep_slot's dummy (simulates bonding)."""
+    from rdkit import Chem
+    props = mol.GetPropsAsDict()
+    rgroups = props.get('m_Rgroups', '')
+    slots = [r.strip() for r in rgroups.split(',')]
+    emol = Chem.RWMol(Chem.RWMol(mol))
+    to_remove = []
+    for atom in emol.GetAtoms():
+        if atom.GetAtomicNum() != 0:
+            continue
+        iso = atom.GetIsotope()
+        if iso < 1 or iso > len(slots):
+            continue
+        lg_smi = slots[iso - 1]
+        if lg_smi in ('None', 'none', ''):
+            continue
+        if iso == keep_slot:
+            nb = atom.GetNeighbors()[0] if atom.GetNeighbors() else None
+            if nb:
+                nb.SetNoImplicit(False)
+            to_remove.append(atom.GetIdx())
+        elif lg_smi == '[H]':
+            nb = atom.GetNeighbors()[0] if atom.GetNeighbors() else None
+            if nb:
+                nb.SetNumExplicitHs(nb.GetNumExplicitHs() + 1)
+                nb.SetNoImplicit(False)
+            to_remove.append(atom.GetIdx())
+        elif lg_smi == '[OH]':
+            new_atom = Chem.Atom(8)
+            new_atom.SetNumExplicitHs(1)
+            emol.ReplaceAtom(atom.GetIdx(), new_atom)
+        else:
+            new_atom = Chem.Atom(Chem.MolFromSmiles(lg_smi).GetAtomWithIdx(0).GetAtomicNum())
+            emol.ReplaceAtom(atom.GetIdx(), new_atom)
+    for idx in sorted(set(to_remove), reverse=True):
+        emol.RemoveAtom(idx)
+    try:
+        Chem.SanitizeMol(emol)
+    except Exception:
+        pass
+    return emol.GetMol()
+
+
 @app.get("/monomer_svg")
 async def monomer_svg(abbr: str, width: int = 220, height: int = 180):
     try:
@@ -2102,7 +2155,14 @@ async def monomer_svg(abbr: str, width: int = 220, height: int = 180):
                 svg = _draw_mol(mol, width, height)
                 restored = _restore_leaving_groups(mol)
                 svg_restored = _draw_mol(restored, width, height)
-                return {"svg": svg, "svg_restored": svg_restored}
+                result = {"svg": svg, "svg_restored": svg_restored}
+                if mol.GetPropsAsDict().get('m_degenerate') == 'true':
+                    nterm = _restore_one_slot(mol, 2)
+                    cterm = _restore_one_slot(mol, 1)
+                    result["degenerate"] = True
+                    result["svg_nterm"] = _draw_mol(nterm, width, height)
+                    result["svg_cterm"] = _draw_mol(cterm, width, height)
+                return result
         return JSONResponse({"error": f"Monomer '{abbr}' not found"}, status_code=404)
     except Exception as exc:
         return JSONResponse({"error": str(exc).split('\n')[0]}, status_code=500)

@@ -958,6 +958,25 @@ class Sequence:
                     if r1_attach is None:
                         r1_attach = _attachment_idx(mol1, 1)  # left cap: no R2, use R1
                     r2_attach = _attachment_idx(mol2, 1)  # slot 1 = R1 = N-term entry
+                    # Guard: degenerate caps mid-chain
+                    m1_type = self.__get_monomer_prop('m_type', num_res)
+                    m2_type = self.__get_monomer_prop('m_type', num_res + 1)
+                    if (m1_type == 'cap' and num_res > 0
+                            and _attachment_idx(mol1, 1) is not None
+                            and _attachment_idx(mol1, 2) is not None):
+                        warnings.warn(
+                            f"Degenerate cap '{self.s_monomers[num_res]['m_name']}'"
+                            f" at position {num_res} is mid-chain; skipping"
+                            f" R2 exit bond to avoid chaining through cap.")
+                        r1_attach = None
+                    if (m2_type == 'cap' and num_res + 1 < nres - 1
+                            and _attachment_idx(mol2, 1) is not None
+                            and _attachment_idx(mol2, 2) is not None):
+                        warnings.warn(
+                            f"Degenerate cap '{self.s_monomers[num_res+1]['m_name']}'"
+                            f" at position {num_res+1} is mid-chain; skipping"
+                            f" R1 entry bond to avoid chaining through cap.")
+                        r2_attach = None
                     if r1_attach is None or r2_attach is None:
                         warnings.warn(
                             f"Cannot form backbone bond between residues "
