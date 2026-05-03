@@ -854,20 +854,52 @@ class Sequence:
                                      outside='[]')
             monomer_types = set()
             monomer_ids = []
-            for res in residues:
+            for _res_pos, res in enumerate(residues):
                 # Extract the residue information
                 # Strip bond annotations: (n,m) and (!n,m) crosslink IDs
                 resname = re.sub(r'\(!?\d+,\d+\)', '', res)
                 resname = re.sub(r'^\[(.*)\]$', '\\1', resname)
 
-                # Check if name exists in MonomerDic
+                # Check if name exists in MonomerDic — with degeneracy resolution
 
                 if resname not in self.monomer_df.index:
-                    warnings.warn(
-                        f"Monomer {resname} in BILN not found in MonomerDic")
-                    warnings.warn(
-                        "Need to check BILN or update MonomerDic before proceeding.")
-                    sys.exit(3)
+                    # Check if resname is a degenerate base alias
+                    degen = self.monomer_df.attrs.get('_degen_aliases', {})
+                    if resname in degen:
+                        variants = degen[resname]
+                        # Determine which variant to use based on position
+                        res_idx = _res_pos
+                        if res_idx == 0:
+                            # First in chain -> N-term cap (has R2, i.e. trailing _)
+                            chosen = [v for v in variants
+                                      if v.endswith('_') and not v.startswith('_')]
+                            if not chosen:
+                                chosen = [v for v in variants if v.endswith('_')]
+                        elif res_idx == len(residues) - 1:
+                            # Last in chain -> C-term cap (has R1, i.e. leading _)
+                            chosen = [v for v in variants
+                                      if v.startswith('_') and not v.endswith('_')]
+                            if not chosen:
+                                chosen = [v for v in variants if v.startswith('_')]
+                        else:
+                            warnings.warn(
+                                f"Degenerate cap '{resname}' used mid-chain "
+                                f"(position {res_idx}); cannot resolve variant.")
+                            sys.exit(3)
+                        if chosen:
+                            resname = chosen[0]
+                        else:
+                            warnings.warn(
+                                f"Monomer {resname} in BILN not found in MonomerDic")
+                            warnings.warn(
+                                "Need to check BILN or update MonomerDic before proceeding.")
+                            sys.exit(3)
+                    else:
+                        warnings.warn(
+                            f"Monomer {resname} in BILN not found in MonomerDic")
+                        warnings.warn(
+                            "Need to check BILN or update MonomerDic before proceeding.")
+                        sys.exit(3)
 
                 # Add additional information of the monomers
                 mm_info = self.monomer_df.loc[resname, :].to_dict()
@@ -958,25 +990,6 @@ class Sequence:
                     if r1_attach is None:
                         r1_attach = _attachment_idx(mol1, 1)  # left cap: no R2, use R1
                     r2_attach = _attachment_idx(mol2, 1)  # slot 1 = R1 = N-term entry
-                    # Guard: degenerate caps mid-chain
-                    m1_type = self.__get_monomer_prop('m_type', num_res)
-                    m2_type = self.__get_monomer_prop('m_type', num_res + 1)
-                    if (m1_type == 'cap' and num_res > 0
-                            and _attachment_idx(mol1, 1) is not None
-                            and _attachment_idx(mol1, 2) is not None):
-                        warnings.warn(
-                            f"Degenerate cap '{self.s_monomers[num_res]['m_name']}'"
-                            f" at position {num_res} is mid-chain; skipping"
-                            f" R2 exit bond to avoid chaining through cap.")
-                        r1_attach = None
-                    if (m2_type == 'cap' and num_res + 1 < nres - 1
-                            and _attachment_idx(mol2, 1) is not None
-                            and _attachment_idx(mol2, 2) is not None):
-                        warnings.warn(
-                            f"Degenerate cap '{self.s_monomers[num_res+1]['m_name']}'"
-                            f" at position {num_res+1} is mid-chain; skipping"
-                            f" R1 entry bond to avoid chaining through cap.")
-                        r2_attach = None
                     if r1_attach is None or r2_attach is None:
                         warnings.warn(
                             f"Cannot form backbone bond between residues "
@@ -1267,6 +1280,49 @@ def get_monomer_info(path):
 
     df_group = df_group.set_index('symbol')
     df_group = df_group.rename(columns={"ROMol": "m_romol"})
+
+    # --- Structural degeneracy detection for paired caps ---
+    # Group cap monomers by their core structure (dummy atoms stripped).
+    # Paired caps like Bn_/_Bn are structurally identical minus dummies;
+    # we derive the base name and store it as a degenerate alias.
+    import pandas as pd
+    caps = df_group[df_group['m_type'] == 'cap']
+    core_map = {}  # canonical SMILES -> list of symbol names
+    for sym in caps.index:
+        mol = caps.at[sym, 'm_romol']
+        if mol is None:
+            continue
+        # Strip dummy atoms (atomic num == 0) to get core
+        emol = Chem.RWMol(mol)
+        dummies = [a.GetIdx() for a in emol.GetAtoms() if a.GetAtomicNum() == 0]
+        for idx in sorted(dummies, reverse=True):
+            emol.RemoveAtom(idx)
+        try:
+            core_smi = Chem.MolToSmiles(emol.GetMol())
+        except Exception:
+            continue
+        if core_smi not in core_map:
+            core_map[core_smi] = []
+        core_map[core_smi].append(sym)
+
+    # For each group with >1 member, derive the base name and add alias
+    degen_aliases = {}  # base_name -> list of variant symbols
+    for smi, variants in core_map.items():
+        if len(variants) < 2:
+            continue
+        # Derive base name: strip leading/trailing '_' from each variant
+        bases = set()
+        for v in variants:
+            base = v.strip('_')
+            bases.add(base)
+        if len(bases) == 1:
+            base_name = bases.pop()
+            # Only create alias if base_name is not already an entry
+            if base_name not in df_group.index:
+                degen_aliases[base_name] = variants
+
+    # Store aliases as a module-level accessible dict on the DataFrame
+    df_group.attrs['_degen_aliases'] = degen_aliases
 
     return df_group
 

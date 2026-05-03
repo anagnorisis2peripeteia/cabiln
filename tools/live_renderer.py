@@ -887,10 +887,18 @@ function startPreview(abbr, row) {
 
 function showPreview(data, row) {
   let html;
-  if (data.degenerate) {
+  if (data.degenerate && data.variants) {
+    // New format: array of variant panels + R-group panel
+    let panels = data.variants.map(v =>
+      `<div class="prev-pane"><span class="prev-label">${v.label}</span>${v.svg}</div>`
+    ).join('');
+    panels += `<div class="prev-pane"><span class="prev-label">R-groups</span>${data.svg}</div>`;
+    html = `<div class="prev-row">${panels}</div>`;
+  } else if (data.degenerate) {
+    // Legacy format fallback
     html = `<div class="prev-row">
-      <div class="prev-pane"><span class="prev-label">N-term</span>${data.svg_nterm}</div>
-      <div class="prev-pane"><span class="prev-label">C-term</span>${data.svg_cterm}</div>
+      <div class="prev-pane"><span class="prev-label">N-term</span>${data.svg_nterm || data.svg}</div>
+      <div class="prev-pane"><span class="prev-label">C-term</span>${data.svg_cterm || data.svg}</div>
     </div>`;
   } else {
     const restored = data.svg_restored || data.svg;
@@ -2148,21 +2156,52 @@ async def monomer_svg(abbr: str, width: int = 220, height: int = 180):
         import pathlib
         sdf_path = pathlib.Path(__file__).parent.parent / 'src' / 'pyPept' / 'data' / 'monomers.sdf'
         suppl = Chem.SDMolSupplier(str(sdf_path), removeHs=False)
+
+        # Build lookup of all monomers by abbreviation
+        mol_by_abbr = {}
         for mol in suppl:
             if mol is None:
                 continue
-            if mol.GetPropsAsDict().get('m_abbr', '') == abbr:
-                svg = _draw_mol(mol, width, height)
-                restored = _restore_leaving_groups(mol)
-                svg_restored = _draw_mol(restored, width, height)
-                result = {"svg": svg, "svg_restored": svg_restored}
-                if mol.GetPropsAsDict().get('m_degenerate') == 'true':
-                    nterm = _restore_one_slot(mol, 2)
-                    cterm = _restore_one_slot(mol, 1)
-                    result["degenerate"] = True
-                    result["svg_nterm"] = _draw_mol(nterm, width, height)
-                    result["svg_cterm"] = _draw_mol(cterm, width, height)
-                return result
+            mol_abbr = mol.GetPropsAsDict().get('m_abbr', '')
+            mol_by_abbr[mol_abbr] = mol
+
+        # Direct match
+        if abbr in mol_by_abbr:
+            mol = mol_by_abbr[abbr]
+            svg = _draw_mol(mol, width, height)
+            restored = _restore_leaving_groups(mol)
+            svg_restored = _draw_mol(restored, width, height)
+            return {"svg": svg, "svg_restored": svg_restored}
+
+        # Check if this is a degenerate base name (e.g. "Bn" -> Bn_/_Bn)
+        # Detect pairs: look for abbr_ and _abbr variants
+        nterm_key = abbr + '_'
+        cterm_key = '_' + abbr
+        variants_found = []
+        if nterm_key in mol_by_abbr:
+            variants_found.append(nterm_key)
+        if cterm_key in mol_by_abbr:
+            variants_found.append(cterm_key)
+
+        if len(variants_found) >= 2:
+            # This is a degenerate base name — render all variants
+            panels = []
+            for vkey in variants_found:
+                vmol = mol_by_abbr[vkey]
+                restored_v = _restore_leaving_groups(vmol)
+                label = f"N-term ({vkey})" if vkey.endswith('_') else f"C-term ({vkey})"
+                panels.append({
+                    "label": label,
+                    "svg": _draw_mol(restored_v, width, height),
+                })
+            # R-group panel from first variant
+            rgroup_svg = _draw_mol(mol_by_abbr[variants_found[0]], width, height)
+            return {
+                "degenerate": True,
+                "variants": panels,
+                "svg": rgroup_svg,
+            }
+
         return JSONResponse({"error": f"Monomer '{abbr}' not found"}, status_code=404)
     except Exception as exc:
         return JSONResponse({"error": str(exc).split('\n')[0]}, status_code=500)

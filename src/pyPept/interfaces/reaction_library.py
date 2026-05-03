@@ -150,7 +150,15 @@ def infer_chem_type(mol, attach_idx: int, slot: int = None) -> str:
         if sym == 7: return 'backbone_n'
         if sym == 8: return 'backbone_o'
     if slot == 2:
-        if sym == 6: return 'backbone_c'
+        if sym == 6:
+            # Only classify as backbone_c (carbonyl) if the carbon has a =O neighbor.
+            # Non-carbonyl carbons at slot 2 (e.g. benzyl caps) fall through to
+            # the 'carbon' heuristic and use generic bond SMIRKS.
+            for nb in atom.GetNeighbors():
+                if nb.GetAtomicNum() == 8:
+                    bond = mol.GetBondBetweenAtoms(attach_idx, nb.GetIdx())
+                    if bond and bond.GetBondTypeAsDouble() == 2.0:
+                        return 'backbone_c'
 
     # ── SMARTS-based detection (covers thiol, selenol, and all exotic types) ───
     for patt, ct in _EXOTIC_SMARTS:
