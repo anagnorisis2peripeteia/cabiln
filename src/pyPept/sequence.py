@@ -80,12 +80,12 @@ _INLINE_BOND_RE = re.compile(r'\.(!\w+)(?:\((\d+),(\d+)\))?')
 _INLINE_CAP_RE  = re.compile(r'\.([A-Za-z]\w*)\((\d+),(\d+)\)')
 
 # Detects old BILN bare-integer crosslink annotations: Token(bid,rg) not preceded by '.'.
-_OLD_BILN_RE = re.compile(r'(?<![.\w\[])([A-Za-z]\w*)\((\d+),(\d+)\)')
+_OLD_BILN_RE = re.compile(r'(?<![.\w\[{])([A-Za-z]\w*)\((\d+),(\d+)\)')
 
 # Matches .[...] sequential reaction bracket on a residue: .[Cap1(x,y).Cap2(z,w)...]
 # The dot sits outside the bracket (consistent with inline .Cap(r,r) notation).
 # Each entry inside uses Fragment(prev_r, cap_r); entries separated by '.'.
-_BRACKET_RE = re.compile(r'\.\[([^\]]*)\]')
+_BRACKET_RE = re.compile(r'\.[\[{]([^\]}]*)[\]}]')
 
 
 def biln_to_cabiln(biln):
@@ -327,7 +327,7 @@ def _expand_inline_caps(biln, peptide_branch_threshold=2):
                 pre_host += '-'
             else:
                 pre_host, host_token = '', prefix
-            host_name = re.split(r'[(\[]', host_token)[0].strip()
+            host_name = re.split(r'[(\[{]', host_token)[0].strip()
             _bracket_ctx[0] = (host_name, pre_host, seg[bm.end():])
             parts.append(_sub_bracket(bm))
             last_end = bm.end()
@@ -379,11 +379,11 @@ def colorize_cabiln(biln, use_ansi=True):
     bracket_count = 0
     in_bracket = False
     for ch in biln:
-        if ch == '[':
+        if ch in ('[', '{'):
             colour = _BRACKET_COLOURS[bracket_count % len(_BRACKET_COLOURS)]
             result.append(colour + ch)
             in_bracket = True
-        elif ch == ']':
+        elif ch in (']', '}'):
             result.append(ch + _ANSI_RESET)
             bracket_count += 1
             in_bracket = False
@@ -426,13 +426,17 @@ def cabiln_to_branch(cabiln):
     search_start = 0
 
     while True:
-        m = _re.search(r'\.\[([^\]]+)\]', result[search_start:])
+        m = _re.search(r'\.([\[{])([^\]}\]]+)[\]}]', result[search_start:])
         if not m:
             break
         m_start = search_start + m.start()
         m_end = search_start + m.end()
 
-        bracket_content = m.group(1)
+        if m.group(1) == '{':
+            search_start = m_end
+            continue
+
+        bracket_content = m.group(2)
         items = _parse_bracket_items(bracket_content)
         if not items or items[0][1] is None:
             break
@@ -858,7 +862,7 @@ class Sequence:
                 # Extract the residue information
                 # Strip bond annotations: (n,m) and (!n,m) crosslink IDs
                 resname = re.sub(r'\(!?\d+,\d+\)', '', res)
-                resname = re.sub(r'^\[(.*)\]$', '\\1', resname)
+                resname = re.sub(r'^[\[{](.*?)[\]}]$', '\\1', resname)
 
                 # Check if name exists in MonomerDic — with degeneracy resolution
 
@@ -1429,10 +1433,16 @@ def split_outside(string, by_element, outside, keep_marker=True):
     # Special character
     grpsep = chr(29)
 
+    openers = {outside[0]}
+    closers = {outside[1]}
+    if outside == '[]':
+        openers.add('{')
+        closers.add('}')
+
     out = ''
     inside = False
     for i in string:
-        if i == outside[0]:
+        if i in openers:
             if inside:
                 if keep_marker:
                     j = i
@@ -1445,7 +1455,7 @@ def split_outside(string, by_element, outside, keep_marker=True):
                     j = i
                 else:
                     j = ''
-        elif i == outside[1]:
+        elif i in closers:
             inside = False
             if keep_marker:
                 j = i

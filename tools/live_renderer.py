@@ -1055,12 +1055,13 @@ function buildResidueUI(resMap, residues, chains, cabiln, bracketGroups, crossli
     const members = groupByHost[rIdx];
     if (members && members.length) {
       const groupWithHost = [rIdx, ...members];
-      resChips.appendChild(makeSeparator('[', groupWithHost));
+      const brk = cabiln && cabiln.includes('{') ? ['{', '}'] : ['[', ']'];
+      resChips.appendChild(makeSeparator(brk[0], groupWithHost));
       members.forEach(mIdx => {
         const mc = makeChip(mIdx);
         if (mc) resChips.appendChild(mc);
       });
-      resChips.appendChild(makeSeparator(']', groupWithHost));
+      resChips.appendChild(makeSeparator(brk[1], groupWithHost));
     }
     appendXlinks(rIdx);
   }
