@@ -85,10 +85,96 @@ _OLD_BILN_RE = re.compile(r'(?<![.\w\[{])([A-Za-z]\w*)\((\d+),(\d+)\)')
 # Matches .[...] sequential reaction bracket on a residue: .[Cap1(x,y).Cap2(z,w)...]
 # The dot sits outside the bracket (consistent with inline .Cap(r,r) notation).
 # Each entry inside uses Fragment(prev_r, cap_r); entries separated by '.'.
-_BRACKET_RE = re.compile(r'\.[\[{]([^\]}]*)[\]}]')
+# Sub-bracket arms [.Entry(r,r)] inside .[...] are supported: each arm connects from
+# the current chain pointer without advancing it, enabling multi-arm hubs.
+_BRACKET_RE = re.compile(
+    r'\.\[([^\[\]]*(?:\[[^\[\]]*\])*[^\[\]]*)\]'  # .[...] with optional inner [.arm]s
+    r'|\.\{([^{}]*)\}'                              # .{...} legacy BILN form
+)
+
+
+def _flatten_nested_brackets(seg):
+    """Flatten nested brackets with reordering: ``[[A.B].C]`` → ``[A.C.B]``.
+
+    Nested brackets disambiguate multi-branch hubs from sequential chains.
+    ``[[TBMB(4,4).C(5,4)].!3(6,4)]`` means both C and !3 bond to TBMB (the
+    anchor), not !3 bonding to C.  Flat brackets are strictly sequential, so we
+    reorder: outer entries go right after the anchor, before inner continuation.
+    Crosslink entries (``!n``) in ``_sub_bracket`` annotate the previous
+    fragment without advancing it, so ``[TBMB.!3.C]`` correctly bonds both !3
+    and C to TBMB.
+    """
+    out = []
+    i = 0
+    while i < len(seg):
+        if seg[i:i + 2] == '.[' and i + 2 < len(seg) and seg[i + 2] == '[':
+            depth = 0
+            j = i + 1
+            while j < len(seg):
+                if seg[j] == '[':
+                    depth += 1
+                elif seg[j] == ']':
+                    depth -= 1
+                    if depth == 0:
+                        break
+                j += 1
+            whole = seg[i + 1:j + 1]
+            flat = _flatten_one_nested(whole)
+            out.append('.' + flat)
+            i = j + 1
+        else:
+            out.append(seg[i])
+            i += 1
+    return ''.join(out)
+
+
+_ENTRY_ANY = re.compile(r'((?:[A-Za-z]\w*|!\w+)\(\d+,\d+\))')
+
+
+def _flatten_one_nested(s):
+    """Recursively flatten a single nested bracket group.
+
+    Input ``s`` is the bracket expression starting at the outer ``[`` (no
+    leading dot).  Returns a flat ``[anchor.outer.inner_rest]`` string.
+    """
+    inner_start = s.index('[', 1)
+    depth = 0
+    inner_end = inner_start
+    while inner_end < len(s):
+        if s[inner_end] == '[':
+            depth += 1
+        elif s[inner_end] == ']':
+            depth -= 1
+            if depth == 0:
+                break
+        inner_end += 1
+
+    inner_bracket = s[inner_start:inner_end + 1]
+    if '[' in inner_bracket[1:-1]:
+        inner_bracket = _flatten_one_nested(inner_bracket)
+
+    inner_content = inner_bracket[1:-1]
+    inner_entries = _ENTRY_ANY.findall(inner_content)
+    anchor = inner_entries[0] if inner_entries else ''
+    inner_rest = inner_entries[1:]
+
+    outer_part = s[inner_end + 1:-1]
+    outer_entries = _ENTRY_ANY.findall(outer_part)
+
+    parts = [anchor] + outer_entries + inner_rest
+    return '[' + '.'.join(parts) + ']'
 
 # Matches entries inside brackets: both monomer .Token(r,r) and crosslink .!n(r,r).
 _BRACKET_ENTRY_RE = re.compile(r'\.((?:[A-Za-z]\w*|!\w+))\((\d+),(\d+)\)')
+
+# Mixed tokeniser for bracket content: matches either a sub-bracket arm [.sub] or a
+# flat entry .Entry(r,r).  Used by _sub_bracket to process new-grammar notation.
+#   group(1) set  → sub-bracket arm content (without surrounding [. and ])
+#   group(2,3,4)  → flat entry tok, prev_r, cur_r
+_MIXED_ENTRY_RE = re.compile(
+    r'\[\.([^\[\]]*)\]'
+    r'|\.((?:[A-Za-z]\w*|!\w+))\((\d+),(\d+)\)'
+)
 
 
 def biln_to_cabiln(biln):
@@ -264,32 +350,43 @@ def _expand_inline_caps(biln, peptide_branch_threshold=2):
     _bracket_ctx = [None]
 
     def _sub_bracket(m):
-        content = '.' + m.group(1)  # dot lives outside bracket in notation; restore for parsing
-        steps = list(_BRACKET_ENTRY_RE.finditer(content))
-        if not steps:
+        # dot lives outside bracket in notation; restore for _MIXED_ENTRY_RE parsing
+        raw = m.group(1) if m.group(1) is not None else m.group(2)
+        content = '.' + raw
+        tokens = list(_MIXED_ENTRY_RE.finditer(content))
+        if not tokens:
             raise ValueError(
                 f"Sequential bracket {m.group(0)!r} contains no valid "
                 f".Fragment(host_r,cap_r) entries.")
-        reconstructed = ''.join(s.group(0) for s in steps)
+        reconstructed = ''.join(t.group(0) for t in tokens)
         if reconstructed != content:
             raise ValueError(
                 f"Sequential bracket {m.group(0)!r} has unrecognised content; "
-                f"expected only .Fragment(r,r) or .!n(r,r) entries.")
+                f"expected only .Fragment(r,r), .!n(r,r), or [.arm(r,r)] entries.")
 
-        first = steps[0]
-        tok1, hr1, cr1 = first.group(1), first.group(2), first.group(3)
+        first = tokens[0]
+        if first.group(1) is not None:
+            raise ValueError(
+                f"Sequential bracket {m.group(0)!r}: first entry must be a flat "
+                f".Entry(r,r) or .!n(r,r), not a sub-bracket arm.")
+
+        tok1, hr1, cr1 = first.group(2), first.group(3), first.group(4)
 
         if tok1.startswith('!'):
             # Pure crosslink bracket: .[!1(4,4)] or .[!1(4,4).!2(5,3)]
             # Each entry is a crosslink bond on the host monomer — no pendant fragment.
             host_bonds = []
-            for step in steps:
-                tok = step.group(1)
+            for t in tokens:
+                if t.group(1) is not None:
+                    raise ValueError(
+                        f"Sequential bracket {m.group(0)!r}: sub-bracket arm cannot "
+                        f"appear in a pure-crosslink bracket.")
+                tok = t.group(2)
                 if not tok.startswith('!'):
                     raise ValueError(
                         f"Sequential bracket {m.group(0)!r}: monomer entry {tok!r} "
                         f"cannot follow crosslink-first entries.")
-                prev_r, cur_r = step.group(2), step.group(3)
+                prev_r, cur_r = t.group(3), t.group(4)
                 if tok not in _seen:
                     _seen[tok] = (prev_r, cur_r)
                 _count[tok] = _count.get(tok, 0) + 1
@@ -297,33 +394,58 @@ def _expand_inline_caps(biln, peptide_branch_threshold=2):
             return ''.join(host_bonds)
 
         bid1 = _ctr[0]; _ctr[0] += 1
-
         frag_tokens = [tok1]
         frag_bond_parts = [f'({bid1},{cr1})']
-
         _backbone_steps = []
-        for step in steps[1:]:
-            tok, prev_r, cur_r = step.group(1), step.group(2), step.group(3)
+        pointer_idx = 0  # index into frag_bond_parts of the current chain tail
 
-            if tok.startswith('!'):
-                # Crosslink entry: bond from preceding fragment to external partner.
-                # prev_r = R-group on the preceding bracket fragment.
-                # cur_r = R-group on the external crosslink partner.
-                frag_bond_parts[-1] += f'({tok},{prev_r})'
-                if tok not in _seen:
-                    _seen[tok] = (prev_r, cur_r)
-                _count[tok] = _count.get(tok, 0) + 1
+        for t in tokens[1:]:
+            if t.group(1) is not None:
+                # Sub-bracket arm [.sub_content]: process its entries as a chain
+                # branching FROM the current pointer.  The arm does NOT advance
+                # pointer_idx — the next sibling arm or flat entry still bonds from
+                # the same host fragment.
+                sub_content = '.' + t.group(1)
+                sub_steps = list(_BRACKET_ENTRY_RE.finditer(sub_content))
+                sub_ptr = pointer_idx
+                for step in sub_steps:
+                    tok, prev_r, cur_r = step.group(1), step.group(2), step.group(3)
+                    if tok.startswith('!'):
+                        frag_bond_parts[sub_ptr] += f'({tok},{prev_r})'
+                        if tok not in _seen:
+                            _seen[tok] = (prev_r, cur_r)
+                        _count[tok] = _count.get(tok, 0) + 1
+                    else:
+                        bid = _ctr[0]; _ctr[0] += 1
+                        frag_bond_parts[sub_ptr] += f'({bid},{prev_r})'
+                        frag_tokens.append(tok)
+                        frag_bond_parts.append(f'({bid},{cur_r})')
+                        sub_ptr = len(frag_bond_parts) - 1
+                # pointer_idx intentionally NOT updated: arm is a branch, not chain
             else:
-                bid = _ctr[0]; _ctr[0] += 1
-                if prev_r == '2' and cur_r == '1':
-                    _backbone_steps.append(tok)
-                frag_bond_parts[-1] += f'({bid},{prev_r})'
-                frag_tokens.append(tok)
-                frag_bond_parts.append(f'({bid},{cur_r})')
+                # Flat entry: crosslink annotates current host; monomer advances chain.
+                tok, prev_r, cur_r = t.group(2), t.group(3), t.group(4)
+                if tok.startswith('!'):
+                    frag_bond_parts[pointer_idx] += f'({tok},{prev_r})'
+                    if tok not in _seen:
+                        _seen[tok] = (prev_r, cur_r)
+                    _count[tok] = _count.get(tok, 0) + 1
+                else:
+                    bid = _ctr[0]; _ctr[0] += 1
+                    if prev_r == '2' and cur_r == '1':
+                        _backbone_steps.append(tok)
+                    frag_bond_parts[pointer_idx] += f'({bid},{prev_r})'
+                    frag_tokens.append(tok)
+                    frag_bond_parts.append(f'({bid},{cur_r})')
+                    pointer_idx = len(frag_bond_parts) - 1
 
         if (peptide_branch_threshold is not None
                 and len(_backbone_steps) >= peptide_branch_threshold):
-            frag_chain = '-'.join(s.group(1) for s in steps if not s.group(1).startswith('!'))
+            flat_chain_toks = [
+                t.group(2) for t in tokens
+                if t.group(1) is None and not t.group(2).startswith('!')
+            ]
+            frag_chain = '-'.join(flat_chain_toks)
             branch_seg = f'!n-{frag_chain}' if cr1 == '1' else f'{frag_chain}-!n'
             ctx = _bracket_ctx[0]
             if ctx:
@@ -346,6 +468,7 @@ def _expand_inline_caps(biln, peptide_branch_threshold=2):
     processed_segments = []
     for seg in segments:
         seg = _handle_terminal_bond_markers(seg, _seen, _count)
+        seg = _flatten_nested_brackets(seg)
         # Brackets first: they may contain .!n(r,r) crosslink entries that
         # _INLINE_BOND_RE would otherwise grab prematurely.
         parts = []
@@ -599,16 +722,25 @@ def cabiln_to_bracket(cabiln):
                 continue
             anchor_tag = unique_tags[0]
             r_host, r_branch = tag_info[anchor_tag]
-            bracket_items = [f'{hub_name}({r_host},{r_branch})']
+            remaining = []
             for tag in unique_tags[1:]:
                 th, tb = tag_info[tag]
-                bracket_items.append(f'{tag}({tb},{th})')
+                remaining.append(f'{tag}({tb},{th})')
             # Simplify remaining host tags BEFORE inserting bracket
             for tag in unique_tags[1:]:
                 main_seg = _re.sub(
                     _re.escape(f'.{tag}') + r'\(\d+,\d+\)',
                     f'.{tag}', main_seg, count=1)
-            bracket_str = '.[' + '.'.join(bracket_items) + ']'
+            inner = f'{hub_name}({r_host},{r_branch})'
+            if not remaining:
+                bracket_str = f'.[{inner}]'
+            elif len(remaining) == 1:
+                bracket_str = f'.[{inner}.{remaining[0]}]'
+            else:
+                core = f'[{inner}.{remaining[0]}]'
+                for r in remaining[1:]:
+                    core = f'[{core}.{r}]'
+                bracket_str = f'.{core}'
             host_pat = _re.escape(f'.{anchor_tag}') + r'\(\d+,\d+\)'
             main_seg = _re.sub(host_pat, bracket_str, main_seg, count=1)
             continue

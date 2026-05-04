@@ -2082,17 +2082,16 @@ class TestThioetherHalide:
         assert ct == 'alkyl_halide_c', f"Expected alkyl_halide_c, got {ct}"
 
     def test_thioether_halide_smirks_direct(self):
-        """[4*][S:2].[4*][C:4][Cl,Br,I] >> [S:2][C:4]; halide departs."""
+        """Halide removed at pre-activate; SMIRKS just forms S-C bond."""
         from pyPept.interfaces.reaction_library import REACTIONS, run_bond_smirks
         entry = REACTIONS['thioether_halide']
         frag1 = Chem.MolFromSmiles('[400*]SC')    # thiol S: [4*][S:2]
-        frag2 = Chem.MolFromSmiles('[401*]CCl')   # alkyl chloride: [4*][C:4][Cl]
+        frag2 = Chem.MolFromSmiles('[401*]C')     # alkyl (halide already removed as LG)
         assert frag1 and frag2
         prod = run_bond_smirks(frag1, frag2, 400, 401, entry, intramolecular=False)
         smi = Chem.MolToSmiles(prod)
         thioether = Chem.MolFromSmarts('[S][C]')
         assert prod.HasSubstructMatch(thioether), f"No thioether S-C in product: {smi}"
-        assert 'Cl' not in smi, f"Chloride should have departed via SN2: {smi}"
         assert not any(a.GetAtomicNum() == 0 for a in prod.GetAtoms()), \
             f"Dummy leaked into thioether product: {smi}"
 
@@ -2908,10 +2907,6 @@ class TestMonomerPreActivate:
 
         elif chem_type == 'alkyl_halide_c':
             assert attach.GetAtomicNum() == 6
-            has_halide = any(nb.GetAtomicNum() in (17, 35, 53)
-                            for nb in attach.GetNeighbors())
-            assert has_halide, \
-                f"Alkyl halide slot {slot}: C must be bonded to Cl/Br/I"
 
         elif chem_type == 'aminooxy':
             assert attach.GetAtomicNum() == 7
@@ -3224,7 +3219,7 @@ class TestMonomerPreActivate:
         """3-Chloro-Ala: Cl on beta-C, dummy on same C."""
         self._check('N[C@@H](CCl)C(=O)O',
                      {1: 7, 2: 6, 3: 7, 4: 6},
-                     expect_lg={4: '[H]'}, expect_ct={4: 'alkyl_halide_c'})
+                     expect_lg={4: '[Cl]'}, expect_ct={4: 'alkyl_halide_c'})
 
     def test_bromoalanine_alkyl_halide(self):
         """3-Bromo-Ala: Br variant."""

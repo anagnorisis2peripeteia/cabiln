@@ -30,6 +30,44 @@ import webbrowser
 
 _SERVER_ID = uuid.uuid4().hex[:8]
 
+# ── in-memory SDF cache ──────────────────────────────────────────────────────
+import pathlib as _pathlib
+
+_SDF_PATH = _pathlib.Path(__file__).resolve().parent.parent / 'src' / 'pyPept' / 'data' / 'monomers.sdf'
+_sdf_cache: dict = {'mols': None, 'by_abbr': None, 'mtime': 0.0}
+_sdf_lock = threading.Lock()
+
+
+def _load_sdf():
+    """Return (mols_list, by_abbr_dict) from a cached SDF load.  Reloads only when the file mtime changes."""
+    from rdkit import Chem
+    mtime = _SDF_PATH.stat().st_mtime
+    with _sdf_lock:
+        if _sdf_cache['mols'] is not None and _sdf_cache['mtime'] == mtime:
+            return _sdf_cache['mols'], _sdf_cache['by_abbr']
+        suppl = Chem.SDMolSupplier(str(_SDF_PATH), removeHs=False)
+        mols, by_abbr = [], {}
+        for mol in suppl:
+            if mol is None:
+                continue
+            mols.append(mol)
+            abbr = mol.GetPropsAsDict().get('m_abbr', '')
+            if abbr:
+                by_abbr[abbr] = mol
+        _sdf_cache['mols'] = mols
+        _sdf_cache['by_abbr'] = by_abbr
+        _sdf_cache['mtime'] = mtime
+        return mols, by_abbr
+
+
+def _invalidate_sdf():
+    with _sdf_lock:
+        _sdf_cache['mols'] = None
+        _sdf_cache['by_abbr'] = None
+        _sdf_cache['mtime'] = 0.0
+
+# ──────────────────────────────────────────────────────────────────────────────
+
 try:
     import uvicorn
     from fastapi import FastAPI
@@ -695,8 +733,9 @@ let previewCache = {};
 let previewTimer = null;
 let buildMode    = false;
 let buildLeft    = null;  // { abbr, rgroups: [{slot, chem_type, used}], selectedSlot }
-let buildRight   = null;  // { abbr, rgroups: [{slot, chem_type}], selectedSlot }
+let buildRight   = null;  // { abbr, rgroups: [{slot, chem_type, used}], selectedSlot }
 let buildLeftRIdx = null;
+let buildRightRIdx = null;
 
 const RES_COLORS = [
   '#2a5080','#2a8050','#802a50','#806a2a','#502a80',
@@ -1032,7 +1071,7 @@ function buildResidueUI(resMap, residues, chains, cabiln, bracketGroups, crossli
   });
   xlinkByRes = xlinkByMember;
 
-  function makeChip(rIdx) {
+  function makeChip(rIdx, simpleHover) {
     const r = resById[rIdx];
     if (!r) return null;
     const chip = document.createElement('span');
@@ -1041,7 +1080,7 @@ function buildResidueUI(resMap, residues, chains, cabiln, bracketGroups, crossli
     chip.dataset.residue = r.idx;
     chip.style.background = RES_COLORS[r.colorIdx % RES_COLORS.length];
     const xlinks = xlinkByMember[r.idx];
-    if (xlinks && xlinks.length) {
+    if (!simpleHover && xlinks && xlinks.length) {
       const allMembers = [...new Set(xlinks.flatMap(g => g.members))];
       chip.addEventListener('mouseenter', () => highlightGroup(allMembers));
     } else {
@@ -1050,11 +1089,20 @@ function buildResidueUI(resMap, residues, chains, cabiln, bracketGroups, crossli
     chip.addEventListener('mouseleave', clearHighlight);
     chip.addEventListener('click', () => {
       if (buildMode) {
-        loadBuildLeft(r.abbr, r.idx);
-        chip.style.outline = '2px solid #5a9ae0';
-        resChips.querySelectorAll('.res-chip').forEach(c => {
-          if (c !== chip) c.style.outline = '';
-        });
+        if (buildLeft && buildLeftRIdx !== r.idx) {
+          loadBuildRight(r.abbr, r.idx);
+          chip.style.outline = '2px solid #e0a05a';
+          resChips.querySelectorAll('.res-chip').forEach(c => {
+            if (c !== chip && parseInt(c.dataset.residue) !== buildLeftRIdx)
+              c.style.outline = '';
+          });
+        } else {
+          loadBuildLeft(r.abbr, r.idx);
+          chip.style.outline = '2px solid #5a9ae0';
+          resChips.querySelectorAll('.res-chip').forEach(c => {
+            if (c !== chip) c.style.outline = '';
+          });
+        }
       }
     });
     return chip;
@@ -1115,8 +1163,11 @@ function buildResidueUI(resMap, residues, chains, cabiln, bracketGroups, crossli
 
   const hasBranch = cabiln && cabiln.includes('%');
   const groups = bracketGroups || [];
-  const groupByHost = {};
-  groups.forEach(g => { groupByHost[g.host] = g.members; });
+  const groupsByHost = {};
+  groups.forEach(g => {
+    if (!groupsByHost[g.host]) groupsByHost[g.host] = [];
+    groupsByHost[g.host].push(g.members);
+  });
   const branchSet = new Set();
   groups.forEach(g => g.members.forEach(m => branchSet.add(m)));
 
@@ -1125,28 +1176,96 @@ function buildResidueUI(resMap, residues, chains, cabiln, bracketGroups, crossli
     prependXlinks(rIdx);
     const chip = makeChip(rIdx);
     if (chip) resChips.appendChild(chip);
-    const members = groupByHost[rIdx];
-    if (members && members.length) {
-      const groupWithHost = [rIdx, ...members];
+    const hostGroups = groupsByHost[rIdx];
+    if (hostGroups) {
+      // If multiple bracket groups on one host, add a $ chip to select all
+      if (hostGroups.length > 1) {
+        const allMembers = [rIdx, ...hostGroups.flat()];
+        const el = document.createElement('span');
+        el.className = 'res-chip branch-chip xlink-chip';
+        el.style.background = '#3a5050';
+        el.style.fontWeight = '700';
+        el.style.fontSize = '0.8em';
+        el.textContent = '$';
+        el.dataset.members = JSON.stringify(allMembers);
+        el.addEventListener('mouseenter', () => highlightGroup(allMembers));
+        el.addEventListener('mouseleave', clearHighlight);
+        resChips.appendChild(el);
+      }
       const brk = cabiln && cabiln.includes('{') ? ['{', '}'] : ['[', ']'];
-      resChips.appendChild(makeSeparator(brk[0], groupWithHost));
-      members.forEach(mIdx => {
-        const mc = makeChip(mIdx);
-        if (mc) resChips.appendChild(mc);
+      hostGroups.forEach(members => {
+        resChips.appendChild(makeSeparator(brk[0], members));
+        members.forEach(mIdx => {
+          const mc = makeChip(mIdx);
+          if (mc) resChips.appendChild(mc);
+        });
+        resChips.appendChild(makeSeparator(brk[1], members));
       });
-      resChips.appendChild(makeSeparator(brk[1], groupWithHost));
     }
     appendXlinks(rIdx);
   }
 
   if (hasBranch) {
     chainData.forEach((chain, ci) => {
-      if (chainData.length > 1) resChips.appendChild(makeSeparator('%', chain.residues));
+      if (chainData.length > 1) {
+        // % chip highlights all chain residues + their crosslink partners
+        const expanded = [...chain.residues];
+        chain.residues.forEach(rIdx => {
+          const xlinks = xlinkByMember[rIdx];
+          if (xlinks) xlinks.forEach(g => g.members.forEach(m => expanded.push(m)));
+        });
+        resChips.appendChild(makeSeparator('%', [...new Set(expanded)]));
+      }
       chain.residues.forEach(rIdx => {
+        if (branchSet.has(rIdx)) return;
         prependXlinks(rIdx);
-        const chip = makeChip(rIdx);
+
+        // Crosslink brackets shown explicitly? Use simple hover on the chip itself
+        const xlinks = xlinkByMember[rIdx];
+        const hasXlinkBrackets = xlinks && xlinks.length > 1;
+        const chip = makeChip(rIdx, hasXlinkBrackets);
         if (chip) resChips.appendChild(chip);
-        appendXlinks(rIdx);
+
+        // Bracket groups on this host (from bracket notation)
+        const hostGroups = groupsByHost[rIdx];
+        if (hostGroups) {
+          if (hostGroups.length > 1) {
+            const allMembers = [rIdx, ...hostGroups.flat()];
+            const el = document.createElement('span');
+            el.className = 'res-chip branch-chip xlink-chip';
+            el.style.background = '#3a5050';
+            el.style.fontWeight = '700';
+            el.style.fontSize = '0.8em';
+            el.textContent = '$';
+            el.dataset.members = JSON.stringify(allMembers);
+            el.addEventListener('mouseenter', () => highlightGroup(allMembers));
+            el.addEventListener('mouseleave', clearHighlight);
+            resChips.appendChild(el);
+          }
+          const brk = cabiln && cabiln.includes('{') ? ['{', '}'] : ['[', ']'];
+          hostGroups.forEach(members => {
+            resChips.appendChild(makeSeparator(brk[0], members));
+            members.forEach(mIdx => {
+              const mc = makeChip(mIdx);
+              if (mc) resChips.appendChild(mc);
+            });
+            resChips.appendChild(makeSeparator(brk[1], members));
+          });
+        }
+
+        // Crosslink chips: if multiple on one residue, wrap each in brackets
+        if (hasXlinkBrackets) {
+          xlinks.forEach(g => {
+            const isNterm = nTermXlinkTags.has(g.tag);
+            if (!isNterm) {
+              resChips.appendChild(makeSeparator('[', g.members));
+              resChips.appendChild(makeXlinkChip(g.tag, g.members));
+              resChips.appendChild(makeSeparator(']', g.members));
+            }
+          });
+        } else {
+          appendXlinks(rIdx);
+        }
       });
     });
   } else if (groups.length) {
@@ -1225,6 +1344,38 @@ function wireUpSvgHover() {
     clearHighlight();
   });
   svg.addEventListener('mouseleave', clearHighlight);
+  svg.addEventListener('click', e => {
+    if (!buildMode) return;
+    let el = e.target;
+    while (el && el !== svg) {
+      const cls = (el.getAttribute('class') || '');
+      const m = cls.match(/atom-(\d+)/);
+      if (m) {
+        const rIdx = atomToRes[parseInt(m[1])];
+        if (rIdx !== undefined) {
+          const r = residueList.find(r => r.idx === rIdx);
+          if (r) {
+            if (buildLeft && buildLeftRIdx !== rIdx) {
+              loadBuildRight(r.abbr, r.idx);
+              resChips.querySelectorAll('.res-chip').forEach(c => {
+                const cIdx = parseInt(c.dataset.residue);
+                if (cIdx === rIdx) c.style.outline = '2px solid #e0a05a';
+                else if (cIdx !== buildLeftRIdx) c.style.outline = '';
+              });
+            } else {
+              loadBuildLeft(r.abbr, r.idx);
+              resChips.querySelectorAll('.res-chip').forEach(c => {
+                c.style.outline = parseInt(c.dataset.residue) === rIdx
+                  ? '2px solid #5a9ae0' : '';
+              });
+            }
+          }
+          return;
+        }
+      }
+      el = el.parentElement;
+    }
+  });
 }
 
 // ─── zoom / pan (shared, wired per canvas) ────────────────────────────────────
@@ -1319,7 +1470,7 @@ function closeBuild() {
   clearBuild();
 }
 function clearBuild() {
-  buildLeft = null; buildRight = null; buildLeftRIdx = null;
+  buildLeft = null; buildRight = null; buildLeftRIdx = null; buildRightRIdx = null;
   buildLeftAbbr.textContent = '—';
   buildLeftSvg.innerHTML = '<div class="box-placeholder">Click a chip above</div>';
   buildLeftRg.innerHTML = '';
@@ -1360,7 +1511,8 @@ async function loadBuildLeft(abbr, rIdx) {
   }
 }
 
-async function loadBuildRight(abbr) {
+async function loadBuildRight(abbr, rIdx) {
+  buildRightRIdx = rIdx !== undefined ? rIdx : null;
   buildRightAbbr.textContent = abbr;
   buildRightSvg.innerHTML = '<div class="spinner"></div>';
   buildRightRg.innerHTML = '';
@@ -1369,7 +1521,11 @@ async function loadBuildRight(abbr) {
   buildStatus.textContent = '';
 
   try {
-    const res = await fetch(`/monomer_rgroups?abbr=${encodeURIComponent(abbr)}`);
+    let url = `/monomer_rgroups?abbr=${encodeURIComponent(abbr)}`;
+    if (rIdx !== undefined) {
+      url += `&residue_idx=${rIdx}&cabiln=${encodeURIComponent(cabilnInput.value.trim())}`;
+    }
+    const res = await fetch(url);
     const data = await res.json();
     if (data.error) {
       buildRightSvg.innerHTML = `<div class="box-placeholder">${escHtml(data.error)}</div>`;
@@ -2031,17 +2187,68 @@ app = FastAPI()
 
 # ── shared drawing helper ─────────────────────────────────────────────────────
 
-def _draw_mol(romol, width: int, height: int) -> str:
+def _draw_mol(romol, width: int, height: int, used_slots: set | None = None) -> str:
+    import re as _re
     from rdkit.Chem import rdDepictor
     from rdkit.Chem.Draw import rdMolDraw2D
     rdDepictor.SetPreferCoordGen(True)
     rdDepictor.Compute2DCoords(romol)
+    rdDepictor.NormalizeDepiction(romol)
+    rdDepictor.StraightenDepiction(romol)
     drawer = rdMolDraw2D.MolDraw2DSVG(width, height)
-    drawer.drawOptions().addStereoAnnotation = True
-    drawer.drawOptions().padding = 0.12
+    opts = drawer.drawOptions()
+    opts.addStereoAnnotation = True
+    opts.padding = 0.12
+    natoms = romol.GetNumAtoms()
+    if natoms > 150:
+        opts.minFontSize = 5
+        opts.maxFontSize = 8
+        opts.bondLineWidth = 0.8
+        opts.additionalAtomLabelPadding = 0.0
+    elif natoms > 80:
+        opts.minFontSize = 7
+        opts.maxFontSize = 10
+        opts.bondLineWidth = 1.0
     drawer.DrawMolecule(romol)
     drawer.FinishDrawing()
-    return drawer.GetDrawingText()
+    svg = drawer.GetDrawingText()
+
+    if used_slots is not None:
+        dummy_slot = {}
+        for atom in romol.GetAtoms():
+            if atom.GetAtomicNum() == 0 and atom.GetIsotope() > 0:
+                dummy_slot[atom.GetIdx()] = atom.GetIsotope()
+
+        COLOR_USED = '#d9534f'
+        COLOR_FREE = '#3dbe6c'
+        OPACITY_USED = '0.35'
+
+        for aidx, slot in dummy_slot.items():
+            color = COLOR_USED if slot in used_slots else COLOR_FREE
+            tag = f'atom-{aidx}'
+            svg = _re.sub(
+                rf"(<path\s+class='[^']*{tag}[^']*'[^>]*fill=')[^']+(')",
+                rf"\g<1>{color}\2",
+                svg,
+            )
+            if slot in used_slots:
+                svg = _re.sub(
+                    rf"(<path\s+class='[^']*{tag}[^']*'[^>]*)(/>)",
+                    rf"\1 opacity='{OPACITY_USED}'\2",
+                    svg,
+                )
+            svg = _re.sub(
+                rf"(<path\s+class='bond-\d+\s+[^']*{tag}[^']*'[^>]*stroke:)#[0-9a-fA-F]{{6}}",
+                rf"\g<1>{color}",
+                svg,
+            )
+            if slot in used_slots:
+                svg = _re.sub(
+                    rf"(<path\s+class='bond-\d+\s+[^']*{tag}[^']*'[^>]*stroke-opacity:)\d[\d.]*",
+                    rf"\g<1>{OPACITY_USED}",
+                    svg,
+                )
+    return svg
 
 
 def _mol_block(romol) -> str:
@@ -2108,12 +2315,11 @@ async def list_monomers():
         from rdkit import Chem
         import sys, pathlib
         sys.path.insert(0, str(pathlib.Path(__file__).parent.parent / 'src'))
-        sdf_path = pathlib.Path(__file__).parent.parent / 'src' / 'pyPept' / 'data' / 'monomers.sdf'
-        suppl = Chem.SDMolSupplier(str(sdf_path), removeHs=False)
+        all_mols, mol_by_abbr = _load_sdf()
         monomers = []
         degen_nterm = {}  # base -> entry with trailing _
         degen_cterm = {}  # base -> entry with leading _
-        for mol in suppl:
+        for mol in all_mols:
             if mol is None:
                 continue
             p = mol.GetPropsAsDict()
@@ -2391,17 +2597,7 @@ def _restore_one_slot(mol, keep_slot):
 async def monomer_svg(abbr: str, width: int = 220, height: int = 180):
     try:
         from rdkit import Chem
-        import pathlib
-        sdf_path = pathlib.Path(__file__).parent.parent / 'src' / 'pyPept' / 'data' / 'monomers.sdf'
-        suppl = Chem.SDMolSupplier(str(sdf_path), removeHs=False)
-
-        # Build lookup of all monomers by abbreviation
-        mol_by_abbr = {}
-        for mol in suppl:
-            if mol is None:
-                continue
-            mol_abbr = mol.GetPropsAsDict().get('m_abbr', '')
-            mol_by_abbr[mol_abbr] = mol
+        _all_mols, mol_by_abbr = _load_sdf()
 
         # Direct match
         if abbr in mol_by_abbr:
@@ -2481,17 +2677,9 @@ async def monomer_rgroups(abbr: str, residue_idx: int = -1, cabiln: str = ''):
     """Return R-group info for a monomer, with used slots marked if in a sequence."""
     try:
         from rdkit import Chem
-        import pathlib
-        sdf_path = pathlib.Path(__file__).parent.parent / 'src' / 'pyPept' / 'data' / 'monomers.sdf'
-        suppl = Chem.SDMolSupplier(str(sdf_path), removeHs=False)
+        _all_mols, mol_by_abbr = _load_sdf()
 
-        target_mol = None
-        for mol in suppl:
-            if mol is None:
-                continue
-            if mol.GetPropsAsDict().get('m_abbr', '') == abbr:
-                target_mol = mol
-                break
+        target_mol = mol_by_abbr.get(abbr)
         if target_mol is None:
             return JSONResponse({"error": f"Monomer '{abbr}' not found"}, status_code=404)
 
@@ -2511,28 +2699,42 @@ async def monomer_rgroups(abbr: str, residue_idx: int = -1, cabiln: str = ''):
 
         lg_list = [s.strip() for s in rgroups_str.split(',')]
 
+        # Infer chem_types at runtime for slots missing from the SDF property
+        from pyPept.interfaces.reaction_library import infer_chem_type
+        from pyPept.sequence import _attachment_idx
+
         rgroups = []
         for i, lg in enumerate(lg_list):
             slot = i + 1
             if lg in ('None', 'none', ''):
                 continue
+            ct = ct_map.get(slot, '')
+            if not ct:
+                aidx = _attachment_idx(target_mol, slot)
+                if aidx is not None:
+                    ct = infer_chem_type(target_mol, aidx, slot=slot, leaving=lg)
             rgroups.append({
                 'slot': slot,
-                'chem_type': ct_map.get(slot, ''),
+                'chem_type': ct,
                 'leaving': lg,
                 'used': False
             })
 
         # If we have a sequence context, mark which R-groups are already used
+        used_slots = set()
         if cabiln.strip() and residue_idx >= 0:
             try:
-                from pyPept.sequence import Sequence
+                from pyPept.sequence import Sequence, _slot_for_attachment
                 seq = Sequence(cabiln)
-                used_slots = set()
                 for bond in seq.s_bonds:
-                    m1, slot1_idx, m2, slot2_idx = bond[0], bond[1], bond[2], bond[3]
-                    s1 = bond[4] if len(bond) > 4 else None
-                    s2 = bond[5] if len(bond) > 4 else None
+                    m1, atom1, m2, atom2 = bond[0], bond[1], bond[2], bond[3]
+                    if len(bond) > 4:
+                        s1, s2 = bond[4], bond[5]
+                    else:
+                        mol1 = seq.get_monomer(m1)['m_romol']
+                        mol2 = seq.get_monomer(m2)['m_romol']
+                        s1 = _slot_for_attachment(mol1, atom1)
+                        s2 = _slot_for_attachment(mol2, atom2)
                     if m1 == residue_idx and s1 is not None:
                         used_slots.add(s1)
                     if m2 == residue_idx and s2 is not None:
@@ -2543,7 +2745,7 @@ async def monomer_rgroups(abbr: str, residue_idx: int = -1, cabiln: str = ''):
             except Exception:
                 pass
 
-        svg = _draw_mol(target_mol, 180, 140)
+        svg = _draw_mol(target_mol, 180, 140, used_slots if used_slots else None)
         return {"svg": svg, "rgroups": rgroups, "abbr": abbr}
 
     except Exception as exc:
@@ -2561,6 +2763,39 @@ class _InsertBondReq(BaseModel):
 async def insert_bond(req: _InsertBondReq):
     """Insert a bracket branch at the given host residue in CABILN notation."""
     import re
+
+    def _rest_to_arms(s):
+        """Rewrite rest_in as explicit [.arm] sub-brackets.
+
+        Existing [.arm] groups pass through unchanged; any flat content between
+        (or after) them is wrapped in its own [...].  This makes every arm from
+        the hub unambiguous regardless of order.
+        """
+        parts = []
+        i = 0
+        flat_start = 0
+        while i < len(s):
+            if s[i] == '[':
+                if i > flat_start:
+                    parts.append('[' + s[flat_start:i] + ']')
+                depth = 0
+                j = i
+                while j < len(s):
+                    if s[j] == '[':
+                        depth += 1
+                    elif s[j] == ']':
+                        depth -= 1
+                        if depth == 0:
+                            break
+                    j += 1
+                parts.append(s[i:j + 1])
+                i = j + 1
+                flat_start = i
+            else:
+                i += 1
+        if flat_start < len(s):
+            parts.append('[' + s[flat_start:] + ']')
+        return ''.join(parts)
     try:
         cabiln = req.cabiln.strip()
         if not cabiln:
@@ -2570,12 +2805,71 @@ async def insert_bond(req: _InsertBondReq):
         if is_backbone:
             return {"result": cabiln + '-' + req.new_abbr}
 
-        # Parse the CABILN string to locate the host monomer token
-        # The approach: walk the CABILN text token by token, counting monomer
-        # positions, and insert the bracket at the right spot.
+        new_entry = f'.{req.new_abbr}({req.r_host},{req.r_new})'
         bracket = f'.[{req.new_abbr}({req.r_host},{req.r_new})]'
 
-        # Tokenize by '-' but respect bracket depth
+        # Check if the host is a bracket-internal monomer by parsing
+        from pyPept.sequence import Sequence
+        try:
+            seq = Sequence(cabiln)
+            chain_ids = seq.s_chains.get('s_monomerIDs', [])
+            main_set = set(chain_ids[0]) if chain_ids else set()
+        except Exception:
+            main_set = set()
+
+        host_abbr = None
+        if req.host_residue_idx not in main_set and main_set:
+            try:
+                host_abbr = seq.s_monomers[req.host_residue_idx].get('m_abbr', '')
+            except (IndexError, KeyError):
+                pass
+
+        if host_abbr:
+            # Host is a bracket-internal monomer — insert inside its bracket
+            # Find the monomer's name followed by (r,r) inside a bracket and
+            # insert the new entry right after its parenthesized args
+            pattern = re.compile(
+                re.escape(host_abbr) + r'\(\d+,\d+\)'
+                + r'(?:\.\w+\(\d+,\d+\))*'  # any existing entries after it
+            )
+            # Walk brackets to find the right one
+            inserted = False
+            for bm in re.finditer(r'\[([^\[\]]*(?:\[[^\[\]]*\])*[^\[\]]*)\]', cabiln):
+                content = bm.group(1)
+                pm = re.search(re.escape(host_abbr) + r'\(\d+,\d+\)', content)
+                if pm:
+                    prefix_in = content[:pm.start()]
+                    hub_in = content[pm.start():pm.end()]
+                    rest_in = content[pm.end():]
+                    open_count = prefix_in.count('[') - prefix_in.count(']')
+                    if open_count == 0 and rest_in and not rest_in.startswith(']'):
+                        # Rewrite the entire bracket so all arms from hub are
+                        # explicit [.arm] sub-brackets — no implicit flat chain
+                        # following a sub-bracket, which would be ambiguous.
+                        # e.g. [hub.chain.!3] + new → [hub[.chain.!3][.new]]
+                        arms = _rest_to_arms(rest_in) + f'[{new_entry}]'
+                        new_bracket = f'[{prefix_in}{hub_in}{arms}]'
+                        result = cabiln[:bm.start()] + new_bracket + cabiln[bm.end():]
+                    else:
+                        insert_pos = bm.start(1) + pm.end()
+                        result = cabiln[:insert_pos] + new_entry + cabiln[insert_pos:]
+                    inserted = True
+                    break
+            if inserted:
+                return {"result": result}
+
+            # Fallback: host uses inline-cap notation .HOST(r,r) without explicit
+            # brackets — convert to bracket form and insert the new entry.
+            inline_m = re.search(r'\.' + re.escape(host_abbr) + r'\(\d+,\d+\)', cabiln)
+            if inline_m and (inline_m.start() == 0
+                             or cabiln[inline_m.start() - 1] != '['):
+                old_cap = inline_m.group(0)[1:]  # strip leading '.'
+                result = (cabiln[:inline_m.start()]
+                          + '.[' + old_cap + new_entry + ']'
+                          + cabiln[inline_m.end():])
+                return {"result": result}
+
+        # Main-chain host: tokenize by '-' respecting bracket depth
         tokens = []
         depth = 0
         current = ''
@@ -2592,18 +2886,10 @@ async def insert_bond(req: _InsertBondReq):
         if current:
             tokens.append(current)
 
-        # Count monomer indices: each token that isn't purely a bracket group
-        # contributes one monomer index. But bracket branches also add
-        # monomers (they're on separate chains). We need the main-chain position.
-        # The simplest approach: find which token textually matches the Nth
-        # main-chain monomer. Bracket-internal monomers don't count as tokens.
         main_idx = 0
         insert_at = -1
         for i, tok in enumerate(tokens):
-            # A token might have brackets attached: e.g. "K.[A(4,1)]"
-            # The main monomer is the part before any ".[" or ".(" marker
             base = re.split(r'\.\[|\.\(|\.!', tok)[0]
-            # Skip crosslink-only tags like "!1"
             if re.match(r'^!\d+$', base):
                 main_idx += 1
                 if main_idx - 1 == req.host_residue_idx:
@@ -2651,8 +2937,17 @@ async def validate_bond(req: _ValidateBondReq):
         return JSONResponse({"error": str(exc).split('\n')[0]}, status_code=500)
 
 
-def _build_bracket_groups(seq, chain_ids):
-    """Identify bracket branch groups and their host monomers."""
+def _build_bracket_groups(seq, chain_ids, cabiln='', crosslink_groups=None):
+    """Identify bracket branch groups and their host monomers.
+
+    Each separate attachment (``.[A.B.C]``, ``.[D]``, ``.cap(r,r)``) on a
+    host residue becomes its own group.  Groups are split by connected
+    components among the branch residues — branch residues that bond to
+    each other stay together; those that only bond to the host get their
+    own group.
+
+    Returns list of ``{host, members}``.
+    """
     if not chain_ids or len(chain_ids) < 2:
         return []
     main_set = set(chain_ids[0])
@@ -2662,34 +2957,66 @@ def _build_bracket_groups(seq, chain_ids):
     if not branch_set:
         return []
 
+    xlink_pairs = set()
+    for g in (crosslink_groups or []):
+        if len(g['members']) == 2:
+            a, b = g['members']
+            xlink_pairs.add((a, b))
+            xlink_pairs.add((b, a))
+
     host_of = {}
+    branch_adj: dict[int, set] = {idx: set() for idx in branch_set}
     for bond in seq.s_bonds:
         m1, m2 = bond[0], bond[2]
+        if (m1, m2) in xlink_pairs:
+            continue
         if m1 in main_set and m2 in branch_set:
             host_of[m2] = m1
         elif m2 in main_set and m1 in branch_set:
             host_of[m1] = m2
+        elif m1 in branch_set and m2 in branch_set:
+            branch_adj[m1].add(m2)
+            branch_adj[m2].add(m1)
 
-    resolved = True
-    while resolved:
-        resolved = False
+    # Propagate host through inter-branch bonds
+    changed = True
+    while changed:
+        changed = False
         for idx in branch_set:
             if idx in host_of:
                 continue
-            for bond in seq.s_bonds:
-                m1, m2 = bond[0], bond[2]
-                peer = m2 if m1 == idx else (m1 if m2 == idx else None)
-                if peer is not None and peer in host_of:
+            for peer in branch_adj.get(idx, set()):
+                if peer in host_of:
                     host_of[idx] = host_of[peer]
-                    resolved = True
+                    changed = True
                     break
 
+    # Connected components among branch residues (union-find)
+    parent = {idx: idx for idx in branch_set}
+
+    def find(x):
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def union(a, b):
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[ra] = rb
+
+    for idx, peers in branch_adj.items():
+        for p in peers:
+            union(idx, p)
+
     from collections import defaultdict
-    groups = defaultdict(list)
-    for idx, host in host_of.items():
-        groups[host].append(idx)
-    return [{"host": h, "members": sorted(members)}
-            for h, members in groups.items()]
+    components = defaultdict(list)
+    for idx in branch_set:
+        if idx in host_of:
+            components[(host_of[idx], find(idx))].append(idx)
+
+    return [{"host": key[0], "members": sorted(members)}
+            for key, members in components.items()]
 
 
 def _build_crosslink_groups(seq):
@@ -2735,8 +3062,8 @@ async def render(req: _CabilnReq):
         chain_ids = seq.s_chains.get('s_monomerIDs', [])
         chains = [{"idx": ci, "residues": ids} for ci, ids in enumerate(chain_ids)]
 
-        bracket_groups = _build_bracket_groups(seq, chain_ids)
         crosslink_groups = _build_crosslink_groups(seq)
+        bracket_groups = _build_bracket_groups(seq, chain_ids, req.cabiln, crosslink_groups)
 
         return {"svg": svg, "mol_block": block,
                 "info": f"{romol.GetNumAtoms()} atoms · MW {ExactMolWt(romol):.2f}",
@@ -2928,12 +3255,11 @@ async def register_monomer(req: _RegisterReq):
         from rdkit import Chem
         from rdkit.Chem import SDWriter, rdDepictor
 
-        sdf_path = pathlib.Path(__file__).parent.parent / 'src' / 'pyPept' / 'data' / 'monomers.sdf'
+        sdf_path = _SDF_PATH
 
         # Check for duplicate abbreviation
-        suppl = Chem.SDMolSupplier(str(sdf_path), removeHs=False)
-        existing = {m.GetPropsAsDict().get('m_abbr', '') for m in suppl if m}
-        if req.abbr in existing:
+        _all_mols, mol_by_abbr = _load_sdf()
+        if req.abbr in mol_by_abbr:
             return JSONResponse({"error": f"Abbreviation '{req.abbr}' already exists in library"}, status_code=400)
 
         mol = Chem.MolFromSmiles(req.chuckles)
@@ -2971,10 +3297,9 @@ async def register_monomer(req: _RegisterReq):
             writer.write(mol)
             writer.close()
 
-        # Count total monomers
-        suppl2 = Chem.SDMolSupplier(str(sdf_path), removeHs=False)
-        total = sum(1 for m in suppl2 if m)
-        return {"ok": True, "total": total}
+        _invalidate_sdf()
+        all_mols, _ = _load_sdf()
+        return {"ok": True, "total": len(all_mols)}
 
     except Exception as exc:
         return JSONResponse({"error": str(exc).split('\n')[0]}, status_code=400)
@@ -2989,6 +3314,9 @@ def _open_browser():
 
 if __name__ == "__main__":
     print("CABILN Live Renderer")
+    import time as _t; _t0 = _t.perf_counter()
+    _warm_mols, _ = _load_sdf()
+    print(f"  SDF cache warmed: {len(_warm_mols)} monomers in {_t.perf_counter()-_t0:.1f}s")
     print("  Local     ->  http://localhost:8732")
     print("  Tailscale ->  http://100.119.0.78:8732")
     threading.Thread(target=_open_browser, daemon=True).start()
