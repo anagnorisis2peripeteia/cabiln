@@ -492,7 +492,23 @@ _HTML = r"""<!DOCTYPE html>
     letter-spacing: .1em;
     color: #3a5580;
     padding: 5px 10px 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
   }
+  .box-clear-btn {
+    font-size: 9px;
+    background: none;
+    border: 1px solid #2a4060;
+    border-radius: 3px;
+    color: #3a6090;
+    cursor: pointer;
+    padding: 0 4px;
+    line-height: 14px;
+    letter-spacing: normal;
+    text-transform: none;
+  }
+  .box-clear-btn:hover { color: #d9534f; border-color: #d9534f; }
   .build-box .box-abbr {
     font-family: "Cascadia Code", "Fira Mono", monospace;
     font-size: 14px;
@@ -641,7 +657,7 @@ _HTML = r"""<!DOCTYPE html>
   </div>
   <div class="build-boxes">
     <div class="build-box" id="build-left">
-      <div class="box-label">Current residue</div>
+      <div class="box-label"><span>Current residue</span><button class="box-clear-btn" id="build-left-change" title="Clear left selection">✕ change</button></div>
       <div class="box-abbr" id="build-left-abbr">—</div>
       <div class="box-svg" id="build-left-svg">
         <div class="box-placeholder">Click a chip above</div>
@@ -654,7 +670,7 @@ _HTML = r"""<!DOCTYPE html>
       <div class="build-status" id="build-status"></div>
     </div>
     <div class="build-box" id="build-right">
-      <div class="box-label">New monomer</div>
+      <div class="box-label"><span id="build-right-label">New monomer</span><button class="box-clear-btn" id="build-right-change" title="Clear right selection">✕ change</button></div>
       <div class="box-abbr" id="build-right-abbr">—</div>
       <div class="box-svg" id="build-right-svg">
         <div class="box-placeholder">Right-click from library</div>
@@ -2817,10 +2833,19 @@ async def insert_bond(req: _InsertBondReq):
             main_set = set()
 
         host_abbr = None
+        target_occurrence = 0
         if req.host_residue_idx not in main_set and main_set:
             try:
                 host_abbr = seq.s_monomers[req.host_residue_idx].get('m_abbr', '')
-            except (IndexError, KeyError):
+                # Which ordinal is this among all pendant monomers with the same abbr?
+                # s_monomers order matches left-to-right CABILN order, so the ordinal
+                # here maps directly to the ordinal we'll find during bracket scanning.
+                pendant_indices = [i for i in range(len(seq.s_monomers))
+                                   if i not in main_set]
+                same_abbr = [i for i in pendant_indices
+                             if seq.s_monomers[i].get('m_abbr', '') == host_abbr]
+                target_occurrence = same_abbr.index(req.host_residue_idx)
+            except (IndexError, KeyError, ValueError):
                 pass
 
         # Backbone on a main-chain residue: simple append.
@@ -2853,6 +2878,7 @@ async def insert_bond(req: _InsertBondReq):
                         i += 1
 
             inserted = False
+            occurrence_count = 0
             for br_start, br_end in _all_bracket_spans(cabiln):
                 content = cabiln[br_start + 1:br_end - 1]
                 pm = re.search(re.escape(host_abbr) + r'\(\d+,\d+\)', content)
@@ -2862,6 +2888,10 @@ async def insert_bond(req: _InsertBondReq):
                 open_count = prefix_in.count('[') - prefix_in.count(']')
                 if open_count != 0:
                     continue  # hub is inside a nested bracket — keep looking
+                # Skip earlier same-abbr occurrences until we reach the target one.
+                if occurrence_count < target_occurrence:
+                    occurrence_count += 1
+                    continue
                 hub_in = content[pm.start():pm.end()]
                 rest_in = content[pm.end():]
                 if rest_in and not rest_in.startswith(']'):
