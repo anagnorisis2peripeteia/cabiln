@@ -938,6 +938,139 @@ print(result.chem_types)  # {1: 'backbone_n', 2: 'backbone_c', 3: 'backbone_n_mo
 
 R1/R2 are assigned by graph topology (the unique path between the amino N and the carboxyl C), so the rule handles α-, β-, and γ-amino acids, N-methyl, and Aib-type residues without hard-coded stereo assumptions.
 
+### SMARTS matching reference
+
+Every monomer goes through a three-pass detection pipeline. The examples below show what `pre_activate` produces for each functional group type and the edge cases you'll encounter.
+
+**Pass 1 — Backbone:** Graph-topology search for the shortest path between an amino N and a carboxyl C. Assigns R1 (backbone_n), R2 (backbone_c), and R3 (backbone_n_mod, only if backbone N has ≥ 2 H — skipped for Pro).
+
+**Pass 2 — Sidechain reactive groups:** SMARTS patterns applied in priority order (first match wins per atom). Each pattern's atom map `:1` marks the attachment point; an `[n*]` dummy replaces the leaving group there.
+
+**Pass 3 — Second H on primary amines:** For sidechain `-NH2` atoms already assigned as `amine_primary`, a second slot is created for the second H (e.g. Lys R5).
+
+#### Standard amino acids
+
+```
+Alanine         N[C@@H](C)C(=O)O
+  → R1=backbone_n  R2=backbone_c  R3=backbone_n_mod
+  No sidechain reactive group — only backbone slots.
+
+Cysteine        N[C@@H](CS)C(=O)O
+  → R1=backbone_n  R2=backbone_c  R3=backbone_n_mod  R4=thiol
+  SMARTS: [SX2H1:1] — thiol S-H, highest sidechain priority.
+
+Selenocysteine  N[C@@H](C[SeH])C(=O)O
+  → R1=backbone_n  R2=backbone_c  R3=backbone_n_mod  R4=selenol
+  SMARTS: [SeX2H1:1] — diselenide chemistry analogue of thiol.
+
+Lysine          NCCCC[C@@H](N)C(=O)O
+  → R1=backbone_n  R2=backbone_c  R3=backbone_n_mod  R4=amine_primary  R5=amine_secondary
+  SMARTS: [NX3;H2:1] — the ε-NH2 gets two slots (R4 for first H, R5 for second H via Pass 3).
+
+Aspartate       N[C@@H](CC(=O)O)C(=O)O
+  → R1=backbone_n  R2=backbone_c  R3=backbone_n_mod  R4=carboxyl
+  ⚠ EDGE CASE: Two COOH groups. Backbone COOH is claimed first by graph topology and
+  excluded from sidechain scan. Sidechain COOH then matches [CX3:1](=O)[OX2H1] → R4.
+  Leaving group: [OH] (not [H]) — this distinguishes carboxyl from aldehyde at assembly time.
+
+Serine          N[C@@H](CO)C(=O)O
+  → R1=backbone_n  R2=backbone_c  R3=backbone_n_mod  R4=hydroxyl
+  SMARTS: [OX2H1:1][CX4] — aliphatic hydroxyl. Matches Ser, Thr, Hser.
+
+Tyrosine        N[C@@H](Cc1ccc(O)cc1)C(=O)O
+  → R1=backbone_n  R2=backbone_c  R3=backbone_n_mod  R4=hydroxyl_phenolic
+  SMARTS: [OX2H1:1][c] — phenolic OH. label_only=True: slot is reserved but
+  has no reaction in the bond table (phenolic OH is unreactive under standard conditions).
+
+Histidine       N[C@@H](Cc1c[nH]cn1)C(=O)O
+  → R1=backbone_n  R2=backbone_c  R3=backbone_n_mod  R4=aromatic_nh
+  SMARTS: [nH:1] — imidazole NH. label_only=True (informational slot).
+
+Proline         O=C(O)[C@@H]1CCCN1
+  → R1=backbone_n  R2=backbone_c
+  ⚠ EDGE CASE: Ring N has only 1 H → R3 threshold (≥ 2 H) not met.
+  No R3 assigned, so backbone N-methylation caps cannot attach.
+
+Arginine        N[C@@H](CCCNC(=N)N)C(=O)O
+  → R1=backbone_n  R2=backbone_c  R3=backbone_n_mod  R4=amine_primary  R5=guanidinium  R6=amine_secondary
+  ⚠ EDGE CASE: Multi-atom match. Guanidinium pattern [NX3;H1:1][CX3](=N) marks the
+  ε-N as R5 (label_only) AND protects the guanidinium carbon from matching later
+  patterns. The terminal -NH2 still gets R4 (amine_primary) + R6 (second H, Pass 3).
+```
+
+#### Bioconjugation handles
+
+```
+Propargylglycine    N[C@@H](CC#C)C(=O)O       → R4=alkyne_c
+  SMARTS: [CX4;!H0:1]C#[CH] — dummy on the α-carbon adjacent to the triple bond
+  (Rule 2: high-valence alkyne C has no spare bond, so [n*] goes on the sp3 neighbor).
+
+Azidoalanine        N[C@@H](CN=[N+]=[N-])C(=O)O  → R4=azide_alpha_c
+  SMARTS: [CX4;!H0:1][N]=[N+]=[N-] — same Rule 2 logic; dummy on sp3 α-carbon.
+
+Chloroacetylalanine N[C@@H](CCl)C(=O)O         → R4=alkyl_halide_c
+  SMARTS: [CX4;!H0:1][Cl,Br,I] — sp3 carbon bearing halide. The halide stays in the
+  monomer; it departs as part of the SMIRKS reaction (SN2).
+
+NHS-alanine         N[C@@H](CC(=O)ON1C(=O)CCC1=O)C(=O)O  → R4=nhs_ester
+  SMARTS: [CX4;!H0:1]C(=O)ON1C(=O)CCC1=O — entire NHS ring encoded in SMARTS.
+
+Aldehyde-alanine    N[C@@H](CC=O)C(=O)O        → R4=aldehyde
+  SMARTS: [CX3H1:1](=O)[!#7] — aldehyde C-H. The [!#7] prevents matching
+  formamide CHO (which has its own pattern). LG=[H] distinguishes from carboxyl LG=[OH].
+
+Aminooxy-alanine    N[C@@H](CON)C(=O)O         → R4=aminooxy
+  SMARTS: [NH2:1][OX2H0] — aminooxy N-H. Priority: checked before amine_primary,
+  so the -ONH2 matches aminooxy (not generic amine).
+
+Hydrazide-alanine   N[C@@H](CC(=O)NN)C(=O)O    → R4=hydrazide
+  SMARTS: [NX3H1:1][NX3H2] — N-N bond distinguishes from plain amine.
+
+Allylglycine        N[C@@H](CC=C)C(=O)O        → R4=terminal_alkene
+  SMARTS: [CH1:1]=[CH2] — vinyl CH=CH2 for ring-closing metathesis (RCM).
+```
+
+#### Caps and special backbones
+
+```
+Glycolic acid       OCC(=O)O                    → R2=backbone_c  R4=hydroxyl
+  ⚠ EDGE CASE: No nitrogen. Backbone detection finds the hydroxyl → COOH path.
+  R2 is backbone_c (carboxyl), R4 is the hydroxyl. No R1/R3 — depsipeptide building block.
+
+Acetyl cap          CC(=O)O                     → R2=backbone_c
+  Cap detection: no N, COOH present → single-ended cap with R2.
+
+Amide cap           N                           → R1=backbone_n
+  Cap detection: amine without COOH → single-ended cap with R1.
+```
+
+#### Priority conflict resolution
+
+The SMARTS patterns are checked in a fixed priority order. When multiple patterns could match the same atom, the first match wins:
+
+| Priority | Pattern | SMARTS | What it catches |
+|----------|---------|--------|-----------------|
+| 1 | thiol | `[SX2H1:1]` | Cys — always matched first |
+| 2 | selenol | `[SeX2H1:1]` | Sec |
+| 3 | alkyl_halide_c | `[CX4;!H0:1][Cl,Br,I]` | ClAcAla, BrAcAla |
+| 4 | aminooxy | `[NH2:1][OX2H0]` | Aoa — before amine_primary |
+| 5 | hydrazide | `[NX3H1:1][NX3H2]` | HzAla — before amine_primary |
+| 6 | amine_primary | `[NX3;H2:1]` | Lys, Orn — generic fallback |
+| 7 | guanidinium | `[NX3;H1:1][CX3](=N)` | Arg ε-N (label_only) |
+| 8 | carboxyl | `[CX3:1](=O)[OX2H1]` | Asp, Glu sidechain COOH |
+| 9 | hydroxyl_phenolic | `[OX2H1:1][c]` | Tyr (label_only) |
+| 10 | hydroxyl | `[OX2H1:1][CX4]` | Ser, Thr, Hser |
+| 11 | aromatic_nh | `[nH:1]` | His, Trp (label_only) |
+| 12 | amide_nh | `[NX3;H1:1][CX3]=O` | Asn, Gln (label_only) |
+| ... | *(bioconjugation handles)* | | alkyne, azide, NHS, etc. |
+
+Key conflicts resolved by this ordering:
+- **Aminooxy vs amine:** `-ONH2` matches aminooxy (#4) before the `-NH2` could match amine_primary (#6).
+- **Hydrazide vs amine:** `-NHNH2` matches hydrazide (#5); the terminal `-NH2` of the hydrazine is protected by the multi-atom match.
+- **Phenolic vs aliphatic OH:** Tyr's `ArO-H` matches hydroxyl_phenolic (#9) before hydroxyl (#10) can fire.
+- **Backbone vs sidechain COOH:** Backbone carboxyl is excluded from the sidechain scan entirely (graph-topology claim). Only the Asp/Glu sidechain COOH survives to match carboxyl (#8).
+- **Guanidinium protection:** The `[CX3](=N)` carbon in Arg's guanidinium is marked `protected` after matching. This prevents the terminal `-NH2` on the guanidinium from being re-classified by a later pattern as a second amine_primary — it correctly gets amine_primary only once, with the second H assigned in Pass 3.
+
 ### Register to library
 
 ```python
