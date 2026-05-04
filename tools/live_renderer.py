@@ -2825,36 +2825,60 @@ async def insert_bond(req: _InsertBondReq):
                 pass
 
         if host_abbr:
-            # Host is a bracket-internal monomer — insert inside its bracket
-            # Find the monomer's name followed by (r,r) inside a bracket and
-            # insert the new entry right after its parenthesized args
-            pattern = re.compile(
-                re.escape(host_abbr) + r'\(\d+,\d+\)'
-                + r'(?:\.\w+\(\d+,\d+\))*'  # any existing entries after it
-            )
-            # Walk brackets to find the right one
-            inserted = False
-            for bm in re.finditer(r'\[([^\[\]]*(?:\[[^\[\]]*\])*[^\[\]]*)\]', cabiln):
-                content = bm.group(1)
-                pm = re.search(re.escape(host_abbr) + r'\(\d+,\d+\)', content)
-                if pm:
-                    prefix_in = content[:pm.start()]
-                    hub_in = content[pm.start():pm.end()]
-                    rest_in = content[pm.end():]
-                    open_count = prefix_in.count('[') - prefix_in.count(']')
-                    if open_count == 0 and rest_in and not rest_in.startswith(']'):
-                        # Rewrite the entire bracket so all arms from hub are
-                        # explicit [.arm] sub-brackets — no implicit flat chain
-                        # following a sub-bracket, which would be ambiguous.
-                        # e.g. [hub.chain.!3] + new → [hub[.chain.!3][.new]]
-                        arms = _rest_to_arms(rest_in) + f'[{new_entry}]'
-                        new_bracket = f'[{prefix_in}{hub_in}{arms}]'
-                        result = cabiln[:bm.start()] + new_bracket + cabiln[bm.end():]
+            # Host is a bracket-internal monomer — insert inside its bracket.
+            # Scan ALL brackets at any nesting depth (char-by-char, not regex
+            # finditer) so old-style [[hub.chain]] notation is handled by
+            # finding the innermost bracket that directly contains hub.
+            def _all_bracket_spans(s):
+                i = 0
+                while i < len(s):
+                    if s[i] == '[':
+                        depth = 0
+                        j = i
+                        while j < len(s):
+                            if s[j] == '[':
+                                depth += 1
+                            elif s[j] == ']':
+                                depth -= 1
+                                if depth == 0:
+                                    break
+                            j += 1
+                        yield (i, j + 1)
+                        i += 1  # +1 so inner brackets are yielded too
                     else:
-                        insert_pos = bm.start(1) + pm.end()
-                        result = cabiln[:insert_pos] + new_entry + cabiln[insert_pos:]
-                    inserted = True
-                    break
+                        i += 1
+
+            inserted = False
+            for br_start, br_end in _all_bracket_spans(cabiln):
+                content = cabiln[br_start + 1:br_end - 1]
+                pm = re.search(re.escape(host_abbr) + r'\(\d+,\d+\)', content)
+                if not pm:
+                    continue
+                prefix_in = content[:pm.start()]
+                open_count = prefix_in.count('[') - prefix_in.count(']')
+                if open_count != 0:
+                    continue  # hub is inside a nested bracket — keep looking
+                hub_in = content[pm.start():pm.end()]
+                rest_in = content[pm.end():]
+                if rest_in and not rest_in.startswith(']'):
+                    # Rewrite all existing content after hub as explicit arms,
+                    # then add new arm: [hub[.existing...][.new]]
+                    arms = _rest_to_arms(rest_in) + f'[{new_entry}]'
+                    new_bracket = f'[{prefix_in}{hub_in}{arms}]'
+                else:
+                    new_bracket = f'[{prefix_in}{hub_in}{new_entry}]'
+                # If the bracket we just replaced was the sole content of an
+                # outer bracket (old [[hub...]] style), unnest it now so the
+                # result is clean .[hub[.arms]] not .[[hub[.arms]]].
+                old_bracket = cabiln[br_start:br_end]
+                if (br_start > 0 and cabiln[br_start - 1] == '['
+                        and br_end < len(cabiln) and cabiln[br_end] == ']'
+                        and cabiln[br_start - 1:br_end + 1] == '[' + old_bracket + ']'):
+                    result = cabiln[:br_start - 1] + new_bracket + cabiln[br_end + 1:]
+                else:
+                    result = cabiln[:br_start] + new_bracket + cabiln[br_end:]
+                inserted = True
+                break
             if inserted:
                 return {"result": result}
 

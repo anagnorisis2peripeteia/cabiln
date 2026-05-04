@@ -94,15 +94,12 @@ _BRACKET_RE = re.compile(
 
 
 def _flatten_nested_brackets(seg):
-    """Flatten nested brackets with reordering: ``[[A.B].C]`` → ``[A.C.B]``.
+    """Convert old ``[[A.B].C]`` nested notation to new ``[A[.B][.C]]`` form.
 
-    Nested brackets disambiguate multi-branch hubs from sequential chains.
-    ``[[TBMB(4,4).C(5,4)].!3(6,4)]`` means both C and !3 bond to TBMB (the
-    anchor), not !3 bonding to C.  Flat brackets are strictly sequential, so we
-    reorder: outer entries go right after the anchor, before inner continuation.
-    Crosslink entries (``!n``) in ``_sub_bracket`` annotate the previous
-    fragment without advancing it, so ``[TBMB.!3.C]`` correctly bonds both !3
-    and C to TBMB.
+    Old notation used nesting to express multi-arm hubs: ``[[TBMB.C].!3]``
+    meant both C and !3 bond to TBMB.  New notation uses explicit sub-bracket
+    arms: ``[TBMB[.C][.!3]]``.  This function converts the old form on the way
+    into the parser so both notations assemble identically.
     """
     out = []
     i = 0
@@ -132,10 +129,12 @@ _ENTRY_ANY = re.compile(r'((?:[A-Za-z]\w*|!\w+)\(\d+,\d+\))')
 
 
 def _flatten_one_nested(s):
-    """Recursively flatten a single nested bracket group.
+    """Convert a single nested bracket to new sub-bracket arm notation.
 
-    Input ``s`` is the bracket expression starting at the outer ``[`` (no
-    leading dot).  Returns a flat ``[anchor.outer.inner_rest]`` string.
+    Input ``s`` is the bracket expression starting at the outer ``[``.
+    Returns ``[anchor[.inner_rest...][.outer...]]`` — every arm from the
+    anchor is an explicit ``[.Entry(r,r)]`` sub-bracket so the parser's
+    pointer semantics are unambiguous.
     """
     inner_start = s.index('[', 1)
     depth = 0
@@ -150,19 +149,24 @@ def _flatten_one_nested(s):
         inner_end += 1
 
     inner_bracket = s[inner_start:inner_end + 1]
-    if '[' in inner_bracket[1:-1]:
-        inner_bracket = _flatten_one_nested(inner_bracket)
-
     inner_content = inner_bracket[1:-1]
+    outer_part = s[inner_end + 1:-1]
+    outer_entries = _ENTRY_ANY.findall(outer_part)
+
+    # If inner content already uses sub-bracket notation, preserve it and just
+    # append outer entries as additional arms.
+    if '[' in inner_content:
+        outer_arms = ''.join(f'[.{e}]' for e in outer_entries)
+        return '[' + inner_content + outer_arms + ']'
+
+    # Legacy flat inner content: split anchor from remaining chain entries.
     inner_entries = _ENTRY_ANY.findall(inner_content)
     anchor = inner_entries[0] if inner_entries else ''
     inner_rest = inner_entries[1:]
 
-    outer_part = s[inner_end + 1:-1]
-    outer_entries = _ENTRY_ANY.findall(outer_part)
-
-    parts = [anchor] + outer_entries + inner_rest
-    return '[' + '.'.join(parts) + ']'
+    inner_arms = ''.join(f'[.{e}]' for e in inner_rest)
+    outer_arms = ''.join(f'[.{e}]' for e in outer_entries)
+    return '[' + anchor + inner_arms + outer_arms + ']'
 
 # Matches entries inside brackets: both monomer .Token(r,r) and crosslink .!n(r,r).
 _BRACKET_ENTRY_RE = re.compile(r'\.((?:[A-Za-z]\w*|!\w+))\((\d+),(\d+)\)')
