@@ -1237,7 +1237,7 @@ pre_activate('N[C@@H](CCN)C(=O)O')
 # 5. Arginine (R) — second H on the guanidinium -NH₂
 pre_activate('N[C@@H](CCCNC(=N)N)C(=O)O')
 # The terminal -NH₂ got R4=amine_primary in Pass 2.
-# Pass 3: same atom gets R6=amine_secondary (R5 taken by guanidinium).
+# Pass 3: same atom gets R7=amine_secondary (R5=guanidinium, R6=guanidinium_imine).
 ```
 
 </details>
