@@ -2802,13 +2802,12 @@ async def insert_bond(req: _InsertBondReq):
             return {"result": req.new_abbr}
 
         is_backbone = (req.r_host == 2 and req.r_new == 1)
-        if is_backbone:
-            return {"result": cabiln + '-' + req.new_abbr}
 
         new_entry = f'.{req.new_abbr}({req.r_host},{req.r_new})'
         bracket = f'.[{req.new_abbr}({req.r_host},{req.r_new})]'
 
-        # Check if the host is a bracket-internal monomer by parsing
+        # Detect bracket-internal host BEFORE the backbone early-return so that
+        # pendant residues (e.g. a Cys arm from TBMB) can be extended correctly.
         from pyPept.sequence import Sequence
         try:
             seq = Sequence(cabiln)
@@ -2823,6 +2822,11 @@ async def insert_bond(req: _InsertBondReq):
                 host_abbr = seq.s_monomers[req.host_residue_idx].get('m_abbr', '')
             except (IndexError, KeyError):
                 pass
+
+        # Backbone on a main-chain residue: simple append.
+        # Backbone on a bracket-internal residue falls through to bracket logic.
+        if is_backbone and not host_abbr:
+            return {"result": cabiln + '-' + req.new_abbr}
 
         if host_abbr:
             # Host is a bracket-internal monomer — insert inside its bracket.
