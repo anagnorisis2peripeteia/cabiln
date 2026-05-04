@@ -1,0 +1,536 @@
+# Canonical reaction chemistry for each cap monomer.
+# reaction: acylation | alkylation | sulfonylation | nucleophilic | reductive_amination
+# reagent_lg: SMILES of the leaving group on the actual reagent
+# reagent_note: common reagent name
+
+# ===================================================================
+# R2 CAPS -- N-terminal / electrophilic
+# ===================================================================
+
+# --- Acylation (R2 on carbonyl C -> forms amide C(=O)-N) ---
+
+ac:
+  reaction: acylation
+  reagent_lg: Cl
+  reagent_note: acetyl chloride (AcCl) or acetic anhydride
+
+Boc:
+  reaction: acylation
+  reagent_lg: Cl
+  reagent_note: Boc-Cl or Boc2O
+
+Cbz:
+  reaction: acylation
+  reagent_lg: Cl
+  reagent_note: Cbz-Cl (benzyl chloroformate)
+
+fmoc:
+  reaction: acylation
+  reagent_lg: Cl
+  reagent_note: Fmoc-Cl
+
+BnCap:
+  reaction: acylation
+  reagent_lg: Cl
+  reagent_note: phenylacetyl chloride
+
+BrAc:
+  reaction: acylation
+  reagent_lg: Cl
+  reagent_note: bromoacetyl chloride
+
+ClAc:
+  reaction: acylation
+  reagent_lg: Cl
+  reagent_note: chloroacetyl chloride
+
+CF3Ac:
+  reaction: acylation
+  reagent_lg: Cl
+  reagent_note: trifluoroacetyl chloride
+
+Bua:
+  reaction: acylation
+  reagent_lg: Cl
+  reagent_note: butyryl chloride
+
+ButCap:
+  reaction: acylation
+  reagent_lg: Cl
+  reagent_note: butyryl chloride
+
+Bz:
+  reaction: acylation
+  reagent_lg: Cl
+  reagent_note: benzoyl chloride
+
+BzCap:
+  reaction: acylation
+  reagent_lg: Cl
+  reagent_note: benzoyl chloride
+
+CyclohexCap:
+  reaction: acylation
+  reagent_lg: Cl
+  reagent_note: cyclohexanecarbonyl chloride
+
+DecCap:
+  reaction: acylation
+  reagent_lg: Cl
+  reagent_note: decanoyl chloride
+
+HexCap:
+  reaction: acylation
+  reagent_lg: Cl
+  reagent_note: hexanoyl chloride
+
+IsoButCap:
+  reaction: acylation
+  reagent_lg: Cl
+  reagent_note: 3-methylbutanoyl chloride
+
+MyrCap:
+  reaction: acylation
+  reagent_lg: Cl
+  reagent_note: myristoyl chloride
+
+NaphtCap:
+  reaction: acylation
+  reagent_lg: Cl
+  reagent_note: 2-naphthoyl chloride
+
+NMe23Abz:
+  reaction: acylation
+  reagent_lg: Cl
+  reagent_note: 3-(dimethylamino)benzoyl chloride
+
+NMe24Abz:
+  reaction: acylation
+  reagent_lg: Cl
+  reagent_note: 4-(dimethylamino)benzoyl chloride
+
+OctCap:
+  reaction: acylation
+  reagent_lg: Cl
+  reagent_note: octanoyl chloride
+
+PalCap:
+  reaction: acylation
+  reagent_lg: Cl
+  reagent_note: palmitoyl chloride
+
+PivCap:
+  reaction: acylation
+  reagent_lg: Cl
+  reagent_note: pivaloyl chloride
+
+PropCap:
+  reaction: acylation
+  reagent_lg: Cl
+  reagent_note: propionyl chloride
+
+# --- Acylation (hydroxy acid / deamino caps -- coupled via HATU/HBTU) ---
+
+D_OAla:
+  reaction: acylation
+  reagent_lg: OH
+  reagent_note: free acid + HATU coupling
+
+D_OVal:
+  reaction: acylation
+  reagent_lg: OH
+  reagent_note: free acid + HATU coupling
+
+L_OAla:
+  reaction: acylation
+  reagent_lg: OH
+  reagent_note: free acid + HATU coupling
+
+L_OVal:
+  reaction: acylation
+  reagent_lg: OH
+  reagent_note: free acid + HATU coupling
+
+Glc:
+  reaction: acylation
+  reagent_lg: OH
+  reagent_note: glycolic acid + coupling
+
+Hva:
+  reaction: acylation
+  reagent_lg: OH
+  reagent_note: hydroxypentanoic acid + coupling
+
+OLeu:
+  reaction: acylation
+  reagent_lg: OH
+  reagent_note: free acid + coupling
+
+deamino_Chg:
+  reaction: acylation
+  reagent_lg: OH
+  reagent_note: free acid + HATU coupling
+
+deamino_Cys:
+  reaction: acylation
+  reagent_lg: OH
+  reagent_note: free acid + coupling
+
+deamino_Dip:
+  reaction: acylation
+  reagent_lg: OH
+  reagent_note: free acid + coupling
+
+deamino_Gly_CN:
+  reaction: acylation
+  reagent_lg: OH
+  reagent_note: cyanoacetic acid + coupling
+
+deamino_Gly_cPent:
+  reaction: acylation
+  reagent_lg: OH
+  reagent_note: cyclopentylacetic acid + coupling
+
+deamino_Gly_tBu:
+  reaction: acylation
+  reagent_lg: OH
+  reagent_note: 3,3-dimethylbutanoic acid + coupling
+
+deamino_Gly_thien2yl:
+  reaction: acylation
+  reagent_lg: OH
+  reagent_note: thienylacetic acid + coupling
+
+deamino_Leu:
+  reaction: acylation
+  reagent_lg: OH
+  reagent_note: free acid + coupling
+
+deamino_Lys:
+  reaction: acylation
+  reagent_lg: OH
+  reagent_note: free acid + coupling
+
+deamino_Ncy:
+  reaction: acylation
+  reagent_lg: OH
+  reagent_note: thioglycolic acid + coupling
+
+deamino_Phe:
+  reaction: acylation
+  reagent_lg: OH
+  reagent_note: free acid + coupling
+
+deamino_Phg_35diMe:
+  reaction: acylation
+  reagent_lg: OH
+  reagent_note: free acid + coupling
+
+deamino_Phg_4Cl:
+  reaction: acylation
+  reagent_lg: OH
+  reagent_note: free acid + coupling
+
+deamino_hPhe:
+  reaction: acylation
+  reagent_lg: OH
+  reagent_note: phenylbutanoic acid + coupling
+
+deamino_nTyr_Me:
+  reaction: acylation
+  reagent_lg: OH
+  reagent_note: methoxyphenylacetic acid + coupling
+
+# --- Acylation (fatty acid / diacid caps -- all fixed, R2 now on carbonyl C) ---
+
+C14FA:
+  reaction: acylation
+  reagent_lg: OH
+  reagent_note: C14 diacid + coupling
+
+C16FA:
+  reaction: acylation
+  reagent_lg: OH
+  reagent_note: C16 diacid + coupling
+
+C18FA:
+  reaction: acylation
+  reagent_lg: OH
+  reagent_note: octadecanedioic acid + coupling
+
+C20FA:
+  reaction: acylation
+  reagent_lg: OH
+  reagent_note: eicosanedioic acid + coupling
+
+C22FA:
+  reaction: acylation
+  reagent_lg: OH
+  reagent_note: C22 diacid + coupling
+
+C14dAcid:
+  reaction: acylation
+  reagent_lg: OH
+  reagent_note: C14 diacid + coupling
+
+C16dAcid:
+  reaction: acylation
+  reagent_lg: OH
+  reagent_note: C16 diacid + coupling
+
+C22dAcid:
+  reaction: acylation
+  reagent_lg: OH
+  reagent_note: C22 diacid + coupling
+
+Dod_dAcid:
+  reaction: acylation
+  reagent_lg: OH
+  reagent_note: C12 diacid + coupling
+
+Succ:
+  reaction: acylation
+  reagent_lg: OH
+  reagent_note: succinic acid + coupling
+
+Glt:
+  reaction: acylation
+  reagent_lg: OH
+  reagent_note: glutaric acid + coupling
+
+Adp:
+  reaction: acylation
+  reagent_lg: OH
+  reagent_note: adipic acid + coupling
+
+Pim:
+  reaction: acylation
+  reagent_lg: OH
+  reagent_note: pimelic acid + coupling
+
+Sub:
+  reaction: acylation
+  reagent_lg: OH
+  reagent_note: suberic acid + coupling
+
+Azel:
+  reaction: acylation
+  reagent_lg: OH
+  reagent_note: azelaic acid + coupling
+
+Seb:
+  reaction: acylation
+  reagent_lg: OH
+  reagent_note: sebacic acid + coupling
+
+Myr:
+  reaction: acylation
+  reagent_lg: OH
+  reagent_note: myristic acid + coupling
+
+Pal:
+  reaction: acylation
+  reagent_lg: OH
+  reagent_note: palmitic acid + coupling
+
+Ste:
+  reaction: acylation
+  reagent_lg: OH
+  reagent_note: stearic acid + coupling
+
+Ole:
+  reaction: acylation
+  reagent_lg: OH
+  reagent_note: oleic acid + coupling
+
+# --- Acylation -- bioconjugation handles ---
+
+Mal:
+  reaction: acylation
+  reagent_lg: OH
+  reagent_note: maleimidopropionic acid + coupling
+
+TCO:
+  reaction: acylation
+  reagent_lg: OH
+  reagent_note: TCO-propionic acid + coupling
+
+Tz:
+  reaction: acylation
+  reagent_lg: OH
+  reagent_note: tetrazine-acetic acid + coupling
+
+# --- Thiol-containing acyl caps ---
+
+Mba:
+  reaction: acylation
+  reagent_lg: OH
+  reagent_note: mercaptobutanoic acid + coupling
+
+Mpa:
+  reaction: acylation
+  reagent_lg: OH
+  reagent_note: mercaptopropanoic acid + coupling
+
+# --- Alkylation (R2 on C, no carbonyl -> forms C-N) ---
+
+Me_:
+  reaction: alkylation
+  reagent_lg: I
+  reagent_note: methyl iodide (MeI)
+
+Et_:
+  reaction: alkylation
+  reagent_lg: Br
+  reagent_note: ethyl bromide (EtBr)
+
+Bn_:
+  reaction: alkylation
+  reagent_lg: Br
+  reagent_note: benzyl bromide (BnBr)
+
+# --- Alkylation via O/N (unusual N-terminal mods) ---
+
+OBn_:
+  reaction: nucleophilic
+  reagent_lg: H
+  reagent_note: O-benzylhydroxylamine (H2N-OCH2Ph, N-O cap)
+
+OMe_:
+  reaction: nucleophilic
+  reagent_lg: H
+  reagent_note: methoxyamine (H2N-OCH3, N-O cap)
+
+NHBn_:
+  reaction: nucleophilic
+  reagent_lg: H
+  reagent_note: benzylhydrazine (H2N-NHCH2Ph, N-N cap)
+
+# --- Sulfonylation (R2 on S) ---
+
+Tos:
+  reaction: sulfonylation
+  reagent_lg: Cl
+  reagent_note: tosyl chloride (TsCl)
+
+MsO:
+  reaction: sulfonylation
+  reagent_lg: Cl
+  reagent_note: mesyl chloride (MsCl)
+
+# ===================================================================
+# R1 CAPS -- C-terminal / sidechain / nucleophilic
+# ===================================================================
+
+# --- Amide caps (nucleophilic amine) ---
+
+am:
+  reaction: nucleophilic
+  reagent_lg: H
+  reagent_note: ammonia (NH3)
+
+NHMe:
+  reaction: nucleophilic
+  reagent_lg: H
+  reagent_note: methylamine
+
+NHEt:
+  reaction: nucleophilic
+  reagent_lg: H
+  reagent_note: ethylamine
+
+_NHBn:
+  reaction: nucleophilic
+  reagent_lg: H
+  reagent_note: benzylamine
+
+deamino_Dab:
+  reaction: nucleophilic
+  reagent_lg: H
+  reagent_note: 4-aminobutanoic acid
+
+deamino_Gly_OH:
+  reaction: nucleophilic
+  reagent_lg: H
+  reagent_note: glycolic acid (O-nucleophile)
+
+# --- Ester caps (nucleophilic alcohol) ---
+
+_OMe:
+  reaction: nucleophilic
+  reagent_lg: H
+  reagent_note: methanol
+
+_OBn:
+  reaction: nucleophilic
+  reagent_lg: H
+  reagent_note: benzyl alcohol
+
+OEt:
+  reaction: nucleophilic
+  reagent_lg: H
+  reagent_note: ethanol
+
+OtBu:
+  reaction: nucleophilic
+  reagent_lg: H
+  reagent_note: tert-butanol
+
+tbu:
+  reaction: nucleophilic
+  reagent_lg: H
+  reagent_note: tert-butanol (sidechain ester protection)
+
+# --- Direct C-C caps (organometallic / Grignard) ---
+
+_Me:
+  reaction: nucleophilic
+  reagent_lg: H
+  reagent_note: methyl nucleophile (MeMgBr or MeLi)
+
+_Et:
+  reaction: nucleophilic
+  reagent_lg: H
+  reagent_note: ethyl nucleophile
+
+_Bn:
+  reaction: nucleophilic
+  reagent_lg: H
+  reagent_note: benzyl nucleophile
+
+Ph:
+  reaction: nucleophilic
+  reagent_lg: H
+  reagent_note: phenyl nucleophile (PhMgBr)
+
+otbu:
+  reaction: nucleophilic
+  reagent_lg: H
+  reagent_note: tert-butyl nucleophile
+
+Dmb:
+  reaction: nucleophilic
+  reagent_lg: H
+  reagent_note: 2,4-dimethoxybenzyl nucleophile
+
+# --- Sidechain protecting group caps ---
+
+boc:
+  reaction: acylation
+  reagent_lg: Cl
+  reagent_note: Boc-Cl (sidechain amine protection)
+
+trt:
+  reaction: alkylation
+  reagent_lg: Cl
+  reagent_note: trityl chloride (TrtCl)
+
+acm:
+  reaction: alkylation
+  reagent_lg: Cl
+  reagent_note: acetamidomethyl chloride
+
+pbf:
+  reaction: sulfonylation
+  reagent_lg: Cl
+  reagent_note: Pbf-Cl (Arg sidechain sulfonyl protection)

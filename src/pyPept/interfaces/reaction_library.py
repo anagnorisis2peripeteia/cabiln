@@ -77,8 +77,13 @@ _CHEM_TYPE_REGISTRY = [
     ('hydrazide',         '[NX3H1:1][NX3H2]',                      '[H]',  '[NX3H0:1]([NX3H2])C(=O)',                False),
     ('amine_primary',     '[NX3;H2:1]',                             '[H]',  '[NX3;H2:1]',                             False),
     ('guanidinium',       '[NX3;H1:1][CX3](=N)',                   '[H]',  '[NX3;H1:1][CX3](=N)',                    True),
+    ('guanidinium_imine', '[NX2H1:1]=[CX3]([NX3])[NX3]',           '[H]',  '[NX2;H0,H1:1]=[CX3]([NX3])[NX3]',       False),
     # ── Carboxyl / oxygen ────────────────────────────────────────────────────
-    ('carboxyl',          '[OX2H1:1][CX3](=O)',                    '[H]',   '[OX2H0:1][CX3](=O)',                    False),
+    # Sidechain COOH: dummy on carbonyl C (same convention as backbone R2).
+    # LG=[OH] removes the hydroxyl.  infer_smarts is intentionally None —
+    # carboxyl vs aldehyde C atoms are structurally identical in CHUCKLES,
+    # so we disambiguate via leaving-group metadata in infer_chem_type.
+    ('carboxyl',          '[CX3:1](=O)[OX2H1]',                   '[OH]',  None,                                    False),
     ('hydroxyl_phenolic', '[OX2H1:1][c]',                           '[H]',  '[OX2H1:1][c]',                           True),
     ('hydroxyl',          '[OX2H1:1][CX4]',                        '[H]',  '[OX2H1:1][CX4]',                         False),
     # ── Aromatic / amide N-H (label-only) ────────────────────────────────────
@@ -98,6 +103,8 @@ _CHEM_TYPE_REGISTRY = [
     # ── Condensation bioorthogonal ────────────────────────────────────────────
     # aldehyde: CH1 (pre, requires H to distinguish from ketone) → CH0 after dummy + chain + O
     ('aldehyde',          '[CX3H1:1](=O)[!#7]',                   '[H]',  '[CX3;H0,H1:1](=O)[!#7]',                False),
+    # formamide_c: formyl (N-CHO) — distinct from amide (N-CO-C, no H)
+    ('formamide_c',       '[CX3H1:1](=O)[NX3]',                   '[H]',  '[CX3;H0,H1:1](=O)[NX3]',                False),
     ('nhs_ester',         '[CX4;!H0:1]C(=O)ON1C(=O)CCC1=O',      '[H]',  '[CX4;!H0:1]C(=O)ON1C(=O)CCC1=O',       False),
     # maleimide_c: ring alkene CH1 (pre) → CH0 after dummy
     # infer_smarts adds ([*]) so the dummy-bearing vinyl C is match[0] not the other vinyl C
@@ -107,7 +114,7 @@ _CHEM_TYPE_REGISTRY = [
 # Derived detection lists — do not edit directly.
 # _EXOTIC_SMARTS: infer_chem_type at assembly time (label_only excluded, infer_smarts column).
 _EXOTIC_SMARTS = [
-    (Chem.MolFromSmarts(infer_smarts), ct)
+    (Chem.MolFromSmarts(infer_smarts) if infer_smarts else None, ct)
     for ct, _pre, _lg, infer_smarts, label_only in _CHEM_TYPE_REGISTRY
     if not label_only
 ]
@@ -117,6 +124,7 @@ _HEURISTIC_TYPES = frozenset({
     'backbone_n', 'backbone_c', 'backbone_o', 'backbone_n_mod',
     'amine_secondary',  # falls through to amine_primary element heuristic
     'carbon',           # plain sp3 C without carbonyl; heuristic fallback at end of infer_chem_type
+    'carboxyl',         # C-attachment COOH; infer_smarts=None, disambiguated via LG in heuristic
 })
 _registry_types = {ct for ct, *_, lo in _CHEM_TYPE_REGISTRY if not lo}
 _bond_types = {ct for e in REACTIONS.values() for pair in e.get('reactant_pairs', []) for ct in pair}
@@ -124,7 +132,8 @@ _missing = _bond_types - _registry_types - _HEURISTIC_TYPES
 assert not _missing, f"chem_types in _BOND_TABLE without SMARTS detection: {_missing}"
 
 
-def infer_chem_type(mol, attach_idx: int, slot: int = None) -> str:
+def infer_chem_type(mol, attach_idx: int, slot: int = None,
+                    leaving: str = None) -> str:
     """
     Infer the chemistry type of an attachment atom from the original monomer mol.
 
@@ -136,6 +145,9 @@ def infer_chem_type(mol, attach_idx: int, slot: int = None) -> str:
     :param slot: 0-based R-group slot override.  When provided, avoids calling
                  _slot_for_attachment (which is ambiguous for atoms bonded to
                  multiple dummies, e.g. backbone N with [1*] and [3*]).
+    :param leaving: leaving-group SMILES (e.g. '[OH]', '[H]') from m_Rgroups.
+                    Used to disambiguate carboxyl C from aldehyde C — they are
+                    structurally identical in CHUCKLES but differ in LG.
     :returns: chem_type string matching reaction library keys.
     """
     from pyPept.sequence import _slot_for_attachment
@@ -179,11 +191,19 @@ def infer_chem_type(mol, attach_idx: int, slot: int = None) -> str:
         return 'amine_primary'
 
     if sym == 6:
+        has_carbonyl = False
         for nb in atom.GetNeighbors():
             if nb.GetAtomicNum() == 8:
                 bond = mol.GetBondBetweenAtoms(attach_idx, nb.GetIdx())
                 if bond.GetBondTypeAsDouble() == 2.0:
-                    return 'carboxyl'
+                    has_carbonyl = True
+                    break
+        if has_carbonyl:
+            if leaving == '[OH]':
+                return 'carboxyl'
+            if leaving == '[H]':
+                return 'aldehyde'
+            return 'carboxyl'
         return 'carbon'
 
     if sym == 8:

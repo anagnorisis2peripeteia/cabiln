@@ -183,7 +183,17 @@ def normalize_input(raw):
 # Each entry: (SMARTS with attachment atom mapped :1, leaving_group_smiles)
 # First match wins; more specific rules must come first.
 LEAVING_GROUP_RULES = [
+    # Halide LGs (reagent form) — checked first so acid chlorides beat free acids
+    ('[CX3:1](=O)[ClX1]',        '[Cl]'),  # acid chloride
+    ('[CX3:1](=O)[BrX1]',        '[Br]'),  # acid bromide
+    ('[SX4:1](=O)(=O)[ClX1]',    '[Cl]'),  # sulfonyl chloride (TsCl, MsCl, Pbf-Cl)
+    ('[CX4:1][IX1]',              '[I]'),   # alkyl iodide (MeI)
+    ('[CX4:1][BrX1]',            '[Br]'),  # alkyl bromide (EtBr, BnBr)
+    ('[CX4:1][ClX1]',            '[Cl]'),  # alkyl chloride (TrtCl, AcmCl)
+    # Free-form LGs (condensation / HATU coupling)
+    ('[CX3H1:1](=O)',      '[H]'),   # aldehyde C → H leaves
     ('[CX3:1](=O)[OX2H1]', '[OH]'),  # carboxylic acid C → OH leaves
+    ('[SX4:1](=O)(=O)[OX2H1]', '[OH]'),  # sulfonyl-OH S → OH leaves
     ('[NX3;H3:1]',         '[H]'),   # unsubstituted amine (NH3 cap) → H leaves
     ('[NX3;H2:1]',         '[H]'),   # primary amine N → H leaves
     ('[NX3;H1;R:1]',       '[H]'),   # proline-type ring N → H leaves
@@ -191,6 +201,9 @@ LEAVING_GROUP_RULES = [
     ('[SX2H1:1]',          '[H]'),   # thiol S → H leaves
     ('[SeX2H1:1]',         '[H]'),   # selenol Se → H leaves
     ('[OX2H1:1]',          '[H]'),   # hydroxyl O → H leaves
+    # Carbon nucleophile (Grignard) — last resort
+    ('[cH1:1]',            '[H]'),   # aromatic C-H
+    ('[CX4;H1,H2,H3:1]',  '[H]'),   # sp3 C-H
 ]
 
 # Compiled once at import time.
@@ -199,10 +212,13 @@ _LG_PATTERNS = [(Chem.MolFromSmarts(s), lg) for s, lg in LEAVING_GROUP_RULES]
 
 # ── Backbone detection — topology patterns ────────────────────────────────
 # Atom-type patterns for the graph-distance backbone search.
-# N: any trivalent N (covers primary amine, Pro ring N, secondary N).
+# N: trivalent N with at least one H (covers primary amine, Pro ring N,
+#    secondary N, but excludes tertiary amines like NMe2 which can't donate H).
 # C: carboxyl carbonyl carbon (C(=O)OH).
-_BB_N_PAT    = Chem.MolFromSmarts('[NX3]')
-_BB_COOH_PAT = Chem.MolFromSmarts('[CX3:1](=O)[OX2H1]')
+_BB_N_PAT        = Chem.MolFromSmarts('[NX3;H1,H2,H3]')
+_BB_COOH_PAT     = Chem.MolFromSmarts('[CX3:1](=O)[OX2H1]')
+_BB_ALDEHYDE_PAT = Chem.MolFromSmarts('[CX3H1:1](=O)')
+_BB_ALCOHOL_PAT  = Chem.MolFromSmarts('[OX2H1:1][CX4]')
 
 # Sidechain rules derived from the unified registry in reaction_library.
 # Uses pre_smarts column (H≥1 required — there must be an H to replace with dummy).
@@ -232,6 +248,12 @@ def find_backbone_slots(mol):
     n_idxs = [m[0] for m in mol.GetSubstructMatches(_BB_N_PAT)]
     c_idxs = [m[0] for m in mol.GetSubstructMatches(_BB_COOH_PAT)]
 
+    # Fallback: if no COOH, try aldehyde then alcohol as C-terminal analogue
+    if not c_idxs:
+        c_idxs = [m[0] for m in mol.GetSubstructMatches(_BB_ALDEHYDE_PAT)]
+    if not c_idxs:
+        c_idxs = [m[0] for m in mol.GetSubstructMatches(_BB_ALCOHOL_PAT)]
+
     if not n_idxs or not c_idxs:
         return None
 
@@ -246,26 +268,97 @@ def find_backbone_slots(mol):
     return {1: best_n, 2: best_c} if best_n is not None else None
 
 
+_CAP_SULFONYL_PAT = Chem.MolFromSmarts('[SX4:1](=O)(=O)[OX2H1]')
+_CAP_ALCOHOL_PAT  = Chem.MolFromSmarts('[OX2H1:1][CX4]')
+# Reagent-form halide patterns (electrophilic caps entered with their LG)
+_CAP_ACYL_HALIDE_PAT    = Chem.MolFromSmarts('[CX3:1](=O)[Cl,Br]')
+_CAP_SULFONYL_CL_PAT    = Chem.MolFromSmarts('[SX4:1](=O)(=O)[ClX1]')
+_CAP_ALKYL_HALIDE_PAT   = Chem.MolFromSmarts('[CX4:1][Cl,Br,I]')
+# Carbon nucleophile caps (Grignard / organometallic — last resort)
+_CAP_BENZYLIC_CH_PAT    = Chem.MolFromSmarts('[CX4;H1,H2,H3:1][c]')
+_CAP_TERTIARY_CH_PAT    = Chem.MolFromSmarts('[CX4;H1:1]([CX4])([CX4])[CX4]')
+_CAP_AROMATIC_CH_PAT    = Chem.MolFromSmarts('[cH1:1]')
+
+
+def _pick_alpha_n(mol, n_idxs):
+    """Among multiple amine N atoms, pick the one closest to a C=O or C-OH."""
+    targets = []
+    for atom in mol.GetAtoms():
+        if atom.GetAtomicNum() == 6:
+            for nb in atom.GetNeighbors():
+                if nb.GetAtomicNum() == 8:
+                    targets.append(atom.GetIdx())
+                    break
+    if not targets:
+        return n_idxs[0]
+    best_n, best_dist = n_idxs[0], float('inf')
+    for n_idx in n_idxs:
+        for c_idx in targets:
+            path = Chem.GetShortestPath(mol, n_idx, c_idx)
+            if path and len(path) - 1 < best_dist:
+                best_dist = len(path) - 1
+                best_n = n_idx
+    return best_n
+
+
 def find_cap_slots(mol):
     """
     Fallback for single-ended cap monomers that lack the full N+COOH backbone.
 
-    When find_backbone_slots returns None (only one terminus present):
-      - COOH only, no amine  → N-terminal cap; assign carboxyl C as R2 (slot 1)
-      - amine only, no COOH  → C-terminal cap; assign amine N as R1 (slot 0)
+    Handles both free-form (COOH, sulfonyl-OH, amine, alcohol) and
+    reagent-form (acid chloride, sulfonyl chloride, alkyl halide) caps.
+    All electrophilic caps → R2 (slot 2). Nucleophilic caps → R1 (slot 1).
 
     :param mol: RDKit mol with explicit H.
     :returns: (slots_dict, chem_types_dict) or (None, None) if unresolvable.
     """
     c_idxs = [m[0] for m in mol.GetSubstructMatches(_BB_COOH_PAT)]
     n_idxs = [m[0] for m in mol.GetSubstructMatches(_BB_N_PAT)]
+    s_idxs = [m[0] for m in mol.GetSubstructMatches(_CAP_SULFONYL_PAT)]
 
+    # Multi-arm crosslinker: 3+ alkyl halides → defer to sidechain-only fallback
+    if not n_idxs and not c_idxs and not s_idxs:
+        alk_multi = [m[0] for m in mol.GetSubstructMatches(_CAP_ALKYL_HALIDE_PAT)]
+        if len(alk_multi) >= 3:
+            return None, None
+
+    # Free-form electrophilic caps
     if c_idxs and not n_idxs:
-        # N-terminal cap: carboxyl bonds to first residue's backbone_n via positional rule
-        return {1: c_idxs[0]}, {1: 'backbone_c'}
+        return {2: c_idxs[0]}, {2: 'backbone_c'}
+    if s_idxs and not n_idxs and not c_idxs:
+        return {2: s_idxs[0]}, {2: 'backbone_c'}
+
+    # Reagent-form electrophilic caps (halide LG still attached)
+    if not n_idxs and not c_idxs and not s_idxs:
+        acyl_h = [m[0] for m in mol.GetSubstructMatches(_CAP_ACYL_HALIDE_PAT)]
+        if acyl_h:
+            return {2: acyl_h[0]}, {2: 'backbone_c'}
+        sul_cl = [m[0] for m in mol.GetSubstructMatches(_CAP_SULFONYL_CL_PAT)]
+        if sul_cl:
+            return {2: sul_cl[0]}, {2: 'backbone_c'}
+        alk_h = [m[0] for m in mol.GetSubstructMatches(_CAP_ALKYL_HALIDE_PAT)]
+        if alk_h and len(alk_h) < 3:
+            return {2: alk_h[0]}, {2: 'backbone_c'}
+
+    # Nucleophilic caps — but prefer electrophilic alkyl halide if present
+    # (e.g. acm: Cl-CH2-NH-COCH3 has both amine and alkyl chloride)
     if n_idxs and not c_idxs:
-        # C-terminal cap: amine bonds to last residue's backbone_c via positional rule
-        return {1: n_idxs[0]}, {1: 'backbone_n'}
+        alk_h = [m[0] for m in mol.GetSubstructMatches(_CAP_ALKYL_HALIDE_PAT)]
+        if alk_h and len(alk_h) < 3:
+            return {2: alk_h[0]}, {2: 'backbone_c'}
+        best = _pick_alpha_n(mol, n_idxs) if len(n_idxs) > 1 else n_idxs[0]
+        return {1: best}, {1: 'backbone_n'}
+    if not n_idxs and not c_idxs and not s_idxs:
+        o_idxs = [m[0] for m in mol.GetSubstructMatches(_CAP_ALCOHOL_PAT)]
+        if o_idxs:
+            return {1: o_idxs[0]}, {1: 'backbone_n'}
+
+    # Carbon nucleophile caps (Grignard / organometallic — last resort)
+    for pat in (_CAP_BENZYLIC_CH_PAT, _CAP_TERTIARY_CH_PAT, _CAP_AROMATIC_CH_PAT):
+        hits = [m[0] for m in mol.GetSubstructMatches(pat)]
+        if hits:
+            return {1: hits[0]}, {1: 'carbon'}
+
     return None, None
 
 
@@ -290,7 +383,8 @@ def find_sidechain_slots(mol, assigned_atoms, start_slot=4):
     first_ct = {}      # atom_idx -> first assigned chem_type
 
     for patt, leaving, chem_type in _SC_PATTERNS:
-        for match in mol.GetSubstructMatches(patt):
+        matches = sorted(mol.GetSubstructMatches(patt), key=lambda m: m[0])
+        for match in matches:
             idx = match[0]
             if idx not in seen and idx not in protected:
                 slots[next_slot] = (idx, leaving, chem_type)
@@ -381,15 +475,27 @@ def pre_activate(smiles, slot_overrides=None, leaving_overrides=None):
     mol = Chem.AddHs(mol)
 
     backbone = find_backbone_slots(mol)
+    _is_cap = False
+    _sidechain_only = False
     if backbone is None:
         backbone, backbone_chem_types = find_cap_slots(mol)
+        _is_cap = True
         if backbone is None:
-            raise ActivationError(
-                "Cannot identify backbone (N + COOH) or a single cap terminus. "
-                "Provide pre-filled CHUCKLES in the input column."
-            )
+            # Last resort: sidechain-only molecule (multi-arm crosslinkers)
+            _sc_all = find_sidechain_slots(mol, assigned_atoms=set(), start_slot=4)
+            if _sc_all:
+                backbone = {s: info[0] for s, info in _sc_all.items()}
+                backbone_chem_types = {s: info[2] for s, info in _sc_all.items()}
+                _sidechain_only = True
+            else:
+                raise ActivationError(
+                    "Cannot identify backbone (N + COOH) or a single cap terminus. "
+                    "Provide pre-filled CHUCKLES in the input column."
+                )
     else:
-        backbone_chem_types = {1: 'backbone_n', 2: 'backbone_c'}
+        r2_element = mol.GetAtomWithIdx(backbone[2]).GetAtomicNum()
+        r2_ct = 'backbone_o' if r2_element == 8 else 'backbone_c'
+        backbone_chem_types = {1: 'backbone_n', 2: r2_ct}
         # backbone_n_mod: second H on backbone N (N-methylation slot).
         # Pro's ring N has only 1 H and is skipped naturally.
         n_atom = mol.GetAtomWithIdx(backbone[1])
@@ -399,8 +505,9 @@ def pre_activate(smiles, slot_overrides=None, leaving_overrides=None):
             backbone[slot] = backbone[1]
             backbone_chem_types[slot] = 'backbone_n_mod'
 
-    # Exclude the backbone COOH OH oxygen so the O-attachment carboxyl
-    # pre_smarts ([OX2H1][CX3](=O)) doesn't spuriously fire on it.
+    # Exclude backbone atoms from the sidechain scan. The backbone COOH's
+    # hydroxyl O is also excluded so downstream patterns (hydroxyl, etc.)
+    # don't spuriously fire on it.
     _bb_excluded = set(backbone.values())
     if 2 in backbone:
         _c = mol.GetAtomWithIdx(backbone[2])
@@ -410,15 +517,22 @@ def pre_activate(smiles, slot_overrides=None, leaving_overrides=None):
                 if _bond.GetBondTypeAsDouble() == 1.0:
                     _bb_excluded.add(_nb.GetIdx())
 
-    # Sidechains fill slots immediately after backbone — no gaps.
-    sidechain = find_sidechain_slots(
-        mol,
-        assigned_atoms=_bb_excluded,
-        start_slot=max(backbone.keys()) + 1,
-    )
+    if _sidechain_only:
+        # All slots already determined — skip further sidechain detection
+        sidechain = {}
+        sidechain_leaving = {s: _sc_all[s][1] for s in _sc_all}
+    else:
+        _sc_start = max(backbone.keys()) + 1
+        if _is_cap:
+            _sc_start = max(_sc_start, 4)
+        sidechain = find_sidechain_slots(
+            mol,
+            assigned_atoms=_bb_excluded,
+            start_slot=_sc_start,
+        )
     slots = {**backbone,
              **{s: info[0] for s, info in sidechain.items()}}
-    sidechain_leaving = {s: info[1] for s, info in sidechain.items()}
+    sidechain_leaving = {**sidechain_leaving} if _sidechain_only else {s: info[1] for s, info in sidechain.items()}
 
     chem_types = {
         **backbone_chem_types,

@@ -240,6 +240,15 @@ class TestBondChemistryUnit:
         with pytest.warns(UserWarning, match='my-custom-label'):
             _check_bond_chemistry(m, 0, m, 1, 'my-custom-label')
 
+    def test_on_hydroxylamine_warns(self):
+        """O-N bond (hydroxylamine/hydroxamic acid): warns but does not raise."""
+        mol_o = _mol('CO')
+        mol_n = _mol('CN')
+        o_idx = next(a.GetIdx() for a in mol_o.GetAtoms() if a.GetAtomicNum() == 8)
+        n_idx = next(a.GetIdx() for a in mol_n.GetAtoms() if a.GetAtomicNum() == 7)
+        with pytest.warns(UserWarning, match='hydroxylamine|hydroxamic'):
+            _check_bond_chemistry(mol_o, o_idx, mol_n, n_idx, 'on-test')
+
 
 # ---------------------------------------------------------------------------
 # 2. End-to-end assembly tests  (all use monomers_new.sdf)
@@ -578,7 +587,7 @@ class TestCapMonomers:
         R3 = backbone-N mod; R4 = thiol in CABILN convention.
         """
         with pytest.warns(UserWarning, match='thioether'):
-            mol = _romol('fmoc-C.trt(4,1)-am')
+            mol = _romol('fmoc-C.trt(4,2)-am')
         assert mol is not None
         dummies = [a for a in mol.GetAtoms() if a.GetAtomicNum() == 0]
         assert dummies == [], f"Dummy atoms leaked: {len(dummies)}"
@@ -587,14 +596,14 @@ class TestCapMonomers:
         """trt-protected Cys should contain an S-C bond to a trisubstituted carbon."""
         with warnings.catch_warnings():
             warnings.simplefilter('always')
-            mol = _romol('fmoc-C.trt(4,1)-am')
+            mol = _romol('fmoc-C.trt(4,2)-am')
         sc_trt = Chem.MolFromSmarts('[S][C](c1ccccc1)(c1ccccc1)c1ccccc1')
         assert mol.HasSubstructMatch(sc_trt), "trt S-C bond pattern not found"
 
     def test_acm_on_cys_warns_thioether(self):
         """acm cap on Cys R4 (thiol) forms S-C thioether — UserWarning, assembles OK."""
         with pytest.warns(UserWarning, match='thioether'):
-            mol = _romol('fmoc-C.acm(4,1)-am')
+            mol = _romol('fmoc-C.acm(4,2)-am')
         assert mol is not None
         dummies = [a for a in mol.GetAtoms() if a.GetAtomicNum() == 0]
         assert dummies == [], f"Dummy atoms leaked: {len(dummies)}"
@@ -603,7 +612,7 @@ class TestCapMonomers:
         """acm-protected Cys should contain the S-CH2-NH-C(=O) acetamidomethyl group."""
         with warnings.catch_warnings():
             warnings.simplefilter('always')
-            mol = _romol('fmoc-C.acm(4,1)-am')
+            mol = _romol('fmoc-C.acm(4,2)-am')
         acm_pat = Chem.MolFromSmarts('[S]CNC(C)=O')
         assert mol.HasSubstructMatch(acm_pat), "acm S-CH2-NH-C(=O) pattern not found"
 
@@ -613,7 +622,7 @@ class TestCapMonomers:
         R3 = backbone-N mod; R4 = guanidinium terminal NH2 in CABILN convention.
         """
         with pytest.warns(UserWarning, match='sulfenamide|S.N'):
-            mol = _romol('fmoc-R.pbf(4,1)-am')
+            mol = _romol('fmoc-R.pbf(4,2)-am')
         assert mol is not None
         dummies = [a for a in mol.GetAtoms() if a.GetAtomicNum() == 0]
         assert dummies == [], f"Dummy atoms leaked: {len(dummies)}"
@@ -622,9 +631,23 @@ class TestCapMonomers:
         """pbf-protected Arg should contain an N-S(=O)(=O) sulfonamide substructure."""
         with warnings.catch_warnings():
             warnings.simplefilter('always')
-            mol = _romol('fmoc-R.pbf(4,1)-am')
+            mol = _romol('fmoc-R.pbf(4,2)-am')
         sulf_pat = Chem.MolFromSmarts('[N]S(=O)=O')
         assert mol.HasSubstructMatch(sulf_pat), "N-S(=O)2 sulfonamide pattern not found"
+
+    def test_obn_cap_warns_hydroxylamine(self):
+        """OBn_ cap on Gly forms O-N bond — warns hydroxylamine, assembles OK."""
+        with pytest.warns(UserWarning, match='hydroxylamine|hydroxamic'):
+            mol = _romol('OBn_-G-am')
+        assert mol is not None
+        dummies = [a for a in mol.GetAtoms() if a.GetAtomicNum() == 0]
+        assert dummies == [], f"Dummy atoms leaked: {len(dummies)}"
+
+    def test_ome_cap_warns_hydroxylamine(self):
+        """OMe_ cap on Gly forms O-N bond — warns hydroxylamine, assembles OK."""
+        with pytest.warns(UserWarning, match='hydroxylamine|hydroxamic'):
+            mol = _romol('OMe_-G-am')
+        assert mol is not None
 
 
 # ---------------------------------------------------------------------------
@@ -662,7 +685,7 @@ class TestCABILNPhase2Parser:
         assert brg == {}
 
     def test_expand_named_cap_unchanged_from_phase1(self):
-        result, brg = _expand_inline_caps('fmoc-C.trt(4,1)-am')
+        result, brg = _expand_inline_caps('fmoc-C.trt(4,2)-am')
         assert 'trt(' in result
         assert '(100,4)' in result
         assert brg == {}
@@ -1386,18 +1409,18 @@ class TestFattyAcidBranching:
 
     def test_c20fa_gGlu_branch_linear(self):
         """C20 fatty diacid cap + gGlu chain assembles correctly."""
-        assert _natoms('C20FA-gGlu-am') == 32
+        assert _natoms('C20FA-gGlu-am') == 33
 
     def test_c20fa_gGlu_aeea_linear(self):
         """Full linker chain: C20FA-gGlu-AEEA with backbone amide bonds."""
-        assert _natoms('C20FA-gGlu-AEEA-am') == 42
+        assert _natoms('C20FA-gGlu-AEEA-am') == 43
 
     def test_lys_sidechain_amide_bond(self):
         """Lys R4 (epsilon-amine) forms amide with AEEA R2 (carboxyl).
 
         Tests the new amine_primary+backbone_c reaction added to BOND_TABLE.
         """
-        assert _natoms('ac-K.!1(4,2)-G-am%C20FA-gGlu-AEEA-!1') == 58
+        assert _natoms('ac-K.!1(4,2)-G-am%C20FA-gGlu-AEEA-!1') == 59
 
     def test_retatrutide(self):
         """Retatrutide (LY3437943): GIP/GLP-1/glucagon triple agonist, 39 AAs.
@@ -1411,7 +1434,7 @@ class TestFattyAcidBranching:
             "%C20FA-gGlu-AEEA-!1"
         )
         mol = _romol(retatrutide)
-        assert mol.GetNumAtoms() == 325
+        assert mol.GetNumAtoms() == 326
 
 
 class TestStapledPeptides:
@@ -1988,7 +2011,7 @@ class TestImideAcylationDirect:
         from pyPept.interfaces.reaction_library import REACTIONS, run_bond_smirks
         entry = REACTIONS['imide_n_acylation']
         frag1 = Chem.MolFromSmiles('[400*]NC')       # backbone N (R3): [3*][N:1]
-        frag2 = Chem.MolFromSmiles('[401*]OC(=O)C')  # sidechain carboxyl O-attach: [4*][O][C:2](=[O:3])
+        frag2 = Chem.MolFromSmiles('[401*]C(=O)C')    # sidechain carboxyl C-attach: [4*][C:2](=[O:3])
         assert frag1 and frag2
         prod = run_bond_smirks(frag1, frag2, 400, 401, entry, intramolecular=False)
         smi = Chem.MolToSmiles(prod)
@@ -2001,8 +2024,8 @@ class TestImideAcylationDirect:
         """Intramolecular closure gives 5-membered succinimide ring."""
         from pyPept.interfaces.reaction_library import REACTIONS, run_bond_smirks
         entry = REACTIONS['imide_n_acylation']
-        # Chain: [400*]N-C(=O)-CH2-CH2-C(=O)O[401*] → 5-membered ring on closure
-        mol = Chem.MolFromSmiles('[400*]NC(=O)CCC(=O)O[401*]')
+        # Chain: [400*]N-C(=O)-CH2-CH2-C([401*])=O → 5-membered ring on closure
+        mol = Chem.MolFromSmiles('[400*]NC(=O)CCC([401*])=O')
         if mol is None:
             pytest.skip("Model SMILES failed to parse")
         prod = run_bond_smirks(mol, mol, 400, 401, entry, intramolecular=True)
@@ -2264,7 +2287,7 @@ class TestBracketNotation:
     def test_multiple_brackets_get_distinct_bond_ids(self):
         """Two brackets on different residues get non-overlapping auto bond IDs."""
         import re as _re
-        result, _ = _expand_inline_caps('C.[trt(4,1)]-G-K.[boc(4,1)]-am')
+        result, _ = _expand_inline_caps('C.[trt(4,2)]-G-K.[boc(4,1)]-am')
         ids = [int(i) for i in _re.findall(r'\((\d+),\d+\)', result)
                if int(i) >= 100]
         # Each single-step bracket uses one bond ID; each ID appears exactly twice
@@ -2277,10 +2300,10 @@ class TestBracketNotation:
 
     def test_bracket_and_crosslink_coexist(self):
         """A residue can carry both a .[..] bracket and a .!1 crosslink marker."""
-        result, brg = _expand_inline_caps('C.[trt(4,1)].!1(4,4)-G-C.!1')
+        result, brg = _expand_inline_caps('C.[trt(4,2)].!1(4,4)-G-C.!1')
         # bracket annotation present
         assert '(100,4)' in result
-        assert 'trt(100,1)' in result
+        assert 'trt(100,2)' in result
         # crosslink annotation present
         assert '(!1,4)' in result
         assert brg == {'!1': 4}
@@ -2308,15 +2331,25 @@ class TestBracketNotation:
         with pytest.raises(ValueError, match='no valid'):
             _expand_inline_caps('C.[]')
 
-    def test_bracket_with_crosslink_marker_raises(self):
-        """.[!1(4,4)] raises because !1 is not a letter-starting cap token."""
-        with pytest.raises(ValueError, match='no valid'):
-            _expand_inline_caps('C.[!1(4,4)]-G-C.!1(4,4)-am')
+    def test_bracket_with_crosslink_marker(self):
+        """.[!1(4,4)] is a pure-crosslink bracket — equivalent to inline .!1(4,4)."""
+        result, _ = _expand_inline_caps('C.[!1(4,4)]-G-C.!1-am')
+        assert '(!1,4)' in result
+
+    def test_bracket_with_monomer_and_crosslinks(self):
+        """.[TBMB(4,4).!1(5,4).!2(6,4)] — monomer anchor + crosslink entries."""
+        result, brg = _expand_inline_caps(
+            'ac-C.[TBMB(4,4).!1(5,4).!2(6,4)]-A-A-C.!1-A-A-C.!2-am')
+        assert 'TBMB' in result
+        assert '(!1,5)' in result
+        assert '(!2,6)' in result
+        assert '(!1,4)' in result
+        assert '(!2,4)' in result
 
     def test_bracket_with_trailing_garbage_raises(self):
-        """.[trt(4,1)xyz] raises because 'xyz' is not a valid entry."""
+        """.[trt(4,2)xyz] raises because 'xyz' is not a valid entry."""
         with pytest.raises(ValueError, match='unrecognised'):
-            _expand_inline_caps('C.[trt(4,1)xyz]-am')
+            _expand_inline_caps('C.[trt(4,2)xyz]-am')
 
     def test_bracket_missing_parens_raises(self):
         """.[trt] (no r-group numbers) raises because .trt has no (x,y)."""
@@ -2356,18 +2389,18 @@ class TestBracketNotation:
     def test_colorize_single_bracket_pair(self):
         """Single bracket pair gets ANSI colour codes on open and close."""
         import re as _re
-        coloured = colorize_cabiln('C.[trt(4,1)]')
+        coloured = colorize_cabiln('C.[trt(4,2)]')
         # At least one ANSI colour escape is injected
         assert _re.search(r'\033\[\d+m', coloured), "No ANSI escape found"
         # Reset code present after close bracket
         assert '\033[0m' in coloured
         # Original content still intact when escapes stripped
         plain = _re.sub(r'\033\[\d+m', '', coloured)
-        assert plain == 'C.[trt(4,1)]'
+        assert plain == 'C.[trt(4,2)]'
 
     def test_colorize_two_pairs_different_colours(self):
         """Two bracket pairs get different ANSI colour codes."""
-        coloured = colorize_cabiln('C.[trt(4,1)]-K.[boc(4,1)]')
+        coloured = colorize_cabiln('C.[trt(4,2)]-K.[boc(4,1)]')
         # Extract just the escape sequences before each [
         import re as _re
         escapes = _re.findall(r'\033\[\d+m(?=\[)', coloured)
@@ -2376,7 +2409,7 @@ class TestBracketNotation:
 
     def test_colorize_use_ansi_false_returns_plain(self):
         """use_ansi=False returns the string unchanged."""
-        s = 'C.[trt(4,1)]-K.[boc(4,1)]'
+        s = 'C.[trt(4,2)]-K.[boc(4,1)]'
         assert colorize_cabiln(s, use_ansi=False) == s
 
     def test_colorize_no_brackets_returns_unchanged(self):
@@ -2387,11 +2420,11 @@ class TestBracketNotation:
     # --- End-to-end assembly tests ---
 
     def test_bracket_single_step_assembly_matches_inline(self):
-        """fmoc-C.[trt(4,1)]-am assembles to the same molecule as fmoc-C.trt(4,1)-am."""
+        """fmoc-C.[trt(4,2)]-am assembles to the same molecule as fmoc-C.trt(4,2)-am."""
         with warnings.catch_warnings():
             warnings.simplefilter('always')
-            mol_bracket = _romol('fmoc-C.[trt(4,1)]-am')
-            mol_inline  = _romol('fmoc-C.trt(4,1)-am')
+            mol_bracket = _romol('fmoc-C.[trt(4,2)]-am')
+            mol_inline  = _romol('fmoc-C.trt(4,2)-am')
         from rdkit import Chem
         smi_bracket = Chem.MolToSmiles(mol_bracket)
         smi_inline  = Chem.MolToSmiles(mol_inline)
@@ -2401,7 +2434,7 @@ class TestBracketNotation:
         """Sequence.validate() returns ok=True for a single-step bracket sequence."""
         with warnings.catch_warnings():
             warnings.simplefilter('always')
-            report = Sequence.validate('fmoc-C.[trt(4,1)]-am')
+            report = Sequence.validate('fmoc-C.[trt(4,2)]-am')
         assert report.ok is True
 
 
@@ -2445,7 +2478,7 @@ class TestMonomerBuilderCLI(_unittest.TestCase):
     def test_smiles_from_cabiln_inline_cap(self):
         """smiles_from_cabiln with inline cap notation assembles correctly."""
         from pyPept.interfaces.cli_monomer import smiles_from_cabiln
-        smi = smiles_from_cabiln('fmoc-C.trt(4,1)-am')
+        smi = smiles_from_cabiln('fmoc-C.trt(4,2)-am')
         mol = Chem.MolFromSmiles(smi)
         assert mol is not None
 
@@ -2796,8 +2829,8 @@ class TestMonomerPreActivate:
         """Verify the chemical environment around the attachment atom is correct.
 
         Goes beyond element-type checking to confirm the dummy is on the
-        structurally correct atom — e.g. the hydroxyl O of a carboxyl, not
-        the carbonyl O.
+        structurally correct atom — e.g. the carbonyl C of a carboxyl with
+        =O, not the hydroxyl O.
         """
         mol = Chem.MolFromSmiles(chuckles)
         dummy = next(a for a in mol.GetAtoms()
@@ -2805,17 +2838,13 @@ class TestMonomerPreActivate:
         attach = next(iter(dummy.GetNeighbors()))
 
         if chem_type == 'carboxyl':
-            assert attach.GetAtomicNum() == 8, \
-                f"Carboxyl slot {slot}: dummy should be on O, got {attach.GetSymbol()}"
-            c_nbs = [nb for nb in attach.GetNeighbors()
-                     if nb.GetAtomicNum() == 6 and nb.GetIdx() != dummy.GetIdx()]
-            has_carbonyl_partner = any(
-                any(mol.GetBondBetweenAtoms(c.GetIdx(), o.GetIdx()).GetBondTypeAsDouble() == 2.0
-                    for o in c.GetNeighbors()
-                    if o.GetAtomicNum() == 8 and o.GetIdx() != attach.GetIdx())
-                for c in c_nbs)
-            assert has_carbonyl_partner, \
-                f"Carboxyl slot {slot}: O must be single-bonded to C(=O) [O-attachment]"
+            assert attach.GetAtomicNum() == 6, \
+                f"Carboxyl slot {slot}: dummy should be on C, got {attach.GetSymbol()}"
+            has_co = any(
+                mol.GetBondBetweenAtoms(attach.GetIdx(), nb.GetIdx()).GetBondTypeAsDouble() == 2.0
+                for nb in attach.GetNeighbors() if nb.GetAtomicNum() == 8)
+            assert has_co, \
+                f"Carboxyl slot {slot}: C must have =O double bond [C-attachment]"
 
         elif chem_type == 'aldehyde':
             assert attach.GetAtomicNum() == 6, \
@@ -2937,43 +2966,43 @@ class TestMonomerPreActivate:
 
         return r
 
-    # ── Carboxyl sidechain: O-attachment (dummy on hydroxyl O) ───────────────
+    # ── Carboxyl sidechain: C-attachment (dummy on carbonyl C) ────────────────
 
-    def test_asp_carboxyl_on_oxygen(self):
-        """Asp: slot 4 dummy lands on sidechain carboxyl O, not C."""
+    def test_asp_carboxyl_on_carbon(self):
+        """Asp: slot 4 dummy lands on sidechain carboxyl C, LG=[OH]."""
         self._check('N[C@@H](CC(=O)O)C(=O)O',
-                     {1: 7, 2: 6, 3: 7, 4: 8},
-                     expect_lg={4: '[H]'}, expect_ct={4: 'carboxyl'})
+                     {1: 7, 2: 6, 3: 7, 4: 6},
+                     expect_lg={4: '[OH]'}, expect_ct={4: 'carboxyl'})
 
-    def test_glu_carboxyl_on_oxygen(self):
-        """Glu: slot 4 dummy on sidechain carboxyl O."""
+    def test_glu_carboxyl_on_carbon(self):
+        """Glu: slot 4 dummy on sidechain carboxyl C."""
         self._check('N[C@@H](CCC(=O)O)C(=O)O',
-                     {1: 7, 2: 6, 3: 7, 4: 8},
-                     expect_lg={4: '[H]'}, expect_ct={4: 'carboxyl'})
+                     {1: 7, 2: 6, 3: 7, 4: 6},
+                     expect_lg={4: '[OH]'}, expect_ct={4: 'carboxyl'})
 
-    def test_d_asp_carboxyl_on_oxygen(self):
-        """D-Asp: O-attachment matches L-Asp."""
+    def test_d_asp_carboxyl_on_carbon(self):
+        """D-Asp: C-attachment matches L-Asp."""
         self._check('N[C@H](CC(=O)O)C(=O)O',
-                     {1: 7, 2: 6, 3: 7, 4: 8},
-                     expect_lg={4: '[H]'}, expect_ct={4: 'carboxyl'})
+                     {1: 7, 2: 6, 3: 7, 4: 6},
+                     expect_lg={4: '[OH]'}, expect_ct={4: 'carboxyl'})
 
-    def test_d_glu_carboxyl_on_oxygen(self):
-        """D-Glu: O-attachment matches L-Glu."""
+    def test_d_glu_carboxyl_on_carbon(self):
+        """D-Glu: C-attachment matches L-Glu."""
         self._check('N[C@H](CCC(=O)O)C(=O)O',
-                     {1: 7, 2: 6, 3: 7, 4: 8},
-                     expect_lg={4: '[H]'}, expect_ct={4: 'carboxyl'})
+                     {1: 7, 2: 6, 3: 7, 4: 6},
+                     expect_lg={4: '[OH]'}, expect_ct={4: 'carboxyl'})
 
     def test_asp_backbone_cooh_oh_excluded(self):
         """Asp: backbone COOH OH is not spuriously labelled as carboxyl."""
         r = self._check('N[C@@H](CC(=O)O)C(=O)O',
-                         {1: 7, 2: 6, 3: 7, 4: 8})
+                         {1: 7, 2: 6, 3: 7, 4: 6})
         carboxyl_slots = [s for s, ct in r.chem_types.items() if ct == 'carboxyl']
         assert len(carboxyl_slots) == 1, f"Expected 1 carboxyl slot, got {carboxyl_slots}"
 
     def test_glu_backbone_cooh_oh_excluded(self):
         """Glu: backbone COOH OH excluded from sidechain detection."""
         r = self._check('N[C@@H](CCC(=O)O)C(=O)O',
-                         {1: 7, 2: 6, 3: 7, 4: 8})
+                         {1: 7, 2: 6, 3: 7, 4: 6})
         carboxyl_slots = [s for s, ct in r.chem_types.items() if ct == 'carboxyl']
         assert len(carboxyl_slots) == 1
 
@@ -3747,12 +3776,110 @@ class TestMonomerPreActivate:
         """Norvaline: n-propyl sidechain, no reactive group."""
         self._check('N[C@@H](CCC)C(=O)O', {1: 7, 2: 6, 3: 7})
 
+    # ── Reagent-form caps (halide LG detection) ─────────────────────────────
+
+    def test_acetyl_chloride_cap(self):
+        """Acid chloride: CC(=O)Cl → R2 slot, LG=[Cl]."""
+        r = self._check('CC(=O)Cl', {2: 6})
+        assert r.leaving[2] == '[Cl]'
+        assert r.chem_types[2] == 'backbone_c'
+
+    def test_benzoyl_chloride_cap(self):
+        """Benzoyl chloride: O=C(Cl)c1ccccc1 → R2 slot, LG=[Cl]."""
+        r = self._check('O=C(Cl)c1ccccc1', {2: 6})
+        assert r.leaving[2] == '[Cl]'
+
+    def test_tosyl_chloride_cap(self):
+        """Sulfonyl chloride: TsCl → R2 slot on S, LG=[Cl]."""
+        r = self._check('Cc1ccc(S(=O)(=O)Cl)cc1', {2: 16})
+        assert r.leaving[2] == '[Cl]'
+
+    def test_methyl_iodide_cap(self):
+        """Alkyl iodide: CI → R2 slot, LG=[I]."""
+        r = self._check('CI', {2: 6})
+        assert r.leaving[2] == '[I]'
+
+    def test_ethyl_bromide_cap(self):
+        """Alkyl bromide: CCBr → R2 slot, LG=[Br]."""
+        r = self._check('CCBr', {2: 6})
+        assert r.leaving[2] == '[Br]'
+
+    def test_benzyl_chloride_cap(self):
+        """Alkyl chloride: ClCc1ccccc1 → R2 slot, LG=[Cl]."""
+        r = self._check('ClCc1ccccc1', {2: 6})
+        assert r.leaving[2] == '[Cl]'
+
+    def test_ammonia_nucleophilic_cap(self):
+        """Nucleophilic cap: N (ammonia) → R1 slot, LG=[H]."""
+        r = self._check('N', {1: 7})
+        assert r.leaving[1] == '[H]'
+        assert r.chem_types[1] == 'backbone_n'
+
+    def test_methanol_nucleophilic_cap(self):
+        """Nucleophilic cap: CO (methanol) → R1 slot on O, LG=[H]."""
+        r = self._check('CO', {1: 8})
+        assert r.leaving[1] == '[H]'
+
+    def test_free_acid_vs_acid_chloride(self):
+        """Same scaffold: free acid gets [OH], acid chloride gets [Cl]."""
+        r_free = self._check('CC(=O)O', {2: 6})
+        r_halide = self._check('CC(=O)Cl', {2: 6})
+        assert r_free.leaving[2] == '[OH]'
+        assert r_halide.leaving[2] == '[Cl]'
+
+
+class TestSynonymResolution:
+    """Synonym aliases in the CSV resolve to canonical SDF entries."""
+
+    @staticmethod
+    def _smi(biln):
+        return _smiles(biln)
+
+    def test_three_letter_gly(self):
+        """Gly resolves to G."""
+        assert self._smi('ac-Gly-am') == self._smi('ac-G-am')
+
+    def test_three_letter_ala(self):
+        """Ala resolves to A."""
+        assert self._smi('ac-Ala-am') == self._smi('ac-A-am')
+
+    def test_d_amino_acid_alias(self):
+        """dA resolves to DAla."""
+        assert self._smi('ac-dA-am') == self._smi('ac-DAla-am')
+
+    def test_cap_synonym_butcap(self):
+        """ButCap resolves to Bua."""
+        assert self._smi('ButCap-G-am') == self._smi('Bua-G-am')
+
+    def test_cap_synonym_bzcap(self):
+        """BzCap resolves to Bz."""
+        assert self._smi('BzCap-G-am') == self._smi('Bz-G-am')
+
+    def test_ncaa_synonym_dopa(self):
+        """Dopa resolves to Tyr_3OH."""
+        assert self._smi('ac-Dopa-am') == self._smi('ac-Tyr_3OH-am')
+
+    def test_ncaa_synonym_hcys(self):
+        """hCys resolves to Hcy."""
+        assert self._smi('ac-hCys-am') == self._smi('ac-Hcy-am')
+
+    def test_ncaa_synonym_kyn(self):
+        """Kyn resolves to Asp_Ph2NH2."""
+        assert self._smi('ac-Kyn-am') == self._smi('ac-Asp_Ph2NH2-am')
+
+    def test_nrg_resolves_to_arg(self):
+        """Nrg resolves to R (Arg)."""
+        assert self._smi('ac-Nrg-am') == self._smi('ac-R-am')
+
+    def test_phe_4ome_resolves_to_tyr_me(self):
+        """Phe_4OMe resolves to Tyr_Me."""
+        assert self._smi('ac-Phe_4OMe-am') == self._smi('ac-Tyr_Me-am')
+
 
 class TestRestoreRgroups:
     """Edge-case tests for __restore_and_remove_rgroups in molecule.py.
 
     Covers every restore path:
-      - O-attachment carboxyl (LG=[H]): dummy removed, implicit H on O restored
       - C-attachment carboxyl (LG=[OH]): dummy swapped for O atom → COOH
       - Backbone N (LG=[H]): dummy removed → free NH2
       - Backbone C (LG=[OH]): dummy swapped for O → free COOH
@@ -3778,69 +3905,69 @@ class TestRestoreRgroups:
             'dummy': sum(1 for a in m.GetAtoms() if a.GetAtomicNum() == 0),
         }
 
-    # ── Group 1: O-attachment carboxyl (slot 4, LG=[H]) ──────────────────────
+    # ── Group 1: homo-Asp/Glu variants (C-attachment carboxyl, LG=[OH]) ──────
 
-    def test_hasp_o_attach_carboxyl_restores(self):
-        """hAsp slot-4 O-attachment carboxyl (LG=[H]) restores to free COOH."""
+    def test_hasp_carboxyl_restores(self):
+        """hAsp slot-4 C-attachment carboxyl (LG=[OH]) restores to free COOH."""
         c = self._counts('ac-hAsp-am')
         assert c['acid'] == 1 and c['dummy'] == 0
 
-    def test_d_hasp_o_attach_carboxyl_restores(self):
-        """D_hAsp D-isomer slot-4 O-attachment carboxyl restores correctly."""
+    def test_d_hasp_carboxyl_restores(self):
+        """D_hAsp D-isomer slot-4 carboxyl restores correctly."""
         c = self._counts('ac-D_hAsp-am')
         assert c['acid'] == 1 and c['dummy'] == 0
 
-    def test_hglu_o_attach_carboxyl_restores(self):
-        """hGlu slot-4 O-attachment carboxyl (LG=[H]) restores to free COOH."""
+    def test_hglu_carboxyl_restores(self):
+        """hGlu slot-4 C-attachment carboxyl (LG=[OH]) restores to free COOH."""
         c = self._counts('ac-hGlu-am')
         assert c['acid'] == 1 and c['dummy'] == 0
 
-    def test_d_hglu_o_attach_carboxyl_restores(self):
-        """D_hGlu D-isomer slot-4 O-attachment carboxyl restores correctly."""
+    def test_d_hglu_carboxyl_restores(self):
+        """D_hGlu D-isomer slot-4 carboxyl restores correctly."""
         c = self._counts('ac-D_hGlu-am')
         assert c['acid'] == 1 and c['dummy'] == 0
 
-    def test_b3hasp_o_attach_carboxyl_restores(self):
-        """b3hAsp (beta-3-homo-Asp) slot-4 O-attachment carboxyl restores."""
+    def test_b3hasp_carboxyl_restores(self):
+        """b3hAsp (beta-3-homo-Asp) slot-4 carboxyl restores."""
         c = self._counts('ac-b3hAsp-am')
         assert c['acid'] == 1 and c['dummy'] == 0
 
-    def test_d_b3hasp_o_attach_carboxyl_restores(self):
-        """D_b3hAsp D-isomer slot-4 O-attachment carboxyl restores correctly."""
+    def test_d_b3hasp_carboxyl_restores(self):
+        """D_b3hAsp D-isomer slot-4 carboxyl restores correctly."""
         c = self._counts('ac-D_b3hAsp-am')
         assert c['acid'] == 1 and c['dummy'] == 0
 
-    def test_b3hglu_o_attach_carboxyl_restores(self):
-        """b3hGlu (beta-3-homo-Glu) slot-4 O-attachment carboxyl restores."""
+    def test_b3hglu_carboxyl_restores(self):
+        """b3hGlu (beta-3-homo-Glu) slot-4 carboxyl restores."""
         c = self._counts('ac-b3hGlu-am')
         assert c['acid'] == 1 and c['dummy'] == 0
 
-    def test_d_b3hglu_o_attach_carboxyl_restores(self):
-        """D_b3hGlu D-isomer slot-4 O-attachment carboxyl restores correctly."""
+    def test_d_b3hglu_carboxyl_restores(self):
+        """D_b3hGlu D-isomer slot-4 carboxyl restores correctly."""
         c = self._counts('ac-D_b3hGlu-am')
         assert c['acid'] == 1 and c['dummy'] == 0
 
-    def test_ameasp_o_attach_carboxyl_restores(self):
-        """aMeAsp (alpha-methyl-Asp) slot-4 O-attachment carboxyl restores."""
+    def test_ameasp_carboxyl_restores(self):
+        """aMeAsp (alpha-methyl-Asp) slot-4 carboxyl restores."""
         c = self._counts('ac-aMeAsp-am')
         assert c['acid'] == 1 and c['dummy'] == 0
 
-    def test_ameglu_o_attach_carboxyl_restores(self):
-        """aMeGlu (alpha-methyl-Glu) slot-4 O-attachment carboxyl restores."""
+    def test_ameglu_carboxyl_restores(self):
+        """aMeGlu (alpha-methyl-Glu) slot-4 carboxyl restores."""
         c = self._counts('ac-aMeGlu-am')
         assert c['acid'] == 1 and c['dummy'] == 0
 
-    def test_d_med_slot3_o_attach_carboxyl_restores(self):
-        """D_meD (NMe-D-Asp) slot-3 O-attachment carboxyl restores to free COOH."""
+    def test_d_med_slot3_carboxyl_restores(self):
+        """D_meD (NMe-D-Asp) slot-3 carboxyl restores to free COOH."""
         c = self._counts('ac-D_meD-am')
         assert c['acid'] == 1 and c['dummy'] == 0
 
-    def test_d_mee_slot3_o_attach_carboxyl_restores(self):
-        """D_meE (NMe-D-Glu) slot-3 O-attachment carboxyl restores to free COOH."""
+    def test_d_mee_slot3_carboxyl_restores(self):
+        """D_meE (NMe-D-Glu) slot-3 carboxyl restores to free COOH."""
         c = self._counts('ac-D_meE-am')
         assert c['acid'] == 1 and c['dummy'] == 0
 
-    # ── Group 2: C-attachment carboxyl (LG=[OH], dummy atom → O atom) ────────
+    # ── Group 2: Standard carboxyl (C-attachment, LG=[OH]) ───────────────────
 
     def test_asp_c_attach_carboxyl_restores(self):
         """Standard Asp (D): slot-4 C-attachment carboxyl (LG=[OH]) restored via atom swap."""
@@ -3902,7 +4029,7 @@ class TestRestoreRgroups:
         assert c['acid'] == 5 and c['dummy'] == 0
 
     def test_mixed_hasp_hglu_two_carboxyls(self):
-        """hAsp + hGlu (both O-attachment slot-4): 2 sidechain COOHs restored."""
+        """hAsp + hGlu (both C-attachment slot-4): 2 sidechain COOHs restored."""
         c = self._counts('ac-hAsp-hGlu-am')
         assert c['acid'] == 2 and c['dummy'] == 0
 
@@ -4098,7 +4225,7 @@ class TestRestoreRgroups:
     # ── Group 16: Beta amino acid restore ────────────────────────────────────
 
     def test_beta_homo_asp_glu_mix(self):
-        """b3hAsp + b3hGlu: both O-attachment carboxyl, 2 COOHs restored."""
+        """b3hAsp + b3hGlu: both C-attachment carboxyl, 2 COOHs restored."""
         c = self._counts('ac-b3hAsp-b3hGlu-am')
         assert c['acid'] == 2 and c['dummy'] == 0
 
@@ -4291,7 +4418,7 @@ class TestReactionPairSMIRKS:
         self._run_pair('thiol', 'backbone_c')
 
     def test_thioester_sidechain(self):
-        """thiol + carboxyl -> sidechain thioester (O-attachment)."""
+        """thiol + carboxyl -> sidechain thioester (C-attachment)."""
         self._run_pair('thiol', 'carboxyl')
 
     def test_thioether_halide(self):
@@ -4732,6 +4859,118 @@ class TestBracketBranchEquivalence:
                   "Y-L-L-E-G-G-P-S-S-G-A-P-P-P-S-am")
         smi = self._smiles(cabiln)
         assert smi and len(smi) > 100, f"Retatrutide should produce a large SMILES: {smi}"
+
+
+class TestLibraryRoundTrip:
+    """Verify that the full monomer library round-trips through pre_activate."""
+
+    LG_ATOMS = {
+        '[H]': (1, 0), '[OH]': (8, 1),
+        '[Cl]': (17, 0), '[Br]': (35, 0), '[I]': (53, 0),
+    }
+
+    @staticmethod
+    def _restore_full_smiles(mol, rgroups):
+        emol = Chem.RWMol(Chem.RWMol(mol))
+        try:
+            Chem.Kekulize(emol, clearAromaticFlags=True)
+        except Exception:
+            pass
+        dummies = []
+        for atom in emol.GetAtoms():
+            if atom.GetAtomicNum() == 0:
+                dummies.append((atom.GetIdx(), atom.GetIsotope()))
+        replacements = []
+        lg_map = {
+            '[H]': ('remove', None), '[OH]': ('replace_oh', None),
+            '[Cl]': ('halide', 17), '[Br]': ('halide', 35), '[I]': ('halide', 53),
+        }
+        for dummy_idx, slot in dummies:
+            if slot < 1 or slot > len(rgroups):
+                continue
+            lg = rgroups[slot - 1]
+            if lg is None:
+                continue
+            action, param = lg_map.get(lg, ('unknown', lg))
+            replacements.append((dummy_idx, action, param))
+        atoms_to_remove = []
+        for dummy_idx, action, param in replacements:
+            if action == 'remove':
+                for nb in emol.GetAtomWithIdx(dummy_idx).GetNeighbors():
+                    nb.SetNoImplicit(False)
+                atoms_to_remove.append(dummy_idx)
+            elif action == 'replace_oh':
+                emol.GetAtomWithIdx(dummy_idx).SetAtomicNum(8)
+                emol.GetAtomWithIdx(dummy_idx).SetIsotope(0)
+                emol.GetAtomWithIdx(dummy_idx).SetNumExplicitHs(1)
+            elif action == 'halide':
+                emol.GetAtomWithIdx(dummy_idx).SetAtomicNum(param)
+                emol.GetAtomWithIdx(dummy_idx).SetIsotope(0)
+            elif action == 'unknown':
+                atoms_to_remove.append(dummy_idx)
+        for idx in sorted(atoms_to_remove, reverse=True):
+            emol.RemoveAtom(idx)
+        try:
+            Chem.SanitizeMol(emol)
+            return Chem.MolToSmiles(emol)
+        except Exception:
+            return None
+
+    @staticmethod
+    def _parse_rgroups(rg):
+        if isinstance(rg, list):
+            return rg
+        return [None if v.strip() == 'None' else v.strip()
+                for v in rg.split(',')]
+
+    @staticmethod
+    def _canonical(smi):
+        mol = Chem.MolFromSmiles(smi)
+        return Chem.MolToSmiles(mol) if mol else None
+
+    def test_library_round_trip_threshold(self):
+        """At least 93% of monomers must round-trip through pre_activate."""
+        from rdkit.Chem import PandasTools
+        from pyPept.interfaces.monomer_pipeline import pre_activate
+
+        sdf = os.path.join(os.path.dirname(__file__),
+                           '..', 'src', 'pyPept', 'data', 'monomers.sdf')
+        df = PandasTools.LoadSDF(sdf)
+        df = df.set_index('symbol')
+
+        passed = 0
+        total = 0
+        for sym in df.index:
+            total += 1
+            mol = df.loc[sym, 'ROMol']
+            if mol is None:
+                continue
+            rgroups = self._parse_rgroups(df.loc[sym, 'm_Rgroups'])
+            stored = self._canonical(Chem.MolToSmiles(mol))
+
+            full_smi = self._restore_full_smiles(mol, rgroups)
+            if full_smi is None:
+                continue
+
+            try:
+                result = pre_activate(full_smi)
+            except Exception:
+                continue
+
+            result_canon = self._canonical(result.chuckles)
+            stored_lgs = {}
+            for i, lg in enumerate(rgroups, 1):
+                if lg is not None:
+                    stored_lgs[i] = lg
+
+            if stored == result_canon and result.leaving == stored_lgs:
+                passed += 1
+
+        pct = 100 * passed / total
+        assert pct >= 93.0, (
+            f"Round-trip pass rate {pct:.1f}% ({passed}/{total}) "
+            f"is below 93% threshold"
+        )
 
 
 if __name__ == '__main__':

@@ -168,6 +168,16 @@ class Molecule:
 
         monomers_orig = [mon['m_romol'] for mon in sequence.s_monomers]
 
+        def _leaving_for_slot(m_idx, slot):
+            rg = sequence.s_monomers[m_idx].get('m_Rgroups', '')
+            if isinstance(rg, str):
+                parts = [v.strip() for v in rg.split(',')]
+            else:
+                parts = list(rg)
+            if 0 < slot <= len(parts) and parts[slot - 1] != 'None':
+                return parts[slot - 1]
+            return None
+
         # ── Step 1: relabel all dummies to globally unique isotopes ──────────
         # unique_iso(m_idx, slot) = (m_idx + 1) * 100 + slot  (slot is 1-based)
         tagged = []
@@ -205,8 +215,10 @@ class Molecule:
             iso2 = (m2 + 1) * 100 + slot2
 
             # Look up SMIRKS reaction
-            ct1 = infer_chem_type(monomers_orig[m1], at1, slot=slot1)
-            ct2 = infer_chem_type(monomers_orig[m2], at2, slot=slot2)
+            ct1 = infer_chem_type(monomers_orig[m1], at1, slot=slot1,
+                                  leaving=_leaving_for_slot(m1, slot1))
+            ct2 = infer_chem_type(monomers_orig[m2], at2, slot=slot2,
+                                  leaving=_leaving_for_slot(m2, slot2))
             entry = REACTION_INDEX.get((ct1, ct2))
 
             if entry is None:

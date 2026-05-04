@@ -87,6 +87,9 @@ _OLD_BILN_RE = re.compile(r'(?<![.\w\[{])([A-Za-z]\w*)\((\d+),(\d+)\)')
 # Each entry inside uses Fragment(prev_r, cap_r); entries separated by '.'.
 _BRACKET_RE = re.compile(r'\.[\[{]([^\]}]*)[\]}]')
 
+# Matches entries inside brackets: both monomer .Token(r,r) and crosslink .!n(r,r).
+_BRACKET_ENTRY_RE = re.compile(r'\.((?:[A-Za-z]\w*|!\w+))\((\d+),(\d+)\)')
+
 
 def biln_to_cabiln(biln):
     """Convert old BILN crosslink notation ``Token(bid,rg)`` to CABILN ``.!n(y,z)`` form.
@@ -262,7 +265,7 @@ def _expand_inline_caps(biln, peptide_branch_threshold=2):
 
     def _sub_bracket(m):
         content = '.' + m.group(1)  # dot lives outside bracket in notation; restore for parsing
-        steps = list(_INLINE_CAP_RE.finditer(content))
+        steps = list(_BRACKET_ENTRY_RE.finditer(content))
         if not steps:
             raise ValueError(
                 f"Sequential bracket {m.group(0)!r} contains no valid "
@@ -271,10 +274,28 @@ def _expand_inline_caps(biln, peptide_branch_threshold=2):
         if reconstructed != content:
             raise ValueError(
                 f"Sequential bracket {m.group(0)!r} has unrecognised content; "
-                f"expected only .Fragment(r,r) entries.")
+                f"expected only .Fragment(r,r) or .!n(r,r) entries.")
 
         first = steps[0]
         tok1, hr1, cr1 = first.group(1), first.group(2), first.group(3)
+
+        if tok1.startswith('!'):
+            # Pure crosslink bracket: .[!1(4,4)] or .[!1(4,4).!2(5,3)]
+            # Each entry is a crosslink bond on the host monomer — no pendant fragment.
+            host_bonds = []
+            for step in steps:
+                tok = step.group(1)
+                if not tok.startswith('!'):
+                    raise ValueError(
+                        f"Sequential bracket {m.group(0)!r}: monomer entry {tok!r} "
+                        f"cannot follow crosslink-first entries.")
+                prev_r, cur_r = step.group(2), step.group(3)
+                if tok not in _seen:
+                    _seen[tok] = (prev_r, cur_r)
+                _count[tok] = _count.get(tok, 0) + 1
+                host_bonds.append(f'({tok},{prev_r})')
+            return ''.join(host_bonds)
+
         bid1 = _ctr[0]; _ctr[0] += 1
 
         frag_tokens = [tok1]
@@ -283,16 +304,26 @@ def _expand_inline_caps(biln, peptide_branch_threshold=2):
         _backbone_steps = []
         for step in steps[1:]:
             tok, prev_r, cur_r = step.group(1), step.group(2), step.group(3)
-            bid = _ctr[0]; _ctr[0] += 1
-            if prev_r == '2' and cur_r == '1':
-                _backbone_steps.append(tok)
-            frag_bond_parts[-1] += f'({bid},{prev_r})'
-            frag_tokens.append(tok)
-            frag_bond_parts.append(f'({bid},{cur_r})')
+
+            if tok.startswith('!'):
+                # Crosslink entry: bond from preceding fragment to external partner.
+                # prev_r = R-group on the preceding bracket fragment.
+                # cur_r = R-group on the external crosslink partner.
+                frag_bond_parts[-1] += f'({tok},{prev_r})'
+                if tok not in _seen:
+                    _seen[tok] = (prev_r, cur_r)
+                _count[tok] = _count.get(tok, 0) + 1
+            else:
+                bid = _ctr[0]; _ctr[0] += 1
+                if prev_r == '2' and cur_r == '1':
+                    _backbone_steps.append(tok)
+                frag_bond_parts[-1] += f'({bid},{prev_r})'
+                frag_tokens.append(tok)
+                frag_bond_parts.append(f'({bid},{cur_r})')
 
         if (peptide_branch_threshold is not None
                 and len(_backbone_steps) >= peptide_branch_threshold):
-            frag_chain = '-'.join(s.group(1) for s in steps)
+            frag_chain = '-'.join(s.group(1) for s in steps if not s.group(1).startswith('!'))
             branch_seg = f'!n-{frag_chain}' if cr1 == '1' else f'{frag_chain}-!n'
             ctx = _bracket_ctx[0]
             if ctx:
@@ -315,8 +346,8 @@ def _expand_inline_caps(biln, peptide_branch_threshold=2):
     processed_segments = []
     for seg in segments:
         seg = _handle_terminal_bond_markers(seg, _seen, _count)
-        seg = _INLINE_BOND_RE.sub(_sub_bond, seg)
-        # Manual loop so _sub_bracket can read surrounding context for suggestions
+        # Brackets first: they may contain .!n(r,r) crosslink entries that
+        # _INLINE_BOND_RE would otherwise grab prematurely.
         parts = []
         last_end = 0
         for bm in _BRACKET_RE.finditer(seg):
@@ -333,6 +364,7 @@ def _expand_inline_caps(biln, peptide_branch_threshold=2):
             last_end = bm.end()
         parts.append(seg[last_end:])
         seg = ''.join(parts)
+        seg = _INLINE_BOND_RE.sub(_sub_bond, seg)
         seg = _INLINE_CAP_RE.sub(_sub_cap, seg)
         processed_segments.append(seg)
 
@@ -546,8 +578,39 @@ def cabiln_to_bracket(cabiln):
     unconverted_crosslink = []
     for branch_seg in crosslink:
         all_tags = _re.findall(r'\.(!\d+)', branch_seg)
-        if len(set(all_tags)) > 1:
-            unconverted_crosslink.append(branch_seg)
+        unique_tags = list(dict.fromkeys(all_tags))
+
+        if len(unique_tags) > 1:
+            # Multi-tag hub (e.g., TBMB.!1.!2.!3) — single monomer only
+            raw_parts = _re.split(r'(?<!\()[-](?!\))', branch_seg)
+            raw_parts = [p.strip() for p in raw_parts if p.strip()]
+            if len(raw_parts) != 1:
+                unconverted_crosslink.append(branch_seg)
+                continue
+            hub_name = _re.split(r'\.!', branch_seg)[0].strip()
+            tag_info = {}
+            for tag in unique_tags:
+                host_pat = _re.escape(f'.{tag}') + r'\((\d+),(\d+)\)'
+                hm = _re.search(host_pat, main_seg)
+                if hm:
+                    tag_info[tag] = (hm.group(1), hm.group(2))
+            if len(tag_info) < len(unique_tags):
+                unconverted_crosslink.append(branch_seg)
+                continue
+            anchor_tag = unique_tags[0]
+            r_host, r_branch = tag_info[anchor_tag]
+            bracket_items = [f'{hub_name}({r_host},{r_branch})']
+            for tag in unique_tags[1:]:
+                th, tb = tag_info[tag]
+                bracket_items.append(f'{tag}({tb},{th})')
+            # Simplify remaining host tags BEFORE inserting bracket
+            for tag in unique_tags[1:]:
+                main_seg = _re.sub(
+                    _re.escape(f'.{tag}') + r'\(\d+,\d+\)',
+                    f'.{tag}', main_seg, count=1)
+            bracket_str = '.[' + '.'.join(bracket_items) + ']'
+            host_pat = _re.escape(f'.{anchor_tag}') + r'\(\d+,\d+\)'
+            main_seg = _re.sub(host_pat, bracket_str, main_seg, count=1)
             continue
         tag_m = _re.search(r'\.(!\d+)', branch_seg)
         if not tag_m:
@@ -749,6 +812,17 @@ def _check_bond_chemistry(mol1, at1, mol2, at2, bond_label=''):
         )
         return
 
+    # O(8)–N(7): hydroxamic acid / hydroxylamine / isoxazole linkage
+    if pair == frozenset([8, 7]):
+        warnings.warn(
+            f"Bond {bond_label}: O–N hydroxylamine/hydroxamic acid bond. "
+            "Valid for O-amino acid caps (OBn_, OMe_) and hydroxamate "
+            "bioconjugation, but unusual in standard peptide assembly. "
+            "Intentional?",
+            UserWarning, stacklevel=4,
+        )
+        return
+
     # Anything else — no plausible inter-monomer chemistry; raise so the caller
     # gets a clear message rather than a silent bad molecule or a raw RDKit crash.
     sym_names = {6: 'C', 7: 'N', 8: 'O', 16: 'S', 34: 'Se'}
@@ -913,20 +987,21 @@ class Sequence:
                 # Check if name exists in MonomerDic — with degeneracy resolution
 
                 if resname not in self.monomer_df.index:
-                    # Check if resname is a degenerate base alias
-                    degen = self.monomer_df.attrs.get('_degen_aliases', {})
-                    if resname in degen:
+                    # 1) Check synonym table (CSV-defined aliases)
+                    synonyms = self.monomer_df.attrs.get('_synonyms', {})
+                    if resname in synonyms:
+                        resname = synonyms[resname]
+                    # 2) Check degenerate cap aliases (R1/R2 structural pairs)
+                    elif resname in self.monomer_df.attrs.get('_degen_aliases', {}):
+                        degen = self.monomer_df.attrs['_degen_aliases']
                         variants = degen[resname]
-                        # Determine which variant to use based on position
                         res_idx = _res_pos
                         if res_idx == 0:
-                            # First in chain -> N-term cap (has R2, i.e. trailing _)
                             chosen = [v for v in variants
                                       if v.endswith('_') and not v.startswith('_')]
                             if not chosen:
                                 chosen = [v for v in variants if v.endswith('_')]
                         elif res_idx == len(residues) - 1:
-                            # Last in chain -> C-term cap (has R1, i.e. leading _)
                             chosen = [v for v in variants
                                       if v.startswith('_') and not v.endswith('_')]
                             if not chosen:
@@ -1373,6 +1448,24 @@ def get_monomer_info(path):
 
     # Store aliases as a module-level accessible dict on the DataFrame
     df_group.attrs['_degen_aliases'] = degen_aliases
+
+    # --- Synonym resolution index ---
+    # Build reverse lookup: alias_name -> canonical_symbol
+    # Sources: CSV synonyms column + SDF duplicate entries already in df_group
+    synonyms = {}  # alias -> canonical
+    csv_path = os.path.join(os.path.dirname(path), 'monomers.csv')
+    if os.path.isfile(csv_path):
+        import csv as _csv
+        with open(csv_path, newline='') as _f:
+            for row in _csv.DictReader(_f):
+                tok = row.get('token', '')
+                syns = row.get('synonyms', '')
+                if tok and syns and tok in df_group.index:
+                    for alias in syns.split(','):
+                        alias = alias.strip()
+                        if alias and alias not in df_group.index:
+                            synonyms[alias] = tok
+    df_group.attrs['_synonyms'] = synonyms
 
     return df_group
 

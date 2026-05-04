@@ -357,7 +357,11 @@ _HTML = r"""<!DOCTYPE html>
     display: none;
     pointer-events: none;
     width: 480px;
+    max-width: 680px;
     overflow: hidden;
+  }
+  #lib-preview.has-reagent {
+    width: 640px;
   }
   #lib-preview .prev-row {
     display: flex;
@@ -382,6 +386,23 @@ _HTML = r"""<!DOCTYPE html>
   }
   #lib-preview .prev-pane svg { width: 100%; height: 100%; display: block; }
   #lib-preview.dark .prev-pane svg { filter: invert(1); }
+  #lib-preview .prev-meta {
+    padding: 4px 8px;
+    font-size: 10px;
+    color: #8ab4e8;
+    border-top: 1px solid #1e3050;
+    background: #0d1422;
+  }
+  #lib-preview .prev-warn {
+    color: #e8a84a;
+  }
+  #lib-preview .prev-rxn {
+    position: absolute;
+    bottom: 4px; left: 6px;
+    font-size: 9px;
+    color: #6a9a6a;
+    z-index: 1;
+  }
 
   /* ── build panel ── */
   #build-panel {
@@ -803,13 +824,21 @@ function renderLibList(q) {
   }
 
   const rows = filtered.map(m => {
-    const badge = m.subtype === 'modified' || m.subtype === 'natural'
+    const badge = m.degenerate
+      ? `<span class="lib-badge cap">N/C cap</span>`
+      : m.subtype === 'modified' || m.subtype === 'natural'
       ? `<span class="lib-badge aa">${m.type}</span>`
       : m.type === 'cap' && m.subtype === 'protecting'
       ? `<span class="lib-badge protect">cap</span>`
       : `<span class="lib-badge cap">${m.type}</span>`;
 
-    const lg = m.leaving ? `  LG: ${escHtml(m.leaving)}` : '';
+    let lg = m.leaving ? `  LG: ${escHtml(m.leaving)}` : '';
+    if (m.degenerate) {
+      const parts = [];
+      if (m.nterm_abbr) parts.push(`N: ${escHtml(m.nterm_abbr)} (${escHtml(m.nterm_leaving)})`);
+      if (m.cterm_abbr) parts.push(`C: ${escHtml(m.cterm_abbr)} (${escHtml(m.cterm_leaving)})`);
+      lg = '  ' + parts.join(' | ');
+    }
     return `<div class="lib-row" data-abbr="${escAttr(m.abbr)}">
       <div class="lib-abbr">${escHtml(m.abbr)}</div>
       <div class="lib-info">
@@ -888,10 +917,20 @@ function startPreview(abbr, row) {
 function showPreview(data, row) {
   let html;
   if (data.degenerate && data.variants) {
-    // New format: array of variant panels + R-group panel
-    let panels = data.variants.map(v =>
-      `<div class="prev-pane"><span class="prev-label">${v.label}</span>${v.svg}</div>`
-    ).join('');
+    // Degenerate: variant panels with optional reagent info
+    let panels = data.variants.map(v => {
+      let pane = `<div class="prev-pane"><span class="prev-label">${v.label}</span>${v.svg}`;
+      if (v.reagent) {
+        pane += `<span class="prev-rxn">${v.reagent.reaction} (LG: ${v.reagent.reagent_lg})</span>`;
+      }
+      pane += `</div>`;
+      return pane;
+    }).join('');
+    // Show reagent form from first variant that has one
+    const withReagent = data.variants.find(v => v.svg_reagent);
+    if (withReagent) {
+      panels += `<div class="prev-pane"><span class="prev-label">Reagent</span>${withReagent.svg_reagent}</div>`;
+    }
     panels += `<div class="prev-pane"><span class="prev-label">R-groups</span>${data.svg}</div>`;
     html = `<div class="prev-row">${panels}</div>`;
   } else if (data.degenerate) {
@@ -902,14 +941,27 @@ function showPreview(data, row) {
     </div>`;
   } else {
     const restored = data.svg_restored || data.svg;
+    let reagentPane = '';
+    let metaLine = '';
+    if (data.svg_reagent) {
+      reagentPane = `<div class="prev-pane"><span class="prev-label">Reagent</span>${data.svg_reagent}</div>`;
+      const r = data.reagent;
+      metaLine = `<div class="prev-meta">${r.reaction}` +
+        (r.reagent_note ? ` — ${r.reagent_note}` : '') +
+        (r.issue ? ` <span class="prev-warn">⚠ ${r.issue}</span>` : '') +
+        `</div>`;
+    }
     html = `<div class="prev-row">
       <div class="prev-pane"><span class="prev-label">Monomer</span>${restored}</div>
+      ${reagentPane}
       <div class="prev-pane"><span class="prev-label">R-groups</span>${data.svg}</div>
-    </div>`;
+    </div>${metaLine}`;
   }
   libPreview.innerHTML = html;
+  const hasReagent = !!(data.svg_reagent || (data.variants && data.variants.some(v => v.svg_reagent)));
+  libPreview.classList.toggle('has-reagent', hasReagent);
   const rect = row.getBoundingClientRect();
-  const previewH = 202;
+  const previewH = hasReagent ? 240 : 202;
   let top = Math.max(8, rect.top - 40);
   if (top + previewH > window.innerHeight - 8) {
     top = window.innerHeight - 8 - previewH;
@@ -2059,6 +2111,8 @@ async def list_monomers():
         sdf_path = pathlib.Path(__file__).parent.parent / 'src' / 'pyPept' / 'data' / 'monomers.sdf'
         suppl = Chem.SDMolSupplier(str(sdf_path), removeHs=False)
         monomers = []
+        degen_nterm = {}  # base -> entry with trailing _
+        degen_cterm = {}  # base -> entry with leading _
         for mol in suppl:
             if mol is None:
                 continue
@@ -2066,22 +2120,182 @@ async def list_monomers():
             abbr = p.get('m_abbr', '') or p.get('symbol', '')
             if not abbr:
                 continue
-            # Build a human-readable leaving-group string from m_Rgroups
             rgroups = p.get('m_Rgroups', '')
             slots   = [r.strip() for r in rgroups.split(',')]
             lg_parts = [f"R{i+1}:{slots[i]}" for i in range(len(slots))
                         if slots[i] not in ('None', '', 'none')]
-            monomers.append({
+            entry = {
                 'abbr':      abbr,
                 'name':      p.get('m_name', ''),
                 'type':      p.get('m_type', ''),
                 'subtype':   p.get('m_subtype', ''),
                 'chem_types': p.get('m_chem_types', ''),
                 'leaving':   ', '.join(lg_parts),
-            })
+            }
+            # Collect degenerate cap pairs for merging
+            if abbr.endswith('_') and not abbr.startswith('_'):
+                degen_nterm[abbr[:-1]] = entry
+                continue
+            if abbr.startswith('_') and not abbr.endswith('_'):
+                degen_cterm[abbr[1:]] = entry
+                continue
+            monomers.append(entry)
+        # Merge degenerate pairs into single entries
+        all_bases = set(degen_nterm) | set(degen_cterm)
+        for base in sorted(all_bases):
+            nt = degen_nterm.get(base)
+            ct = degen_cterm.get(base)
+            primary = nt or ct
+            merged = {
+                'abbr': base,
+                'name': primary['name'],
+                'type': primary['type'],
+                'subtype': primary['subtype'],
+                'chem_types': primary['chem_types'],
+                'leaving': primary['leaving'],
+                'degenerate': True,
+            }
+            if nt:
+                merged['nterm_abbr'] = nt['abbr']
+                merged['nterm_leaving'] = nt['leaving']
+            if ct:
+                merged['cterm_abbr'] = ct['abbr']
+                merged['cterm_leaving'] = ct['leaving']
+            monomers.append(merged)
         return monomers
     except Exception as exc:
         return JSONResponse({"error": str(exc)}, status_code=500)
+
+
+_CAP_REACTIONS = None
+
+def _load_cap_reactions():
+    global _CAP_REACTIONS
+    if _CAP_REACTIONS is None:
+        import pathlib, yaml
+        yaml_path = pathlib.Path(__file__).parent.parent / 'src' / 'pyPept' / 'data' / 'cap_reactions.yaml'
+        if yaml_path.exists():
+            with open(yaml_path, encoding="utf-8") as f:
+                _CAP_REACTIONS = yaml.safe_load(f) or {}
+        else:
+            _CAP_REACTIONS = {}
+    return _CAP_REACTIONS
+
+
+_LG_SMILES = {
+    'Cl': '[Cl]',
+    'Br': '[Br]',
+    'I': '[I]',
+    'OH': '[OH]',
+    'H': '[H]',
+}
+
+
+def _restore_reagent_form(mol, abbr):
+    """Replace the bonding R-group dummy with the reagent's canonical leaving group.
+
+    For an N-terminal cap (R2 bonding slot), this shows the actual reagent:
+    e.g. ac with LG=Cl renders as CH₃C(=O)Cl (acetyl chloride).
+    For C-terminal caps (R1 bonding slot), LG=H shows the free nucleophile.
+    """
+    from rdkit import Chem
+    cap_rx = _load_cap_reactions()
+    info = cap_rx.get(abbr)
+    if not info:
+        return None, None
+
+    reagent_lg = info.get('reagent_lg', '')
+    lg_smi = _LG_SMILES.get(reagent_lg)
+    if not lg_smi:
+        return None, None
+
+    props = mol.GetPropsAsDict()
+    rgroups = props.get('m_Rgroups', '')
+    slots = [r.strip() for r in rgroups.split(',')]
+
+    # Determine which slot is the bonding slot for this cap type
+    # R2 caps (N-terminal/electrophilic): slot 2 bonds to the amine
+    # R1 caps (C-terminal/nucleophilic): slot 1 bonds to the carbonyl
+    # Sidechain caps: slot 1 bonds to the sidechain
+    # We detect by checking which slot has the conventional LG ([OH] or [H])
+    bonding_slot = None
+    if len(slots) >= 2 and slots[1] in ('[OH]', '[H]'):
+        bonding_slot = 2  # R2 cap
+    elif len(slots) >= 1 and slots[0] in ('[OH]', '[H]'):
+        bonding_slot = 1  # R1 cap
+    else:
+        bonding_slot = 2  # Default to R2
+
+    emol = Chem.RWMol(Chem.RWMol(mol))
+    to_remove = []
+    for atom in emol.GetAtoms():
+        if atom.GetAtomicNum() != 0:
+            continue
+        iso = atom.GetIsotope()
+        if iso < 1 or iso > len(slots):
+            continue
+        slot_lg = slots[iso - 1]
+        if slot_lg in ('None', 'none', ''):
+            continue
+
+        if iso == bonding_slot:
+            # Replace with reagent LG
+            if lg_smi == '[H]':
+                nb = atom.GetNeighbors()[0] if atom.GetNeighbors() else None
+                if nb:
+                    nb.SetNumExplicitHs(nb.GetNumExplicitHs() + 1)
+                    nb.SetNoImplicit(False)
+                to_remove.append(atom.GetIdx())
+            elif lg_smi == '[OH]':
+                new_atom = Chem.Atom(8)
+                new_atom.SetNumExplicitHs(1)
+                emol.ReplaceAtom(atom.GetIdx(), new_atom)
+            elif lg_smi == '[Cl]':
+                new_atom = Chem.Atom(17)
+                emol.ReplaceAtom(atom.GetIdx(), new_atom)
+            elif lg_smi == '[Br]':
+                new_atom = Chem.Atom(35)
+                emol.ReplaceAtom(atom.GetIdx(), new_atom)
+            elif lg_smi == '[I]':
+                new_atom = Chem.Atom(53)
+                emol.ReplaceAtom(atom.GetIdx(), new_atom)
+        else:
+            # Non-bonding slots: restore normally
+            if slot_lg == '[H]':
+                nb = atom.GetNeighbors()[0] if atom.GetNeighbors() else None
+                if nb:
+                    nb.SetNumExplicitHs(nb.GetNumExplicitHs() + 1)
+                    nb.SetNoImplicit(False)
+                to_remove.append(atom.GetIdx())
+            elif slot_lg == '[OH]':
+                new_atom = Chem.Atom(8)
+                new_atom.SetNumExplicitHs(1)
+                emol.ReplaceAtom(atom.GetIdx(), new_atom)
+            else:
+                lg_mol = Chem.MolFromSmiles(slot_lg, sanitize=True)
+                if lg_mol:
+                    new_atom = Chem.Atom(lg_mol.GetAtomWithIdx(0).GetAtomicNum())
+                    emol.ReplaceAtom(atom.GetIdx(), new_atom)
+
+    for idx in sorted(set(to_remove), reverse=True):
+        emol.RemoveAtom(idx)
+
+    try:
+        Chem.SanitizeMol(emol)
+    except Exception:
+        pass
+
+    reaction_type = info.get('reaction', '')
+    reagent_note = info.get('reagent_note', '')
+    issue = info.get('issue', '')
+    meta = {
+        'reaction': reaction_type,
+        'reagent_lg': reagent_lg,
+        'reagent_note': reagent_note,
+    }
+    if issue:
+        meta['issue'] = issue
+    return emol.GetMol(), meta
 
 
 def _restore_leaving_groups(mol):
@@ -2195,7 +2409,14 @@ async def monomer_svg(abbr: str, width: int = 220, height: int = 180):
             svg = _draw_mol(mol, width, height)
             restored = _restore_leaving_groups(mol)
             svg_restored = _draw_mol(restored, width, height)
-            return {"svg": svg, "svg_restored": svg_restored}
+            result = {"svg": svg, "svg_restored": svg_restored}
+
+            # Add reagent form if cap has reaction metadata
+            reagent_mol, reagent_meta = _restore_reagent_form(mol, abbr)
+            if reagent_mol is not None:
+                result["svg_reagent"] = _draw_mol(reagent_mol, width, height)
+                result["reagent"] = reagent_meta
+            return result
 
         # Check if this is a degenerate base name (e.g. "Bn" -> Bn_/_Bn)
         # Detect pairs: look for abbr_ and _abbr variants
@@ -2214,10 +2435,15 @@ async def monomer_svg(abbr: str, width: int = 220, height: int = 180):
                 vmol = mol_by_abbr[vkey]
                 restored_v = _restore_leaving_groups(vmol)
                 label = f"N-term ({vkey})" if vkey.endswith('_') else f"C-term ({vkey})"
-                panels.append({
+                reagent_mol, reagent_meta = _restore_reagent_form(vmol, vkey)
+                panel = {
                     "label": label,
                     "svg": _draw_mol(restored_v, width, height),
-                })
+                }
+                if reagent_mol is not None:
+                    panel["svg_reagent"] = _draw_mol(reagent_mol, width, height)
+                    panel["reagent"] = reagent_meta
+                panels.append(panel)
             # R-group panel from first variant
             rgroup_svg = _draw_mol(mol_by_abbr[variants_found[0]], width, height)
             return {

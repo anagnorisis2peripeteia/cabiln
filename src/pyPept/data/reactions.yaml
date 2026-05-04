@@ -48,13 +48,13 @@
     - "[1*][N:2].[2*][C:4](=[O:5]) >> [N:2][C:4](=[O:5])"
 
 - id: sidechain_amide
-  description: Amide bond from primary amine + sidechain carboxyl (O-attachment)
+  description: Amide bond from primary amine + sidechain carboxyl (C-attachment)
   reactant_pairs:
     - [amine_primary, carboxyl]
   slot_a: 1
   slot_b: 4
   steps:
-    - "[1*][N:2].[4*][O][C:4](=[O:5]) >> [N:2][C:4](=[O:5])"
+    - "[1*][N:2].[4*][C:4](=[O:5]) >> [N:2][C:4](=[O:5])"
 
 - id: backbone_ester
   description: Depsipeptide ester bond (O-to-C)
@@ -95,13 +95,13 @@
     - "[4*][S:2].[2*][C:4](=[O:5]) >> [S:2][C:4](=[O:5])"
 
 - id: thioester_sc
-  description: Thioester crosslink from thiol + sidechain carboxyl (O-attachment)
+  description: Thioester crosslink from thiol + sidechain carboxyl (C-attachment)
   reactant_pairs:
     - [thiol, carboxyl]
   slot_a: 4
   slot_b: 4
   steps:
-    - "[4*][S:2].[4*][O][C:3](=[O:5]) >> [S:2][C:3](=[O:5])"
+    - "[4*][S:2].[4*][C:3](=[O:5]) >> [S:2][C:3](=[O:5])"
 
 - id: thioether_halide
   description: Thioether from thiol + alkyl halide (SN2; halide departs)
@@ -241,7 +241,7 @@
   slot_a: 3
   slot_b: 4
   steps:
-    - "[3*][N:1].[4*][O][C:2](=[O:3]) >> [N:1][C:2](=[O:3])"
+    - "[3*][N:1].[4*][C:2](=[O:3]) >> [N:1][C:2](=[O:3])"
 
 - id: backbone_n_alkylation
   description: >
@@ -289,8 +289,8 @@
   steps:
     - "[4*][N:2] >> [H][N:2]"
 
-- id: restore_r4_carboxyl_o
-  description: Cap R4 sidechain carboxyl O with H → free carboxylic acid
+- id: restore_r4_carboxyl_c
+  description: Cap R4 sidechain carboxyl C with OH → free carboxylic acid
   slot_a: 4
   steps:
-    - "[4*][O:2][C](=O) >> [H][O:2][C](=O)"
+    - "[4*][C:2](=[O:3]) >> O[C:2](=[O:3])"
