@@ -1649,7 +1649,9 @@ buildConnect.addEventListener('click', async () => {
         host_residue_idx: buildLeftRIdx ?? 0,
         new_abbr: newAbbr,
         r_host: rHost,
-        r_new: rNew
+        r_new: rNew,
+        target_residue_idx: (buildRightRIdx !== null && buildRightRIdx !== buildLeftRIdx)
+                             ? buildRightRIdx : -1
       })
     });
     const data = await res.json();
@@ -2774,6 +2776,7 @@ class _InsertBondReq(BaseModel):
     new_abbr: str
     r_host: int
     r_new: int
+    target_residue_idx: int = -1  # -1 = add new monomer; >=0 = crosslink to existing
 
 @app.post("/insert_bond")
 async def insert_bond(req: _InsertBondReq):
@@ -2816,6 +2819,106 @@ async def insert_bond(req: _InsertBondReq):
         cabiln = req.cabiln.strip()
         if not cabiln:
             return {"result": req.new_abbr}
+
+        # ── Intramolecular crosslink: annotate two EXISTING residues ─────────
+        if req.target_residue_idx >= 0 and req.target_residue_idx != req.host_residue_idx:
+            from pyPept.sequence import Sequence as _Seq
+            try:
+                _seq2 = _Seq(cabiln)
+                _chain_ids2 = _seq2.s_chains.get('s_monomerIDs', [])
+                _main2 = set(_chain_ids2[0]) if _chain_ids2 else set()
+            except Exception:
+                _seq2 = None
+                _main2 = set()
+
+            # Pick the next unused !n tag
+            _used_ns = {int(m.group(1)) for m in re.finditer(r'\.?!(\d+)', cabiln)}
+            _n = 1
+            while _n in _used_ns:
+                _n += 1
+            _tag = f'!{_n}'
+
+            def _token_split(s):
+                """Split CABILN by '-' respecting bracket depth."""
+                toks, depth, cur = [], 0, ''
+                for ch in s:
+                    if ch == '[': depth += 1
+                    elif ch == ']': depth -= 1
+                    if ch == '-' and depth == 0:
+                        toks.append(cur); cur = ''
+                    else:
+                        cur += ch
+                if cur: toks.append(cur)
+                return toks
+
+            def _annotate_main(cabiln, res_idx, ann):
+                """Append ann to the main-chain token for res_idx."""
+                toks = _token_split(cabiln)
+                midx = 0
+                for i, tok in enumerate(toks):
+                    if midx == res_idx:
+                        toks[i] = tok + ann
+                        return '-'.join(toks)
+                    midx += 1
+                return cabiln
+
+            def _annotate_pendant(cabiln, res_idx, ann, seq, main_set):
+                """Insert ann after the pendant residue's Abbr(r,r) in its bracket."""
+                try:
+                    abbr = seq.s_monomers[res_idx].get('m_abbr', '')
+                except (IndexError, KeyError):
+                    return cabiln
+                pendant_indices = [i for i in range(len(seq.s_monomers))
+                                   if i not in main_set]
+                same_abbr = [i for i in pendant_indices
+                             if seq.s_monomers[i].get('m_abbr', '') == abbr]
+                try:
+                    occ = same_abbr.index(res_idx)
+                except ValueError:
+                    occ = 0
+                pat = re.compile(re.escape(abbr) + r'\(\d+,\d+\)')
+                cnt = 0
+                def _spans(s):
+                    i = 0
+                    while i < len(s):
+                        if s[i] == '[':
+                            depth = 0; j = i
+                            while j < len(s):
+                                if s[j] == '[': depth += 1
+                                elif s[j] == ']':
+                                    depth -= 1
+                                    if depth == 0: break
+                                j += 1
+                            yield (i, j + 1); i += 1
+                        else:
+                            i += 1
+                for bs, be in _spans(cabiln):
+                    content = cabiln[bs + 1:be - 1]
+                    for pm in pat.finditer(content):
+                        pfix = content[:pm.start()]
+                        if pfix.count('[') != pfix.count(']'):
+                            continue
+                        if cnt < occ:
+                            cnt += 1; continue
+                        new_content = content[:pm.end()] + ann + content[pm.end():]
+                        return cabiln[:bs] + '[' + new_content + ']' + cabiln[be:]
+                return cabiln
+
+            ann_host   = f'.{_tag}({req.r_host},{req.r_new})'
+            ann_target = f'.{_tag}({req.r_new},{req.r_host})'
+
+            result = cabiln
+            for _ridx, _ann in [(req.host_residue_idx, ann_host),
+                                 (req.target_residue_idx, ann_target)]:
+                if _main2 and _ridx in _main2:
+                    result = _annotate_main(result, _ridx, _ann)
+                elif _seq2 is not None:
+                    result = _annotate_pendant(result, _ridx, _ann, _seq2, _main2)
+                else:
+                    result = _annotate_main(result, _ridx, _ann)
+
+            return {"result": result}
+        # ─────────────────────────────────────────────────────────────────────
 
         is_backbone = (req.r_host == 2 and req.r_new == 1)
 
