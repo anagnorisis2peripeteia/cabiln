@@ -102,9 +102,9 @@ _CHEM_TYPE_REGISTRY = [
     ('tco_c',             '[CX4;!H0;!r:1][C;r]=[C;r]',           '[H]',  '[CX4;!H0;!r:1][C;r]=[C;r]',             False),
     # ── Condensation bioorthogonal ────────────────────────────────────────────
     # aldehyde: CH1 (pre, requires H to distinguish from ketone) → CH0 after dummy + chain + O
-    ('aldehyde',          '[CX3H1:1](=O)[!#7]',                   '[H]',  '[CX3;H0,H1:1](=O)[!#7]',                False),
+    ('aldehyde',          '[CX3H1:1](=O)[!#7;!#1]',                '[H]',  '[CX3;H0,H1:1](=O)[!#7;!#1]',            False),
     # formamide_c: formyl (N-CHO) — distinct from amide (N-CO-C, no H)
-    ('formamide_c',       '[CX3H1:1](=O)[NX3]',                   '[H]',  '[CX3;H0,H1:1](=O)[NX3]',                False),
+    ('formamide_c',       '[CX3H1:1](=O)[#7X3]',                  '[H]',  '[CX3;H0,H1:1](=O)[#7X3]',               False),
     ('nhs_ester',         '[CX4;!H0:1]C(=O)ON1C(=O)CCC1=O',      '[H]',  '[CX4;!H0:1]C(=O)ON1C(=O)CCC1=O',       False),
     # maleimide_c: ring alkene CH1 (pre) → CH0 after dummy
     # infer_smarts adds ([*]) so the dummy-bearing vinyl C is match[0] not the other vinyl C

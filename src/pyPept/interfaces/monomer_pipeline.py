@@ -224,9 +224,9 @@ _BB_ALCOHOL_PAT  = Chem.MolFromSmarts('[OX2H1:1][CX4]')
 # Uses pre_smarts column (H≥1 required — there must be an H to replace with dummy).
 # All entries including label_only are included to reserve slots in pre_activate.
 from pyPept.interfaces.reaction_library import _CHEM_TYPE_REGISTRY
-_SIDECHAIN_RULES = [(pre_smarts, lg, ct) for ct, pre_smarts, lg, _infer, _lo in _CHEM_TYPE_REGISTRY]
+_SIDECHAIN_RULES = [(pre_smarts, lg, ct, lo) for ct, pre_smarts, lg, _infer, lo in _CHEM_TYPE_REGISTRY]
 
-_SC_PATTERNS  = [(Chem.MolFromSmarts(s), lg, ct) for s, lg, ct in _SIDECHAIN_RULES]
+_SC_PATTERNS  = [(Chem.MolFromSmarts(s), lg, ct, lo) for s, lg, ct, lo in _SIDECHAIN_RULES]
 _SECOND_H_PAT = Chem.MolFromSmarts('[NX3;H2:1]')
 
 
@@ -382,7 +382,7 @@ def find_sidechain_slots(mol, assigned_atoms, start_slot=4):
     protected = set()  # non-attachment atoms in multi-atom SMARTS — off-limits
     first_ct = {}      # atom_idx -> first assigned chem_type
 
-    for patt, leaving, chem_type in _SC_PATTERNS:
+    for patt, leaving, chem_type, label_only in _SC_PATTERNS:
         matches = sorted(mol.GetSubstructMatches(patt), key=lambda m: m[0])
         for match in matches:
             idx = match[0]
@@ -391,8 +391,9 @@ def find_sidechain_slots(mol, assigned_atoms, start_slot=4):
                 seen.add(idx)
                 first_ct[idx] = chem_type
                 next_slot += 1
-                for other_idx in match[1:]:
-                    protected.add(other_idx)
+                if not label_only:
+                    for other_idx in match[1:]:
+                        protected.add(other_idx)
 
     # Second H on sidechain primary amines only (not backbone atoms).
     for match in mol.GetSubstructMatches(_SECOND_H_PAT):

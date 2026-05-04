@@ -340,7 +340,7 @@ The complete type set, in priority order:
 | 5 | `hydrazide` | `[NX3H1:1][NX3H2]` | `[H]` | no | HzAla |
 | 6 | `amine_primary` | `[NX3;H2:1]` | `[H]` | no | Lys, Orn |
 | 7 | `guanidinium` | `[NX3;H1:1][CX3](=N)` | `[H]` | **yes** | Arg |
-| 8 | `guanidinium_imine` | `[NX2H1:1]=[CX3]([NX3])[NX3]` | `[H]` | no | *(shadow)* |
+| 8 | `guanidinium_imine` | `[NX2H1:1]=[CX3]([NX3])[NX3]` | `[H]` | no | Arg =NH |
 | 9 | `carboxyl` | `[CX3:1](=O)[OX2H1]` | `[OH]` | no | Asp, Glu |
 | 10 | `hydroxyl_phenolic` | `[OX2H1:1][c]` | `[H]` | **yes** | Tyr |
 | 11 | `hydroxyl` | `[OX2H1:1][CX4]` | `[H]` | no | Ser, Thr |
@@ -353,15 +353,15 @@ The complete type set, in priority order:
 | 18 | `terminal_alkene` | `[CH1:1]=[CH2]` | `[H]` | no | S5, R8 |
 | 19 | `tetrazine_c` | `[CX4;!H0:1][c]1nnc(nn1)` | `[H]` | no | TzAla |
 | 20 | `tco_c` | `[CX4;!H0;!r:1][C;r]=[C;r]` | `[H]` | no | TcoAla |
-| 21 | `aldehyde` | `[CX3H1:1](=O)[!#7]` | `[H]` | no | Ald |
-| 22 | `formamide_c` | `[CX3H1:1](=O)[NX3]` | `[H]` | no | *(shadow)* |
+| 21 | `aldehyde` | `[CX3H1:1](=O)[!#7;!#1]` | `[H]` | no | Ald |
+| 22 | `formamide_c` | `[CX3H1:1](=O)[#7X3]` | `[H]` | no | Lys_For |
 | 23 | `nhs_ester` | `[CX4;!H0:1]C(=O)ON1C(=O)CCC1=O` | `[H]` | no | NHSAla |
 | 24 | `maleimide_c` | `[CH1:1]1=[C][C](=[O])[N][C]1=[O]` | `[H]` | no | MalAla |
 | — | `amine_secondary` | *(Pass 3: second H)* | `[H]` | — | Lys R5 |
 
 **`label_only`** types get a visible R-group slot but no entry in the bond reaction table. This prevents incorrect bonding of detectable-but-unreactive atoms (e.g. Arg's guanidinium NH, Tyr's phenolic OH, His's imidazole NH). The slot is still useful for cap attachment and for tools that inspect monomer connectivity.
 
-**Shadowed types**: `formamide_c` (#22) and `guanidinium_imine` (#8) are shadowed at registration time. For formamide_c, amide_nh (#13) matches the formamide N first, and the `protected` set blocks the adjacent C. For guanidinium_imine, guanidinium (#7) matches the ε-NH first, and its `(=N)` branch puts the imine N in `protected`. Both types activate only at assembly time via `infer_chem_type`.
+**`label_only` protection rule**: multi-atom matches for `label_only` types do NOT add non-attachment atoms to the `protected` set. This allows reactive types to detect their attachment points even when a label_only pattern matches a neighboring atom. For example, Arg's guanidinium (#7, label_only) reserves the ε-NH slot without blocking guanidinium_imine (#8) from detecting the =NH. Similarly, amide_nh (#13, label_only) reserves the amide N–H without blocking formamide_c (#22) from detecting the formyl C.
 
 Each type is documented below with 5 walkthrough examples showing step-by-step detection logic.
 
@@ -614,29 +614,28 @@ Guanidinium NH on arginine. **label_only**: slot is visible but has no bond-tabl
 <summary>5 examples</summary>
 
 ```python
-# 1. Arginine (R) — multi-atom protection in action
+# 1. Arginine (R) — label_only protection allows guanidinium_imine
 pre_activate('N[C@@H](CCCNC(=N)N)C(=O)O')
 # Sidechain scan (in order):
 #   amine_primary (#6): terminal -NH₂ matches → R4=amine_primary
 #   guanidinium (#7): the ε-NH matches [NX3;H1:1][CX3](=N) → R5=guanidinium (label_only)
-#     ⚠ PROTECTION: match tuple includes [CX3] AND the (=N) branch nitrogen.
-#     Both added to `protected`. The =NH nitrogen is now blocked.
-#   guanidinium_imine (#8): =NH would match but is in `protected` → SKIPPED
-# Pass 3: R4 amine_primary gets second H → R6=amine_secondary
-# Result: {4: 'amine_primary', 5: 'guanidinium', 6: 'amine_secondary'}
+#     ⚠ label_only → match tuple NOT added to `protected`.
+#   guanidinium_imine (#8): =NH matches [NX2H1:1]=[CX3]... → R6=guanidinium_imine
+# Pass 3: R4 amine_primary gets second H → R7=amine_secondary
+# Result: {4: 'amine_primary', 5: 'guanidinium', 6: 'guanidinium_imine', 7: 'amine_secondary'}
 
 # 2. D-Arginine (DArg)
 pre_activate('N[C@H](CCCNC(=N)N)C(=O)O')
-# Same protection mechanism. {4: amine_primary, 5: guanidinium, 6: amine_secondary}
+# Same detection. {4: amine_primary, 5: guanidinium, 6: guanidinium_imine, 7: amine_secondary}
 
 # 3. Homoarginine (hArg) — one extra CH₂
 pre_activate('N[C@@H](CCCCNC(=N)N)C(=O)O')
-# Longer chain, same guanidinium detection and protection.
+# Longer chain, same detection.
 
 # 4. N-Methyl-arginine (meR) — slot numbering shift
 pre_activate('CN[C@@H](CCCNC(=N)N)C(=O)O')
 # Backbone N has 1 H → no R3. Sidechain starts at R3 (not R4).
-# Result: {3: 'amine_primary', 4: 'guanidinium', 5: 'amine_secondary'}
+# Result: {3: 'amine_primary', 4: 'guanidinium', 5: 'guanidinium_imine', 6: 'amine_secondary'}
 
 # 5. Arginine aldehyde (Arg_al) — C-terminal aldehyde
 pre_activate('N[C@@H](CCCNC(=N)N)C=O')
@@ -646,31 +645,39 @@ pre_activate('N[C@@H](CCCNC(=N)N)C=O')
 
 </details>
 
-#### guanidinium_imine — `[NX2H1:1]=[CX3]([NX3])[NX3]` (priority 8, shadowed)
+#### guanidinium_imine — `[NX2H1:1]=[CX3]([NX3])[NX3]` (priority 8)
 
-Guanidinium =NH imine nitrogen. In theory this matches the imine N in Arg-like guanidinium groups. In practice, **always shadowed**: guanidinium (#7) matches the ε-NH first, and its multi-atom match `[NX3;H1:1][CX3](=N)` includes the imine N via the `(=N)` branch — adding it to `protected`. Activates only at assembly time via `infer_chem_type`.
+Guanidinium =NH imine nitrogen. Matches the imine N in Arg-like guanidinium groups. Guanidinium (#7, label_only) matches the ε-NH first but does NOT protect the imine N (label_only types skip protection). So guanidinium_imine detects the =NH as a reactive slot. LG=`[H]`.
 
 <details>
-<summary>Why it's shadowed — step by step</summary>
+<summary>5 examples</summary>
 
 ```python
-# Arginine (R): N[C@@H](CCCNC(=N)N)C(=O)O
-# The guanidinium group -NHC(=NH)NH₂ has three matchable nitrogens:
-#
-# 1. Terminal -NH₂: amine_primary (#6) matches → R4
-# 2. ε-NH: guanidinium (#7) matches [NX3;H1:1][CX3](=N)
-#    → R5=guanidinium (label_only)
-#    → match tuple = (ε-N, C, =NH-N) → C and =NH-N added to `protected`
-# 3. =NH: guanidinium_imine (#8) would match [NX2H1:1]=[CX3]...
-#    → BUT =NH-N is already in `protected` → SKIPPED
-#
-# Result: {4: 'amine_primary', 5: 'guanidinium', 6: 'amine_secondary'}
-# guanidinium_imine is absent from pre_activate output.
-# At assembly time, infer_chem_type() can detect it because it uses
-# different SMARTS without the protection mechanism.
-
+# 1. Arginine (R) — all three guanidinium nitrogens detected
 pre_activate('N[C@@H](CCCNC(=N)N)C(=O)O')
-# → {4: 'amine_primary', 5: 'guanidinium', 6: 'amine_secondary'}
+# Terminal -NH₂ → R4=amine_primary
+# ε-NH → R5=guanidinium (label_only)
+# =NH → R6=guanidinium_imine (reactive)
+# Pass 3: R7=amine_secondary
+# Result: {4: 'amine_primary', 5: 'guanidinium', 6: 'guanidinium_imine', 7: 'amine_secondary'}
+
+# 2. D-Arginine (DArg)
+pre_activate('N[C@H](CCCNC(=N)N)C(=O)O')
+# Same detection, opposite chirality.
+
+# 3. Homoarginine (hArg) — one extra CH₂
+pre_activate('N[C@@H](CCCCNC(=N)N)C(=O)O')
+# Same guanidinium detection regardless of chain length.
+
+# 4. N-Methyl-arginine (meR) — slot numbering shift
+pre_activate('CN[C@@H](CCCNC(=N)N)C(=O)O')
+# No R3 (backbone N has 1H). Sidechain starts at R3.
+# Result: {3: 'amine_primary', 4: 'guanidinium', 5: 'guanidinium_imine', 6: 'amine_secondary'}
+
+# 5. ADMA (asymmetric dimethylarginine) — dimethylated terminal N
+pre_activate('CN(C)C(=N)NCCC[C@@H](N)C(=O)O')
+# Terminal N is N(CH₃)₂ — no H₂, so amine_primary doesn't match.
+# ε-NH → guanidinium (label_only). =NH → guanidinium_imine.
 ```
 
 </details>
@@ -826,11 +833,12 @@ pre_activate('N[C@@H](CCCNC(=O)N)C(=O)O')
 # Pass 3: R4 gets second H → R6=amine_secondary.
 # Result: {4: 'amine_primary', 5: 'amide_nh', 6: 'amine_secondary'}
 
-# 3. Formyl-lysine (Lys_For) — formamide sidechain
+# 3. Formyl-lysine (Lys_For) — formamide sidechain, two slots
 pre_activate('N[C@@H](CCCCNC=O)C(=O)O')
-# ⚠ PRIORITY SHADOW: amide_nh matches the N-H → R4=amide_nh (label_only).
-# The formamide C is added to `protected` by the multi-atom match [CX3]=O.
-# formamide_c (#22) CANNOT match the C — it is blocked.
+# amide_nh matches the N-H → R4=amide_nh (label_only).
+# ⚠ label_only → formamide C is NOT protected.
+# formamide_c (#22) matches the C-H → R5=formamide_c (reactive).
+# Result: {4: 'amide_nh', 5: 'formamide_c'}
 
 # 4. Acetyl-lysine (Lys_Ac) — acetamide sidechain
 pre_activate('N[C@@H](CCCCNC(=O)C)C(=O)O')
@@ -1069,9 +1077,9 @@ pre_activate('N[C@@H](CCC1=CCCCCCC1)C(=O)O')
 
 </details>
 
-#### aldehyde — `[CX3H1:1](=O)[!#7]` (priority 21)
+#### aldehyde — `[CX3H1:1](=O)[!#7;!#1]` (priority 21)
 
-Aldehyde –CHO. LG=`[H]`. The `[!#7]` exclusion prevents matching formamide C–H (which is bonded to nitrogen). At assembly time, carboxyl and aldehyde are distinguished by their leaving groups: `[OH]` → carboxyl, `[H]` → aldehyde.
+Aldehyde –CHO. LG=`[H]`. The `[!#7;!#1]` exclusion prevents matching formamide C–H (bonded to nitrogen) and ensures H atoms don't falsely satisfy the constraint when explicit. At assembly time, carboxyl and aldehyde are distinguished by their leaving groups: `[OH]` → carboxyl, `[H]` → aldehyde.
 
 <details>
 <summary>5 examples</summary>
@@ -1079,7 +1087,7 @@ Aldehyde –CHO. LG=`[H]`. The `[!#7]` exclusion prevents matching formamide C�
 ```python
 # 1. 4-Formyl-phenylalanine (Ald) — aromatic aldehyde handle
 pre_activate('N[C@@H](Cc1ccc(C=O)cc1)C(=O)O')
-# [CX3H1:1](=O) matches the aldehyde C-H; [!#7] confirms neighbor is not N.
+# [CX3H1:1](=O) matches the aldehyde C-H; [!#7;!#1] confirms neighbor is not N or H.
 # → R4=aldehyde
 
 # 2. Alanine-aldehyde (Ala_al) — C-terminal aldehyde mimic
@@ -1103,30 +1111,37 @@ pre_activate('N[C@@H](CCCNC(=N)N)C=O')
 
 </details>
 
-#### formamide_c — `[CX3H1:1](=O)[NX3]` (priority 22, shadowed)
+#### formamide_c — `[CX3H1:1](=O)[#7X3]` (priority 22)
 
-Formamide C–H. In theory matches formamide –N–CHO. In practice, **always shadowed** at registration time: amide_nh (#13) matches the adjacent N first, and the multi-atom protection adds the carbonyl C to `protected` — blocking formamide_c. Activates only at assembly time via `infer_chem_type`.
+Formamide C–H. Matches the carbonyl carbon in –N–CHO groups. The `[#7X3]` matches any nitrogen (aromatic or aliphatic) with degree 3. LG=`[H]`. Amide_nh (#13, label_only) matches the adjacent N first but does NOT protect the carbonyl C (label_only types skip protection), so formamide_c correctly detects the reactive electrophilic center.
 
 <details>
-<summary>Why it's shadowed — step by step</summary>
+<summary>5 examples</summary>
 
 ```python
-# Formyl-lysine (Lys_For): N[C@@H](CCCCNC=O)C(=O)O
-# The formamide group -NH-CHO has two matchable atoms:
-#
-# Atom 1 (N): [NX3;H1:1][CX3]=O → amide_nh (#13) matches
-#   → N gets R4=amide_nh (label_only)
-#   → CX3 (the formamide C) added to `protected` set
-#
-# Atom 2 (C): [CX3H1:1](=O)[NX3] → formamide_c (#22) would match
-#   → BUT the C is already in `protected` → SKIPPED
-#
-# Result: only R4=amide_nh. The formamide_c type is invisible at registration.
-# At assembly time, infer_chem_type() can detect it because it uses different
-# SMARTS without the protection mechanism.
-
+# 1. Formyl-lysine (Lys_For) — both amide_nh and formamide_c detected
 pre_activate('N[C@@H](CCCCNC=O)C(=O)O')
-# → {4: 'amide_nh'}  (formamide_c absent)
+# Amide_nh (#13, label_only) matches the N-H → R4=amide_nh
+#   ⚠ label_only → does NOT protect the adjacent C
+# Formamide_c (#22) matches the C-H → R5=formamide_c (reactive)
+# Result: {4: 'amide_nh', 5: 'formamide_c'}
+
+# 2. Formyl-ornithine (Orn_For)
+pre_activate('N[C@@H](CCCNC=O)C(=O)O')
+# Same dual detection. {4: 'amide_nh', 5: 'formamide_c'}
+
+# 3. Formyl-Dab (Dab_For) — short linker
+pre_activate('N[C@@H](CCNC=O)C(=O)O')
+# {4: 'amide_nh', 5: 'formamide_c'}
+
+# 4. D-Trp-formyl (D_Trp_For) — formyl on aromatic indole N
+pre_activate('N[C@H](Cc1cn(C=O)c2ccccc12)C(=O)O')
+# The indole N is aromatic — [#7X3] matches it (unlike [NX3] which is aliphatic-only).
+# No amide_nh here (indole N has H0). → R4=formamide_c only.
+
+# 5. Formyl-Dap (Dap_For) — shortest formamide sidechain
+pre_activate('N[C@@H](CNC=O)C(=O)O')
+# {4: 'amide_nh', 5: 'formamide_c'}
 ```
 
 </details>
@@ -1821,7 +1836,7 @@ R1/R2 are assigned by graph topology (the unique path between the amino N and th
 
 ### SMARTS matching reference
 
-The three-pass detection pipeline (backbone → sidechain SMARTS → second-H) is documented with step-by-step walkthrough examples in [**Stage 1 — R-group labelling**](#how-chemistry-aware-validation-works) above. That section covers all 24 SMARTS patterns, priority ordering, multi-atom protection, label_only types, and shadowed types.
+The three-pass detection pipeline (backbone → sidechain SMARTS → second-H) is documented with step-by-step walkthrough examples in [**Stage 1 — R-group labelling**](#how-chemistry-aware-validation-works) above. That section covers all 24 SMARTS patterns, priority ordering, multi-atom protection, and label_only types.
 
 ### Register to library
 
