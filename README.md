@@ -22,7 +22,7 @@ Y-Aib-Q-G-T-F-T-S-D-Y-S-I-aMeLeu-L-D-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-A-Q-Aib-
 
 # Maleimide conjugation then DBCO loading on Cys — two sequential reactions,
 # each step's R-group refers to the preceding fragment, not to Cys directly
-G-C.[Mal(4,1).DBCO(2,1)]-A-G-AzK-G
+G-C.[Mal(4,4).DBCO(2,1)]-A-G-AzK-G
 
 # Cyclic peptide with a disulfide bridge — head-to-tail (!1) + sidechain crosslink (!2)
 # Second endpoint is just .!2 — R-groups are declared once on the first endpoint
@@ -32,7 +32,7 @@ G-C.[Mal(4,1).DBCO(2,1)]-A-G-AzK-G
 ac-A-S5.!1(4,4)-A-A-A-A-A-R8.!1-G-am
 
 # Full Fmoc-SPPS protection pattern — three residues, three different protecting groups
-fmoc-C.trt(4,1)-K.boc(4,1)-R.pbf(4,1)-am
+fmoc-C.trt(4,2)-K.boc(4,2)-R.pbf(4,2)-am
 ```
 
 Every string above feeds directly into `Sequence(...)` and produces a valid RDKit molecule.
@@ -51,16 +51,16 @@ Residue.Modifier(host_Rgroup, modifier_Rgroup)
 
 | Sequence | What it means |
 |----------|---------------|
-| `fmoc-C.trt(4,1)-am` | Cys, thiol (R4) capped with trityl R1 |
-| `fmoc-K.boc(4,1)-am` | Lys, ε-amine (R4) capped with Boc R1 |
-| `fmoc-R.pbf(4,1)-am` | Arg, guanidinium (R4) capped with Pbf R1 |
-| `fmoc-C.acm(4,1)-am` | Cys, thiol (R4) with acetamidomethyl |
+| `fmoc-C.trt(4,2)-am` | Cys, thiol (R4) capped with trityl R2 |
+| `fmoc-K.boc(4,2)-am` | Lys, ε-amine (R4) capped with Boc R2 |
+| `fmoc-R.pbf(4,2)-am` | Arg, guanidinium (R4) capped with Pbf R2 |
+| `fmoc-C.acm(4,2)-am` | Cys, thiol (R4) with acetamidomethyl |
 | `ac-pSer-am` | Pre-formed phosphoserine (no inline notation needed) |
 
 Multiple residues capped in one string:
 
 ```python
-seq = Sequence('fmoc-C.trt(4,1)-K.boc(4,1)-R.pbf(4,1)-am')
+seq = Sequence('fmoc-C.trt(4,2)-K.boc(4,2)-R.pbf(4,2)-am')
 ```
 
 ### 2 — Terminal cyclisation `!n-...-!n`
@@ -71,8 +71,8 @@ Head-to-tail and backbone cyclisation uses marker tokens at both endpoints. The 
 # Head-to-tail cyclic tetrapeptide
 seq = Sequence('!1-A-G-K-A-!1')
 
-# Lactam staple: Lys ε-amine (R4) → Asp sidechain carboxyl (R3)
-seq = Sequence('ac-K.!1(4,3)-A-A-A-D.!1-am')
+# Lactam staple: Lys ε-amine (R4) → Asp sidechain carboxyl (R4)
+seq = Sequence('ac-K.!1(4,4)-A-A-A-D.!1-am')
 
 # Disulfide bridge
 seq = Sequence('ac-C.!1(4,4)-A-G-A-C.!1-am')
@@ -97,9 +97,9 @@ Host.[CapA(host_r, capA_r).CapB(capA_r, capB_r).CapC(capB_r, capC_r)]
 **Two-step** — maleimide thiol-Michael then DBCO loading:
 
 ```python
-# Step 1: Mal R1 occupies Cys R4 (thiol → thioether), Mal R2 is now exposed
-# Step 2: DBCO R1 occupies Mal R2 — DBCO goes onto the maleimide, not onto Cys
-seq = Sequence('G-C.[Mal(4,1).DBCO(2,1)]-A')
+# Step 1: Mal R4 (maleimide) reacts with Cys R4 (thiol → thioether), Mal R2 is now exposed
+# Step 2: DBCO R1 occupies Mal R2 — DBCO goes onto the linker, not onto Cys
+seq = Sequence('G-C.[Mal(4,4).DBCO(2,1)]-A')
 ```
 
 **Three-step** — fatty acid lipidation (semaglutide/retatrutide-type isopeptide linker):
@@ -117,12 +117,13 @@ Reading the bracket left to right matches synthesis order from Lys outward: K �
 **Brackets compose freely with everything else:**
 
 ```python
-# Single-step bracket is valid but redundant — C.[Mal(4,1)] == C.Mal(4,1)
+# Single-step bracket is valid but redundant — C.[Mal(4,4)] == C.Mal(4,4)
+# For Mal, R4 is the maleimide (thiol-reactive); R2 is the linker carboxyl
 # Brackets only add value when chaining 2+ sequential steps
-seq = Sequence('!1-C.[Mal(4,1)]-A-G-K-!1')
+seq = Sequence('!1-C.[Mal(4,4)]-A-G-K-!1')
 
 # Multiple protecting groups — inline notation is cleaner for single steps
-seq = Sequence('fmoc-C.trt(4,1)-G-K.boc(4,1)-am')
+seq = Sequence('fmoc-C.trt(4,2)-G-K.boc(4,2)-am')
 
 # Bracket lipidation + disulfide staple on the same peptide
 seq = Sequence('ac-C.!1(4,4)-A-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-A-C.!1-am')
@@ -174,7 +175,7 @@ Sequence('ac-C.!1(4,4)-A-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-A-C.!1-am')
 #              ^---disulfide crosslink---^  ^---isopeptide lipid linker---^
 
 # Full Fmoc-SPPS protection: Pbf on Arg, Boc on Lys, disulfide between two Cys
-Sequence('fmoc-R.pbf(4,1)-A-C.!1(4,4)-K.boc(4,1)-A-C.!1-am')
+Sequence('fmoc-R.pbf(4,2)-A-C.!1(4,4)-K.boc(4,2)-A-C.!1-am')
 #               ^Arg guard  ^-disulfide-^  ^Lys guard  ^2nd Cys
 
 # Hydrocarbon staple (RCM, i,i+4) plus isopeptide lipidation on the same helix
@@ -199,7 +200,7 @@ CABILN knows what chemistry each R-group represents. When you write a bond, the 
 Standard Fmoc-SPPS protection pattern — these all validate silently:
 
 ```python
-Sequence('fmoc-C.trt(4,1)-K.boc(4,1)-R.pbf(4,1)-am')
+Sequence('fmoc-C.trt(4,2)-K.boc(4,2)-R.pbf(4,2)-am')
 #         ^N-term  ^thiol    ^ε-amine   ^guanidinium ^C-term
 ```
 
@@ -209,8 +210,8 @@ Sequence('fmoc-C.trt(4,1)-K.boc(4,1)-R.pbf(4,1)-am')
 # Disulfide (thiol R4 ↔ thiol R4)
 Sequence('ac-C.!1(4,4)-A-G-A-C.!1-am')
 
-# Lactam staple (ε-amine R4 ↔ sidechain carboxyl R3)
-Sequence('ac-K.!1(4,3)-A-A-A-D.!1-am')
+# Lactam staple (ε-amine R4 ↔ sidechain carboxyl R4)
+Sequence('ac-K.!1(4,4)-A-A-A-D.!1-am')
 
 # Aspartimide (backbone ↔ sidechain carboxyl — five-membered ring)
 Sequence('ac-A-D.!1(4,3)-G.!1-A-am')
@@ -228,14 +229,14 @@ Sequence('G-AzK-G')
 
 # Two-step: maleimide thiol-Michael then DBCO loading; azide-Lys in the same chain
 # DBCO attaches to Mal R2, not to Cys — bracket notation makes the order explicit
-Sequence('G-C.[Mal(4,1).DBCO(2,1)]-A-G-AzK-G')
+Sequence('G-C.[Mal(4,4).DBCO(2,1)]-A-G-AzK-G')
 ```
 
 IEDDA (tetrazine ligation — tetrazine + TCO):
 
 ```python
 # Tetrazine on Lys, trans-cyclooctene on adjacent Lys
-Sequence('ac-K.Tz(4,1)-A-A-K.TCO(4,1)-am')
+Sequence('ac-K.Tz(4,2)-A-A-K.TCO(4,2)-am')
 ```
 
 Oxime ligation (aminooxy + aldehyde):
@@ -249,7 +250,7 @@ Depsipeptide (ester backbone):
 
 ```python
 # O-linked ester in place of one amide
-Sequence('ac-A-Hser.!1(3,2)-G.!1-A-am')
+Sequence('ac-A-Hser.!1(4,2)-G.!1-A-am')
 ```
 
 Thioester:
@@ -371,14 +372,14 @@ Sequence('ac-A-G-K-L-V-am')
 # 2. Head-to-tail cyclic — first backbone_n bonds to last backbone_c
 Sequence('!1-A-G-K-A-G-!1')
 
-# 3. Macrolactam — Lys ε-amine (R4) to Asp sidechain carboxyl (R3)
-Sequence('ac-K.!1(4,3)-A-A-A-D.!1-am')
+# 3. Macrolactam — Lys ε-amine (R4) to Asp sidechain carboxyl (R4)
+Sequence('ac-K.!1(4,4)-A-A-A-D.!1-am')
 
 # 4. Glutamate lactam — six-membered ring
-Sequence('ac-K.!1(4,3)-A-A-A-A-E.!1-am')
+Sequence('ac-K.!1(4,4)-A-A-A-A-E.!1-am')
 
 # 5. Lactam inside head-to-tail ring — bicyclic scaffold
-Sequence('!1-K.!2(4,3)-A-G-A-D.!2(3,4)-!1')
+Sequence('!1-K.!2(4,4)-A-G-A-D.!2-!1')
 ```
 
 </details>
@@ -522,7 +523,7 @@ Sequence('ac-C.!1(4,4)-A-G-MalAla.!1-am')
 Sequence('ac-C.!1(4,4)-A-A-A-MalLys.!1-am')
 
 # 3. Inline notation — equivalent, cleaner for a single step
-Sequence('ac-A-C.MalAla(4,1)-G-am')
+Sequence('ac-A-C.MalAla(4,4)-G-am')
 
 # 4. Two thiol-maleimide crosslinks — parallel bridges
 Sequence('ac-C.!1(4,4)-A-MalAla.!1-G-C.!2(4,4)-A-MalAla.!2-am')
@@ -813,7 +814,7 @@ Every monomer in the library has numbered R-groups (attachment points). The stan
 | R3 | N-modification / backbone N cap |
 | R4+ | Sidechain (thiol, amine, carboxyl, …) |
 
-When you write `C.trt(4,1)`, you are saying: form a bond between **Cys R4** (the thiol) and **trt R1** (the attachment point of the trityl group). The library looks up both monomers, finds their chemical types, and validates that thiol–C is a sensible bond.
+When you write `C.trt(4,2)`, you are saying: form a bond between **Cys R4** (the thiol) and **trt R2** (the attachment point of the trityl group). The library looks up both monomers, finds their chemical types, and validates that thiol–C is a sensible bond.
 
 The same `(host_r, cap_r)` pair controls all bond formation — caps, crosslinks, and bracket chains all use identical syntax.
 
@@ -853,7 +854,7 @@ print(Chem.MolToSmiles(rdmol))
 ### Validate before building
 
 ```python
-report = Sequence.validate('ac-K.!1(4,3)-A-A-A-D.!1-am')
+report = Sequence.validate('ac-K.!1(4,4)-A-A-A-D.!1-am')
 print(report.ok)        # True
 print(report.bonds)     # [(K, R4, D, R3)]
 print(report.warnings)  # any chemistry alerts
@@ -898,7 +899,7 @@ register_monomer(
 pyPept-monomer-add --smiles "N[C@@H](CS)C(=O)O" --symbol Cys_check
 
 # From an existing CABILN fragment (assembles first, then registers the product)
-pyPept-monomer-add --from-cabiln "K.boc(4,1)" --symbol Lys_Boc --name "Boc-lysine"
+pyPept-monomer-add --from-cabiln "K.boc(4,2)" --symbol Lys_Boc --name "Boc-lysine"
 ```
 
 ---
@@ -911,8 +912,8 @@ CABILN separates them with `.!`:
 
 | Old BILN | CABILN equivalent |
 |----------|-------------------|
-| `C(1,3)-A-C(1,3)` | `C.!1(3,3)-A-C.!1` |
-| `K(2,4)-A-D(2,3)` | `K.!2(4,3)-A-D.!2` |
+| `C(1,3)-A-C(1,3)` | `C.!1(4,4)-A-C.!1` |
+| `K(2,3)-A-D(2,3)` | `K.!2(4,4)-A-D.!2` |
 
 Old BILN is accepted, but you must declare it explicitly — `Sequence()` without a format flag raises `ValueError` to avoid silent misparse:
 
@@ -927,7 +928,7 @@ seq = Sequence('C(1,3)-A-A-A-C(1,3)', fmt='biln')
 
 # Or convert upfront and use CABILN directly
 cabiln = biln_to_cabiln('C(1,3)-A-A-A-C(1,3)')
-seq = Sequence(cabiln)   # C.!1(3,3)-A-A-A-C.!1
+seq = Sequence(cabiln)   # C.!1(4,4)-A-A-A-C.!1
 ```
 
 ---
@@ -967,7 +968,7 @@ seq = Sequence(cabiln)   # C.!1(3,3)-A-A-A-C.!1
 pytest tests/test_bond_validation_and_assembly.py -v
 ```
 
-271 tests covering: bond validation, inline caps, bracket notation (1/2/3-step), crosslinks, RCM staples, SPAAC/IEDDA/oxime/hydrazone/depsipeptide/thioester chemistry, fatty acid branching, phosphopeptides, monomer pipeline, CLI, and HELM/BILN/FASTA round-trips.
+572 tests (571 pass, 1 xfail) covering: bond validation, inline caps, bracket notation (1/2/3-step), crosslinks, RCM staples, SPAAC/IEDDA/oxime/hydrazone/depsipeptide/thioester chemistry, fatty acid branching, phosphopeptides, monomer pipeline, full library round-trip (1001 monomers), CLI, and HELM/BILN/FASTA round-trips.
 
 ---
 
