@@ -20,9 +20,9 @@ The result is that complex peptides that previously required separate files or h
 # bracket reads synthesis order: K → gGlu(γ-COOH isopeptide) → AEEA → C20FA
 Y-Aib-Q-G-T-F-T-S-D-Y-S-I-aMeLeu-L-D-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-A-Q-Aib-A-F-I-E-Y-L-L-E-G-G-P-S-S-G-A-P-P-P-S-am
 
-# Maleimide conjugation then DBCO loading on Cys — two sequential reactions,
+# Maleimide conjugation then AEEA linker on Cys — two sequential reactions,
 # each step's R-group refers to the preceding fragment, not to Cys directly
-G-C.[Mal(4,4).DBCO(2,1)]-A-G-AzK-G
+G-C.[Mal(4,4).AEEA(2,1)]-A-G-AzK-G
 
 # Cyclic peptide with a disulfide bridge — head-to-tail (!1) + sidechain crosslink (!2)
 # Second endpoint is just .!2 — R-groups are declared once on the first endpoint
@@ -94,12 +94,12 @@ The bracket notation chains modifications onto one residue in order. **Each step
 Host.[CapA(host_r, capA_r).CapB(capA_r, capB_r).CapC(capB_r, capC_r)]
 ```
 
-**Two-step** — maleimide thiol-Michael then DBCO loading:
+**Two-step** — maleimide thiol-Michael then AEEA linker loading:
 
 ```python
 # Step 1: Mal R4 (maleimide) reacts with Cys R4 (thiol → thioether), Mal R2 is now exposed
-# Step 2: DBCO R1 occupies Mal R2 — DBCO goes onto the linker, not onto Cys
-seq = Sequence('G-C.[Mal(4,4).DBCO(2,1)]-A')
+# Step 2: AEEA R1 (amine) occupies Mal R2 (carboxyl) — amide bond to linker, not to Cys
+seq = Sequence('G-C.[Mal(4,4).AEEA(2,1)]-A')
 ```
 
 **Three-step** — fatty acid lipidation (semaglutide/retatrutide-type isopeptide linker):
@@ -134,11 +134,11 @@ seq = Sequence('ac-C.!1(4,4)-A-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-A-C.!1-am')
 The `%%` separator attaches a pendant chain to the main chain via a crosslink. The branch string reads N→C, bonding residues through their backbone R-groups (R1→R2 at each `-`).
 
 ```python
-# PEG branch: Lys ε-amine (R4) → PEG chain N-terminus (R1)
-seq = Sequence('ac-K.!1(4,1)-G-am%!1-PEG-am')
+# AEEA linker branch: Lys ε-amine (R4) → AEEA C-terminus (R2), N-capped with ac
+seq = Sequence('ac-K.!1(4,2)-G-am%ac-AEEA.!1')
 
 # Bracket equivalent (same molecule)
-seq = Sequence('ac-K.[PEG(4,1).am(2,1)]-G-am')
+seq = Sequence('ac-K.[AEEA(4,2).ac(1,2)]-G-am')
 ```
 
 Branch and bracket are interchangeable when the pendant chain attaches via a **backbone R-group** of the junction residue. For sidechain attachment (e.g. gGlu's γ-COOH is R4), bracket reads proximal→distal from K; branch string is reversed (distal→proximal) because C20FA — a cap with only R2 (no R1) — must lead the branch. The bracket uses `(1,2)` continuations because it grows C→N from gGlu toward C20FA (prev.R1 → this.R2):
@@ -187,7 +187,7 @@ Sequence('!1-A-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-A-!1')
 #          ^head-to-tail cycle^  ^lipidation bracket^
 ```
 
-Bioconjugation handles (Mal, DBCO, TCO, Tz) follow the same pattern once the monomers are registered via `pyPept-monomer-add`.
+Bioconjugation handles (Mal, TCO, Tz, and all click-chemistry amino acids) are in the library and follow the same pattern.
 
 ---
 
@@ -227,9 +227,9 @@ SPAAC (copper-free click — cyclooctyne + azide):
 # Azide handle on Lys sidechain, ready for strain-promoted cycloaddition
 Sequence('G-AzK-G')
 
-# Two-step: maleimide thiol-Michael then DBCO loading; azide-Lys in the same chain
-# DBCO attaches to Mal R2, not to Cys — bracket notation makes the order explicit
-Sequence('G-C.[Mal(4,4).DBCO(2,1)]-A-G-AzK-G')
+# Two-step: maleimide thiol-Michael then AEEA linker; azide-Lys in the same chain
+# AEEA attaches to Mal R2, not to Cys — bracket notation makes the order explicit
+Sequence('G-C.[Mal(4,4).AEEA(2,1)]-A-G-AzK-G')
 ```
 
 IEDDA (tetrazine ligation — tetrazine + TCO):
@@ -249,15 +249,15 @@ Sequence('ac-A-Aoa-G-Ald-A-am')
 Depsipeptide (ester backbone):
 
 ```python
-# O-linked ester in place of one amide
-Sequence('ac-A-Hser.!1(4,2)-G.!1-A-am')
+# Glycolic acid (Glc) forms an ester junction instead of amide
+Sequence('ac-G-Glc-A-G-am')
 ```
 
 Thioester:
 
 ```python
-# S–C(=O) linkage — thiol R4 to carboxyl R2
-Sequence('ac-C.!1(4,2)-A-G-!1-am')
+# S–C(=O) linkage — Cys thiol R4 to Asp sidechain carboxyl R4
+Sequence('ac-C.!1(4,4)-A-A-D.!1-am')
 ```
 
 ### Phosphopeptides
@@ -388,16 +388,12 @@ Sequence('!1-K.!2(4,4)-A-G-A-D.!2-!1')
 
 Reactant pair: `backbone_o` + `backbone_c`
 
-An α-hydroxy acid carries its R1 as `backbone_o`; the `-` junction with the next residue forms an ester instead of an amide. Register α-hydroxy acid monomers before use.
+An α-hydroxy acid carries its R2 as `backbone_o`; the `-` junction with the preceding residue forms an ester instead of an amide. Glc (glycolic acid) is in the library.
 
 <details>
-<summary>5 examples — Glc (glycolic acid) is in the library; register others from SMILES</summary>
+<summary>5 examples</summary>
 
 ```python
-# Glc (glycolic acid, Gly-sized α-hydroxy acid) is already in the library.
-# To add lactic acid (Ala-sized):
-# register_monomer(smiles='OC(C)C(=O)O', symbol='Lac', name='Lactic acid')
-
 # 1. Glycolic acid ester junction in a tetrapeptide
 Sequence('ac-G-Glc-A-G-am')
 
@@ -407,11 +403,11 @@ Sequence('ac-A-Glc-A-Glc-A-am')
 # 3. Glycolic acid flanked by charged residues
 Sequence('ac-K-Glc-D-am')
 
-# 4. Cyclic depsipeptide — head-to-tail ring with ester junction
-Sequence('!1-Glc-A-G-A-!1')
-
-# 5. Depsipeptide + disulfide staple
+# 4. Depsipeptide + disulfide staple
 Sequence('ac-C.!1(4,4)-Glc-G-A-C.!1-am')
+
+# 5. Homoserine in a peptide chain (sidechain hydroxyl at R4)
+Sequence('ac-A-Hser-G-am')
 ```
 
 </details>
@@ -454,20 +450,20 @@ Sulphur displaces the amide nitrogen. Used in native chemical ligation models an
 <summary>5 examples</summary>
 
 ```python
-# 1. Cys thiol to backbone C-terminus — macrolactone mimic
-Sequence('ac-C.!1(4,2)-A-G-!1-am')
+# 1. Cys thiol to Asp sidechain carboxyl — short ring
+Sequence('ac-C.!1(4,4)-G-D.!1-am')
 
-# 2. Cys thiol to Asp sidechain carboxyl
+# 2. Cys thiol to Asp sidechain carboxyl — medium ring
 Sequence('ac-C.!1(4,4)-A-A-D.!1-am')
 
 # 3. Cys thiol to Glu sidechain — six-membered thioester ring
 Sequence('ac-C.!1(4,4)-G-G-E.!1-am')
 
-# 4. Longer macrocycle via thioester
-Sequence('ac-C.!1(4,2)-A-A-A-G-!1-am')
+# 4. Longer thioester macrocycle via Asp
+Sequence('ac-C.!1(4,4)-A-A-A-D.!1-am')
 
 # 5. Thioester inside head-to-tail cyclic peptide
-Sequence('!1-C.!2(4,2)-A-G-!2-!1')
+Sequence('!1-C.!2(4,4)-A-G-D.!2-!1')
 ```
 
 </details>
@@ -476,19 +472,13 @@ Sequence('!1-C.!2(4,2)-A-G-!2-!1')
 
 Reactant pair: `thiol` + `alkyl_halide_c`
 
-Cys thiol displaces a halide leaving group. Register a halide-bearing monomer with `alkyl_halide_c` at R4 before use.
+Cys thiol displaces a halide leaving group. `ClAcAla` (chloroacetyl-alanine) is in the library with `alkyl_halide_c` at R4.
 
 <details>
-<summary>5 examples — register halide monomer first</summary>
+<summary>5 examples</summary>
 
 ```python
-# Register chloroacetyl-alanine
-register_monomer(
-    smiles='N[C@@H](CC(=O)Cl)C(=O)O',
-    symbol='ClAcAla', name='Chloroacetyl-Ala',
-)
-
-# 1. Standard Cys alkylation by chloroacetyl handle
+# 1. Standard Cys alkylation by chloroacetyl handle (ClAcAla is in the library)
 Sequence('ac-C.!1(4,4)-A-A-ClAcAla.!1-am')
 
 # 2. Short loop — adjacent Cys and halide
@@ -538,32 +528,26 @@ Sequence('!1-C.!2(4,4)-A-G-MalAla.!2-A-!1')
 
 Reactant pair: `amine_primary` + `nhs_ester` · `amine_secondary` + `nhs_ester`
 
-NHS-activated ester reacts with primary or secondary amine; NHS ring leaves as byproduct. Register NHS ester monomers before use.
+NHS-activated ester reacts with primary or secondary amine; NHS ring leaves as byproduct. `NHSAla` (NHS-alanine) is in the library with `nhs_ester` at R4.
 
 <details>
-<summary>5 examples — register NHS ester monomer first</summary>
+<summary>5 examples</summary>
 
 ```python
-# Register NHS-glycine
-register_monomer(
-    smiles='NCC(=O)ON1C(=O)CCC1=O',
-    symbol='GlyNHS', name='NHS-glycine',
-)
-
-# 1. Lys ε-amine + NHS-glycine — amide ligation
-Sequence('ac-K.!1(4,4)-G-A-GlyNHS.!1-am')
+# 1. Lys ε-amine + NHSAla — amide ligation
+Sequence('ac-K.!1(4,4)-G-A-NHSAla.!1-am')
 
 # 2. Short loop — Lys adjacent to NHS ester
-Sequence('ac-K.!1(4,4)-G-GlyNHS.!1-am')
+Sequence('ac-K.!1(4,4)-G-NHSAla.!1-am')
 
 # 3. Two NHS ligations — dual Lys modification
-Sequence('ac-K.!1(4,4)-A-K.!2(4,4)-G-GlyNHS.!1-A-GlyNHS.!2-am')
+Sequence('ac-K.!1(4,4)-A-K.!2(4,4)-G-NHSAla.!1-A-NHSAla.!2-am')
 
 # 4. NHS amide inside head-to-tail ring
-Sequence('!1-K.!2(4,4)-A-G-GlyNHS.!2-!1')
+Sequence('!1-K.!2(4,4)-A-G-NHSAla.!2-!1')
 
 # 5. NHS amide + lipidation on same peptide
-Sequence('ac-K.!1(4,4)-A-GlyNHS.!1-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-am')
+Sequence('ac-K.!1(4,4)-A-NHSAla.!1-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-am')
 ```
 
 </details>
@@ -572,17 +556,12 @@ Sequence('ac-K.!1(4,4)-A-GlyNHS.!1-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-am')
 
 Reactant pair: `aminooxy` + `aldehyde`
 
-Aminooxy condenses with aldehyde to form a stable oxime (C=N–O); water is implicit. Bioorthogonal under mildly acidic conditions. Register `Aoa` and `Ald` monomers before use.
+Aminooxy condenses with aldehyde to form a stable oxime (C=N–O); water is implicit. Bioorthogonal under mildly acidic conditions. `Aoa` (aminooxy-alanine) and `Ald` (aldehyde-alanine) are in the library.
 
 <details>
-<summary>5 examples — register Aoa and Ald monomers first</summary>
+<summary>5 examples</summary>
 
 ```python
-# Register aminooxy-alanine
-register_monomer(smiles='N[C@@H](CON)C(=O)O', symbol='Aoa', name='Aminooxy-alanine')
-# Register aldehyde-alanine
-register_monomer(smiles='N[C@@H](CC=O)C(=O)O', symbol='Ald', name='Aldehyde-alanine')
-
 # 1. Aoa + Ald — intramolecular oxime bridge
 Sequence('ac-Aoa.!1(4,4)-A-G-A-Ald.!1-am')
 
@@ -605,30 +584,26 @@ Sequence('ac-C.!1(4,4)-A-Aoa.!2(4,4)-G-C.!1-Ald.!2-am')
 
 Reactant pair: `hydrazide` + `aldehyde`
 
-Hydrazide condenses with aldehyde forming a C=N–N hydrazone. Reversible at low pH — useful for stimuli-responsive linkers.
+Hydrazide condenses with aldehyde forming a C=N–N hydrazone. Reversible at low pH — useful for stimuli-responsive linkers. `HzAla` (hydrazide-alanine) and `Ald` (aldehyde-alanine) are in the library.
 
 <details>
-<summary>5 examples — register hydrazide monomer first</summary>
+<summary>5 examples</summary>
 
 ```python
-# Register hydrazide-glycine
-register_monomer(smiles='NCC(=O)NN', symbol='GlyHz', name='Hydrazide-Gly')
-# Ald monomer: same SMILES as oxime examples above
-
-# 1. GlyHz + Ald — hydrazone bridge
-Sequence('ac-GlyHz.!1(4,4)-A-G-A-Ald.!1-am')
+# 1. HzAla + Ald — hydrazone bridge
+Sequence('ac-HzAla.!1(4,4)-A-G-A-Ald.!1-am')
 
 # 2. Shorter loop
-Sequence('ac-GlyHz.!1(4,4)-G-Ald.!1-am')
+Sequence('ac-HzAla.!1(4,4)-G-Ald.!1-am')
 
 # 3. Hydrazone inside head-to-tail ring
-Sequence('!1-GlyHz.!2(4,4)-A-G-Ald.!2-!1')
+Sequence('!1-HzAla.!2(4,4)-A-G-Ald.!2-!1')
 
 # 4. Two hydrazone bonds — bifunctional staple
-Sequence('ac-GlyHz.!1(4,4)-A-Ald.!1-G-GlyHz.!2(4,4)-A-Ald.!2-am')
+Sequence('ac-HzAla.!1(4,4)-A-Ald.!1-G-HzAla.!2(4,4)-A-Ald.!2-am')
 
 # 5. Hydrazone + disulfide combination
-Sequence('ac-C.!1(4,4)-A-GlyHz.!2(4,4)-G-C.!1-Ald.!2-am')
+Sequence('ac-C.!1(4,4)-A-HzAla.!2(4,4)-G-C.!1-Ald.!2-am')
 ```
 
 </details>

@@ -276,6 +276,13 @@ def run_bond_smirks(frag1, frag2,
                 if rxn is None:
                     raise ValueError(f"Bad grouped SMIRKS in '{entry['id']}' step 1: {grouped!r}")
                 products = rxn.RunReactants((frag1,))
+                if not products and slot_a_iso is not None and slot_b_iso is not None:
+                    targeted_swap = smirks.replace(f'[{slot_a_iso}*]', f'[{iso2}*]', 1)
+                    targeted_swap = targeted_swap.replace(f'[{slot_b_iso}*]', f'[{iso1}*]', 1)
+                    grouped_swap = _group_smirks_for_intramol(targeted_swap)
+                    rxn_swap = AllChem.ReactionFromSmarts(grouped_swap)
+                    if rxn_swap is not None:
+                        products = rxn_swap.RunReactants((frag1,))
             else:
                 rxn = AllChem.ReactionFromSmarts(targeted)
                 if rxn is None:
