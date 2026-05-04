@@ -2879,40 +2879,42 @@ async def insert_bond(req: _InsertBondReq):
 
             inserted = False
             occurrence_count = 0
+            abbr_pat = re.compile(re.escape(host_abbr) + r'\(\d+,\d+\)')
             for br_start, br_end in _all_bracket_spans(cabiln):
                 content = cabiln[br_start + 1:br_end - 1]
-                pm = re.search(re.escape(host_abbr) + r'\(\d+,\d+\)', content)
-                if not pm:
-                    continue
-                prefix_in = content[:pm.start()]
-                open_count = prefix_in.count('[') - prefix_in.count(']')
-                if open_count != 0:
-                    continue  # hub is inside a nested bracket — keep looking
-                # Skip earlier same-abbr occurrences until we reach the target one.
-                if occurrence_count < target_occurrence:
-                    occurrence_count += 1
-                    continue
-                hub_in = content[pm.start():pm.end()]
-                rest_in = content[pm.end():]
-                if rest_in and not rest_in.startswith(']'):
-                    # Rewrite all existing content after hub as explicit arms,
-                    # then add new arm: [hub[.existing...][.new]]
-                    arms = _rest_to_arms(rest_in) + f'[{new_entry}]'
-                    new_bracket = f'[{prefix_in}{hub_in}{arms}]'
-                else:
-                    new_bracket = f'[{prefix_in}{hub_in}{new_entry}]'
-                # If the bracket we just replaced was the sole content of an
-                # outer bracket (old [[hub...]] style), unnest it now so the
-                # result is clean .[hub[.arms]] not .[[hub[.arms]]].
-                old_bracket = cabiln[br_start:br_end]
-                if (br_start > 0 and cabiln[br_start - 1] == '['
-                        and br_end < len(cabiln) and cabiln[br_end] == ']'
-                        and cabiln[br_start - 1:br_end + 1] == '[' + old_bracket + ']'):
-                    result = cabiln[:br_start - 1] + new_bracket + cabiln[br_end + 1:]
-                else:
-                    result = cabiln[:br_start] + new_bracket + cabiln[br_end:]
-                inserted = True
-                break
+                # Iterate ALL top-level matches within this bracket so that two
+                # same-abbr residues in the same sequential arm can both be targeted.
+                for pm in abbr_pat.finditer(content):
+                    prefix_in = content[:pm.start()]
+                    open_count = prefix_in.count('[') - prefix_in.count(']')
+                    if open_count != 0:
+                        continue  # inside a nested bracket — keep looking
+                    # Skip earlier occurrences until we reach the target.
+                    if occurrence_count < target_occurrence:
+                        occurrence_count += 1
+                        continue
+                    hub_in = content[pm.start():pm.end()]
+                    rest_in = content[pm.end():]
+                    if rest_in and not rest_in.startswith(']'):
+                        # Rewrite existing content after hub as explicit arms,
+                        # then add new arm: [hub[.existing...][.new]]
+                        arms = _rest_to_arms(rest_in) + f'[{new_entry}]'
+                        new_bracket = f'[{prefix_in}{hub_in}{arms}]'
+                    else:
+                        new_bracket = f'[{prefix_in}{hub_in}{new_entry}]'
+                    # If the replaced bracket was the sole content of an outer
+                    # [[hub...]] style bracket, unnest it now.
+                    old_bracket = cabiln[br_start:br_end]
+                    if (br_start > 0 and cabiln[br_start - 1] == '['
+                            and br_end < len(cabiln) and cabiln[br_end] == ']'
+                            and cabiln[br_start - 1:br_end + 1] == '[' + old_bracket + ']'):
+                        result = cabiln[:br_start - 1] + new_bracket + cabiln[br_end + 1:]
+                    else:
+                        result = cabiln[:br_start] + new_bracket + cabiln[br_end:]
+                    inserted = True
+                    break
+                if inserted:
+                    break
             if inserted:
                 return {"result": result}
 
