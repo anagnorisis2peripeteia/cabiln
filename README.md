@@ -354,7 +354,7 @@ Every bond in CABILN is validated before assembly. The system runs in two stages
 
 ### Supported reaction types
 
-All 15 chemistry reactions in the YAML library, with 5 CABILN examples each:
+All 19 bond-forming reactions in the YAML library (plus 6 terminal-restoration and 100 cap reactions applied automatically), with 5 CABILN examples each:
 
 #### backbone_amide — standard peptide amide bond
 
@@ -380,6 +380,34 @@ Sequence('ac-K.!1(4,4)-A-A-A-A-E.!1-am')
 
 # 5. Lactam inside head-to-tail ring — bicyclic scaffold
 Sequence('!1-K.!2(4,4)-A-G-A-D.!2-!1')
+```
+
+</details>
+
+#### sidechain_amide — amide from primary amine + sidechain carboxyl
+
+Reactant pair: `amine_primary` + `carboxyl`
+
+Lys ε-amine (R4) attacks Asp/Glu sidechain carboxyl (R4). Same amide bond as backbone, but both partners are sidechains — gives isopeptide (lactam) bridges.
+
+<details>
+<summary>5 examples</summary>
+
+```python
+# 1. Lys ε-amine to Asp sidechain — isopeptide bridge
+Sequence('ac-K.!1(4,4)-A-A-D.!1-am')
+
+# 2. Lys to Glu — six-membered lactam ring
+Sequence('ac-K.!1(4,4)-A-A-A-E.!1-am')
+
+# 3. Short isopeptide loop — Lys adjacent to Asp
+Sequence('ac-K.!1(4,4)-G-D.!1-am')
+
+# 4. Two isopeptide bridges — bis-lactam bicycle
+Sequence('ac-K.!1(4,4)-A-D.!1-G-K.!2(4,4)-A-E.!2-am')
+
+# 5. Isopeptide inside head-to-tail ring
+Sequence('!1-K.!2(4,4)-A-G-D.!2-!1')
 ```
 
 </details>
@@ -436,6 +464,34 @@ Sequence('!1-C.!2(4,4)-A-G-A-C.!2-!1')
 
 # 5. Disulfide + isopeptide lipidation on same peptide
 Sequence('ac-C.!1(4,4)-A-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-A-C.!1-am')
+```
+
+</details>
+
+#### diselenide — diselenide bridge (Se–Se)
+
+Reactant pair: `selenol` + `selenol`
+
+Selenocysteine (Sec) pairs form Se–Se bridges — redox-active analogues of disulfides with lower reduction potential.
+
+<details>
+<summary>5 examples</summary>
+
+```python
+# 1. Classic diselenide — Sec pair
+Sequence('ac-Sec.!1(4,4)-A-G-Sec.!1-am')
+
+# 2. Short loop — adjacent selenocysteines
+Sequence('ac-Sec.!1(4,4)-G-Sec.!1-am')
+
+# 3. Diselenide inside head-to-tail ring
+Sequence('!1-Sec.!2(4,4)-A-G-A-Sec.!2-!1')
+
+# 4. Two diselenide bridges
+Sequence('ac-Sec.!1(4,4)-A-Sec.!2(4,4)-G-Sec.!2-A-Sec.!1-am')
+
+# 5. Mixed disulfide + diselenide on same peptide
+Sequence('ac-C.!1(4,4)-A-Sec.!2(4,4)-G-C.!1-Sec.!2-am')
 ```
 
 </details>
@@ -772,6 +828,34 @@ Sequence('ac-D.!1(4,3)-G.!1-A-D.!2(4,3)-G.!2-am')
 
 # 5. Aspartimide inside head-to-tail cyclic peptide
 Sequence('!1-A-D.!2(4,3)-G.!2-A-!1')
+```
+
+</details>
+
+#### backbone_n_alkylation — N-alkylation of backbone amide nitrogen
+
+Reactant pair: `backbone_n_mod` (R3) + `carbon` (R1)
+
+N-alkylation of the backbone amide NH via the R3 slot. `meA` (N-methyl cap) attaches to any non-Pro residue's R3, converting the backbone N to an N-methyl amide.
+
+<details>
+<summary>5 examples</summary>
+
+```python
+# 1. N-methyl Ala — meA cap on backbone N
+Sequence('ac-A.meA(3,2)-G-am')
+
+# 2. N-methyl Gly (sarcosine equivalent)
+Sequence('ac-G.meA(3,2)-A-am')
+
+# 3. Two N-methylations — peptoid-like backbone
+Sequence('ac-A.meA(3,2)-A.meA(3,2)-G-am')
+
+# 4. N-methylation inside head-to-tail ring
+Sequence('!1-A.meA(3,2)-G-A-!1')
+
+# 5. N-methylation + disulfide on same peptide
+Sequence('ac-C.!1(4,4)-A.meA(3,2)-G-C.!1-am')
 ```
 
 </details>
