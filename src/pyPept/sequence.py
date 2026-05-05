@@ -710,7 +710,7 @@ def cabiln_to_branch(cabiln):
             _xlink_ctr[0] += 1
             host_marker = f'.{tag}({r_host},{r_branch})'
             reversed_cont = [abbr for abbr, _, _ in items[1:]][::-1]
-            branch_parts = reversed_cont + [f'{anchor_abbr}.{tag}']
+            branch_parts = reversed_cont + [anchor_abbr, tag]
             branch_str = '-'.join(branch_parts)
             result = result[:m_start] + host_marker + result[m_end:]
             branches.append(branch_str)
@@ -772,6 +772,24 @@ def cabiln_to_bracket(cabiln):
 
     main_seg = segments[0]
     branch_segs = segments[1:]
+
+    def _normalize_terminal_marker(bs):
+        """Convert standalone terminal !n tokens to inline .!n form.
+
+        'G-G-!1'    -> 'G-G.!1'    (C-terminal marker on last monomer)
+        '!1-G-G-am' -> 'G.!1-G-am' (N-terminal marker on first monomer)
+        """
+        parts = _re.split(r'(?<!\()[-](?!\))', bs)
+        parts = [p.strip() for p in parts]
+        if len(parts) >= 2 and _re.match(r'^!\d+$', parts[-1]):
+            parts[-2] = parts[-2] + '.' + parts[-1]
+            parts = parts[:-1]
+        elif len(parts) >= 2 and _re.match(r'^!\d+$', parts[0]):
+            parts[1] = parts[1] + '.' + parts[0]
+            parts = parts[1:]
+        return '-'.join(parts)
+
+    branch_segs = [_normalize_terminal_marker(bs) for bs in branch_segs]
 
     # Separate branches: crosslink-connected vs positional
     positional = []

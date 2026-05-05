@@ -219,6 +219,7 @@ _BB_N_PAT        = Chem.MolFromSmarts('[NX3;H1,H2,H3]')
 _BB_COOH_PAT     = Chem.MolFromSmarts('[CX3:1](=O)[OX2H1]')
 _BB_ALDEHYDE_PAT = Chem.MolFromSmarts('[CX3H1:1](=O)')
 _BB_ALCOHOL_PAT  = Chem.MolFromSmarts('[OX2H1:1][CX4]')
+_BB_LACTONE_PAT  = Chem.MolFromSmarts('[CX3:1](=O)[OX2;R]')
 
 # Sidechain rules derived from the unified registry in reaction_library.
 # Uses pre_smarts column (H≥1 required — there must be an H to replace with dummy).
@@ -248,11 +249,13 @@ def find_backbone_slots(mol):
     n_idxs = [m[0] for m in mol.GetSubstructMatches(_BB_N_PAT)]
     c_idxs = [m[0] for m in mol.GetSubstructMatches(_BB_COOH_PAT)]
 
-    # Fallback: if no COOH, try aldehyde then alcohol as C-terminal analogue
+    # Fallback: if no COOH, try aldehyde → alcohol → lactone as C-terminal analogue
     if not c_idxs:
         c_idxs = [m[0] for m in mol.GetSubstructMatches(_BB_ALDEHYDE_PAT)]
     if not c_idxs:
         c_idxs = [m[0] for m in mol.GetSubstructMatches(_BB_ALCOHOL_PAT)]
+    if not c_idxs:
+        c_idxs = [m[0] for m in mol.GetSubstructMatches(_BB_LACTONE_PAT)]
 
     if not n_idxs or not c_idxs:
         return None
@@ -387,7 +390,8 @@ def find_sidechain_slots(mol, assigned_atoms, start_slot=4):
         for match in matches:
             idx = match[0]
             if idx not in seen and idx not in protected:
-                slots[next_slot] = (idx, leaving, chem_type)
+                lg = leaving if leaving is not None else infer_leaving_group(mol, idx)
+                slots[next_slot] = (idx, lg, chem_type)
                 seen.add(idx)
                 first_ct[idx] = chem_type
                 next_slot += 1
@@ -494,8 +498,18 @@ def pre_activate(smiles, slot_overrides=None, leaving_overrides=None):
                     "Provide pre-filled CHUCKLES in the input column."
                 )
     else:
-        r2_element = mol.GetAtomWithIdx(backbone[2]).GetAtomicNum()
-        r2_ct = 'backbone_o' if r2_element == 8 else 'backbone_c'
+        r2_atom = mol.GetAtomWithIdx(backbone[2])
+        r2_element = r2_atom.GetAtomicNum()
+        if r2_element == 8:
+            r2_ct = 'backbone_o'
+        elif any(
+            nb.GetAtomicNum() == 8 and nb.IsInRing()
+            for nb in r2_atom.GetNeighbors()
+            if mol.GetBondBetweenAtoms(r2_atom.GetIdx(), nb.GetIdx()).GetBondTypeAsDouble() == 1.0
+        ):
+            r2_ct = 'lactone_c'
+        else:
+            r2_ct = 'backbone_c'
         backbone_chem_types = {1: 'backbone_n', 2: r2_ct}
         # backbone_n_mod: second H on backbone N (N-methylation slot).
         # Pro's ring N has only 1 H and is skipped naturally.

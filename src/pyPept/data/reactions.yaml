@@ -110,7 +110,7 @@
   slot_a: 4
   slot_b: 4
   steps:
-    - "[4*][S:2].[4*][C:4][Cl,Br,I] >> [S:2][C:4]"
+    - "[4*][S:2].[4*][C:4] >> [S:2][C:4]"
 
 - id: thiol_maleimide
   description: Thiol-maleimide Michael addition; succinimide ring retained

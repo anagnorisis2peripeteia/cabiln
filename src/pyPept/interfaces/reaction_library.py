@@ -69,7 +69,7 @@ _CHEM_TYPE_REGISTRY = [
     ('thiol',             '[SX2H1:1]',                              '[H]',  '[SX2;H0,H1:1]',                          False),
     ('selenol',           '[SeX2H1:1]',                             '[H]',  '[SeX2;H0,H1:1]',                         False),
     # ── Alkyl halide — !H0 covers CH2 (pre) and CH1 after dummy took one H ──
-    ('alkyl_halide_c',    '[CX4;!H0:1][Cl,Br,I]',                  '[H]',  '[CX4;!H0:1][Cl,Br,I]',                  False),
+    ('alkyl_halide_c',    '[CX4;!H0:1][Cl,Br,I]',                  None,   '[CX4;!H0:1][Cl,Br,I]',                  False),
     # ── Nitrogen nucleophiles — most-specific first ───────────────────────────
     # aminooxy:  NH2 (pre) → NH1 after dummy
     ('aminooxy',          '[NH2:1][OX2H0]',                         '[H]',  '[NH1:1][OX2H0]',                         False),

@@ -4610,7 +4610,7 @@ class TestNotationConversion:
         bracket = cabiln_to_bracket(branch)
         assert bracket == "ac-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-am"
         back = cabiln_to_branch(bracket)
-        assert back == "ac-K.!1(4,4)-G-am%C20FA-AEEA-gGlu.!1"
+        assert back == "ac-K.!1(4,4)-G-am%C20FA-AEEA-gGlu-!1"
 
     # ------------------------------------------------------------------
     # Bracket -> Branch -> Bracket  (bracket notation is canonical input)
@@ -4711,7 +4711,7 @@ class TestNotationConversion:
         from pyPept.sequence import cabiln_to_branch
         bracket = "!1-A-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-A-!1"
         result = cabiln_to_branch(bracket)
-        assert result == "!1-A-K.!2(4,4)-G-A-!1%C20FA-AEEA-gGlu.!2", (
+        assert result == "!1-A-K.!2(4,4)-G-A-!1%C20FA-AEEA-gGlu-!2", (
             f"(1,2) bracket should convert to reversed crosslink branch: {result}"
         )
 
@@ -4734,13 +4734,13 @@ class TestNotationConversion:
     @pytest.mark.parametrize("label, bracket, expected_branch", [
         ("lipid_linker_12",
          "K.[C20FA(4,4).AEEA(1,2).gGlu(1,2)]-G-am",
-         "K.!1(4,4)-G-am%gGlu-AEEA-C20FA.!1"),
+         "K.!1(4,4)-G-am%gGlu-AEEA-C20FA-!1"),
         ("two_monomer_12",
          "ac-A.[C(4,4).G(1,2)]-am",
-         "ac-A.!1(4,4)-am%G-C.!1"),
+         "ac-A.!1(4,4)-am%G-C-!1"),
         ("lipid_correct",
          "ac-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-am",
-         "ac-K.!1(4,4)-G-am%C20FA-AEEA-gGlu.!1"),
+         "ac-K.!1(4,4)-G-am%C20FA-AEEA-gGlu-!1"),
     ])
     def test_12_bracket_converts_to_reversed_branch(self, label, bracket, expected_branch):
         from pyPept.sequence import cabiln_to_branch
@@ -4784,7 +4784,219 @@ class TestNotationConversion:
         from pyPept.sequence import cabiln_to_branch
         bracket = "K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-am"
         result = cabiln_to_branch(bracket)
-        assert result == "K.!1(4,4)-G-am%C20FA-AEEA-gGlu.!1", f"Got: {result}"
+        assert result == "K.!1(4,4)-G-am%C20FA-AEEA-gGlu-!1", f"Got: {result}"
+
+    # ------------------------------------------------------------------
+    # Complex round-trips
+    # ------------------------------------------------------------------
+
+    def test_cyclic_plus_lipid_branch_roundtrip(self):
+        """Head-to-tail cyclic peptide with lipid branch: both notation directions."""
+        from pyPept.sequence import cabiln_to_bracket, cabiln_to_branch
+        branch = "!1-A-K.!2(4,4)-G-A-!1%C20FA-AEEA-gGlu-!2"
+        expected_bracket = "!1-A-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-A-!1"
+        bracket = cabiln_to_bracket(branch)
+        assert bracket == expected_bracket, f"branch->bracket: {bracket!r}"
+        back = cabiln_to_branch(bracket)
+        assert back == branch, (
+            f"bracket->branch roundtrip failed:\n"
+            f"  {branch!r} -> {bracket!r} -> {back!r}"
+        )
+
+    def test_cyclic_plus_lipid_bracket_roundtrip(self):
+        """Bracket form of cyclic+lipid round-trips through branch and back."""
+        from pyPept.sequence import cabiln_to_bracket, cabiln_to_branch
+        bracket = "!1-A-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-A-!1"
+        branch = cabiln_to_branch(bracket)
+        assert branch == "!1-A-K.!2(4,4)-G-A-!1%C20FA-AEEA-gGlu-!2", f"bracket->branch: {branch!r}"
+        back = cabiln_to_bracket(branch)
+        assert back == bracket, (
+            f"branch->bracket roundtrip failed:\n"
+            f"  {bracket!r} -> {branch!r} -> {back!r}"
+        )
+
+    def test_long_chain_two_positional_branches_roundtrip(self):
+        """9-residue chain with two different positional branches at K and E."""
+        from pyPept.sequence import cabiln_to_bracket, cabiln_to_branch
+        branch = "ac-A-G-K.(4,1)-A-A-E.(4,1)-G-am%G-A-am%A-G-am"
+        expected_bracket = (
+            "ac-A-G-K.[G(4,1).A(2,1).am(2,1)]"
+            "-A-A-E.[A(4,1).G(2,1).am(2,1)]-G-am"
+        )
+        bracket = cabiln_to_bracket(branch)
+        assert bracket == expected_bracket, f"branch->bracket: {bracket!r}"
+        back = cabiln_to_branch(bracket)
+        assert back == branch, (
+            f"bracket->branch roundtrip failed:\n"
+            f"  {branch!r} -> {bracket!r} -> {back!r}"
+        )
+
+    def test_mixed_bracket_types_roundtrip(self):
+        """Single-monomer bracket (passthrough) + lipid (1,2) bracket coexist."""
+        from pyPept.sequence import cabiln_to_bracket, cabiln_to_branch
+        # [A(4,1)] single-monomer stays as-is; lipid converts to crosslink branch
+        bracket = "ac-K.[A(4,1)]-G-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-am"
+        expected_branch = "ac-K.[A(4,1)]-G-K.!1(4,4)-am%C20FA-AEEA-gGlu-!1"
+        branch = cabiln_to_branch(bracket)
+        assert branch == expected_branch, f"bracket->branch: {branch!r}"
+        back = cabiln_to_bracket(branch)
+        assert back == bracket, (
+            f"branch->bracket roundtrip failed:\n"
+            f"  {bracket!r} -> {branch!r} -> {back!r}"
+        )
+
+    # ------------------------------------------------------------------
+    # Comprehensive parametrized round-trip suite
+    # ------------------------------------------------------------------
+
+    @pytest.mark.parametrize("label,bracket,expected_branch", [
+        ("two_lipid_brackets",
+         "ac-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-am",
+         "ac-K.!1(4,4)-G-K.!2(4,4)-am%C20FA-AEEA-gGlu-!1%C20FA-AEEA-gGlu-!2"),
+        ("two_aeea_peg",
+         "ac-K.[AEEA(4,2).AEEA(1,2)]-G-am",
+         "ac-K.!1(4,2)-G-am%AEEA-AEEA-!1"),
+        ("three_aeea_peg",
+         "ac-K.[AEEA(4,2).AEEA(1,2).AEEA(1,2)]-G-am",
+         "ac-K.!1(4,2)-G-am%AEEA-AEEA-AEEA-!1"),
+        ("four_residue_branch",
+         "ac-K.[G(4,1).A(2,1).G(2,1).am(2,1)]-G-am",
+         "ac-K.(4,1)-G-am%G-A-G-am"),
+        ("no_caps",
+         "K.[G(4,1).A(2,1).am(2,1)]-G-A",
+         "K.(4,1)-G-A%G-A-am"),
+        ("cyclic_plus_plain",
+         "!1-A-K.[G(4,1).am(2,1)]-G-A-!1",
+         "!1-A-K.(4,1)-G-A-!1%G-am"),
+        ("semaglutide_like",
+         "His-Aib-Glu-Gly-Thr-Phe-Thr-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-am",
+         "His-Aib-Glu-Gly-Thr-Phe-Thr-K.!1(4,4)-am%C20FA-AEEA-gGlu-!1"),
+        ("c_terminal_marker_normalised",
+         "ac-K.[G(4,2).G(1,2)]-G-am",
+         "ac-K.!1(4,2)-G-am%G-G-!1"),
+        ("n_terminal_marker_normalised",
+         "ac-K.[G(4,1).G(2,1).am(2,1)]-G-am",
+         "ac-K.(4,1)-G-am%G-G-am"),
+    ])
+    def test_bracket_to_branch_comprehensive(self, label, bracket, expected_branch):
+        """bracket -> branch conversion: exact expected output + round-trip back."""
+        from pyPept.sequence import cabiln_to_bracket, cabiln_to_branch
+        result = cabiln_to_branch(bracket)
+        assert result == expected_branch, (
+            f"{label}: bracket->branch\n"
+            f"  expected: {expected_branch!r}\n"
+            f"  got:      {result!r}"
+        )
+        back = cabiln_to_bracket(result)
+        assert back == bracket, (
+            f"{label}: branch->bracket roundtrip\n"
+            f"  expected: {bracket!r}\n"
+            f"  got:      {back!r}"
+        )
+
+    @pytest.mark.parametrize("label,branch,expected_bracket", [
+        ("two_lipid_crosslinks",
+         "ac-K.!1(4,4)-G-K.!2(4,4)-am%C20FA-AEEA-gGlu-!1%C20FA-AEEA-gGlu-!2",
+         "ac-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-am"),
+        ("three_positional_branches",
+         "ac-K.(4,1)-A-K.(4,1)-A-K.(4,1)-am%G-am%A-am%G-G-am",
+         "ac-K.[G(4,1).am(2,1)]-A-K.[A(4,1).am(2,1)]-A-K.[G(4,1).G(2,1).am(2,1)]-am"),
+        ("four_residue_branch",
+         "ac-K.(4,1)-G-am%G-A-G-am",
+         "ac-K.[G(4,1).A(2,1).G(2,1).am(2,1)]-G-am"),
+        ("no_caps",
+         "K.(4,1)-G-A%G-A-am",
+         "K.[G(4,1).A(2,1).am(2,1)]-G-A"),
+        ("cyclic_plus_plain",
+         "!1-A-K.(4,1)-G-A-!1%G-am",
+         "!1-A-K.[G(4,1).am(2,1)]-G-A-!1"),
+    ])
+    def test_branch_to_bracket_comprehensive(self, label, branch, expected_bracket):
+        """branch -> bracket conversion: exact expected output + round-trip back."""
+        from pyPept.sequence import cabiln_to_bracket, cabiln_to_branch
+        result = cabiln_to_bracket(branch)
+        assert result == expected_bracket, (
+            f"{label}: branch->bracket\n"
+            f"  expected: {expected_bracket!r}\n"
+            f"  got:      {result!r}"
+        )
+        back = cabiln_to_branch(result)
+        assert back == branch, (
+            f"{label}: bracket->branch roundtrip\n"
+            f"  expected: {branch!r}\n"
+            f"  got:      {back!r}"
+        )
+
+    def test_retatrutide_bracket_roundtrip(self):
+        """Retatrutide 39AA in bracket form: bracket -> branch -> bracket."""
+        from pyPept.sequence import cabiln_to_bracket, cabiln_to_branch
+        bracket = (
+            "Y-Aib-Q-G-T-F-T-S-D-Y-S-I-aMeLeu-L-D-"
+            "K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-A-Q-Aib-A-F-I-E-"
+            "Y-L-L-E-G-G-P-S-S-G-A-P-P-P-S-am"
+        )
+        expected_branch = (
+            "Y-Aib-Q-G-T-F-T-S-D-Y-S-I-aMeLeu-L-D-"
+            "K.!1(4,4)-A-Q-Aib-A-F-I-E-Y-L-L-E-G-G-P-S-S-G-A-P-P-P-S-am"
+            "%C20FA-AEEA-gGlu-!1"
+        )
+        branch = cabiln_to_branch(bracket)
+        assert branch == expected_branch, (
+            f"bracket->branch:\n  expected: {expected_branch!r}\n  got: {branch!r}"
+        )
+        back = cabiln_to_bracket(branch)
+        assert back == bracket, (
+            f"branch->bracket roundtrip:\n  expected: {bracket!r}\n  got: {back!r}"
+        )
+
+    # ------------------------------------------------------------------
+    # Terminal !n marker forms (hyphen-separated) now handled
+    # ------------------------------------------------------------------
+
+    def test_n_terminal_marker_branch_to_bracket(self):
+        """N-terminal !1 marker: %!1-G-G-am converts to bracket; normalises to positional on back-trip."""
+        from pyPept.sequence import cabiln_to_bracket, cabiln_to_branch
+        branch = "ac-K.!1(4,1)-G-am%!1-G-G-am"
+        bracket = cabiln_to_bracket(branch)
+        assert bracket == "ac-K.[G(4,1).G(2,1).am(2,1)]-G-am", (
+            f"bracket mismatch: {bracket!r}"
+        )
+        back = cabiln_to_branch(bracket)
+        assert back == "ac-K.(4,1)-G-am%G-G-am", f"back form: {back!r}"
+
+    def test_c_terminal_marker_branch_to_bracket(self):
+        """C-terminal !1 marker: %G-G-!1 converts to bracket; round-trip gives inline dot form."""
+        from pyPept.sequence import cabiln_to_bracket, cabiln_to_branch
+        branch = "ac-K.!1(4,2)-G-am%G-G-!1"
+        bracket = cabiln_to_bracket(branch)
+        assert bracket == "ac-K.[G(4,2).G(1,2)]-G-am", (
+            f"bracket mismatch: {bracket!r}"
+        )
+        back = cabiln_to_branch(bracket)
+        assert back == "ac-K.!1(4,2)-G-am%G-G-!1", f"back form: {back!r}"
+
+    def test_retatrutide_branch_bracket_roundtrip(self):
+        """Retatrutide with C-terminal -!1 marker: converts to bracket and round-trips via dot form."""
+        from pyPept.sequence import cabiln_to_bracket, cabiln_to_branch
+        branch = (
+            "Y-Aib-Q-G-T-F-T-S-D-Y-S-I-aMeLeu-L-D-"
+            "K.!1(4,2)-A-Q-Aib-A-F-I-E-Y-L-L-E-G-G-P-S-S-G-A-P-P-P-S-am"
+            "%C20FA-gGlu-AEEA-!1"
+        )
+        expected_bracket = (
+            "Y-Aib-Q-G-T-F-T-S-D-Y-S-I-aMeLeu-L-D-"
+            "K.[AEEA(4,2).gGlu(1,2).C20FA(1,2)]-A-Q-Aib-A-F-I-E-"
+            "Y-L-L-E-G-G-P-S-S-G-A-P-P-P-S-am"
+        )
+        bracket = cabiln_to_bracket(branch)
+        assert bracket == expected_bracket, f"bracket mismatch: {bracket!r}"
+        back = cabiln_to_branch(bracket)
+        expected_back = (
+            "Y-Aib-Q-G-T-F-T-S-D-Y-S-I-aMeLeu-L-D-"
+            "K.!1(4,2)-A-Q-Aib-A-F-I-E-Y-L-L-E-G-G-P-S-S-G-A-P-P-P-S-am"
+            "%C20FA-gGlu-AEEA-!1"
+        )
+        assert back == expected_back, f"back mismatch: {back!r}"
 
 
 class TestBracketBranchEquivalence:
@@ -4854,6 +5066,42 @@ class TestBracketBranchEquivalence:
                   "Y-L-L-E-G-G-P-S-S-G-A-P-P-P-S-am")
         smi = self._smiles(cabiln)
         assert smi and len(smi) > 100, f"Retatrutide should produce a large SMILES: {smi}"
+
+    def test_cyclic_plus_lipid_same_smiles(self):
+        """Cyclic peptide with lipid branch: bracket and branch forms assemble identically."""
+        bracket = "!1-A-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-A-!1"
+        branch = "!1-A-K.!2(4,4)-G-A-!1%C20FA-AEEA-gGlu.!2"
+        smi_bracket = self._smiles(bracket)
+        smi_branch = self._smiles(branch)
+        assert smi_bracket == smi_branch, (
+            f"cyclic+lipid SMILES mismatch\n"
+            f"  bracket: {smi_bracket}\n"
+            f"  branch:  {smi_branch}"
+        )
+
+    def test_two_lipid_brackets_same_smiles(self):
+        """Two lipid brackets on same chain: bracket and branch forms assemble identically."""
+        bracket = "ac-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-am"
+        branch = "ac-K.!1(4,4)-G-K.!2(4,4)-am%C20FA-AEEA-gGlu.!1%C20FA-AEEA-gGlu.!2"
+        smi_bracket = self._smiles(bracket)
+        smi_branch = self._smiles(branch)
+        assert smi_bracket == smi_branch, (
+            f"two-lipid-brackets SMILES mismatch\n"
+            f"  bracket: {smi_bracket}\n"
+            f"  branch:  {smi_branch}"
+        )
+
+    def test_semaglutide_like_same_smiles(self):
+        """8AA semaglutide-like with C20FA lipid: bracket and branch assemble identically."""
+        bracket = "His-Aib-Glu-Gly-Thr-Phe-Thr-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-am"
+        branch = "His-Aib-Glu-Gly-Thr-Phe-Thr-K.!1(4,4)-am%C20FA-AEEA-gGlu.!1"
+        smi_bracket = self._smiles(bracket)
+        smi_branch = self._smiles(branch)
+        assert smi_bracket == smi_branch, (
+            f"semaglutide-like SMILES mismatch\n"
+            f"  bracket: {smi_bracket}\n"
+            f"  branch:  {smi_branch}"
+        )
 
 
 class TestLibraryRoundTrip:

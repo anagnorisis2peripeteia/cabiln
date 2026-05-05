@@ -76,6 +76,84 @@ try:
 except ImportError:
     raise SystemExit("pip install fastapi uvicorn  (then re-run)")
 
+EXAMPLES = [
+    {
+        "category": "GLP-1 / Incretin Agonists",
+        "items": [
+            {
+                "name": "Retatrutide",
+                "description": "GIP/GLP-1/glucagon triple agonist · 39 AA · C20 lipid conjugate",
+                "cabiln": "Y-Aib-Q-G-T-F-T-S-D-Y-S-I-aMeLeu-L-D-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-A-Q-Aib-A-F-I-E-Y-L-L-E-G-G-P-S-S-G-A-P-P-P-S-am",
+            },
+            {
+                "name": "Semaglutide-like",
+                "description": "GLP-1 scaffold · γGlu–AEEA–C20 lipid linker on K8",
+                "cabiln": "His-Aib-Glu-Gly-Thr-Phe-Thr-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-am",
+            },
+        ],
+    },
+    {
+        "category": "Bicyclic Peptides (Bicycle Therapeutics)",
+        "items": [
+            {
+                "name": "TBMB Bicycle — minimal",
+                "description": "Three-Cys scaffold cyclised with TBMB · Bicycle Therapeutics platform",
+                "cabiln": "ac-C.!1(4,4)-A-A-C.!2(4,5)-A-A-C.!3(4,6)-am%TBMB.!1.!2.!3",
+            },
+            {
+                "name": "TBMB Bicycle — asymmetric loops",
+                "description": "Variable loop lengths for epitope shape mimicry",
+                "cabiln": "ac-C.!1(4,4)-G-A-K-C.!2(4,5)-E-L-F-C.!3(4,6)-am%TBMB.!1.!2.!3",
+            },
+        ],
+    },
+    {
+        "category": "Cyclic Peptides",
+        "items": [
+            {
+                "name": "Head-to-tail cyclic with lipid",
+                "description": "N→C cyclised backbone with C20 lipid branch on K",
+                "cabiln": "!1-A-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-A-!1",
+            },
+            {
+                "name": "Head-to-tail cyclic",
+                "description": "Simple N→C cyclised hexapeptide",
+                "cabiln": "!1-A-K-G-E-L-F-!1",
+            },
+        ],
+    },
+    {
+        "category": "Lipid Conjugates",
+        "items": [
+            {
+                "name": "Dual-lipid backbone",
+                "description": "Two independent γGlu–AEEA–C20 arms on a 3-residue backbone",
+                "cabiln": "ac-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-am",
+            },
+            {
+                "name": "AEEA PEG spacer",
+                "description": "Tandem AEEA mini-PEG linker — common in half-life extension",
+                "cabiln": "ac-K.[AEEA(4,2).AEEA(1,2)]-G-am",
+            },
+        ],
+    },
+    {
+        "category": "Branched Peptides",
+        "items": [
+            {
+                "name": "K-branched dipeptide",
+                "description": "Lysine with G–A pendant arm via R4→R1 bond",
+                "cabiln": "ac-A-K.[G(4,1).A(2,1).am(2,1)]-G-am",
+            },
+            {
+                "name": "Triple-branched backbone",
+                "description": "Three positional branches — each K carries a distinct arm",
+                "cabiln": "ac-K.[G(4,1).am(2,1)]-A-K.[A(4,1).am(2,1)]-A-K.[G(4,1).G(2,1).am(2,1)]-am",
+            },
+        ],
+    },
+]
+
 _HTML = r"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -283,6 +361,88 @@ _HTML = r"""<!DOCTYPE html>
     overflow: hidden;
   }
   #lib-panel.open { display: flex; }
+
+  /* ── example peptide sidebar (right) ── */
+  #examples-panel {
+    width: 340px;
+    max-width: 50%;
+    background: #0d1422;
+    border-left: 1px solid #1e3050;
+    display: none;
+    flex-direction: column;
+    flex-shrink: 0;
+    overflow: hidden;
+    order: 99;
+  }
+  #examples-panel.open { display: flex; }
+
+  #examples-header {
+    flex-shrink: 0;
+    padding: 10px 14px 8px;
+    background: #0a1018;
+    border-bottom: 1px solid #1e3050;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  #examples-header span { flex: 1; font-size: 12px; color: #7aaeff; letter-spacing: .08em; }
+  #examples-close {
+    background: none;
+    border: none;
+    color: #4a6a9a;
+    font-size: 16px;
+    cursor: pointer;
+    padding: 2px 4px;
+    line-height: 1;
+  }
+  #examples-close:hover { color: #d8e8ff; }
+
+  #examples-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0 0 8px;
+  }
+  #examples-list::-webkit-scrollbar { width: 6px; }
+  #examples-list::-webkit-scrollbar-track { background: #0a1018; }
+  #examples-list::-webkit-scrollbar-thumb { background: #1e3050; border-radius: 3px; }
+
+  .example-cat {
+    padding: 8px 14px 4px;
+    font-size: 9.5px;
+    text-transform: uppercase;
+    letter-spacing: .1em;
+    color: #3a5070;
+    border-bottom: 1px solid #0d1830;
+    margin-top: 6px;
+  }
+  .example-cat:first-child { margin-top: 0; }
+  .example-row {
+    padding: 8px 14px 7px;
+    border-bottom: 1px solid #0d1830;
+    cursor: pointer;
+    transition: background .1s;
+  }
+  .example-row:hover { background: #131f35; }
+  .example-name {
+    font-size: 12px;
+    font-weight: 600;
+    color: #8ab8f0;
+    margin-bottom: 2px;
+  }
+  .example-desc {
+    font-size: 10.5px;
+    color: #4a6a8a;
+    margin-bottom: 5px;
+    line-height: 1.4;
+  }
+  .example-seq {
+    font-family: "Cascadia Code", "Fira Mono", monospace;
+    font-size: 9px;
+    color: #2e4560;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
 
   #lib-header {
     flex-shrink: 0;
@@ -622,7 +782,8 @@ _HTML = r"""<!DOCTYPE html>
 
 <header>
   <span class="title">CABILN Live Renderer <span>— pyPept</span></span>
-  <button id="btn-lib"    class="hbtn green"  title="Browse monomer library">📋 Library</button>
+  <button id="btn-lib"      class="hbtn green"  title="Browse monomer library">📋 Library</button>
+  <button id="btn-examples" class="hbtn green"  title="Browse example peptides">🧬 Examples</button>
   <button id="btn-hl"     class="hbtn active" title="Toggle residue highlighting">🔗 Highlight</button>
   <button id="btn-dark"   class="hbtn"        title="Toggle dark canvas">🌙 Dark</button>
   <button id="btn-verify" class="hbtn"        title="SMILES vs CABILN comparison">⚖ Verify</button>
@@ -657,7 +818,7 @@ _HTML = r"""<!DOCTYPE html>
   </div>
   <div class="build-boxes">
     <div class="build-box" id="build-left">
-      <div class="box-label"><span>Current residue</span><button class="box-clear-btn" id="build-left-change" title="Clear left selection">✕ change</button></div>
+      <div class="box-label"><span>Current residue</span><button class="box-clear-btn" id="build-left-change" title="Clear selection">Clear</button></div>
       <div class="box-abbr" id="build-left-abbr">—</div>
       <div class="box-svg" id="build-left-svg">
         <div class="box-placeholder">Click a chip above</div>
@@ -670,7 +831,7 @@ _HTML = r"""<!DOCTYPE html>
       <div class="build-status" id="build-status"></div>
     </div>
     <div class="build-box" id="build-right">
-      <div class="box-label"><span id="build-right-label">New monomer</span><button class="box-clear-btn" id="build-right-change" title="Clear right selection">✕ change</button></div>
+      <div class="box-label"><span id="build-right-label">New monomer</span><button class="box-clear-btn" id="build-right-change" title="Clear selection">Clear</button></div>
       <div class="box-abbr" id="build-right-abbr">—</div>
       <div class="box-svg" id="build-right-svg">
         <div class="box-placeholder">Right-click from library</div>
@@ -702,6 +863,15 @@ _HTML = r"""<!DOCTYPE html>
         <div class="placeholder">Start typing a sequence…</div>
       </div>
     </div>
+  </div>
+
+  <!-- example peptide sidebar (right, persistent) -->
+  <div id="examples-panel">
+    <div id="examples-header">
+      <span>Example Peptides</span>
+      <button id="examples-close" title="Close">✕</button>
+    </div>
+    <div id="examples-list"><div class="placeholder">Loading…</div></div>
   </div>
 
   <!-- verify reference pane (hidden by default, shown beside render-pane) -->
@@ -783,6 +953,10 @@ const libClose      = document.getElementById('lib-close');
 const libList       = document.getElementById('lib-list');
 const libCount      = document.getElementById('lib-count');
 const libPreview    = document.getElementById('lib-preview');
+const btnExamples    = document.getElementById('btn-examples');
+const examplesPanel  = document.getElementById('examples-panel');
+const examplesClose  = document.getElementById('examples-close');
+const examplesList   = document.getElementById('examples-list');
 const resChips      = document.getElementById('residue-chips');
 const buildPanel    = document.getElementById('build-panel');
 const btnBuild      = document.getElementById('btn-build');
@@ -847,6 +1021,59 @@ btnLib.addEventListener('click', () =>
 libClose.addEventListener('click', closeLib);
 
 libSearch.addEventListener('input', () => renderLibList(libSearch.value.trim().toLowerCase()));
+
+// ─── example peptide sidebar ──────────────────────────────────────────────────
+let examplesLoaded = false;
+
+function openExamples() {
+  examplesPanel.classList.add('open');
+  btnExamples.classList.add('active');
+  if (!examplesLoaded) loadExamples();
+}
+function closeExamples() {
+  examplesPanel.classList.remove('open');
+  btnExamples.classList.remove('active');
+}
+
+btnExamples.addEventListener('click', () =>
+  examplesPanel.classList.contains('open') ? closeExamples() : openExamples());
+examplesClose.addEventListener('click', closeExamples);
+
+async function loadExamples() {
+  try {
+    const res = await fetch('/examples');
+    const data = await res.json();
+    renderExamples(data);
+    examplesLoaded = true;
+  } catch (e) {
+    examplesList.innerHTML = '<div class="placeholder err">Failed to load examples</div>';
+  }
+}
+
+function renderExamples(categories) {
+  const rows = [];
+  for (const cat of categories) {
+    rows.push(`<div class="example-cat">${escHtml(cat.category)}</div>`);
+    for (const item of cat.items) {
+      const preview = item.cabiln.length > 55
+        ? item.cabiln.slice(0, 52) + '…'
+        : item.cabiln;
+      rows.push(`<div class="example-row" data-cabiln="${escAttr(item.cabiln)}">
+        <div class="example-name">${escHtml(item.name)}</div>
+        <div class="example-desc">${escHtml(item.description)}</div>
+        <div class="example-seq" title="${escAttr(item.cabiln)}">${escHtml(preview)}</div>
+      </div>`);
+    }
+  }
+  examplesList.innerHTML = rows.join('');
+  examplesList.querySelectorAll('.example-row').forEach(row => {
+    row.addEventListener('click', () => {
+      cabilnInput.value = row.dataset.cabiln;
+      cabilnInput.dispatchEvent(new Event('input'));
+      cabilnInput.focus();
+    });
+  });
+}
 
 async function loadMonomers() {
   libList.innerHTML = '<div class="placeholder">Loading…</div>';
@@ -1501,6 +1728,8 @@ function clearBuild() {
 
 btnBuild.addEventListener('click', () => buildMode ? closeBuild() : openBuild());
 buildClose.addEventListener('click', closeBuild);
+document.getElementById('build-left-change').addEventListener('click', clearBuild);
+document.getElementById('build-right-change').addEventListener('click', clearBuild);
 
 async function loadBuildLeft(abbr, rIdx) {
   buildLeftRIdx = rIdx;
@@ -1753,6 +1982,7 @@ function resetCabiln() {
 
 async function doRenderCabiln(seq) {
   lastCabiln = seq;
+  if (buildMode) clearBuild();
   const { w, h } = canvasSize(renderCanvas);
   try {
     const res  = await fetch('/render', {
@@ -3081,6 +3311,11 @@ class _ValidateBondReq(BaseModel):
     slot_a: int = 0
     abbr_b: str = ''
     slot_b: int = 0
+
+@app.get("/examples")
+async def get_examples():
+    return JSONResponse(EXAMPLES)
+
 
 @app.post("/validate_bond")
 async def validate_bond(req: _ValidateBondReq):
