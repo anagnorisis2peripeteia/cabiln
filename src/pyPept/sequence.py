@@ -628,9 +628,61 @@ def cabiln_to_branch(cabiln):
 
         bracket_content = result[open_pos + 1:close_pos - 1]
 
-        # Sub-bracket arms present — skip, no clean % equivalent
+        # Sub-bracket arms present: check if they are all pure crosslink annotations
+        # (e.g., .[TBMB(4,4)[.!2(5,4)][.!3(6,4)]]).  If so, convert to branch.
+        # If arms have residue tokens, there is no clean % equivalent — skip.
         if '[' in bracket_content:
-            search_start = m_end
+            flat_end = bracket_content.index('[')
+            flat_part = bracket_content[:flat_end]
+            hub_m = _re.match(r'([^(]+)\((\d+),(\d+)\)', flat_part.strip())
+            if not hub_m:
+                search_start = m_end
+                continue
+            # Extract sub-bracket arm contents
+            sub_arms = []
+            j = flat_end
+            while j < len(bracket_content):
+                if bracket_content[j] == '[':
+                    depth = 0; k = j
+                    while k < len(bracket_content):
+                        if bracket_content[k] == '[': depth += 1
+                        elif bracket_content[k] == ']':
+                            depth -= 1
+                            if depth == 0: break
+                        k += 1
+                    sub_arms.append(bracket_content[j + 1:k])
+                    j = k + 1
+                else:
+                    j += 1
+            # Each arm must be a single pure crosslink entry .!n(r,r)
+            _xlink_pat = _re.compile(r'^\.?(!\d+)\((\d+),(\d+)\)$')
+            arm_info = [_xlink_pat.match(a.strip()) for a in sub_arms]
+            if not sub_arms or any(m is None for m in arm_info):
+                search_start = m_end
+                continue
+            # Build the conversion
+            hub_name = hub_m.group(1)
+            r_host_hub = hub_m.group(2)   # slot on main-chain host
+            r_hub_host = hub_m.group(3)   # slot on hub connecting to host
+            all_used = set(int(x) for x in _re.findall(r'!(\d+)', result))
+            new_n = max(all_used, default=0) + 1
+            new_tag = f'!{new_n}'
+            _xlink_ctr[0] = new_n + 1
+            new_result = result[:m_start] + f'.{new_tag}({r_host_hub},{r_hub_host})' + result[m_end:]
+            arm_tags = []
+            for am in arm_info:
+                tag_arm  = am.group(1)   # e.g., !2
+                r_hub_arm = am.group(2)  # slot on hub side
+                r_partner = am.group(3)  # slot on main-chain partner
+                # Promote no-parens second endpoint in main chain to first occurrence
+                new_result = _re.sub(
+                    r'\.' + _re.escape(tag_arm) + r'(?!\()',
+                    f'.{tag_arm}({r_partner},{r_hub_arm})',
+                    new_result, count=1)
+                arm_tags.append(tag_arm)
+            result = new_result
+            branch_str = hub_name + '.' + '.'.join([new_tag] + arm_tags)
+            branches.append(branch_str)
             continue
 
         items = _parse_bracket_items(bracket_content)
