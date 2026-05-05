@@ -4610,7 +4610,7 @@ class TestNotationConversion:
         bracket = cabiln_to_bracket(branch)
         assert bracket == "ac-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-am"
         back = cabiln_to_branch(bracket)
-        assert back == "ac-K.!1(4,4)-G-am%C20FA-AEEA-gGlu-!1"
+        assert back == "ac-K.!1(4,4)-G-am%C20FA-AEEA-gGlu.!1"
 
     # ------------------------------------------------------------------
     # Bracket -> Branch -> Bracket  (bracket notation is canonical input)
@@ -4711,7 +4711,7 @@ class TestNotationConversion:
         from pyPept.sequence import cabiln_to_branch
         bracket = "!1-A-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-A-!1"
         result = cabiln_to_branch(bracket)
-        assert result == "!1-A-K.!2(4,4)-G-A-!1%C20FA-AEEA-gGlu-!2", (
+        assert result == "!1-A-K.!2(4,4)-G-A-!1%C20FA-AEEA-gGlu.!2", (
             f"(1,2) bracket should convert to reversed crosslink branch: {result}"
         )
 
@@ -4734,13 +4734,13 @@ class TestNotationConversion:
     @pytest.mark.parametrize("label, bracket, expected_branch", [
         ("lipid_linker_12",
          "K.[C20FA(4,4).AEEA(1,2).gGlu(1,2)]-G-am",
-         "K.!1(4,4)-G-am%gGlu-AEEA-C20FA-!1"),
+         "K.!1(4,4)-G-am%gGlu-AEEA-C20FA.!1"),
         ("two_monomer_12",
          "ac-A.[C(4,4).G(1,2)]-am",
-         "ac-A.!1(4,4)-am%G-C-!1"),
+         "ac-A.!1(4,4)-am%G-C.!1"),
         ("lipid_correct",
          "ac-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-am",
-         "ac-K.!1(4,4)-G-am%C20FA-AEEA-gGlu-!1"),
+         "ac-K.!1(4,4)-G-am%C20FA-AEEA-gGlu.!1"),
     ])
     def test_12_bracket_converts_to_reversed_branch(self, label, bracket, expected_branch):
         from pyPept.sequence import cabiln_to_branch
@@ -4784,7 +4784,7 @@ class TestNotationConversion:
         from pyPept.sequence import cabiln_to_branch
         bracket = "K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-am"
         result = cabiln_to_branch(bracket)
-        assert result == "K.!1(4,4)-G-am%C20FA-AEEA-gGlu-!1", f"Got: {result}"
+        assert result == "K.!1(4,4)-G-am%C20FA-AEEA-gGlu.!1", f"Got: {result}"
 
     # ------------------------------------------------------------------
     # Complex round-trips
@@ -4793,7 +4793,7 @@ class TestNotationConversion:
     def test_cyclic_plus_lipid_branch_roundtrip(self):
         """Head-to-tail cyclic peptide with lipid branch: both notation directions."""
         from pyPept.sequence import cabiln_to_bracket, cabiln_to_branch
-        branch = "!1-A-K.!2(4,4)-G-A-!1%C20FA-AEEA-gGlu-!2"
+        branch = "!1-A-K.!2(4,4)-G-A-!1%C20FA-AEEA-gGlu.!2"
         expected_bracket = "!1-A-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-A-!1"
         bracket = cabiln_to_bracket(branch)
         assert bracket == expected_bracket, f"branch->bracket: {bracket!r}"
@@ -4808,7 +4808,7 @@ class TestNotationConversion:
         from pyPept.sequence import cabiln_to_bracket, cabiln_to_branch
         bracket = "!1-A-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-A-!1"
         branch = cabiln_to_branch(bracket)
-        assert branch == "!1-A-K.!2(4,4)-G-A-!1%C20FA-AEEA-gGlu-!2", f"bracket->branch: {branch!r}"
+        assert branch == "!1-A-K.!2(4,4)-G-A-!1%C20FA-AEEA-gGlu.!2", f"bracket->branch: {branch!r}"
         back = cabiln_to_bracket(branch)
         assert back == bracket, (
             f"branch->bracket roundtrip failed:\n"
@@ -4836,7 +4836,7 @@ class TestNotationConversion:
         from pyPept.sequence import cabiln_to_bracket, cabiln_to_branch
         # [A(4,1)] single-monomer stays as-is; lipid converts to crosslink branch
         bracket = "ac-K.[A(4,1)]-G-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-am"
-        expected_branch = "ac-K.[A(4,1)]-G-K.!1(4,4)-am%C20FA-AEEA-gGlu-!1"
+        expected_branch = "ac-K.[A(4,1)]-G-K.!1(4,4)-am%C20FA-AEEA-gGlu.!1"
         branch = cabiln_to_branch(bracket)
         assert branch == expected_branch, f"bracket->branch: {branch!r}"
         back = cabiln_to_bracket(branch)
@@ -4852,7 +4852,7 @@ class TestNotationConversion:
     @pytest.mark.parametrize("label,bracket,expected_branch", [
         ("two_lipid_brackets",
          "ac-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-am",
-         "ac-K.!1(4,4)-G-K.!2(4,4)-am%C20FA-AEEA-gGlu-!1%C20FA-AEEA-gGlu-!2"),
+         "ac-K.!1(4,4)-G-K.!2(4,4)-am%C20FA-AEEA-gGlu.!1%C20FA-AEEA-gGlu.!2"),
         ("two_aeea_peg",
          "ac-K.[AEEA(4,2).AEEA(1,2)]-G-am",
          "ac-K.!1(4,2)-G-am%AEEA-AEEA-!1"),
@@ -4870,7 +4870,7 @@ class TestNotationConversion:
          "!1-A-K.(4,1)-G-A-!1%G-am"),
         ("semaglutide_like",
          "His-Aib-Glu-Gly-Thr-Phe-Thr-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-am",
-         "His-Aib-Glu-Gly-Thr-Phe-Thr-K.!1(4,4)-am%C20FA-AEEA-gGlu-!1"),
+         "His-Aib-Glu-Gly-Thr-Phe-Thr-K.!1(4,4)-am%C20FA-AEEA-gGlu.!1"),
         ("c_terminal_marker_normalised",
          "ac-K.[G(4,2).G(1,2)]-G-am",
          "ac-K.!1(4,2)-G-am%G-G-!1"),
@@ -4896,7 +4896,7 @@ class TestNotationConversion:
 
     @pytest.mark.parametrize("label,branch,expected_bracket", [
         ("two_lipid_crosslinks",
-         "ac-K.!1(4,4)-G-K.!2(4,4)-am%C20FA-AEEA-gGlu-!1%C20FA-AEEA-gGlu-!2",
+         "ac-K.!1(4,4)-G-K.!2(4,4)-am%C20FA-AEEA-gGlu.!1%C20FA-AEEA-gGlu.!2",
          "ac-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-am"),
         ("three_positional_branches",
          "ac-K.(4,1)-A-K.(4,1)-A-K.(4,1)-am%G-am%A-am%G-G-am",
@@ -4938,7 +4938,7 @@ class TestNotationConversion:
         expected_branch = (
             "Y-Aib-Q-G-T-F-T-S-D-Y-S-I-aMeLeu-L-D-"
             "K.!1(4,4)-A-Q-Aib-A-F-I-E-Y-L-L-E-G-G-P-S-S-G-A-P-P-P-S-am"
-            "%C20FA-AEEA-gGlu-!1"
+            "%C20FA-AEEA-gGlu.!1"
         )
         branch = cabiln_to_branch(bracket)
         assert branch == expected_branch, (

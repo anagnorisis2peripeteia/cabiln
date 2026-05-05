@@ -710,8 +710,12 @@ def cabiln_to_branch(cabiln):
             _xlink_ctr[0] += 1
             host_marker = f'.{tag}({r_host},{r_branch})'
             reversed_cont = [abbr for abbr, _, _ in items[1:]][::-1]
-            branch_parts = reversed_cont + [anchor_abbr, tag]
-            branch_str = '-'.join(branch_parts)
+            # Use dot form: .!n attaches to anchor's sidechain slot.
+            # Only use hyphen form (-!n) when anchor connects via R2 (backbone terminus).
+            if r_branch == '2':
+                branch_str = '-'.join(reversed_cont + [anchor_abbr, tag])
+            else:
+                branch_str = '-'.join(reversed_cont + [anchor_abbr]) + f'.{tag}'
             result = result[:m_start] + host_marker + result[m_end:]
             branches.append(branch_str)
         elif cont:
