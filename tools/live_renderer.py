@@ -66,6 +66,23 @@ def _invalidate_sdf():
         _sdf_cache['by_abbr'] = None
         _sdf_cache['mtime'] = 0.0
 
+# ── render cache (LRU, capped at 200 entries) ─────────────────────────────────
+from collections import OrderedDict as _OD
+_render_cache: _OD = _OD()
+_RENDER_CACHE_MAX = 200
+
+def _rc_get(key):
+    if key in _render_cache:
+        _render_cache.move_to_end(key)
+        return _render_cache[key]
+    return None
+
+def _rc_put(key, value):
+    _render_cache[key] = value
+    _render_cache.move_to_end(key)
+    if len(_render_cache) > _RENDER_CACHE_MAX:
+        _render_cache.popitem(last=False)
+
 # ──────────────────────────────────────────────────────────────────────────────
 
 try:
@@ -3051,6 +3068,10 @@ def _restore_one_slot(mol, keep_slot):
 
 @app.get("/monomer_svg")
 async def monomer_svg(abbr: str, width: int = 220, height: int = 180):
+    _mck = ("monomer", abbr, width, height)
+    _mhit = _rc_get(_mck)
+    if _mhit is not None:
+        return _mhit
     try:
         from rdkit import Chem
         _all_mols, mol_by_abbr = _load_sdf()
@@ -3068,6 +3089,7 @@ async def monomer_svg(abbr: str, width: int = 220, height: int = 180):
             if reagent_mol is not None:
                 result["svg_reagent"] = _draw_mol(reagent_mol, width, height)
                 result["reagent"] = reagent_meta
+            _rc_put(_mck, result)
             return result
 
         # Check if this is a degenerate base name (e.g. "Bn" -> Bn_/_Bn)
@@ -3657,6 +3679,11 @@ def _build_crosslink_groups(seq):
 
 @app.post("/render")
 async def render(req: _CabilnReq):
+    w, h = max(400, req.width), max(300, req.height)
+    _ck = (req.cabiln, w, h, req.seed)
+    _hit = _rc_get(_ck)
+    if _hit is not None:
+        return _hit
     try:
         from rdkit.Chem.Descriptors import ExactMolWt
         from pyPept.molecule import Molecule
@@ -3668,7 +3695,6 @@ async def render(req: _CabilnReq):
         if romol is None:
             return JSONResponse({"error": "Assembly produced no molecule"}, status_code=400)
 
-        w, h  = max(400, req.width), max(300, req.height)
         svg   = _draw_mol(romol, w, h, seed=req.seed)
         block = _mol_block(romol)
 
@@ -3682,14 +3708,16 @@ async def render(req: _CabilnReq):
         crosslink_groups = _build_crosslink_groups(seq)
         bracket_groups = _build_bracket_groups(seq, chain_ids, req.cabiln, crosslink_groups)
 
-        return {"svg": svg, "mol_block": block,
-                "info": f"{romol.GetNumAtoms()} atoms · MW {ExactMolWt(romol):.2f}",
-                "residue_map": {str(k): v for k, v in res_map.items()},
-                "residues": residues,
-                "chains": chains,
-                "bracket_groups": bracket_groups,
-                "crosslink_groups": crosslink_groups,
-                "cabiln_echo": req.cabiln}
+        result = {"svg": svg, "mol_block": block,
+                  "info": f"{romol.GetNumAtoms()} atoms · MW {ExactMolWt(romol):.2f}",
+                  "residue_map": {str(k): v for k, v in res_map.items()},
+                  "residues": residues,
+                  "chains": chains,
+                  "bracket_groups": bracket_groups,
+                  "crosslink_groups": crosslink_groups,
+                  "cabiln_echo": req.cabiln}
+        _rc_put(_ck, result)
+        return result
 
     except (Exception, SystemExit) as exc:
         return JSONResponse({"error": str(exc).split('\n')[0]}, status_code=400)
@@ -3936,6 +3964,17 @@ if __name__ == "__main__":
     import time as _t; _t0 = _t.perf_counter()
     _warm_mols, _ = _load_sdf()
     print(f"  SDF cache warmed: {len(_warm_mols)} monomers in {_t.perf_counter()-_t0:.1f}s")
+    try:
+        import sys as _sys, pathlib as _pl
+        _sys.path.insert(0, str(_pl.Path(__file__).resolve().parent.parent / 'src'))
+        from rdkit.Chem import rdDepictor as _, MolToMolBlock as __
+        from rdkit.Chem.Draw import rdMolDraw2D as ___
+        from rdkit.Chem.Descriptors import ExactMolWt as ____
+        from pyPept.sequence import Sequence as _____
+        from pyPept.molecule import Molecule as ______
+        print(f"  Imports pre-warmed in {_t.perf_counter()-_t0:.1f}s")
+    except Exception as _e:
+        print(f"  Import warmup partial: {_e}")
     print(f"  Local     ->  http://localhost:{_port}")
     print("  Tailscale ->  http://100.119.0.78:8732")
     if _port == 8732:
