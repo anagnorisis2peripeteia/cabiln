@@ -592,18 +592,47 @@ def cabiln_to_branch(cabiln):
     existing_tags = set(int(x) for x in _re.findall(r'!\s*(\d+)', cabiln))
     _xlink_ctr = [max(existing_tags, default=0) + 1]
 
-    while True:
-        m = _re.search(r'\.([\[{])([^\]}\]]+)[\]}]', result[search_start:])
-        if not m:
-            break
-        m_start = search_start + m.start()
-        m_end = search_start + m.end()
+    def _next_bracket(s, start):
+        """Return (dot_pos, open_pos, close_pos+1) of the next .[...] or .{...}
+        starting at or after `start`, using depth-aware scanning.  Returns None
+        if not found."""
+        i = start
+        while i < len(s) - 1:
+            if s[i] == '.' and s[i + 1] in ('[', '{'):
+                open_ch = s[i + 1]
+                close_ch = ']' if open_ch == '[' else '}'
+                depth = 0
+                j = i + 1
+                while j < len(s):
+                    if s[j] == open_ch:
+                        depth += 1
+                    elif s[j] == close_ch:
+                        depth -= 1
+                        if depth == 0:
+                            return (i, i + 1, j + 1)
+                    j += 1
+            i += 1
+        return None
 
-        if m.group(1) == '{':
+    while True:
+        span = _next_bracket(result, search_start)
+        if span is None:
+            break
+        dot_pos, open_pos, close_pos = span
+        m_start, m_end = dot_pos, close_pos
+        open_ch = result[open_pos]
+
+        if open_ch == '{':
             search_start = m_end
             continue
 
-        bracket_content = m.group(2)
+        bracket_content = result[open_pos + 1:close_pos - 1]
+
+        # Sub-bracket arms present — skip, no clean % equivalent
+        if '[' in bracket_content:
+            search_start = m_end
+            continue
+
         items = _parse_bracket_items(bracket_content)
         if not items or items[0][1] is None:
             search_start = m_end
@@ -738,13 +767,10 @@ def cabiln_to_bracket(cabiln):
             inner = f'{hub_name}({r_host},{r_branch})'
             if not remaining:
                 bracket_str = f'.[{inner}]'
-            elif len(remaining) == 1:
-                bracket_str = f'.[{inner}.{remaining[0]}]'
             else:
-                core = f'[{inner}.{remaining[0]}]'
-                for r in remaining[1:]:
-                    core = f'[{core}.{r}]'
-                bracket_str = f'.{core}'
+                # Use sub-bracket arm grammar: [hub[.arm1][.arm2]...]
+                arms = ''.join(f'[.{r}]' for r in remaining)
+                bracket_str = f'.[{inner}{arms}]'
             host_pat = _re.escape(f'.{anchor_tag}') + r'\(\d+,\d+\)'
             main_seg = _re.sub(host_pat, bracket_str, main_seg, count=1)
             continue
