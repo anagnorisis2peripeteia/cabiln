@@ -1,0 +1,2 @@
+[phases.setup]
+nixPkgs = ['xorg.libXrender', 'xorg.libX11', 'cairo', 'libGL']
