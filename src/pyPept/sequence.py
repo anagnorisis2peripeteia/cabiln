@@ -665,7 +665,7 @@ def cabiln_to_branch(cabiln):
             r_host_hub = hub_m.group(2)   # slot on main-chain host
             r_hub_host = hub_m.group(3)   # slot on hub connecting to host
             all_used = set(int(x) for x in _re.findall(r'!(\d+)', result))
-            new_n = max(all_used, default=0) + 1
+            new_n = next(i for i in range(1, len(all_used) + 2) if i not in all_used)
             new_tag = f'!{new_n}'
             _xlink_ctr[0] = new_n + 1
             new_result = result[:m_start] + f'.{new_tag}({r_host_hub},{r_hub_host})' + result[m_end:]
