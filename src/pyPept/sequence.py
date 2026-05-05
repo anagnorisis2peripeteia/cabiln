@@ -700,8 +700,10 @@ def cabiln_to_branch(cabiln):
         all_12 = cont and all(rp == '1' and rt == '2' for rp, rt in cont)
 
         if all_21:
-            host_marker = f'.({r_host},{r_branch})'
-            branch_parts = [anchor_abbr] + [abbr for abbr, _, _ in items[1:]]
+            tag = f'!{_xlink_ctr[0]}'
+            _xlink_ctr[0] += 1
+            host_marker = f'.{tag}({r_host},{r_branch})'
+            branch_parts = [tag] + [anchor_abbr] + [abbr for abbr, _, _ in items[1:]]
             branch_str = '-'.join(branch_parts)
             result = result[:m_start] + host_marker + result[m_end:]
             branches.append(branch_str)
