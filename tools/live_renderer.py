@@ -1452,7 +1452,7 @@ function buildResidueUI(resMap, residues, chains, cabiln, bracketGroups, crossli
     const xlinks = xlinkByMember[rIdx];
     if (!xlinks) return;
     xlinks.forEach(g => {
-      if (nTermXlinkTags.has(g.tag))
+      if (nTermXlinkTags.has(g.tag) && g.members[0] === rIdx)
         resChips.appendChild(makeXlinkChip(g.tag, g.members));
     });
   }
@@ -1461,7 +1461,7 @@ function buildResidueUI(resMap, residues, chains, cabiln, bracketGroups, crossli
     const xlinks = xlinkByMember[rIdx];
     if (!xlinks) return;
     xlinks.forEach(g => {
-      if (!nTermXlinkTags.has(g.tag))
+      if (!nTermXlinkTags.has(g.tag) || g.members[0] !== rIdx)
         resChips.appendChild(makeXlinkChip(g.tag, g.members));
     });
   }
