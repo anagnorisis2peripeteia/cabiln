@@ -3930,11 +3930,14 @@ def _open_browser():
 
 
 if __name__ == "__main__":
+    import os as _os
+    _port = int(_os.environ.get("PORT", 8732))
     print("CABILN Live Renderer")
     import time as _t; _t0 = _t.perf_counter()
     _warm_mols, _ = _load_sdf()
     print(f"  SDF cache warmed: {len(_warm_mols)} monomers in {_t.perf_counter()-_t0:.1f}s")
-    print("  Local     ->  http://localhost:8732")
+    print(f"  Local     ->  http://localhost:{_port}")
     print("  Tailscale ->  http://100.119.0.78:8732")
-    threading.Thread(target=_open_browser, daemon=True).start()
-    uvicorn.run(app, host="0.0.0.0", port=8732, log_level="warning")
+    if _port == 8732:
+        threading.Thread(target=_open_browser, daemon=True).start()
+    uvicorn.run(app, host="0.0.0.0", port=_port, log_level="warning")
