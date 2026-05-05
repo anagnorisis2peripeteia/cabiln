@@ -191,6 +191,9 @@ def infer_chem_type(mol, attach_idx: int, slot: int = None,
         return 'amine_primary'
 
     if sym == 6:
+        # pre_activate strips the halide into m_Rgroups; detect via leaving group
+        if leaving in ('[Cl]', '[Br]', '[I]', 'Cl', 'Br', 'I'):
+            return 'alkyl_halide_c'
         has_carbonyl = False
         for nb in atom.GetNeighbors():
             if nb.GetAtomicNum() == 8:

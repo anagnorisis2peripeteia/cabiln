@@ -2082,11 +2082,11 @@ class TestThioetherHalide:
         assert ct == 'alkyl_halide_c', f"Expected alkyl_halide_c, got {ct}"
 
     def test_thioether_halide_smirks_direct(self):
-        """Halide removed at pre-activate; SMIRKS just forms S-C bond."""
+        """Halide replaced by dummy in pre_activate CHUCKLES; SMIRKS just forms S-C bond."""
         from pyPept.interfaces.reaction_library import REACTIONS, run_bond_smirks
         entry = REACTIONS['thioether_halide']
         frag1 = Chem.MolFromSmiles('[400*]SC')    # thiol S: [4*][S:2]
-        frag2 = Chem.MolFromSmiles('[401*]C')     # alkyl (halide already removed as LG)
+        frag2 = Chem.MolFromSmiles('[401*]C')     # alkyl: [4*][C:4] — halide already replaced by dummy
         assert frag1 and frag2
         prod = run_bond_smirks(frag1, frag2, 400, 401, entry, intramolecular=False)
         smi = Chem.MolToSmiles(prod)
