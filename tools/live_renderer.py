@@ -3151,28 +3151,42 @@ def _s2c_get_lib():
             except Exception: cm = None
             if cm is None: continue
             cm = _C.RemoveHs(cm)
-            cm = _s2c_normalize(cm)
-            if cm is None: continue
-            lib.append((abbr, cm, cm.GetNumAtoms()))
+            orig_cm = cm                    # preserve stereochemistry
+            norm_cm = _s2c_normalize(cm)    # resonance-normalised (strips stereo)
+            if norm_cm is None: continue
+            lib.append((abbr, orig_cm, norm_cm, norm_cm.GetNumAtoms()))
             seen.add(abbr)
-        lib.sort(key=lambda x: x[2], reverse=True)
+        lib.sort(key=lambda x: x[3], reverse=True)
         _s2c_lib_cache = lib
         _s2c_lib_mtime = mtime
         return lib
 
 
 def _s2c_match(aa_mol, lib):
-    aa_mol = _s2c_normalize(aa_mol)
-    n_q = aa_mol.GetNumAtoms()
-    best_abbr, best_n = None, 0
-    for abbr, ref, n_ref in lib:
+    """Match an isolated residue mol against the library.
+
+    Strategy: try stereo-sensitive match first; fall back to InChI-normalised
+    no-chirality match for resonance-ambiguous monomers (e.g. Arg guanidinium).
+    """
+    orig_mol = aa_mol
+    norm_mol = _s2c_normalize(aa_mol)
+    n_q = orig_mol.GetNumAtoms()
+    best_abbr, best_n, best_used_stereo = None, 0, False
+    for abbr, ref_orig, ref_norm, n_ref in lib:
         if n_ref > n_q: continue
-        match = aa_mol.GetSubstructMatches(ref, useChirality=False)
+        # Pass 1: chirality-aware match against original (non-normalised) ref
+        match = orig_mol.GetSubstructMatches(ref_orig, useChirality=True)
+        used_stereo = True
+        if not match:
+            # Pass 2: normalised mol, no chirality (handles resonance tautomers)
+            match = norm_mol.GetSubstructMatches(ref_norm, useChirality=False)
+            used_stereo = False
         if not match: continue
         n_m = len(match[0])
-        if n_m > best_n:
-            best_n = n_m; best_abbr = abbr
-            if n_m == n_q: break
+        # Prefer stereo match over non-stereo at equal score
+        if n_m > best_n or (n_m == best_n and used_stereo and not best_used_stereo):
+            best_n = n_m; best_abbr = abbr; best_used_stereo = used_stereo
+            if n_m == n_q and used_stereo: break
     return best_abbr, best_n
 
 
