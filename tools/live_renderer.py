@@ -858,6 +858,10 @@ _HTML = r"""<!DOCTYPE html>
       <div class="rgroup-buttons" id="build-right-rgroups"></div>
     </div>
   </div>
+  <div id="build-insert-row" style="display:none;align-items:center;gap:10px;padding:6px 2px 0;">
+    <span id="build-insert-info" style="font-size:10px;color:#5a8ab0;flex:1;"></span>
+    <button id="build-insert-btn" class="hbtn green" style="font-size:10px;padding:2px 10px;">⊕ Insert Between</button>
+  </div>
 </div>
 
 <!-- main area -->
@@ -942,6 +946,7 @@ let buildLeft    = null;  // { abbr, rgroups: [{slot, chem_type, used}], selecte
 let buildRight   = null;  // { abbr, rgroups: [{slot, chem_type, used}], selectedSlot }
 let buildLeftRIdx = null;
 let buildRightRIdx = null;
+let insertBetweenActive = false;
 let rerollSeed   = 0;
 let reactionPairs = null;  // lazy-loaded list of [ct_a, ct_b] pairs
 let rxnFilterActive = false;
@@ -993,6 +998,9 @@ const buildLeftRg   = document.getElementById('build-left-rgroups');
 const buildRightAbbr= document.getElementById('build-right-abbr');
 const buildRightSvg = document.getElementById('build-right-svg');
 const buildRightRg  = document.getElementById('build-right-rgroups');
+const buildInsertRow = document.getElementById('build-insert-row');
+const buildInsertInfo = document.getElementById('build-insert-info');
+const buildInsertBtn = document.getElementById('build-insert-btn');
 const btnReroll     = document.getElementById('btn-reroll');
 const btnRxnFilter  = document.getElementById('btn-rxn-filter');
 
@@ -1160,6 +1168,13 @@ function renderLibList(q) {
     });
   }
 
+  if (insertBetweenActive) {
+    filtered = filtered.filter(m => {
+      const raw = m.chem_types || '';
+      return raw.includes('backbone_n') && raw.includes('backbone_c');
+    });
+  }
+
   libCount.textContent = `${filtered.length} / ${allMonomers.length} monomers`;
 
   if (!filtered.length) {
@@ -1196,7 +1211,9 @@ function renderLibList(q) {
 
   libList.querySelectorAll('.lib-row').forEach(row => {
     row.addEventListener('click', () => {
-      if (buildMode) {
+      if (buildMode && insertBetweenActive) {
+        doInsertBetween(row.dataset.abbr);
+      } else if (buildMode) {
         if (!cabilnInput.value.trim()) {
           // No sequence yet — insert as first monomer
           cabilnInput.value = row.dataset.abbr;
@@ -1323,6 +1340,7 @@ function hidePreview() {
 
 // ─── residue chips + bidirectional highlighting ───────────────────────────────
 let chainData = [];
+let currentBranchSet = new Set();
 let xlinkByRes = {};
 
 function highlightGroup(idxList) {
@@ -1475,6 +1493,7 @@ function buildResidueUI(resMap, residues, chains, cabiln, bracketGroups, crossli
   });
   const branchSet = new Set();
   groups.forEach(g => g.members.forEach(m => branchSet.add(m)));
+  currentBranchSet = new Set(branchSet);
 
   function appendResidueWithBrackets(rIdx) {
     if (branchSet.has(rIdx)) return;
@@ -1501,6 +1520,7 @@ function buildResidueUI(resMap, residues, chains, cabiln, bracketGroups, crossli
         members.forEach(mIdx => {
           const mc = makeChip(mIdx);
           if (mc) resChips.appendChild(mc);
+          appendXlinks(mIdx);
         });
         resChips.appendChild(makeSeparator(brk[1], members));
       });
@@ -1550,6 +1570,7 @@ function buildResidueUI(resMap, residues, chains, cabiln, bracketGroups, crossli
             members.forEach(mIdx => {
               const mc = makeChip(mIdx);
               if (mc) resChips.appendChild(mc);
+              appendXlinks(mIdx);
             });
             resChips.appendChild(makeSeparator(brk[1], members));
           });
@@ -1784,6 +1805,9 @@ function closeBuild() {
 }
 function clearBuild() {
   buildLeft = null; buildRight = null; buildLeftRIdx = null; buildRightRIdx = null;
+  insertBetweenActive = false;
+  buildInsertRow.style.display = 'none';
+  buildInsertBtn.textContent = '⊕ Insert Between';
   buildLeftAbbr.textContent = '—';
   buildLeftSvg.innerHTML = '<div class="box-placeholder">Click a chip above</div>';
   buildLeftRg.innerHTML = '';
@@ -1804,6 +1828,89 @@ function clearBuild() {
 
 btnBuild.addEventListener('click', () => buildMode ? closeBuild() : openBuild());
 buildClose.addEventListener('click', closeBuild);
+
+function checkAdjacentMainChain() {
+  if (buildLeftRIdx == null || buildRightRIdx == null) return false;
+  if (buildLeftRIdx === buildRightRIdx) return false;
+  const main = chainData.length ? chainData[0].residues : [];
+  if (!main.includes(buildLeftRIdx) || !main.includes(buildRightRIdx)) return false;
+  if (currentBranchSet.has(buildLeftRIdx) || currentBranchSet.has(buildRightRIdx)) return false;
+  const posL = main.indexOf(buildLeftRIdx);
+  const posR = main.indexOf(buildRightRIdx);
+  return Math.abs(posL - posR) === 1;
+}
+
+function updateInsertBetweenUI() {
+  if (buildMode && checkAdjacentMainChain()) {
+    const la = (residueList.find(r => r.idx === buildLeftRIdx) || {}).abbr || '?';
+    const ra = (residueList.find(r => r.idx === buildRightRIdx) || {}).abbr || '?';
+    buildInsertInfo.textContent = `${la} and ${ra} are adjacent on the backbone`;
+    buildInsertRow.style.display = 'flex';
+  } else {
+    buildInsertRow.style.display = 'none';
+    if (insertBetweenActive) {
+      insertBetweenActive = false;
+      buildInsertBtn.textContent = '⊕ Insert Between';
+      if (libLoaded) renderLibList(libSearch.value.trim().toLowerCase());
+    }
+  }
+}
+
+buildInsertBtn.addEventListener('click', () => {
+  if (insertBetweenActive) {
+    insertBetweenActive = false;
+    buildInsertBtn.textContent = '⊕ Insert Between';
+    buildHint.textContent = 'Select a chip on the sequence, then right-click a monomer in the library';
+    if (libLoaded) renderLibList(libSearch.value.trim().toLowerCase());
+    return;
+  }
+  if (!checkAdjacentMainChain()) return;
+  insertBetweenActive = true;
+  buildInsertBtn.textContent = '✕ Cancel';
+  buildHint.textContent = 'Click a backbone monomer in the library to insert between the selected residues';
+  if (!libPanel.classList.contains('open')) openLib();
+  if (libLoaded) renderLibList(libSearch.value.trim().toLowerCase());
+});
+
+async function doInsertBetween(abbr) {
+  const main = chainData.length ? chainData[0].residues : [];
+  const posL = main.indexOf(buildLeftRIdx);
+  const posR = main.indexOf(buildRightRIdx);
+  const after_idx = posL < posR ? buildLeftRIdx : buildRightRIdx;
+  const val = cabilnInput.value.trim();
+  buildHint.textContent = 'Inserting…';
+  try {
+    const res = await fetch('/insert_backbone', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ cabiln: val, after_idx, new_abbr: abbr })
+    });
+    const data = await res.json();
+    if (data.error) {
+      buildHint.textContent = 'Insert failed: ' + data.error;
+      return;
+    }
+    cabilnInput.value = data.result;
+    cabilnInput.dispatchEvent(new Event('input'));
+    // Reset build state for next operation
+    buildLeft = null; buildRight = null; buildLeftRIdx = null; buildRightRIdx = null;
+    insertBetweenActive = false;
+    buildInsertRow.style.display = 'none';
+    buildInsertBtn.textContent = '⊕ Insert Between';
+    buildLeftAbbr.textContent = '—';
+    buildLeftSvg.innerHTML = '<div class="box-placeholder">Click a chip above</div>';
+    buildLeftRg.innerHTML = '';
+    buildRightAbbr.textContent = '—';
+    buildRightSvg.innerHTML = '<div class="box-placeholder">Right-click from library</div>';
+    buildRightRg.innerHTML = '';
+    buildConnect.disabled = true;
+    buildHint.textContent = `${abbr} inserted — select chips to continue building`;
+    resChips.querySelectorAll('.res-chip').forEach(c => c.style.outline = '');
+    if (libLoaded) renderLibList(libSearch.value.trim().toLowerCase());
+  } catch (e) {
+    buildHint.textContent = 'Insert failed';
+  }
+}
 document.getElementById('build-left-change').addEventListener('click', clearBuild);
 document.getElementById('build-right-change').addEventListener('click', clearBuild);
 
@@ -1829,6 +1936,7 @@ async function loadBuildLeft(abbr, rIdx) {
     buildHint.textContent = buildRight ? 'Select R-groups to connect' : 'Now right-click a monomer in the library';
     btnRxnFilter.disabled = false;
     if (rxnFilterActive && libLoaded) renderLibList(libSearch.value.trim().toLowerCase());
+    updateInsertBetweenUI();
   } catch (e) {
     buildLeftSvg.innerHTML = '<div class="box-placeholder">Error loading monomer</div>';
   }
@@ -1858,6 +1966,7 @@ async function loadBuildRight(abbr, rIdx) {
     buildRight = { abbr, rgroups: data.rgroups || [], selectedSlot: null };
     renderRgroupButtons(buildRightRg, buildRight, 'right');
     buildHint.textContent = 'Select R-groups to connect';
+    updateInsertBetweenUI();
   } catch (e) {
     buildRightSvg.innerHTML = '<div class="box-placeholder">Error loading monomer</div>';
   }
@@ -2073,8 +2182,10 @@ function resetCabiln() {
 }
 
 async function doRenderCabiln(seq) {
+  const _seqChanged = seq !== lastCabiln;
   lastCabiln = seq;
-  if (buildMode) clearBuild();
+  if (buildMode && _seqChanged) clearBuild();
+  resChips.innerHTML = '';
   const { w, h } = canvasSize(renderCanvas);
   try {
     const res  = await fetch('/render', {
@@ -2659,11 +2770,9 @@ def _draw_mol(romol, width: int, height: int, used_slots: set | None = None, see
         rdDepictor.SetPreferCoordGen(True)
         rdDepictor.Compute2DCoords(romol)
     elif seed % 2 == 1:
-        # Odd clicks: Indigo layout (falls back to CoordGen reorder if unavailable)
         if _indigo_layout(romol) is None:
             romol = _best_layout(romol, base_seed=seed * 6)
     else:
-        # Even clicks: CoordGen best-of-6 atom reorderings
         romol = _best_layout(romol, base_seed=seed * 6)
     rdDepictor.NormalizeDepiction(romol)
     rdDepictor.StraightenDepiction(romol)
@@ -3529,6 +3638,55 @@ async def insert_bond(req: _InsertBondReq):
             tokens[-1] = tokens[-1] + bracket
 
         return {"result": '-'.join(tokens)}
+
+    except Exception as exc:
+        return JSONResponse({"error": str(exc).split('\n')[0]}, status_code=500)
+
+
+class _InsertBackboneReq(BaseModel):
+    cabiln: str
+    after_idx: int
+    new_abbr: str
+
+@app.post("/insert_backbone")
+async def insert_backbone(req: _InsertBackboneReq):
+    """Insert new_abbr into the main chain immediately after the residue at global index after_idx."""
+    def _tok_split(s):
+        toks, depth, cur = [], 0, ''
+        for ch in s:
+            if ch in '[{': depth += 1
+            elif ch in ']}': depth -= 1
+            if ch == '-' and depth == 0:
+                toks.append(cur); cur = ''
+            else:
+                cur += ch
+        if cur: toks.append(cur)
+        return toks
+
+    try:
+        cabiln = req.cabiln.strip()
+        if not cabiln:
+            return {"result": req.new_abbr}
+
+        from pyPept.sequence import Sequence
+        seq = Sequence(cabiln)
+        chain_ids = seq.s_chains.get('s_monomerIDs', [])
+        if not chain_ids:
+            return {"error": "No chains found"}
+
+        main_chain = chain_ids[0]
+        if req.after_idx not in main_chain:
+            return {"error": f"Residue {req.after_idx} is not in the main chain"}
+        pos = main_chain.index(req.after_idx)
+
+        # Split branch suffix (% notation) so we only modify the main chain
+        pct = cabiln.find('%')
+        main_str = cabiln[:pct] if pct >= 0 else cabiln
+        suffix   = cabiln[pct:] if pct >= 0 else ''
+
+        toks = _tok_split(main_str)
+        toks.insert(pos + 1, req.new_abbr)
+        return {"result": '-'.join(toks) + suffix}
 
     except Exception as exc:
         return JSONResponse({"error": str(exc).split('\n')[0]}, status_code=500)
