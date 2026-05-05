@@ -2554,53 +2554,6 @@ def _indigo_layout(romol):
         return None
 
 
-# Cached flag: None = not yet checked, True/False = availability
-_rdmoldraw2d_available: bool | None = None
-
-def _get_rdmoldraw2d():
-    global _rdmoldraw2d_available
-    if _rdmoldraw2d_available is None:
-        try:
-            from rdkit.Chem.Draw import rdMolDraw2D  # noqa: F401
-            _rdmoldraw2d_available = True
-        except (ImportError, OSError):
-            _rdmoldraw2d_available = False
-    return _rdmoldraw2d_available
-
-
-def _indigo_render_svg(romol, width: int, height: int) -> str:
-    """SVG via Indigo renderer — no system X11/Cairo required (Vercel fallback)."""
-    from rdkit import Chem
-    from rdkit.Chem import rdDepictor
-    try:
-        from indigo import Indigo as _Indigo
-        from indigo.renderer import IndigoRenderer as _Renderer
-    except ImportError:
-        return (
-            f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}">'
-            f'<text x="10" y="30" fill="red" font-size="14">Indigo not installed</text></svg>'
-        )
-    tmp = Chem.RWMol(romol)
-    if tmp.GetNumConformers() == 0:
-        rdDepictor.SetPreferCoordGen(True)
-        rdDepictor.Compute2DCoords(tmp)
-    mol_block = Chem.MolToMolBlock(tmp)
-    try:
-        ind = _Indigo()
-        ind.setOption("ignore-stereochemistry-errors", True)
-        ind.setOption("render-output-format", "svg")
-        ind.setOption("render-image-width", width)
-        ind.setOption("render-image-height", height)
-        im = ind.loadMolecule(mol_block)
-        rend = _Renderer(ind)
-        return rend.renderToBuffer(im).decode("utf-8", errors="replace")
-    except Exception as exc:
-        return (
-            f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}">'
-            f'<text x="10" y="30" fill="red" font-size="14">Render error: {exc}</text></svg>'
-        )
-
-
 def _overlap_score(romol) -> int:
     """Count non-bonded atom pairs closer than 0.8 Å — lower is better."""
     conf = romol.GetConformer()
@@ -2684,20 +2637,6 @@ def _best_layout(romol, base_seed: int, n_tries: int = 6):
 def _draw_mol(romol, width: int, height: int, used_slots: set | None = None, seed: int = 0) -> str:
     import re as _re
     from rdkit.Chem import rdDepictor
-
-    if not _get_rdmoldraw2d():
-        # Vercel / environments without system X11: use Indigo SVG renderer
-        if seed == 0:
-            rdDepictor.SetPreferCoordGen(True)
-            rdDepictor.Compute2DCoords(romol)
-        elif seed % 2 == 1:
-            _indigo_layout(romol)
-        else:
-            romol = _best_layout(romol, base_seed=seed * 6)
-        rdDepictor.NormalizeDepiction(romol)
-        rdDepictor.StraightenDepiction(romol)
-        return _indigo_render_svg(romol, width, height)
-
     from rdkit.Chem.Draw import rdMolDraw2D
     if seed == 0:
         rdDepictor.SetPreferCoordGen(True)

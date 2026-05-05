@@ -1,0 +1,1001 @@
+abbr,m_type,m_subtype,issues
+G,aa,natural,MISSING m_Rgroups or m_chem_types
+A,aa,natural,MISSING m_Rgroups or m_chem_types
+V,aa,natural,MISSING m_Rgroups or m_chem_types
+L,aa,natural,MISSING m_Rgroups or m_chem_types
+I,aa,natural,MISSING m_Rgroups or m_chem_types
+P,aa,natural,MISSING m_Rgroups or m_chem_types
+F,aa,natural,MISSING m_Rgroups or m_chem_types
+W,aa,natural,MISSING m_Rgroups or m_chem_types
+M,aa,natural,MISSING m_Rgroups or m_chem_types
+S,aa,natural,MISSING m_Rgroups or m_chem_types
+T,aa,natural,MISSING m_Rgroups or m_chem_types
+C,aa,natural,MISSING m_Rgroups or m_chem_types
+Y,aa,natural,MISSING m_Rgroups or m_chem_types
+H,aa,natural,MISSING m_Rgroups or m_chem_types
+D,aa,natural,MISSING m_Rgroups or m_chem_types
+E,aa,natural,MISSING m_Rgroups or m_chem_types
+N,aa,natural,MISSING m_Rgroups or m_chem_types
+Q,aa,natural,MISSING m_Rgroups or m_chem_types
+K,aa,natural,MISSING m_Rgroups or m_chem_types
+R,aa,natural,MISSING m_Rgroups or m_chem_types
+DAla,aa,natural,MISSING m_Rgroups or m_chem_types
+DVal,aa,natural,MISSING m_Rgroups or m_chem_types
+DLeu,aa,natural,MISSING m_Rgroups or m_chem_types
+DIle,aa,natural,MISSING m_Rgroups or m_chem_types
+DPhe,aa,natural,MISSING m_Rgroups or m_chem_types
+DTrp,aa,natural,MISSING m_Rgroups or m_chem_types
+DSer,aa,natural,MISSING m_Rgroups or m_chem_types
+DThr,aa,natural,MISSING m_Rgroups or m_chem_types
+DCys,aa,natural,MISSING m_Rgroups or m_chem_types
+DTyr,aa,natural,MISSING m_Rgroups or m_chem_types
+DHis,aa,natural,MISSING m_Rgroups or m_chem_types
+DAsp,aa,natural,MISSING m_Rgroups or m_chem_types
+DGlu,aa,natural,MISSING m_Rgroups or m_chem_types
+DAsn,aa,natural,MISSING m_Rgroups or m_chem_types
+DGln,aa,natural,MISSING m_Rgroups or m_chem_types
+DLys,aa,natural,MISSING m_Rgroups or m_chem_types
+DArg,aa,natural,MISSING m_Rgroups or m_chem_types
+Aib,aa,natural,MISSING m_Rgroups or m_chem_types
+Orn,aa,natural,MISSING m_Rgroups or m_chem_types
+Hyp,aa,natural,MISSING m_Rgroups or m_chem_types
+Nle,aa,natural,MISSING m_Rgroups or m_chem_types
+Nva,aa,natural,MISSING m_Rgroups or m_chem_types
+Sec,aa,natural,MISSING m_Rgroups or m_chem_types
+ac,cap,cap,MISSING m_Rgroups or m_chem_types
+am,cap,cap,MISSING m_Rgroups or m_chem_types
+fmoc,cap,cap,MISSING m_Rgroups or m_chem_types
+boc,cap,cap,MISSING m_Rgroups or m_chem_types
+tbu,cap,cap,MISSING m_Rgroups or m_chem_types
+otbu,cap,cap,MISSING m_Rgroups or m_chem_types
+trt,cap,cap,MISSING m_Rgroups or m_chem_types
+acm,cap,cap,MISSING m_Rgroups or m_chem_types
+pbf,cap,cap,MISSING m_Rgroups or m_chem_types
+dA,aa,natural,MISSING m_Rgroups or m_chem_types
+dC,aa,natural,MISSING m_Rgroups or m_chem_types
+dD,aa,natural,MISSING m_Rgroups or m_chem_types
+dE,aa,natural,MISSING m_Rgroups or m_chem_types
+dF,aa,natural,MISSING m_Rgroups or m_chem_types
+dH,aa,natural,MISSING m_Rgroups or m_chem_types
+dI,aa,natural,MISSING m_Rgroups or m_chem_types
+dK,aa,natural,MISSING m_Rgroups or m_chem_types
+dL,aa,natural,MISSING m_Rgroups or m_chem_types
+dM,aa,natural,MISSING m_Rgroups or m_chem_types
+dN,aa,natural,MISSING m_Rgroups or m_chem_types
+dP,aa,natural,MISSING m_Rgroups or m_chem_types
+dQ,aa,natural,MISSING m_Rgroups or m_chem_types
+dR,aa,natural,MISSING m_Rgroups or m_chem_types
+dS,aa,natural,MISSING m_Rgroups or m_chem_types
+dT,aa,natural,MISSING m_Rgroups or m_chem_types
+dV,aa,natural,MISSING m_Rgroups or m_chem_types
+dW,aa,natural,MISSING m_Rgroups or m_chem_types
+dY,aa,natural,MISSING m_Rgroups or m_chem_types
+_Me,cap,cap,MISSING m_Rgroups or m_chem_types
+Iva,aa,natural,MISSING m_Rgroups or m_chem_types
+aIle,aa,natural,MISSING m_Rgroups or m_chem_types
+gGlu,aa,natural,MISSING m_Rgroups or m_chem_types
+Hcy,aa,natural,MISSING m_Rgroups or m_chem_types
+Hse,aa,natural,MISSING m_Rgroups or m_chem_types
+D_gGlu,aa,natural,MISSING m_Rgroups or m_chem_types
+D_Nle,aa,natural,MISSING m_Rgroups or m_chem_types
+D_hPhe,aa,natural,MISSING m_Rgroups or m_chem_types
+D_Hyp,aa,natural,MISSING m_Rgroups or m_chem_types
+D_Nva,aa,natural,MISSING m_Rgroups or m_chem_types
+D_Orn,aa,natural,MISSING m_Rgroups or m_chem_types
+Pyr,aa,natural,MISSING m_Rgroups or m_chem_types
+D_Pyr,aa,natural,MISSING m_Rgroups or m_chem_types
+Phe_3Cl,aa,natural,MISSING m_Rgroups or m_chem_types
+Phe_4Cl,aa,natural,MISSING m_Rgroups or m_chem_types
+Phe_4NH2,aa,natural,MISSING m_Rgroups or m_chem_types
+Phg,aa,natural,MISSING m_Rgroups or m_chem_types
+Ser_tBu,aa,natural,MISSING m_Rgroups or m_chem_types
+Tyr_Bn,aa,natural,MISSING m_Rgroups or m_chem_types
+Tza,aa,natural,MISSING m_Rgroups or m_chem_types
+1Nal,aa,natural,MISSING m_Rgroups or m_chem_types
+Cha,aa,natural,MISSING m_Rgroups or m_chem_types
+Lys_Boc,aa,natural,MISSING m_Rgroups or m_chem_types
+aThr,aa,natural,MISSING m_Rgroups or m_chem_types
+D_2Nal,aa,natural,MISSING m_Rgroups or m_chem_types
+D_2Thi,aa,natural,MISSING m_Rgroups or m_chem_types
+D_aHyp,aa,natural,MISSING m_Rgroups or m_chem_types
+D_aIle,aa,natural,MISSING m_Rgroups or m_chem_types
+D_Phg,aa,natural,MISSING m_Rgroups or m_chem_types
+D_Ser_tBu,aa,natural,MISSING m_Rgroups or m_chem_types
+Cya,aa,natural,MISSING m_Rgroups or m_chem_types
+Lys_Me3,aa,natural,MISSING m_Rgroups or m_chem_types
+Pen,aa,natural,MISSING m_Rgroups or m_chem_types
+Phe_4Me,aa,natural,MISSING m_Rgroups or m_chem_types
+Ser_Bn,aa,natural,MISSING m_Rgroups or m_chem_types
+Tyr_tBu,aa,natural,MISSING m_Rgroups or m_chem_types
+2Nal,aa,natural,MISSING m_Rgroups or m_chem_types
+Thi,aa,natural,MISSING m_Rgroups or m_chem_types
+aHyp,aa,natural,MISSING m_Rgroups or m_chem_types
+Ala_tBu,aa,natural,MISSING m_Rgroups or m_chem_types
+hPhe,aa,natural,MISSING m_Rgroups or m_chem_types
+D_1Nal,aa,natural,MISSING m_Rgroups or m_chem_types
+D_aThr,aa,natural,MISSING m_Rgroups or m_chem_types
+D_Cha,aa,natural,MISSING m_Rgroups or m_chem_types
+D_Pen,aa,natural,MISSING m_Rgroups or m_chem_types
+D_Phe_4Cl,aa,natural,MISSING m_Rgroups or m_chem_types
+D_Ser_Bn,aa,natural,MISSING m_Rgroups or m_chem_types
+Wil,aa,natural,MISSING m_Rgroups or m_chem_types
+MsO,cap,cap,MISSING m_Rgroups or m_chem_types
+Oic_3aS_7aS,aa,natural,MISSING m_Rgroups or m_chem_types
+Pip,aa,natural,MISSING m_Rgroups or m_chem_types
+3Pal,aa,natural,MISSING m_Rgroups or m_chem_types
+4Pal,aa,natural,MISSING m_Rgroups or m_chem_types
+Abu,aa,natural,MISSING m_Rgroups or m_chem_types
+Apm,aa,natural,MISSING m_Rgroups or m_chem_types
+Chg,aa,natural,MISSING m_Rgroups or m_chem_types
+Dab,aa,natural,MISSING m_Rgroups or m_chem_types
+Dap,aa,natural,MISSING m_Rgroups or m_chem_types
+D_3Pal,aa,natural,MISSING m_Rgroups or m_chem_types
+D_aMeAbu,aa,natural,MISSING m_Rgroups or m_chem_types
+D_Chg,aa,natural,MISSING m_Rgroups or m_chem_types
+D_Cit,aa,natural,MISSING m_Rgroups or m_chem_types
+D_Dab,aa,natural,MISSING m_Rgroups or m_chem_types
+D_Pip,aa,natural,MISSING m_Rgroups or m_chem_types
+D_Tic,aa,natural,MISSING m_Rgroups or m_chem_types
+Aca,aa,natural,MISSING m_Rgroups or m_chem_types
+Tic,aa,natural,MISSING m_Rgroups or m_chem_types
+Aad,aa,natural,MISSING m_Rgroups or m_chem_types
+Cit,aa,natural,MISSING m_Rgroups or m_chem_types
+Aze,aa,natural,MISSING m_Rgroups or m_chem_types
+Ac5c,aa,natural,MISSING m_Rgroups or m_chem_types
+D_2Pal,aa,natural,MISSING m_Rgroups or m_chem_types
+D_Abu,aa,natural,MISSING m_Rgroups or m_chem_types
+D_Dap,aa,natural,MISSING m_Rgroups or m_chem_types
+Asu,aa,natural,MISSING m_Rgroups or m_chem_types
+Cbz,cap,cap,MISSING m_Rgroups or m_chem_types
+_Et,cap,cap,MISSING m_Rgroups or m_chem_types
+NHEt,cap,cap,MISSING m_Rgroups or m_chem_types
+OEt,cap,cap,MISSING m_Rgroups or m_chem_types
+_OMe,cap,cap,MISSING m_Rgroups or m_chem_types
+OtBu,cap,cap,MISSING m_Rgroups or m_chem_types
+Tos,cap,cap,MISSING m_Rgroups or m_chem_types
+D_Thz,aa,natural,MISSING m_Rgroups or m_chem_types
+Mpa,cap,cap,MISSING m_Rgroups or m_chem_types
+Bua,cap,cap,MISSING m_Rgroups or m_chem_types
+Glc,cap,cap,MISSING m_Rgroups or m_chem_types
+deamino_Cys,cap,cap,MISSING m_Rgroups or m_chem_types
+deamino_Dab,cap,cap,MISSING m_Rgroups or m_chem_types
+deamino_Gly_CN,cap,cap,MISSING m_Rgroups or m_chem_types
+deamino_Gly_cPent,cap,cap,MISSING m_Rgroups or m_chem_types
+deamino_Gly_OH,cap,cap,MISSING m_Rgroups or m_chem_types
+deamino_Gly_thien2yl,cap,cap,MISSING m_Rgroups or m_chem_types
+D_Trp_For,aa,natural,MISSING m_Rgroups or m_chem_types
+deamino_Ncy,cap,cap,MISSING m_Rgroups or m_chem_types
+deamino_Phe,cap,cap,MISSING m_Rgroups or m_chem_types
+deamino_Phg_35diMe,cap,cap,MISSING m_Rgroups or m_chem_types
+deamino_Leu,cap,cap,MISSING m_Rgroups or m_chem_types
+D_OAla,cap,cap,MISSING m_Rgroups or m_chem_types
+L_OAla,cap,cap,MISSING m_Rgroups or m_chem_types
+L_OVal,cap,cap,MISSING m_Rgroups or m_chem_types
+NHBn_,cap,cap,MISSING m_Rgroups or m_chem_types
+Bz,cap,cap,MISSING m_Rgroups or m_chem_types
+Et_,cap,cap,MISSING m_Rgroups or m_chem_types
+Me_,cap,cap,MISSING m_Rgroups or m_chem_types
+D_Tyr_Et,aa,natural,MISSING m_Rgroups or m_chem_types
+Lys_Ac,aa,natural,MISSING m_Rgroups or m_chem_types
+OMe_,cap,cap,MISSING m_Rgroups or m_chem_types
+Asp_OMe,aa,natural,MISSING m_Rgroups or m_chem_types
+Sta_3xi4xi,aa,natural,MISSING m_Rgroups or m_chem_types
+Tyr_ab_dehydroMe,aa,natural,MISSING m_Rgroups or m_chem_types
+App,aa,natural,MISSING m_Rgroups or m_chem_types
+Cap,aa,natural,MISSING m_Rgroups or m_chem_types
+Cys_SEt,aa,natural,MISSING m_Rgroups or m_chem_types
+Dsu,aa,natural,MISSING m_Rgroups or m_chem_types
+Pro_4Me3OH,aa,natural,MISSING m_Rgroups or m_chem_types
+Asp_al,aa,natural,MISSING m_Rgroups or m_chem_types
+_NHBn,cap,cap,MISSING m_Rgroups or m_chem_types
+NHMe,cap,cap,MISSING m_Rgroups or m_chem_types
+Met_O2,aa,natural,MISSING m_Rgroups or m_chem_types
+Phe_2Me,aa,natural,MISSING m_Rgroups or m_chem_types
+Phe_34diCl,aa,natural,MISSING m_Rgroups or m_chem_types
+Phe_4Br,aa,natural,MISSING m_Rgroups or m_chem_types
+Phe_4I,aa,natural,MISSING m_Rgroups or m_chem_types
+Phe_4Sdihydroorotamido,aa,natural,MISSING m_Rgroups or m_chem_types
+Pyl,aa,natural,MISSING m_Rgroups or m_chem_types
+Ser_PO3H2,aa,natural,MISSING m_Rgroups or m_chem_types
+Thr_PO3H2,aa,natural,MISSING m_Rgroups or m_chem_types
+Thz,aa,natural,MISSING m_Rgroups or m_chem_types
+Trp_Me,aa,natural,MISSING m_Rgroups or m_chem_types
+Tyr_26diMe,aa,natural,MISSING m_Rgroups or m_chem_types
+Tyr_3I,aa,natural,MISSING m_Rgroups or m_chem_types
+Tyr_3NO2,aa,natural,MISSING m_Rgroups or m_chem_types
+Tyr_Ph4OH,aa,natural,MISSING m_Rgroups or m_chem_types
+Tyr_SO3H,aa,natural,MISSING m_Rgroups or m_chem_types
+Val_3OH,aa,natural,MISSING m_Rgroups or m_chem_types
+xiIle,aa,natural,MISSING m_Rgroups or m_chem_types
+aMePhe,aa,natural,MISSING m_Rgroups or m_chem_types
+aMePro,aa,natural,MISSING m_Rgroups or m_chem_types
+aMeTyr_3OH,aa,natural,MISSING m_Rgroups or m_chem_types
+Bmt,aa,natural,MISSING m_Rgroups or m_chem_types
+Bmt_E,aa,natural,MISSING m_Rgroups or m_chem_types
+Cys_Bn,aa,natural,MISSING m_Rgroups or m_chem_types
+Gla,aa,natural,MISSING m_Rgroups or m_chem_types
+hHis,aa,natural,MISSING m_Rgroups or m_chem_types
+His_1Me,aa,natural,MISSING m_Rgroups or m_chem_types
+Gly_allyl,aa,natural,MISSING m_Rgroups or m_chem_types
+Gly_cPr,aa,natural,MISSING m_Rgroups or m_chem_types
+Asp_Ph2NH2,aa,natural,MISSING m_Rgroups or m_chem_types
+Azi,aa,natural,MISSING m_Rgroups or m_chem_types
+2Abz,aa,natural,MISSING m_Rgroups or m_chem_types
+3Abz,aa,natural,MISSING m_Rgroups or m_chem_types
+4Abz,aa,natural,MISSING m_Rgroups or m_chem_types
+Ac3c,aa,natural,MISSING m_Rgroups or m_chem_types
+Ac6c,aa,natural,MISSING m_Rgroups or m_chem_types
+bAla,aa,natural,MISSING m_Rgroups or m_chem_types
+D_Bmt,aa,natural,MISSING m_Rgroups or m_chem_types
+D_Bmt_E,aa,natural,MISSING m_Rgroups or m_chem_types
+D_hArg,aa,natural,MISSING m_Rgroups or m_chem_types
+D_Phe_4F,aa,natural,MISSING m_Rgroups or m_chem_types
+D_Trp_2Me,aa,natural,MISSING m_Rgroups or m_chem_types
+D_Tyr_3OH,aa,natural,MISSING m_Rgroups or m_chem_types
+D_Tyr_Me,aa,natural,MISSING m_Rgroups or m_chem_types
+D_xiIle,aa,natural,MISSING m_Rgroups or m_chem_types
+Lys_iPr,aa,natural,MISSING m_Rgroups or m_chem_types
+_Bn,cap,cap,MISSING m_Rgroups or m_chem_types
+_OBn,cap,cap,MISSING m_Rgroups or m_chem_types
+Ph,cap,cap,MISSING m_Rgroups or m_chem_types
+Boc,cap,cap,MISSING m_Rgroups or m_chem_types
+Mba,cap,cap,MISSING m_Rgroups or m_chem_types
+Hva,cap,cap,MISSING m_Rgroups or m_chem_types
+deamino_Chg,cap,cap,MISSING m_Rgroups or m_chem_types
+deamino_Dip,cap,cap,MISSING m_Rgroups or m_chem_types
+deamino_Gly_tBu,cap,cap,MISSING m_Rgroups or m_chem_types
+deamino_hPhe,cap,cap,MISSING m_Rgroups or m_chem_types
+deamino_nTyr_Me,cap,cap,MISSING m_Rgroups or m_chem_types
+deamino_Phg_4Cl,cap,cap,MISSING m_Rgroups or m_chem_types
+D_OVal,cap,cap,MISSING m_Rgroups or m_chem_types
+OLeu,cap,cap,MISSING m_Rgroups or m_chem_types
+Bn_,cap,cap,MISSING m_Rgroups or m_chem_types
+OBn_,cap,cap,MISSING m_Rgroups or m_chem_types
+deamino_Lys,cap,cap,MISSING m_Rgroups or m_chem_types
+Phe_ab_dehydro_3NO2,aa,natural,MISSING m_Rgroups or m_chem_types
+Sta_3S4S,aa,natural,MISSING m_Rgroups or m_chem_types
+Bux,aa,natural,MISSING m_Rgroups or m_chem_types
+Dpm,aa,natural,MISSING m_Rgroups or m_chem_types
+seC,aa,natural,MISSING m_Rgroups or m_chem_types
+"L_hArg(Et,Et)",aa,natural,MISSING m_Rgroups or m_chem_types
+Met_O,aa,natural,MISSING m_Rgroups or m_chem_types
+nTyr,aa,natural,MISSING m_Rgroups or m_chem_types
+Oic_3aR_7aS,aa,natural,MISSING m_Rgroups or m_chem_types
+Oic_3axi_7axi,aa,natural,MISSING m_Rgroups or m_chem_types
+Phe_2F,aa,natural,MISSING m_Rgroups or m_chem_types
+Phe_3F,aa,natural,MISSING m_Rgroups or m_chem_types
+Phe_4F,aa,natural,MISSING m_Rgroups or m_chem_types
+Phe_4NO2,aa,natural,MISSING m_Rgroups or m_chem_types
+Phe_bbdiMe,aa,natural,MISSING m_Rgroups or m_chem_types
+Trp_5OH,aa,natural,MISSING m_Rgroups or m_chem_types
+Trp_Ome,aa,natural,MISSING m_Rgroups or m_chem_types
+Tyr_35diI,aa,natural,MISSING m_Rgroups or m_chem_types
+Tyr_3OH,aa,natural,MISSING m_Rgroups or m_chem_types
+Tyr_Me,aa,natural,MISSING m_Rgroups or m_chem_types
+Tyr_PO3H2,aa,natural,MISSING m_Rgroups or m_chem_types
+xiHyp,aa,natural,MISSING m_Rgroups or m_chem_types
+xiThr,aa,natural,MISSING m_Rgroups or m_chem_types
+aMeTyr,aa,natural,MISSING m_Rgroups or m_chem_types
+Aoda,aa,natural,MISSING m_Rgroups or m_chem_types
+Bpa,aa,natural,MISSING m_Rgroups or m_chem_types
+Cys_Me,aa,natural,MISSING m_Rgroups or m_chem_types
+Dip,aa,natural,MISSING m_Rgroups or m_chem_types
+hArg,aa,natural,MISSING m_Rgroups or m_chem_types
+His_1Bn,aa,natural,MISSING m_Rgroups or m_chem_types
+His_3Me,aa,natural,MISSING m_Rgroups or m_chem_types
+Hyl_5xi,aa,natural,MISSING m_Rgroups or m_chem_types
+Bip,aa,natural,MISSING m_Rgroups or m_chem_types
+D_Dip,aa,natural,MISSING m_Rgroups or m_chem_types
+D_hArg_Et2,aa,natural,MISSING m_Rgroups or m_chem_types
+D_Met_S_O,aa,natural,MISSING m_Rgroups or m_chem_types
+D_His_1Bn,aa,natural,MISSING m_Rgroups or m_chem_types
+D_nTyr,aa,natural,MISSING m_Rgroups or m_chem_types
+D_Phe_4ureido,aa,natural,MISSING m_Rgroups or m_chem_types
+meA,aa,natural,MISSING m_Rgroups or m_chem_types
+meG,aa,natural,MISSING m_Rgroups or m_chem_types
+meL,aa,natural,MISSING m_Rgroups or m_chem_types
+meI,aa,natural,MISSING m_Rgroups or m_chem_types
+meV,aa,natural,MISSING m_Rgroups or m_chem_types
+meF,aa,natural,MISSING m_Rgroups or m_chem_types
+meW,aa,natural,MISSING m_Rgroups or m_chem_types
+meS,aa,natural,MISSING m_Rgroups or m_chem_types
+meT,aa,natural,MISSING m_Rgroups or m_chem_types
+meC,aa,natural,MISSING m_Rgroups or m_chem_types
+meY,aa,natural,MISSING m_Rgroups or m_chem_types
+meH,aa,natural,MISSING m_Rgroups or m_chem_types
+meD,aa,natural,MISSING m_Rgroups or m_chem_types
+meE,aa,natural,MISSING m_Rgroups or m_chem_types
+meN,aa,natural,MISSING m_Rgroups or m_chem_types
+meQ,aa,natural,MISSING m_Rgroups or m_chem_types
+meK,aa,natural,MISSING m_Rgroups or m_chem_types
+meR,aa,natural,MISSING m_Rgroups or m_chem_types
+meM,aa,natural,MISSING m_Rgroups or m_chem_types
+Aib_ol,aa,natural,MISSING m_Rgroups or m_chem_types
+Ala_ol,aa,natural,MISSING m_Rgroups or m_chem_types
+D_Phg_ol,aa,natural,MISSING m_Rgroups or m_chem_types
+D_Pro_ol,aa,natural,MISSING m_Rgroups or m_chem_types
+D_Thr_ol,aa,natural,MISSING m_Rgroups or m_chem_types
+Gly_ol,aa,natural,MISSING m_Rgroups or m_chem_types
+Hsl,aa,natural,MISSING m_Rgroups or m_chem_types
+Leu_ol,aa,natural,MISSING m_Rgroups or m_chem_types
+Lys_ol,aa,natural,MISSING m_Rgroups or m_chem_types
+Phe_ol,aa,natural,MISSING m_Rgroups or m_chem_types
+Phg_ol,aa,natural,MISSING m_Rgroups or m_chem_types
+Pro_ol,aa,natural,MISSING m_Rgroups or m_chem_types
+Thr_ol,aa,natural,MISSING m_Rgroups or m_chem_types
+Val_ol,aa,natural,MISSING m_Rgroups or m_chem_types
+Ala_al,aa,natural,MISSING m_Rgroups or m_chem_types
+Arg_al,aa,natural,MISSING m_Rgroups or m_chem_types
+Gly_al,aa,natural,MISSING m_Rgroups or m_chem_types
+Leu_al,aa,natural,MISSING m_Rgroups or m_chem_types
+Lys_al,aa,natural,MISSING m_Rgroups or m_chem_types
+Phe_al,aa,natural,MISSING m_Rgroups or m_chem_types
+Pro_al,aa,natural,MISSING m_Rgroups or m_chem_types
+NMe2Abz,aa,natural,MISSING m_Rgroups or m_chem_types
+NMe4Abz,aa,natural,MISSING m_Rgroups or m_chem_types
+NMebAla,aa,natural,MISSING m_Rgroups or m_chem_types
+NMe23Abz,cap,cap,MISSING m_Rgroups or m_chem_types
+NMe24Abz,cap,cap,MISSING m_Rgroups or m_chem_types
+pnA,aa,natural,MISSING m_Rgroups or m_chem_types
+pnC,aa,natural,MISSING m_Rgroups or m_chem_types
+pnG,aa,natural,MISSING m_Rgroups or m_chem_types
+pnT,aa,natural,MISSING m_Rgroups or m_chem_types
+Pqa,aa,natural,MISSING m_Rgroups or m_chem_types
+aMeLeu,aa,natural,MISSING m_Rgroups or m_chem_types
+AEEA,aa,natural,MISSING m_Rgroups or m_chem_types
+C18FA,cap,cap,MISSING m_Rgroups or m_chem_types
+C20FA,cap,cap,MISSING m_Rgroups or m_chem_types
+S5,aa,natural,MISSING m_Rgroups or m_chem_types
+R8,aa,natural,MISSING m_Rgroups or m_chem_types
+AzK,aa,natural,MISSING m_Rgroups or m_chem_types
+pSer,aa,natural,"slot_in_ct_but_no_dummy: [0]; dummy_slot_missing_from_ct: [3]; slot1_ct_mismatch: stored='backbone_c' inferred='backbone_n'; slot2_ct_mismatch: stored='backbone_n_mod' inferred='backbone_c'; no_reaction: backbone pair (backbone_c,backbone_n_mod) not in REACTION_INDEX; slot1_lg_mismatch: stored_lg='[H]' expected_for_backbone_c='[OH]'; slot2_lg_mismatch: stored_lg='[OH]' expected_for_backbone_n_mod='[H]'"
+pThr,aa,natural,"slot_in_ct_but_no_dummy: [0]; dummy_slot_missing_from_ct: [3]; slot1_ct_mismatch: stored='backbone_c' inferred='backbone_n'; slot2_ct_mismatch: stored='backbone_n_mod' inferred='backbone_c'; no_reaction: backbone pair (backbone_c,backbone_n_mod) not in REACTION_INDEX; slot1_lg_mismatch: stored_lg='[H]' expected_for_backbone_c='[OH]'; slot2_lg_mismatch: stored_lg='[OH]' expected_for_backbone_n_mod='[H]'"
+pTyr,aa,natural,"slot_in_ct_but_no_dummy: [0]; dummy_slot_missing_from_ct: [3]; slot1_ct_mismatch: stored='backbone_c' inferred='backbone_n'; slot2_ct_mismatch: stored='backbone_n_mod' inferred='backbone_c'; no_reaction: backbone pair (backbone_c,backbone_n_mod) not in REACTION_INDEX; slot1_lg_mismatch: stored_lg='[H]' expected_for_backbone_c='[OH]'; slot2_lg_mismatch: stored_lg='[OH]' expected_for_backbone_n_mod='[H]'"
+TL3,aa,modified,MISSING m_Rgroups or m_chem_types
+MalAla,aa,modified,ok
+MalLys,aa,modified,ok
+Pra,aa,modified,ok
+Hpg,aa,modified,ok
+AzAla,aa,modified,ok
+AzHal,aa,modified,ok
+TzAla,aa,modified,ok
+TzLys,aa,modified,ok
+TcoAla,aa,modified,ok
+TcoLys,aa,modified,ok
+CyoAla,aa,modified,ok
+CyoLys,aa,modified,ok
+Tz,cap,cap,ok
+TCO,cap,cap,ok
+Mal,cap,cap,ok
+Aoa,aa,modified,ok
+Ald,aa,modified,ok
+Dmb,cap,protecting,ok
+Phe_4CF3,aa,modified,ok
+Phe_4CN,aa,modified,ok
+Phe_4OMe,aa,modified,ok
+Phe_3OMe,aa,modified,ok
+Phe_2OMe,aa,modified,ok
+Phe_2Cl,aa,modified,ok
+Phe_2Br,aa,modified,ok
+Phe_3Br,aa,modified,ok
+Phe_34diF,aa,modified,ok
+Phe_35diF,aa,modified,ok
+Phe_26diF,aa,modified,ok
+Phe_24diF,aa,modified,ok
+Phe_4tBu,aa,modified,ok
+Phe_F5,aa,modified,ok
+Phe_4Ac,aa,modified,ok
+Phe_2NO2,aa,modified,ok
+Phe_3NO2,aa,modified,ok
+Phe_3OH,aa,modified,ok
+hPhe2,aa,modified,ok
+Trp_5F,aa,modified,ok
+Trp_5Me,aa,modified,ok
+Trp_5Br,aa,modified,ok
+Trp_5OMe,aa,modified,ok
+Trp_6F,aa,modified,ok
+Trp_7Aza,aa,modified,ok
+Trp_1Me,aa,modified,ok
+Trp_4F,aa,modified,ok
+hTrp,aa,modified,ok
+Tyr_3F,aa,modified,ok
+Tyr_3Cl,aa,modified,ok
+Tyr_3Br,aa,modified,ok
+Tyr_35diMe,aa,modified,ok
+aMeVal,aa,modified,ok
+aMeTrp,aa,modified,ok
+aMeGlu,aa,modified,slot4_ct_mismatch: stored='carboxyl' inferred='aldehyde'
+aMeAsp,aa,modified,slot4_ct_mismatch: stored='carboxyl' inferred='aldehyde'
+aMeLys,aa,modified,ok
+aMeGln,aa,modified,ok
+aMeAsn,aa,modified,ok
+aMeSer,aa,modified,ok
+aMeCys,aa,modified,slot4_ct_mismatch: stored='thiol' inferred='element_16'
+aMeHis,aa,modified,ok
+aMeIle,aa,modified,ok
+aMeArg,aa,modified,ok
+b3hLeu,aa,modified,ok
+b3hVal,aa,modified,ok
+b3hTyr,aa,modified,ok
+b3hSer,aa,modified,ok
+b3hLys,aa,modified,ok
+b3hGlu,aa,modified,slot4_ct_mismatch: stored='carboxyl' inferred='hydroxyl'
+b3hAsp,aa,modified,slot4_ct_mismatch: stored='carboxyl' inferred='hydroxyl'
+b3hAla,aa,modified,ok
+b3hNle,aa,modified,ok
+Pro_4F_t,aa,modified,ok
+Pro_4F_c,aa,modified,ok
+Ind,aa,modified,ok
+Glu_OMe,aa,modified,ok
+Glu_OtBu,aa,modified,ok
+Glu_OBn,aa,modified,ok
+Asp_OtBu,aa,modified,ok
+Asp_OBn,aa,modified,ok
+GABA,linker,linker,ok
+5Ava,linker,linker,ok
+6Ahx,linker,linker,ok
+7Ahp,linker,linker,ok
+8Ado,linker,linker,ok
+11Aun,linker,linker,ok
+OEG1,linker,linker,ok
+OEG3,linker,linker,ok
+OEG4,linker,linker,ok
+C14dAcid,cap,cap,slot2_ct_mismatch: stored='backbone_c' inferred='hydroxyl'
+C16dAcid,cap,cap,slot2_ct_mismatch: stored='backbone_c' inferred='hydroxyl'
+C22dAcid,cap,cap,slot2_ct_mismatch: stored='backbone_c' inferred='hydroxyl'
+Myr,cap,cap,slot2_ct_mismatch: stored='backbone_c' inferred='hydroxyl'
+Pal,cap,cap,slot2_ct_mismatch: stored='backbone_c' inferred='hydroxyl'
+Ste,cap,cap,slot2_ct_mismatch: stored='backbone_c' inferred='hydroxyl'
+Ole,cap,cap,slot2_ct_mismatch: stored='backbone_c' inferred='hydroxyl'
+C14FA,cap,cap,slot2_ct_mismatch: stored='backbone_c' inferred='hydroxyl'
+C16FA,cap,cap,slot2_ct_mismatch: stored='backbone_c' inferred='hydroxyl'
+C22FA,cap,cap,slot2_ct_mismatch: stored='backbone_c' inferred='hydroxyl'
+DnLys,aa,modified,ok
+NBDLys,aa,modified,ok
+AMCALys,aa,modified,ok
+C343Lys,aa,modified,ok
+FITCLys,aa,modified,ok
+BDPFLLys,aa,modified,ok
+TAMRALys,aa,modified,ok
+Cy3Lys,aa,modified,ok
+D_Phe_4CF3,aa,modified,ok
+D_Phe_4CN,aa,modified,ok
+D_Phe_4OMe,aa,modified,ok
+D_Phe_3OMe,aa,modified,ok
+D_Phe_2OMe,aa,modified,ok
+D_Phe_2Cl,aa,modified,ok
+D_Phe_2Br,aa,modified,ok
+D_Phe_3Br,aa,modified,ok
+D_Phe_34diF,aa,modified,ok
+D_Phe_35diF,aa,modified,ok
+D_Phe_26diF,aa,modified,ok
+D_Phe_24diF,aa,modified,ok
+D_Phe_4tBu,aa,modified,ok
+D_Phe_F5,aa,modified,ok
+D_Phe_4Ac,aa,modified,ok
+D_Phe_2NO2,aa,modified,ok
+D_Phe_3NO2,aa,modified,ok
+D_Phe_3OH,aa,modified,ok
+D_Trp_5F,aa,modified,ok
+D_Trp_5Me,aa,modified,ok
+D_Trp_5Br,aa,modified,ok
+D_Trp_5OMe,aa,modified,ok
+D_Trp_6F,aa,modified,ok
+D_Trp_7Aza,aa,modified,ok
+D_Trp_1Me,aa,modified,ok
+D_Trp_4F,aa,modified,ok
+D_Tyr_3F,aa,modified,ok
+D_Tyr_3Cl,aa,modified,ok
+D_Tyr_3Br,aa,modified,ok
+D_Tyr_35diMe,aa,modified,ok
+D_Pro_4F_t,aa,modified,ok
+D_Pro_4F_c,aa,modified,ok
+D_Ind,aa,modified,ok
+D_Glu_OMe,aa,modified,ok
+D_Glu_OtBu,aa,modified,ok
+D_Glu_OBn,aa,modified,ok
+D_Asp_OtBu,aa,modified,ok
+D_Asp_OBn,aa,modified,ok
+Trp_4OMe,aa,modified,ok
+Trp_5NO2,aa,modified,ok
+Trp_6Cl,aa,modified,ok
+Trp_6Br,aa,modified,ok
+Trp_6Me,aa,modified,ok
+Trp_6F2,aa,modified,ok
+Trp_5Cl,aa,modified,ok
+Trp_5I,aa,modified,ok
+Trp_4NO2,aa,modified,ok
+Trp_7F,aa,modified,ok
+Kyn,aa,modified,ok
+hLys,aa,modified,ok
+cBuAla,aa,modified,ok
+cPenAla,aa,modified,ok
+Fur2Ala,aa,modified,ok
+Fur3Ala,aa,modified,ok
+BiPheAla,aa,modified,ok
+ArgNO2,aa,modified,ok
+Pro_3OH_t,aa,modified,ok
+Pro_3OH_c,aa,modified,ok
+Pro_3F,aa,modified,ok
+Lys_For,aa,modified,ok
+BiotinLys,aa,modified,ok
+Phe_4Az,aa,modified,ok
+Phe_4OPrg,aa,modified,ok
+Dopa,aa,modified,ok
+Phe_4CF,aa,modified,ok
+OEG2,linker,linker,ok
+OEG5,linker,linker,ok
+D_hPhe2,aa,modified,ok
+Phe_345triF,aa,modified,ok
+ACC,aa,modified,ok
+ACBC,aa,modified,ok
+Nspe,aa,modified,ok
+Nrpe,aa,modified,ok
+NocGly,aa,modified,ok
+Thz2Ala,aa,modified,ok
+Pyz3Ala,aa,modified,ok
+Im2Ala,aa,modified,ok
+Dao,aa,modified,ok
+ACPC,aa,modified,ok
+D_b3hPhe,aa,modified,ok
+D_b3hLeu,aa,modified,ok
+D_b3hVal,aa,modified,ok
+D_b3hTrp,aa,modified,ok
+D_b3hSer,aa,modified,ok
+D_b3hAla,aa,modified,ok
+OEG6,linker,linker,ok
+D_Fur2Ala,aa,modified,ok
+D_Fur3Ala,aa,modified,ok
+D_BiPheAla,aa,modified,ok
+D_cBuAla,aa,modified,ok
+D_cPenAla,aa,modified,ok
+D_Kyn,aa,modified,ok
+D_ArgNO2,aa,modified,ok
+D_Dopa,aa,modified,ok
+D_AzAla,aa,modified,ok
+D_CyoAla,aa,modified,ok
+D_Thz2Ala,aa,modified,ok
+D_Pyz3Ala,aa,modified,ok
+D_Im2Ala,aa,modified,ok
+D_BiotinLys,aa,modified,ok
+D_hLys,aa,modified,ok
+D_Dao,aa,modified,ok
+D_Phe_4Az,aa,modified,ok
+PipAla,aa,modified,ok
+Phe_4NMe2,aa,modified,ok
+Phe_4iPr,aa,modified,ok
+Phe_34diOMe,aa,modified,ok
+Phe_4SMe,aa,modified,ok
+D_PipAla,aa,modified,ok
+D_Phe_4Br,aa,modified,ok
+D_Phe_4I,aa,modified,ok
+D_Phe_4NO2,aa,modified,ok
+D_Phe_4NH2,aa,modified,ok
+D_Phe_4NMe2,aa,modified,ok
+D_Phe_4SMe,aa,modified,ok
+BimAla,aa,modified,ok
+QuiAla,aa,modified,ok
+IsoQuiAla,aa,modified,ok
+Thi3Ala,aa,modified,ok
+IndAzAla,aa,modified,ok
+Pyr1Ala,aa,modified,ok
+TriazAla,aa,modified,ok
+BenzoxAla,aa,modified,ok
+D_BimAla,aa,modified,ok
+D_QuiAla,aa,modified,ok
+D_Thi3Ala,aa,modified,ok
+D_IndAzAla,aa,modified,ok
+Trp_4Me,aa,modified,ok
+Trp_4Cl,aa,modified,ok
+Trp_4Br,aa,modified,ok
+Trp_5NH2,aa,modified,ok
+Trp_7Me,aa,modified,ok
+Trp_7Cl,aa,modified,ok
+Trp_2Me,aa,modified,ok
+D_Trp_4Me,aa,modified,ok
+D_Trp_4Br,aa,modified,ok
+D_Trp_7Me,aa,modified,ok
+D_Tyr_3I,aa,modified,ok
+D_Tyr_3NO2,aa,modified,ok
+Tyr_OBn,aa,modified,ok
+Ser_OBn,aa,modified,ok
+Pro_4Me_t,aa,modified,ok
+Pro_4Me_c,aa,modified,ok
+Pro_4NH2_t,aa,modified,ok
+Pro_4NH2_c,aa,modified,ok
+hLeu,aa,modified,ok
+hMet,aa,modified,ok
+hIle,aa,modified,ok
+hNle,aa,modified,ok
+hSer,aa,modified,ok
+hCys,aa,modified,slot4_ct_mismatch: stored='thiol' inferred='element_16'
+hCit,aa,modified,ok
+D_hLeu,aa,modified,ok
+D_hMet,aa,modified,ok
+D_hIle,aa,modified,ok
+D_hNle,aa,modified,ok
+D_hSer,aa,modified,ok
+D_hCys,aa,modified,slot4_ct_mismatch: stored='thiol' inferred='element_16'
+AllGly,aa,modified,ok
+D_AllGly,aa,modified,ok
+CyanoAla,aa,modified,ok
+AzOrn,aa,modified,ok
+D_AzOrn,aa,modified,ok
+AzNva,aa,modified,ok
+D_AzNva,aa,modified,ok
+Nrg,aa,modified,ok
+ADMA,aa,modified,ok
+Lys_5Me,aa,modified,ok
+Lys_5diMe,aa,modified,ok
+Lys_Cbz,aa,modified,ok
+Orn_Cbz,aa,modified,ok
+S3,aa,modified,dummy_slot_missing_from_ct: [4]
+R3,aa,modified,dummy_slot_missing_from_ct: [4]
+R5,aa,modified,dummy_slot_missing_from_ct: [4]
+S8,aa,modified,dummy_slot_missing_from_ct: [4]
+meCha,aa,modified,ok
+meNle,aa,modified,ok
+meNva,aa,modified,ok
+meAbu,aa,modified,ok
+me1Nal,aa,modified,ok
+me2Nal,aa,modified,ok
+mePhe_4F,aa,modified,ok
+mePhe_4Cl,aa,modified,ok
+mePhe_4OMe,aa,modified,ok
+mePhe_4Br,aa,modified,ok
+mePhe_3F,aa,modified,ok
+mePhe_3OMe,aa,modified,ok
+meBip,aa,modified,ok
+meDip,aa,modified,ok
+meChg,aa,modified,ok
+me4Pal,aa,modified,ok
+me3Pal,aa,modified,ok
+mePhe_4CF3,aa,modified,ok
+mePhe_4tBu,aa,modified,ok
+D_meA,aa,modified,ok
+D_meF,aa,modified,ok
+D_meL,aa,modified,ok
+D_meV,aa,modified,ok
+D_meI,aa,modified,ok
+D_meY,aa,modified,ok
+D_meS,aa,modified,ok
+D_meNle,aa,modified,ok
+aMeMet,aa,modified,ok
+aMeNle,aa,modified,ok
+aMeNva,aa,modified,ok
+aMeAbu,aa,modified,ok
+aMeThr,aa,modified,ok
+aMePhe_4F,aa,modified,ok
+aMePhe_4Cl,aa,modified,ok
+aMePhe_4OMe,aa,modified,ok
+D_aMePhe,aa,modified,ok
+D_aMeLeu,aa,modified,ok
+D_aMeVal,aa,modified,ok
+D_aMeIle,aa,modified,ok
+D_aMeGlu,aa,modified,ok
+D_aMeAsp,aa,modified,ok
+D_aMeTyr,aa,modified,ok
+D_aMeGln,aa,modified,ok
+D_aMeAsn,aa,modified,ok
+D_aMeSer,aa,modified,ok
+Lys_Alloc,aa,modified,ok
+Orn_Alloc,aa,modified,ok
+Dab_Alloc,aa,modified,ok
+Dap_Alloc,aa,modified,ok
+Glu_OAll,aa,modified,ok
+Asp_OAll,aa,modified,ok
+Ser_All,aa,modified,ok
+Thr_All,aa,modified,ok
+Tyr_All,aa,modified,ok
+Cys_All,aa,modified,ok
+Lys_Mtt,aa,modified,ok
+Dha,aa,modified,ok
+DeltaAbu,aa,modified,ok
+DeltaPhe,aa,modified,ok
+b3hPhe_4F,aa,modified,ok
+b3hPhe_4Cl,aa,modified,ok
+b3hPhe_4OMe,aa,modified,ok
+b3hPhe_4Br,aa,modified,ok
+D_b3hPhe_4F,aa,modified,ok
+D_b3hPhe_4Cl,aa,modified,ok
+D_b3hPhe_4OMe,aa,modified,ok
+Succ,cap,cap,slot2_ct_mismatch: stored='backbone_c' inferred='hydroxyl'
+Glt,cap,cap,slot2_ct_mismatch: stored='backbone_c' inferred='hydroxyl'
+Adp,cap,cap,slot2_ct_mismatch: stored='backbone_c' inferred='hydroxyl'
+Pim,cap,cap,slot2_ct_mismatch: stored='backbone_c' inferred='hydroxyl'
+Sub,cap,cap,slot2_ct_mismatch: stored='backbone_c' inferred='hydroxyl'
+Azel,cap,cap,slot2_ct_mismatch: stored='backbone_c' inferred='hydroxyl'
+Seb,cap,cap,slot2_ct_mismatch: stored='backbone_c' inferred='hydroxyl'
+Dod_dAcid,cap,cap,slot2_ct_mismatch: stored='backbone_c' inferred='hydroxyl'
+ClAc,cap,cap,MISSING m_Rgroups or m_chem_types
+BrAc,cap,cap,MISSING m_Rgroups or m_chem_types
+PropCap,cap,cap,MISSING m_Rgroups or m_chem_types
+ButCap,cap,cap,MISSING m_Rgroups or m_chem_types
+HexCap,cap,cap,MISSING m_Rgroups or m_chem_types
+CF3Ac,cap,cap,MISSING m_Rgroups or m_chem_types
+9Anac,linker,linker,ok
+10Adec,linker,linker,ok
+12Adod,linker,linker,ok
+OEG7,linker,linker,ok
+meTrp_5F,aa,modified,dummy_slot_missing_from_ct: [3]
+meTrp_5Me,aa,modified,dummy_slot_missing_from_ct: [3]
+meTrp_7Aza,aa,modified,dummy_slot_missing_from_ct: [3]
+D_meW,aa,modified,dummy_slot_missing_from_ct: [3]
+D_aMeTrp,aa,modified,dummy_slot_missing_from_ct: [4]
+b3hTrp_5F,aa,modified,dummy_slot_missing_from_ct: [4]
+D_meT,aa,modified,dummy_slot_missing_from_ct: [3]
+D_meM,aa,modified,ok
+D_meC,aa,modified,dummy_slot_missing_from_ct: [3]
+D_meH,aa,modified,dummy_slot_missing_from_ct: [3]
+D_meD,aa,modified,dummy_slot_missing_from_ct: [3]
+D_meE,aa,modified,dummy_slot_missing_from_ct: [3]
+D_meN,aa,modified,"dummy_slot_missing_from_ct: [3, 4]"
+D_meQ,aa,modified,"dummy_slot_missing_from_ct: [3, 4]"
+D_meK,aa,modified,"dummy_slot_missing_from_ct: [3, 4]"
+D_meR,aa,modified,"dummy_slot_missing_from_ct: [3, 4, 5]"
+D_meCha,aa,modified,ok
+D_meBip,aa,modified,ok
+D_me1Nal,aa,modified,ok
+D_me2Nal,aa,modified,ok
+D_meChg,aa,modified,ok
+D_meDip,aa,modified,ok
+D_meNva,aa,modified,ok
+D_meAbu,aa,modified,ok
+D_me3Pal,aa,modified,ok
+D_me4Pal,aa,modified,ok
+D_mePhe_3F,aa,modified,ok
+D_mePhe_3OMe,aa,modified,ok
+D_mePhe_4Br,aa,modified,ok
+D_mePhe_4CF3,aa,modified,ok
+D_mePhe_4Cl,aa,modified,ok
+D_mePhe_4F,aa,modified,ok
+D_mePhe_4OMe,aa,modified,ok
+D_mePhe_4tBu,aa,modified,ok
+D_meTrp_5F,aa,modified,dummy_slot_missing_from_ct: [3]
+D_meTrp_5Me,aa,modified,dummy_slot_missing_from_ct: [3]
+D_meTrp_7Aza,aa,modified,dummy_slot_missing_from_ct: [3]
+meOrn,aa,modified,"dummy_slot_missing_from_ct: [3, 4]"
+D_meOrn,aa,modified,"dummy_slot_missing_from_ct: [3, 4]"
+meDab,aa,modified,"dummy_slot_missing_from_ct: [3, 4]"
+D_meDab,aa,modified,"dummy_slot_missing_from_ct: [3, 4]"
+meDap,aa,modified,"dummy_slot_missing_from_ct: [3, 4]"
+D_meDap,aa,modified,"dummy_slot_missing_from_ct: [3, 4]"
+mePhe_2F,aa,modified,ok
+D_mePhe_2F,aa,modified,ok
+mePhe_2Cl,aa,modified,ok
+D_mePhe_2Cl,aa,modified,ok
+mePhe_4Me,aa,modified,ok
+D_mePhe_4Me,aa,modified,ok
+mePhe_4CN,aa,modified,ok
+D_mePhe_4CN,aa,modified,ok
+mePhe_4NO2,aa,modified,ok
+D_mePhe_4NO2,aa,modified,ok
+mePhe_4NH2,aa,modified,ok
+D_mePhe_4NH2,aa,modified,ok
+mePhe_4SMe,aa,modified,ok
+D_mePhe_4SMe,aa,modified,ok
+mePhe_4I,aa,modified,ok
+D_mePhe_4I,aa,modified,ok
+mePhe_34diF,aa,modified,ok
+D_mePhe_34diF,aa,modified,ok
+meTrp_5Br,aa,modified,dummy_slot_missing_from_ct: [3]
+D_meTrp_5Br,aa,modified,dummy_slot_missing_from_ct: [3]
+meTyr_3F,aa,modified,dummy_slot_missing_from_ct: [3]
+D_meTyr_3F,aa,modified,dummy_slot_missing_from_ct: [3]
+D_ADMA,aa,modified,ok
+D_Asp_OAll,aa,modified,ok
+D_BenzoxAla,aa,modified,ok
+D_CyanoAla,aa,modified,ok
+D_Cys_All,aa,modified,ok
+D_Dab_Alloc,aa,modified,ok
+D_Dap_Alloc,aa,modified,ok
+D_Glu_OAll,aa,modified,ok
+D_IsoQuiAla,aa,modified,ok
+D_Lys_5Me,aa,modified,ok
+D_Lys_5diMe,aa,modified,ok
+D_Lys_Alloc,aa,modified,ok
+D_Lys_Cbz,aa,modified,ok
+D_Lys_Mtt,aa,modified,ok
+D_Nrg,aa,modified,ok
+D_Orn_Alloc,aa,modified,ok
+D_Orn_Cbz,aa,modified,ok
+D_Phe_34diOMe,aa,modified,ok
+D_Phe_4iPr,aa,modified,ok
+D_Pro_4Me_c,aa,modified,ok
+D_Pro_4Me_t,aa,modified,ok
+D_Pro_4NH2_c,aa,modified,ok
+D_Pro_4NH2_t,aa,modified,ok
+D_Pyr1Ala,aa,modified,ok
+D_Ser_All,aa,modified,ok
+D_Thr_All,aa,modified,ok
+D_TriazAla,aa,modified,ok
+D_Tyr_All,aa,modified,ok
+D_hCit,aa,modified,ok
+D_aMeArg,aa,modified,ok
+D_aMeCys,aa,modified,slot4_ct_mismatch: stored='thiol' inferred='element_16'
+D_aMeHis,aa,modified,ok
+D_aMeLys,aa,modified,ok
+D_aMeMet,aa,modified,ok
+D_aMeNle,aa,modified,ok
+D_aMeNva,aa,modified,ok
+D_aMePro,aa,modified,MISSING m_Rgroups or m_chem_types
+D_aMeThr,aa,modified,ok
+D_aMeTyr_3OH,aa,modified,MISSING m_Rgroups or m_chem_types
+D_aMePhe_4Cl,aa,modified,ok
+D_aMePhe_4F,aa,modified,ok
+D_aMePhe_4OMe,aa,modified,ok
+aMeOrn,aa,modified,ok
+D_aMeOrn,aa,modified,ok
+aMeDab,aa,modified,ok
+D_aMeDab,aa,modified,ok
+aMeDap,aa,modified,ok
+D_aMeDap,aa,modified,ok
+aMePhe_4Br,aa,modified,ok
+D_aMePhe_4Br,aa,modified,ok
+aMePhe_4CF3,aa,modified,ok
+D_aMePhe_4CF3,aa,modified,ok
+aMePhe_4CN,aa,modified,ok
+D_aMePhe_4CN,aa,modified,ok
+aMePhe_4Me,aa,modified,ok
+D_aMePhe_4Me,aa,modified,ok
+aMePhe_4tBu,aa,modified,ok
+D_aMePhe_4tBu,aa,modified,ok
+aMePhe_3F,aa,modified,ok
+D_aMePhe_3F,aa,modified,ok
+aMe1Nal,aa,modified,ok
+D_aMe1Nal,aa,modified,ok
+aMe2Nal,aa,modified,ok
+D_aMe2Nal,aa,modified,ok
+aMeCha,aa,modified,ok
+D_aMeCha,aa,modified,ok
+aMeChg,aa,modified,ok
+D_aMeChg,aa,modified,ok
+aMeBip,aa,modified,ok
+D_aMeBip,aa,modified,ok
+aMeTrp_5F,aa,modified,ok
+D_aMeTrp_5F,aa,modified,ok
+aMeTrp_7Aza,aa,modified,ok
+D_aMeTrp_7Aza,aa,modified,ok
+b3hPhe,aa,modified,ok
+b3hMet,aa,modified,ok
+b3hNva,aa,modified,ok
+b3hCha,aa,modified,ok
+b3hChg,aa,modified,ok
+b3h1Nal,aa,modified,ok
+b3h2Nal,aa,modified,ok
+b3hAsn,aa,modified,ok
+b3hGln,aa,modified,ok
+b3hArg,aa,modified,ok
+b3hHis,aa,modified,ok
+b3hTrp,aa,modified,dummy_slot_missing_from_ct: [4]
+D_b3hNle,aa,modified,ok
+D_b3hTyr,aa,modified,ok
+D_b3hLys,aa,modified,ok
+D_b3hAsp,aa,modified,slot4_ct_mismatch: stored='carboxyl' inferred='hydroxyl'
+D_b3hGlu,aa,modified,slot4_ct_mismatch: stored='carboxyl' inferred='hydroxyl'
+D_b3hPhe_4Br,aa,modified,ok
+D_b3hTrp_5F,aa,modified,dummy_slot_missing_from_ct: [4]
+D_b3hMet,aa,modified,ok
+D_b3hNva,aa,modified,ok
+D_b3hCha,aa,modified,ok
+D_b3hChg,aa,modified,ok
+D_b3h1Nal,aa,modified,ok
+D_b3h2Nal,aa,modified,ok
+D_b3hAsn,aa,modified,ok
+D_b3hGln,aa,modified,ok
+D_b3hArg,aa,modified,ok
+D_b3hHis,aa,modified,ok
+b3hPhe_4CN,aa,modified,ok
+D_b3hPhe_4CN,aa,modified,ok
+b3hPhe_4CF3,aa,modified,ok
+D_b3hPhe_4CF3,aa,modified,ok
+b3hPhe_4Me,aa,modified,ok
+D_b3hPhe_4Me,aa,modified,ok
+b3hPhe_4NO2,aa,modified,ok
+D_b3hPhe_4NO2,aa,modified,ok
+b3hPhe_4NH2,aa,modified,ok
+D_b3hPhe_4NH2,aa,modified,ok
+b3hPhe_4I,aa,modified,ok
+D_b3hPhe_4I,aa,modified,ok
+b3h3Pal,aa,modified,ok
+D_b3h3Pal,aa,modified,ok
+b3h4Pal,aa,modified,ok
+D_b3h4Pal,aa,modified,ok
+b3hOrn,aa,modified,ok
+D_b3hOrn,aa,modified,ok
+b3hDab,aa,modified,ok
+D_b3hDab,aa,modified,ok
+b3hDap,aa,modified,ok
+D_b3hDap,aa,modified,ok
+SeM,aa,modified,ok
+D_SeM,aa,modified,ok
+VinGly,aa,modified,ok
+D_VinGly,aa,modified,ok
+HPG,aa,modified,ok
+D_HPG,aa,modified,ok
+Cys_Prg,aa,modified,ok
+D_Cys_Prg,aa,modified,ok
+Ala_3Br,aa,modified,ok
+D_Ala_3Br,aa,modified,ok
+Ala_3Cl,aa,modified,ok
+D_Ala_3Cl,aa,modified,ok
+Phe_3I,aa,modified,ok
+D_Phe_3I,aa,modified,ok
+Pro_4OAc,aa,modified,ok
+D_Pro_4OAc,aa,modified,ok
+D_Pro_3OH_c,aa,modified,ok
+D_Pro_3OH_t,aa,modified,ok
+D_Pro_4Me3OH,aa,modified,MISSING m_Rgroups or m_chem_types
+D_Aze,aa,modified,ok
+hTyr,aa,modified,ok
+D_hTyr,aa,modified,ok
+D_hTrp,aa,modified,ok
+D_hHis,aa,modified,MISSING m_Rgroups or m_chem_types
+hThr,aa,modified,ok
+D_hThr,aa,modified,ok
+hCha,aa,modified,ok
+D_hCha,aa,modified,ok
+bAbu,aa,modified,ok
+S4,aa,modified,dummy_slot_missing_from_ct: [4]
+R4,aa,modified,dummy_slot_missing_from_ct: [4]
+S6,aa,modified,dummy_slot_missing_from_ct: [4]
+R6,aa,modified,dummy_slot_missing_from_ct: [4]
+OctCap,cap,cap,ok
+DecCap,cap,cap,ok
+IsoButCap,cap,cap,ok
+PivCap,cap,cap,ok
+CyclohexCap,cap,cap,ok
+BnCap,cap,cap,ok
+NaphtCap,cap,cap,ok
+MyrCap,cap,cap,ok
+PalCap,cap,cap,ok
+BzCap,cap,cap,ok
+mePhe_3Cl,aa,modified,ok
+D_mePhe_3Cl,aa,modified,ok
+mePhe_3Br,aa,modified,ok
+D_mePhe_3Br,aa,modified,ok
+mePhe_34diOMe,aa,modified,ok
+D_mePhe_34diOMe,aa,modified,ok
+mePhe_4iPr,aa,modified,ok
+D_mePhe_4iPr,aa,modified,ok
+mePhe_2OMe,aa,modified,ok
+D_mePhe_2OMe,aa,modified,ok
+mePhe_2Me,aa,modified,ok
+D_mePhe_2Me,aa,modified,ok
+mePhe_4NMe2,aa,modified,ok
+D_mePhe_4NMe2,aa,modified,ok
+meTrp_6F,aa,modified,dummy_slot_missing_from_ct: [3]
+D_meTrp_6F,aa,modified,dummy_slot_missing_from_ct: [3]
+meTyr_3I,aa,modified,dummy_slot_missing_from_ct: [3]
+D_meTyr_3I,aa,modified,dummy_slot_missing_from_ct: [3]
+D_bAbu,aa,modified,ok
+hAsp,aa,modified,slot4_ct_mismatch: stored='carboxyl' inferred='hydroxyl'
+D_hAsp,aa,modified,slot4_ct_mismatch: stored='carboxyl' inferred='hydroxyl'
+hGlu,aa,modified,slot4_ct_mismatch: stored='carboxyl' inferred='hydroxyl'
+D_hGlu,aa,modified,slot4_ct_mismatch: stored='carboxyl' inferred='hydroxyl'
+hTrp_5F,aa,modified,ok
+D_hTrp_5F,aa,modified,ok
+aMePhe_4NO2,aa,modified,ok
+D_aMePhe_4NO2,aa,modified,ok
+aMePhe_4NH2,aa,modified,ok
+D_aMePhe_4NH2,aa,modified,ok
+b3hPhe_2F,aa,modified,ok
+D_b3hPhe_2F,aa,modified,ok
+b3hPhe_3F,aa,modified,ok
+D_b3hPhe_3F,aa,modified,ok
+mePhe_35diF,aa,modified,ok
+D_mePhe_35diF,aa,modified,ok
+mePhe_34diCl,aa,modified,ok
+D_mePhe_34diCl,aa,modified,ok
+aMeTrp_5Br,aa,modified,ok
+D_aMeTrp_5Br,aa,modified,ok
+Ala_3F,aa,modified,ok
+D_Ala_3F,aa,modified,ok
+Pro_4OBn,aa,modified,ok
+D_Pro_4OBn,aa,modified,ok
+Thi2Ala,aa,modified,ok
+D_Thi2Ala,aa,modified,ok
+Ahx,linker,linker,ok
+IsoQui3Ala,aa,modified,ok
+D_IsoQui3Ala,aa,modified,ok
+Qui6Ala,aa,modified,ok
