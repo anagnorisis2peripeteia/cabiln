@@ -907,6 +907,7 @@ _HTML = r"""<!DOCTYPE html>
           📂 .mol
           <input type="file" id="mol-upload" accept=".mol,.sdf" style="display:none;">
         </label>
+        <button id="btn-s2c" class="hbtn green" style="font-size:10px;padding:2px 10px;" title="Convert SMILES to CABILN">→ CABILN</button>
       </div>
       <textarea id="smiles-input" placeholder="Paste SMILES, BILN, or HELM here…"
                 spellcheck="false" autocomplete="off"></textarea>
@@ -1002,6 +1003,7 @@ const buildInsertRow = document.getElementById('build-insert-row');
 const buildInsertInfo = document.getElementById('build-insert-info');
 const buildInsertBtn = document.getElementById('build-insert-btn');
 const btnReroll     = document.getElementById('btn-reroll');
+const btnS2c        = document.getElementById('btn-s2c');
 const btnRxnFilter  = document.getElementById('btn-rxn-filter');
 
 // ─── dark mode ────────────────────────────────────────────────────────────────
@@ -2137,6 +2139,38 @@ btnReroll.addEventListener('click', () => {
   doRenderCabiln(lastCabiln);
 });
 
+// ─── SMILES → CABILN conversion ───────────────────────────────────────────────
+btnS2c.addEventListener('click', async () => {
+  const smiles = smilesInput.value.trim();
+  if (!smiles) return;
+  const origText = btnS2c.textContent;
+  btnS2c.textContent = '…';
+  btnS2c.disabled = true;
+  try {
+    const res = await fetch('/smiles_to_cabiln', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ smiles })
+    });
+    const data = await res.json();
+    if (data.error) {
+      smilesStatus.textContent = 'S2C: ' + data.error;
+      smilesStatus.className = 'statusbar';
+    } else {
+      cabilnInput.value = data.cabiln;
+      cabilnInput.dispatchEvent(new Event('input'));
+      smilesStatus.textContent = `Converted: ${data.details.length} residue(s)`;
+      smilesStatus.className = 'statusbar ok';
+    }
+  } catch (e) {
+    smilesStatus.textContent = 'S2C error — is server running?';
+    smilesStatus.className = 'statusbar';
+  } finally {
+    btnS2c.textContent = origText;
+    btnS2c.disabled = false;
+  }
+});
+
 function setExportReady(svg, molBlock) {
   lastSvg      = svg || '';
   lastMolBlock = molBlock || '';
@@ -2885,6 +2919,300 @@ class _RegisterReq(BaseModel):
     name:       str
     type:       str = "aa"
     subtype:    str = "modified"
+
+
+# ── SMILES → CABILN algorithm (ported from cyclicpeptide, MIT) ───────────────
+#
+# Detects the peptide backbone (NCC=O repeating unit), isolates each residue by
+# cutting backbone peptide bonds and capping the C-terminus with -OH, then
+# substructure-matches the isolated residues against the pyPept SDF monomer
+# library to produce a CABILN sequence string.
+
+import re as _re
+
+def _s2c_normalize(mol):
+    """Normalize resonance forms (e.g. guanidinium) via InChI round-trip."""
+    try:
+        from rdkit.Chem.inchi import MolToInchi, MolFromInchi
+        from rdkit import Chem as _Chem
+        inchi = MolToInchi(mol)
+        if inchi:
+            m = MolFromInchi(inchi)
+            if m:
+                _Chem.SanitizeMol(m)
+                return m
+    except Exception:
+        pass
+    return mol
+
+
+def _s2c_cap_smiles(smi, rgroups_str):
+    """Replace [n*] dummy atoms with caps: [OH] slot → O atom; everything else → [H]."""
+    rgroups = [r.strip() for r in rgroups_str.split(',')]
+    def _rep(m):
+        n = int(m.group(1))
+        rg = rgroups[n - 1] if n - 1 < len(rgroups) else 'None'
+        return 'O' if rg == '[OH]' else '[H]'
+    return _re.sub(r'\[(\d+)\*\]', _rep, smi)
+
+
+def _s2c_detect_backbone(mol):
+    from rdkit import Chem as _C
+    n = len(mol.GetSubstructMatches(_C.MolFromSmiles('NCC=O')))
+    if n == 0:
+        return '', None
+    matches = mol.GetSubstructMatches(_C.MolFromSmiles('C(=O)CN' * n))
+    if not matches:
+        return '', None
+    bb = matches[0]
+    bb_idx = list(bb); bb_idx.reverse()
+    return bb, bb_idx
+
+
+def _s2c_order_backbone(m, bb_idx):
+    from rdkit import Chem as _C
+    id_list = bb_idx[:]
+    for idx in [a.GetIdx() for a in m.GetAtoms()]:
+        if idx not in id_list:
+            id_list.append(idx)
+    m_renum = _C.RenumberAtoms(m, newOrder=id_list)
+    _, new_bb_idx = _s2c_detect_backbone(m_renum)
+    return m_renum, new_bb_idx
+
+
+def _s2c_side_chain_neighbors(m, atoms, origin):
+    out = set()
+    for ai in atoms:
+        for nb in m.GetAtomWithIdx(ai).GetNeighbors():
+            ni = nb.GetIdx()
+            if ni not in origin:
+                out.add(ni)
+    return [i for i in out if i not in atoms]
+
+
+def _s2c_expand_aa(m, aa_set):
+    origin = [idx for aa in aa_set for idx in aa]
+    expanded = []
+    for aa in [set(a) for a in aa_set]:
+        nbs = _s2c_side_chain_neighbors(m, aa, origin)
+        aa.update(nbs)
+        while nbs:
+            nbs = _s2c_side_chain_neighbors(m, aa, origin)
+            aa.update(nbs)
+        expanded.append(list(aa))
+    return expanded
+
+
+def _s2c_split_residues(m):
+    from rdkit import Chem as _C
+    raw = m.GetSubstructMatches(_C.MolFromSmiles('NCC=O'))
+    return _s2c_expand_aa(m, raw)
+
+
+def _s2c_isolate_residues(m, aa_units):
+    """Cut each residue from the peptide ring; cap C=O termini with -OH."""
+    from rdkit import Chem as _C
+    from rdkit.Chem import RWMol
+    aas, mappings = [], []
+    for atom_idxs in aa_units:
+        rw = RWMol()
+        amap = {}
+        for idx in atom_idxs:
+            amap[idx] = rw.AddAtom(m.GetAtomWithIdx(idx))
+        mappings.append(amap)
+        for bond in m.GetBonds():
+            bi, ei = bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()
+            if bi in atom_idxs and ei in atom_idxs:
+                rw.AddBond(amap[bi], amap[ei], bond.GetBondType())
+            elif bi in atom_idxs or ei in atom_idxs:
+                inside = bi if bi in atom_idxs else ei
+                outside = ei if inside == bi else bi
+                ia = m.GetAtomWithIdx(inside)
+                oa = m.GetAtomWithIdx(outside)
+                if ia.GetSymbol() == 'C' and oa.GetSymbol() == 'N':
+                    has_dbl_o = any(
+                        nb.GetSymbol() == 'O' and
+                        m.GetBondBetweenAtoms(inside, nb.GetIdx()).GetBondType() == _C.BondType.DOUBLE
+                        for nb in ia.GetNeighbors()
+                    )
+                    if has_dbl_o:
+                        o_idx = rw.AddAtom(_C.Atom('O'))
+                        rw.AddBond(amap[inside], o_idx, _C.BondType.SINGLE)
+        mol_out = rw.GetMol()
+        _C.SanitizeMol(mol_out)
+        aas.append(mol_out)
+    return aas, mappings
+
+
+def _s2c_connected_pairs(m, mappings):
+    from rdkit import Chem as _C
+    aa_idxs = [set(mp.keys()) for mp in mappings]
+    pairs = []
+    for ai in range(len(aa_idxs) - 1):
+        for aj in range(ai + 1, len(aa_idxs)):
+            fi, fj = aa_idxs[ai], aa_idxs[aj]
+            is_link = is_peptide = False
+            link_count = 0
+            for bond in m.GetBonds():
+                bi, ei = bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()
+                if (bi in fi and ei in fj) or (bi in fj and ei in fi):
+                    is_link = True; link_count += 1
+                    for c_idx, n_idx in [(bi, ei), (ei, bi)]:
+                        ca = m.GetAtomWithIdx(c_idx); na = m.GetAtomWithIdx(n_idx)
+                        if ca.GetSymbol() == 'C' and na.GetSymbol() == 'N':
+                            if any(nb.GetSymbol() == 'O' and
+                                   m.GetBondBetweenAtoms(c_idx, nb.GetIdx()).GetBondType() == _C.BondType.DOUBLE
+                                   for nb in ca.GetNeighbors()):
+                                is_peptide = True
+            if is_link:
+                if is_peptide:
+                    pairs.append((ai, aj, 'peptide bond'))
+                if link_count > 1 or not is_peptide:
+                    pairs.append((ai, aj, 'side chain'))
+    return pairs
+
+
+def _s2c_search_chain(qi, search, N, pairs):
+    r, chain = 0, [qi]
+    while r < N:
+        for i, j, t in pairs:
+            if t == 'side chain': continue
+            if i == qi and j in search:
+                qi = j; chain.append(qi); search = [k for k in search if k not in chain]; break
+            elif j == qi and i in search:
+                qi = i; chain.append(qi); search = [k for k in search if k not in chain]; break
+        r += 1
+    return chain
+
+
+def _s2c_ordered_chain(pairs, N_aa):
+    best = []
+    for qi in range(N_aa):
+        c = _s2c_search_chain(qi, [i for i in range(N_aa) if i != qi], N_aa, pairs)
+        if len(c) > len(best): best = c
+    chain = best
+    if len(chain) == N_aa: return chain
+    for _ in range(5):
+        if len(chain) > N_aa - 2: break
+        ext = []
+        for qi in [k for k in range(N_aa) if k not in chain]:
+            c = _s2c_search_chain(qi, [i for i in range(N_aa) if i != qi and i not in chain], N_aa, pairs)
+            if len(c) > len(ext): ext = c
+        chain += ext
+    if len(chain) < N_aa: chain += [i for i in range(N_aa) if i not in chain]
+    return chain
+
+
+def _s2c_is_cyclic(pairs, n):
+    pbs = [(i, j) for i, j, t in pairs if t == 'peptide bond']
+    scs = {(min(i, j), max(i, j)) for i, j, t in pairs if t == 'side chain'}
+    if n == 2:
+        pb_set = {(min(i, j), max(i, j)) for i, j in pbs}
+        return bool(pb_set & scs)
+    return any(abs(i - j) > 1 for i, j in pbs)
+
+
+# Capped library cache (invalidates when SDF changes)
+_s2c_lib_cache: list = []
+_s2c_lib_mtime: float = 0.0
+_s2c_lib_lock = threading.Lock()
+
+
+def _s2c_get_lib():
+    """Return (or rebuild) the capped monomer library."""
+    from rdkit import Chem as _C
+    global _s2c_lib_cache, _s2c_lib_mtime
+    mtime = _SDF_PATH.stat().st_mtime
+    with _s2c_lib_lock:
+        if _s2c_lib_cache and _s2c_lib_mtime == mtime:
+            return _s2c_lib_cache
+        suppl = _C.SDMolSupplier(str(_SDF_PATH), removeHs=False)
+        lib = []
+        seen = set()
+        for mol in suppl:
+            if mol is None: continue
+            props = mol.GetPropsAsDict()
+            abbr = props.get('m_abbr', '').strip()
+            if not abbr or abbr in seen: continue
+            ct_str = props.get('m_chem_types', '')
+            rg_str = props.get('m_Rgroups', '')
+            cts = {}
+            for item in ct_str.split(','):
+                item = item.strip()
+                if ':' in item:
+                    k, v = item.split(':', 1)
+                    try: cts[int(k)] = v.strip()
+                    except ValueError: pass
+            if not any(v == 'backbone_n' for v in cts.values()): continue
+            if not any(v == 'backbone_c' for v in cts.values()): continue
+            smi = _C.MolToSmiles(mol, allHsExplicit=False)
+            capped_smi = _s2c_cap_smiles(smi, rg_str)
+            try: cm = _C.MolFromSmiles(capped_smi)
+            except Exception: cm = None
+            if cm is None: continue
+            cm = _C.RemoveHs(cm)
+            cm = _s2c_normalize(cm)
+            if cm is None: continue
+            lib.append((abbr, cm, cm.GetNumAtoms()))
+            seen.add(abbr)
+        lib.sort(key=lambda x: x[2], reverse=True)
+        _s2c_lib_cache = lib
+        _s2c_lib_mtime = mtime
+        return lib
+
+
+def _s2c_match(aa_mol, lib):
+    aa_mol = _s2c_normalize(aa_mol)
+    n_q = aa_mol.GetNumAtoms()
+    best_abbr, best_n = None, 0
+    for abbr, ref, n_ref in lib:
+        if n_ref > n_q: continue
+        match = aa_mol.GetSubstructMatches(ref, useChirality=False)
+        if not match: continue
+        n_m = len(match[0])
+        if n_m > best_n:
+            best_n = n_m; best_abbr = abbr
+            if n_m == n_q: break
+    return best_abbr, best_n
+
+
+def smiles_to_cabiln_core(smiles: str):
+    """Convert a peptide SMILES string to CABILN notation.
+
+    Returns (cabiln_str, match_details) where match_details is a list of
+    (abbr, n_matched, n_total_atoms) per residue in chain order.
+    """
+    from rdkit import Chem as _C
+    mol = _C.MolFromSmiles(smiles)
+    if mol is None:
+        raise ValueError(f'Invalid SMILES: {smiles[:80]}')
+
+    bb, bb_idx = _s2c_detect_backbone(mol)
+    if bb_idx is None:
+        raise ValueError('Cannot detect peptide backbone (no NCC=O units found)')
+    mol, bb_idx = _s2c_order_backbone(mol, bb_idx)
+
+    aa_units = _s2c_split_residues(mol)
+    n = len(aa_units)
+    if n == 0:
+        raise ValueError('No residue units detected')
+
+    aas, mappings = _s2c_isolate_residues(mol, aa_units)
+    pairs = _s2c_connected_pairs(mol, mappings)
+    order = _s2c_ordered_chain(pairs, n)
+
+    lib = _s2c_get_lib()
+    details = []
+    for idx in order:
+        abbr, score = _s2c_match(aas[idx], lib)
+        details.append((abbr or '?', score, aas[idx].GetNumAtoms()))
+
+    pos_map = {v: i for i, v in enumerate(order)}
+    remap = [(pos_map[i], pos_map[j], t) for i, j, t in pairs]
+
+    abbrs = [d[0] for d in details]
+    cabiln = ('!1-' + '-'.join(abbrs) + '-!1') if _s2c_is_cyclic(remap, n) else '-'.join(abbrs)
+    return cabiln, details
 
 
 # ── routes ────────────────────────────────────────────────────────────────────
@@ -3703,6 +4031,22 @@ async def insert_backbone(req: _InsertBackboneReq):
 
     except Exception as exc:
         return JSONResponse({"error": str(exc).split('\n')[0]}, status_code=500)
+
+
+class _SmilesToCabilnReq(BaseModel):
+    smiles: str
+
+@app.post("/smiles_to_cabiln")
+async def smiles_to_cabiln_endpoint(req: _SmilesToCabilnReq):
+    """Convert a peptide SMILES to CABILN notation using pyPept's monomer library."""
+    try:
+        cabiln, details = smiles_to_cabiln_core(req.smiles.strip())
+        return {
+            "cabiln": cabiln,
+            "details": [{"abbr": a, "score": s, "total": t} for a, s, t in details],
+        }
+    except Exception as exc:
+        return JSONResponse({"error": str(exc).split('\n')[0]}, status_code=400)
 
 
 class _ValidateBondReq(BaseModel):
