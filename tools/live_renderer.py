@@ -232,6 +232,18 @@ _HTML = r"""<!DOCTYPE html>
     gap: 3px;
   }
   #input-bar-row { display: flex; align-items: center; gap: 9px; }
+  #notation-select {
+    flex-shrink: 0;
+    background: #0d1e38;
+    border: 1px solid #2a4070;
+    color: #7aaeff;
+    font-size: 10px;
+    padding: 2px 5px;
+    border-radius: 4px;
+    cursor: pointer;
+    outline: none;
+  }
+  #notation-select:focus { border-color: #5a9ae0; }
   .seq-label {
     font-size: 10px;
     text-transform: uppercase;
@@ -820,9 +832,16 @@ _HTML = r"""<!DOCTYPE html>
 <div id="input-bar">
   <div id="input-bar-row">
     <span class="seq-label" id="cabiln-label">Sequence</span>
+    <select id="notation-select" title="Input notation">
+      <option value="cabiln" selected>CABILN</option>
+      <option value="smiles">SMILES</option>
+      <option value="biln">BILN</option>
+      <option value="helm">HELM</option>
+    </select>
     <textarea id="cabiln-input"
               placeholder="e.g.  fmoc-A-G-L-am&#10;fmoc-C.trt(4,1)-A-K.boc(4,1)-am&#10;fmoc-K.!1(4,1)-G-G-E.!1-am"
               spellcheck="false" autocomplete="off"></textarea>
+    <button id="btn-to-cabiln" class="hbtn green" style="display:none;font-size:10px;padding:2px 10px;white-space:nowrap;" title="Convert to CABILN">→ CABILN</button>
   </div>
   <div id="cabiln-status" class="statusbar"></div>
   <div id="residue-chips"></div>
@@ -1005,6 +1024,8 @@ const buildInsertBtn = document.getElementById('build-insert-btn');
 const btnReroll     = document.getElementById('btn-reroll');
 const btnS2c        = document.getElementById('btn-s2c');
 const btnRxnFilter  = document.getElementById('btn-rxn-filter');
+const notationSelect = document.getElementById('notation-select');
+const btnToCabiln   = document.getElementById('btn-to-cabiln');
 
 // ─── dark mode ────────────────────────────────────────────────────────────────
 btnDark.addEventListener('click', () => {
@@ -2171,6 +2192,41 @@ btnS2c.addEventListener('click', async () => {
   }
 });
 
+// ─── main input → CABILN convert button ──────────────────────────────────────
+btnToCabiln.addEventListener('click', async () => {
+  const txt = cabilnInput.value.trim();
+  if (!txt) return;
+  const origText = btnToCabiln.textContent;
+  btnToCabiln.textContent = '…';
+  btnToCabiln.disabled = true;
+  try {
+    const res = await fetch('/to_cabiln', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ input: txt })
+    });
+    const data = await res.json();
+    if (data.error) {
+      cabilnStatus.textContent = data.error;
+      cabilnStatus.className = 'statusbar';
+    } else {
+      notationSelect.value = 'cabiln';
+      btnToCabiln.style.display = 'none';
+      cabilnInput.placeholder = NOTATION_PLACEHOLDER.cabiln;
+      cabilnInput.value = data.cabiln;
+      cabilnInput.dispatchEvent(new Event('input'));
+      cabilnStatus.textContent = `Converted from ${data.from}: ${data.cabiln}`;
+      cabilnStatus.className = 'statusbar ok';
+    }
+  } catch (e) {
+    cabilnStatus.textContent = '→ CABILN error — is server running?';
+    cabilnStatus.className = 'statusbar';
+  } finally {
+    btnToCabiln.textContent = origText;
+    btnToCabiln.disabled = false;
+  }
+});
+
 function setExportReady(svg, molBlock) {
   lastSvg      = svg || '';
   lastMolBlock = molBlock || '';
@@ -2199,10 +2255,35 @@ function showSpinner(inner) {
   setInner(inner, '<div class="spinner"></div>');
 }
 
+// ─── notation selector ────────────────────────────────────────────────────────
+const NOTATION_PLACEHOLDER = {
+  cabiln: 'e.g.  fmoc-A-G-L-am\nfmoc-C.trt(4,1)-A-K.boc(4,1)-am\nfmoc-K.!1(4,1)-G-G-E.!1-am',
+  smiles: 'Paste SMILES here… e.g. O=C1CNC(=O)[C@@H](C)N1',
+  biln:   'Paste BILN here… e.g. fmoc-A-G-L-am  (use Token(bid,rg) for crosslinks)',
+  helm:   'Paste HELM here… e.g. PEPTIDE1{A.G.L}$$$$',
+};
+
+notationSelect.addEventListener('change', () => {
+  const mode = notationSelect.value;
+  cabilnInput.placeholder = NOTATION_PLACEHOLDER[mode] || '';
+  btnToCabiln.style.display = mode === 'cabiln' ? 'none' : '';
+  cabilnInput.value = '';
+  cabilnInput.className = '';
+  resetCabiln();
+});
+
 // ─── CABILN render ────────────────────────────────────────────────────────────
 cabilnInput.addEventListener('input', () => {
   clearTimeout(cabilnTimer);
   const seq = cabilnInput.value.trim();
+  const mode = notationSelect.value;
+  if (mode !== 'cabiln') {
+    // Non-CABILN: render via render_reference for a live preview
+    if (!seq) { resetCabiln(); return; }
+    showSpinner(renderInner);
+    cabilnTimer = setTimeout(() => doRenderForeign(seq), 400);
+    return;
+  }
   if (seq === lastCabiln) return;
   rerollSeed = 0;
   btnReroll.textContent = '⟳ Layout';
@@ -2210,6 +2291,32 @@ cabilnInput.addEventListener('input', () => {
   showSpinner(renderInner);
   cabilnTimer = setTimeout(() => doRenderCabiln(seq), 300);
 });
+
+async function doRenderForeign(txt) {
+  const { w, h } = canvasSize(renderCanvas);
+  try {
+    const res = await fetch('/render_reference', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ input: txt, width: w, height: h })
+    });
+    const data = await res.json();
+    if (data.error) {
+      setInner(renderInner, `<div class="placeholder err">${escHtml(data.error)}</div>`);
+      cabilnStatus.textContent = data.error;
+      cabilnStatus.className = 'statusbar';
+      cabilnInput.className = 'err';
+    } else {
+      setInner(renderInner, data.svg);
+      cabilnStatus.textContent = `${data.format}: ${data.info || ''}`;
+      cabilnStatus.className = 'statusbar ok';
+      cabilnInput.className = 'ok';
+    }
+  } catch (e) {
+    cabilnStatus.textContent = 'Server error';
+    cabilnStatus.className = 'statusbar';
+  }
+}
 
 function resetCabiln() {
   lastCabiln = '';
@@ -3162,32 +3269,58 @@ def _s2c_get_lib():
         return lib
 
 
+def _s2c_cip_score(aa_mol, ref_mol, match_tuple):
+    """Count CIP stereo agreements (+1) vs disagreements (-1) for a match.
+
+    RDKit's useChirality=True checks SMARTS @/@@ which is context-dependent,
+    not absolute.  This function compares CIP R/S codes directly instead.
+    """
+    from rdkit.Chem import AllChem as _AC
+    _AC.AssignStereochemistry(aa_mol, cleanIt=True, force=True)
+    _AC.AssignStereochemistry(ref_mol, cleanIt=True, force=True)
+    score = 0
+    for ref_idx, aa_idx in enumerate(match_tuple):
+        ref_cip = ref_mol.GetAtomWithIdx(ref_idx).GetPropsAsDict().get('_CIPCode')
+        aa_cip  = aa_mol.GetAtomWithIdx(aa_idx).GetPropsAsDict().get('_CIPCode')
+        if ref_cip and aa_cip:
+            score += 1 if ref_cip == aa_cip else -1
+    return score
+
+
 def _s2c_match(aa_mol, lib):
     """Match an isolated residue mol against the library.
 
-    Strategy: try stereo-sensitive match first; fall back to InChI-normalised
-    no-chirality match for resonance-ambiguous monomers (e.g. Arg guanidinium).
+    Strategy:
+      1. Match connectivity with useChirality=False.
+      2. Rank by CIP stereo agreement (R/S at each stereocenter).
+      3. For resonance-ambiguous monomers (Arg guanidinium, His tautomers)
+         that have no direct match, fall back to InChI-normalised no-chirality.
     """
-    orig_mol = aa_mol
     norm_mol = _s2c_normalize(aa_mol)
-    n_q = orig_mol.GetNumAtoms()
-    best_abbr, best_n, best_used_stereo = None, 0, False
+    n_q = aa_mol.GetNumAtoms()
+    best_abbr = None
+    best_atom_n = 0
+    best_stereo = -999
+
     for abbr, ref_orig, ref_norm, n_ref in lib:
         if n_ref > n_q: continue
-        # Pass 1: chirality-aware match against original (non-normalised) ref
-        match = orig_mol.GetSubstructMatches(ref_orig, useChirality=True)
-        used_stereo = True
-        if not match:
-            # Pass 2: normalised mol, no chirality (handles resonance tautomers)
+        # connectivity match (no chirality)
+        match = aa_mol.GetSubstructMatches(ref_orig, useChirality=False)
+        if match:
+            n_m = len(match[0])
+            # best CIP agreement across all match orientations
+            sc = max(_s2c_cip_score(aa_mol, ref_orig, m) for m in match)
+        else:
+            # resonance fallback: normalised mol, no chirality, stereo score = 0
             match = norm_mol.GetSubstructMatches(ref_norm, useChirality=False)
-            used_stereo = False
-        if not match: continue
-        n_m = len(match[0])
-        # Prefer stereo match over non-stereo at equal score
-        if n_m > best_n or (n_m == best_n and used_stereo and not best_used_stereo):
-            best_n = n_m; best_abbr = abbr; best_used_stereo = used_stereo
-            if n_m == n_q and used_stereo: break
-    return best_abbr, best_n
+            if not match: continue
+            n_m = len(match[0])
+            sc = 0
+
+        if n_m > best_atom_n or (n_m == best_atom_n and sc > best_stereo):
+            best_atom_n = n_m; best_abbr = abbr; best_stereo = sc
+            if n_m == n_q and sc >= 0: break
+    return best_abbr, best_atom_n
 
 
 def smiles_to_cabiln_core(smiles: str):
@@ -4061,6 +4194,59 @@ async def smiles_to_cabiln_endpoint(req: _SmilesToCabilnReq):
         }
     except Exception as exc:
         return JSONResponse({"error": str(exc).split('\n')[0]}, status_code=400)
+
+
+class _ToCabilnReq(BaseModel):
+    input: str
+
+
+@app.post("/to_cabiln")
+async def to_cabiln_endpoint(req: _ToCabilnReq):
+    """Convert SMILES, BILN, or HELM input to CABILN notation."""
+    from rdkit import Chem as _C
+    txt = req.input.strip()
+
+    # 1. Try SMILES
+    mol = _C.MolFromSmiles(txt)
+    if mol is not None:
+        try:
+            cabiln, details = smiles_to_cabiln_core(txt)
+            return {"cabiln": cabiln, "from": "SMILES",
+                    "details": [{"abbr": a, "score": s, "total": t} for a, s, t in details]}
+        except Exception as exc:
+            return JSONResponse({"error": str(exc).split('\n')[0]}, status_code=400)
+
+    # 2. Try HELM
+    if 'PEPTIDE' in txt.upper() and '$' in txt:
+        try:
+            import sys as _sys, pathlib as _pl
+            _sys.path.insert(0, str(_pl.Path(__file__).parent.parent / 'src'))
+            from pyPept.converter import Converter
+            from pyPept.sequence import biln_to_cabiln
+            biln = Converter(helm=txt).get_biln()
+            cabiln = biln_to_cabiln(biln)
+            # Verify it assembles
+            from pyPept.molecule import Molecule
+            from pyPept.sequence import Sequence
+            Molecule(Sequence(cabiln)).get_molecule(fmt='ROMol')
+            return {"cabiln": cabiln, "from": "HELM", "details": []}
+        except Exception as exc:
+            return JSONResponse({"error": f"HELM parse failed: {exc}".split('\n')[0]},
+                                status_code=400)
+
+    # 3. Try BILN
+    try:
+        from pyPept.sequence import biln_to_cabiln, Sequence
+        from pyPept.molecule import Molecule
+        cabiln = biln_to_cabiln(txt)
+        Molecule(Sequence(cabiln)).get_molecule(fmt='ROMol')
+        return {"cabiln": cabiln, "from": "BILN", "details": []}
+    except Exception as exc:
+        pass
+
+    return JSONResponse(
+        {"error": "Could not parse input as SMILES, BILN, or HELM"},
+        status_code=400)
 
 
 class _ValidateBondReq(BaseModel):
