@@ -3,7 +3,6 @@ uvicorn
 pydantic
 pyyaml
 rdkit
-epam.indigo
 numpy>=1.22.2
 pandas>=1.4.1
 requests>=2.27.1
