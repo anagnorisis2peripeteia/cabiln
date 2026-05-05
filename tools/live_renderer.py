@@ -1421,20 +1421,18 @@ function buildResidueUI(resMap, residues, chains, cabiln, bracketGroups, crossli
     if (chip) resChips.appendChild(chip);
     const hostGroups = groupsByHost[rIdx];
     if (hostGroups) {
-      // If multiple bracket groups on one host, add a $ chip to select all
-      if (hostGroups.length > 1) {
-        const allMembers = [rIdx, ...hostGroups.flat()];
-        const el = document.createElement('span');
-        el.className = 'res-chip branch-chip xlink-chip';
-        el.style.background = '#3a5050';
-        el.style.fontWeight = '700';
-        el.style.fontSize = '0.8em';
-        el.textContent = '$';
-        el.dataset.members = JSON.stringify(allMembers);
-        el.addEventListener('mouseenter', () => highlightGroup(allMembers));
-        el.addEventListener('mouseleave', clearHighlight);
-        resChips.appendChild(el);
-      }
+      // $ chip selects residue + all its bracket branches (always, even single group)
+      const allMembers = [rIdx, ...hostGroups.flat()];
+      const el = document.createElement('span');
+      el.className = 'res-chip branch-chip xlink-chip';
+      el.style.background = '#3a5050';
+      el.style.fontWeight = '700';
+      el.style.fontSize = '0.8em';
+      el.textContent = '$';
+      el.dataset.members = JSON.stringify(allMembers);
+      el.addEventListener('mouseenter', () => highlightGroup(allMembers));
+      el.addEventListener('mouseleave', clearHighlight);
+      resChips.appendChild(el);
       const brk = cabiln && cabiln.includes('{') ? ['{', '}'] : ['[', ']'];
       hostGroups.forEach(members => {
         resChips.appendChild(makeSeparator(brk[0], members));
@@ -1472,19 +1470,18 @@ function buildResidueUI(resMap, residues, chains, cabiln, bracketGroups, crossli
         // Bracket groups on this host (from bracket notation)
         const hostGroups = groupsByHost[rIdx];
         if (hostGroups) {
-          if (hostGroups.length > 1) {
-            const allMembers = [rIdx, ...hostGroups.flat()];
-            const el = document.createElement('span');
-            el.className = 'res-chip branch-chip xlink-chip';
-            el.style.background = '#3a5050';
-            el.style.fontWeight = '700';
-            el.style.fontSize = '0.8em';
-            el.textContent = '$';
-            el.dataset.members = JSON.stringify(allMembers);
-            el.addEventListener('mouseenter', () => highlightGroup(allMembers));
-            el.addEventListener('mouseleave', clearHighlight);
-            resChips.appendChild(el);
-          }
+          // $ selects residue + all bracket branches (always, even single group)
+          const bracketMembers = [rIdx, ...hostGroups.flat()];
+          const el = document.createElement('span');
+          el.className = 'res-chip branch-chip xlink-chip';
+          el.style.background = '#3a5050';
+          el.style.fontWeight = '700';
+          el.style.fontSize = '0.8em';
+          el.textContent = '$';
+          el.dataset.members = JSON.stringify(bracketMembers);
+          el.addEventListener('mouseenter', () => highlightGroup(bracketMembers));
+          el.addEventListener('mouseleave', clearHighlight);
+          resChips.appendChild(el);
           const brk = cabiln && cabiln.includes('{') ? ['{', '}'] : ['[', ']'];
           hostGroups.forEach(members => {
             resChips.appendChild(makeSeparator(brk[0], members));
@@ -1496,8 +1493,19 @@ function buildResidueUI(resMap, residues, chains, cabiln, bracketGroups, crossli
           });
         }
 
-        // Crosslink chips: if multiple on one residue, wrap each in brackets
+        // Crosslink chips: if multiple on one residue, add $ then wrap each in brackets
         if (hasXlinkBrackets) {
+          const xlinkMembers = [rIdx, ...xlinks.flatMap(g => g.members)];
+          const el = document.createElement('span');
+          el.className = 'res-chip branch-chip xlink-chip';
+          el.style.background = '#3a5050';
+          el.style.fontWeight = '700';
+          el.style.fontSize = '0.8em';
+          el.textContent = '$';
+          el.dataset.members = JSON.stringify(xlinkMembers);
+          el.addEventListener('mouseenter', () => highlightGroup(xlinkMembers));
+          el.addEventListener('mouseleave', clearHighlight);
+          resChips.appendChild(el);
           xlinks.forEach(g => {
             const isNterm = nTermXlinkTags.has(g.tag);
             if (!isNterm) {
