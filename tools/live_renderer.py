@@ -506,6 +506,7 @@ _HTML = r"""<!DOCTYPE html>
     transition: background .1s;
   }
   .lib-row:hover { background: #131f35; }
+  .lib-row.hidden { display: none; }
   .lib-abbr {
     font-family: "Cascadia Code", "Fira Mono", monospace;
     font-size: 12px;
@@ -790,6 +791,7 @@ _HTML = r"""<!DOCTYPE html>
   <button id="btn-build"  class="hbtn green" title="Visual peptide builder">🔧 Build</button>
   <button id="btn-to-bracket" class="hbtn" title="Convert to bracket notation">→[ ]</button>
   <button id="btn-to-branch"  class="hbtn" title="Convert to branch (%) notation">→%</button>
+  <button id="btn-reroll" class="hbtn"        title="New 2D layout seed" disabled>⟳ Reroll</button>
   <button id="btn-png"    class="hbtn"        title="Download PNG" disabled>⬇ PNG</button>
   <button id="btn-mol"    class="hbtn"        title="Download MOL file" disabled>⬇ MOL</button>
   <a href="/register" target="_blank" style="text-decoration:none;">
@@ -849,6 +851,7 @@ _HTML = r"""<!DOCTYPE html>
     <div id="lib-header">
       <span>Monomer Library</span>
       <input id="lib-search" type="text" placeholder="Search abbr / name / type…" autocomplete="off">
+      <button id="btn-rxn-filter" class="hbtn" title="Filter to monomers reactive with selected residue" disabled>⚗ Filter</button>
       <button id="lib-close" title="Close">✕</button>
     </div>
     <div id="lib-count"></div>
@@ -922,6 +925,9 @@ let buildLeft    = null;  // { abbr, rgroups: [{slot, chem_type, used}], selecte
 let buildRight   = null;  // { abbr, rgroups: [{slot, chem_type, used}], selectedSlot }
 let buildLeftRIdx = null;
 let buildRightRIdx = null;
+let rerollSeed   = 0;
+let reactionPairs = null;  // lazy-loaded list of [ct_a, ct_b] pairs
+let rxnFilterActive = false;
 
 const RES_COLORS = [
   '#2a5080','#2a8050','#802a50','#806a2a','#502a80',
@@ -970,6 +976,8 @@ const buildLeftRg   = document.getElementById('build-left-rgroups');
 const buildRightAbbr= document.getElementById('build-right-abbr');
 const buildRightSvg = document.getElementById('build-right-svg');
 const buildRightRg  = document.getElementById('build-right-rgroups');
+const btnReroll     = document.getElementById('btn-reroll');
+const btnRxnFilter  = document.getElementById('btn-rxn-filter');
 
 // ─── dark mode ────────────────────────────────────────────────────────────────
 btnDark.addEventListener('click', () => {
@@ -1009,6 +1017,7 @@ function openLib() {
   btnLib.classList.add('active');
   if (!libLoaded) loadMonomers();
   else libSearch.focus();
+  loadReactions();
 }
 function closeLib() {
   libPanel.classList.remove('open');
@@ -1021,6 +1030,12 @@ btnLib.addEventListener('click', () =>
 libClose.addEventListener('click', closeLib);
 
 libSearch.addEventListener('input', () => renderLibList(libSearch.value.trim().toLowerCase()));
+
+btnRxnFilter.addEventListener('click', () => {
+  rxnFilterActive = !rxnFilterActive;
+  btnRxnFilter.classList.toggle('active', rxnFilterActive);
+  renderLibList(libSearch.value.trim().toLowerCase());
+});
 
 // ─── example peptide sidebar ──────────────────────────────────────────────────
 let examplesLoaded = false;
@@ -1088,8 +1103,21 @@ async function loadMonomers() {
   }
 }
 
+async function loadReactions() {
+  if (reactionPairs !== null) return;
+  try {
+    const res = await fetch('/reactions');
+    reactionPairs = await res.json();
+  } catch (e) { reactionPairs = []; }
+}
+
+function parseCts(cts) {
+  if (!cts) return [];
+  return cts.split(',').map(p => p.includes(':') ? p.split(':')[1].trim() : p.trim()).filter(Boolean);
+}
+
 function renderLibList(q) {
-  const filtered = q
+  let filtered = q
     ? allMonomers.filter(m =>
         m.abbr.toLowerCase().includes(q) ||
         m.name.toLowerCase().includes(q) ||
@@ -1097,6 +1125,23 @@ function renderLibList(q) {
         (m.chem_types || '').toLowerCase().includes(q)
       )
     : allMonomers;
+
+  if (rxnFilterActive && buildLeft && Array.isArray(reactionPairs)) {
+    const pairSet = new Set(reactionPairs.map(([a, b]) => a + '|' + b));
+    let lcts;
+    if (buildLeft.selectedSlot !== null) {
+      const selRg = buildLeft.rgroups.find(r => r.slot === buildLeft.selectedSlot);
+      lcts = selRg && !selRg.used ? [selRg.chem_type] : [];
+    } else {
+      lcts = buildLeft.rgroups.filter(r => !r.used).map(r => r.chem_type);
+    }
+    filtered = filtered.filter(m => {
+      const mcts = parseCts(m.chem_types);
+      return mcts.some(mct => lcts.some(lct =>
+        pairSet.has(lct + '|' + mct) || pairSet.has(mct + '|' + lct)
+      ));
+    });
+  }
 
   libCount.textContent = `${filtered.length} / ${allMonomers.length} monomers`;
 
@@ -1732,6 +1777,12 @@ function clearBuild() {
   buildStatus.textContent = '';
   buildStatus.className = 'build-status';
   buildHint.textContent = 'Select a chip on the sequence, then right-click a monomer in the library';
+  btnRxnFilter.disabled = true;
+  if (rxnFilterActive) {
+    rxnFilterActive = false;
+    btnRxnFilter.classList.remove('active');
+    if (libLoaded) renderLibList(libSearch.value.trim().toLowerCase());
+  }
 }
 
 btnBuild.addEventListener('click', () => buildMode ? closeBuild() : openBuild());
@@ -1759,6 +1810,8 @@ async function loadBuildLeft(abbr, rIdx) {
     buildLeft = { abbr, rgroups: data.rgroups || [], selectedSlot: null };
     renderRgroupButtons(buildLeftRg, buildLeft, 'left');
     buildHint.textContent = buildRight ? 'Select R-groups to connect' : 'Now right-click a monomer in the library';
+    btnRxnFilter.disabled = false;
+    if (rxnFilterActive && libLoaded) renderLibList(libSearch.value.trim().toLowerCase());
   } catch (e) {
     buildLeftSvg.innerHTML = '<div class="box-placeholder">Error loading monomer</div>';
   }
@@ -1813,6 +1866,7 @@ function selectRgroup(side, slot) {
   if (side === 'left' && buildLeft) {
     buildLeft.selectedSlot = buildLeft.selectedSlot === slot ? null : slot;
     renderRgroupButtons(buildLeftRg, buildLeft, 'left');
+    if (rxnFilterActive && libLoaded) renderLibList(libSearch.value.trim().toLowerCase());
   } else if (side === 'right' && buildRight) {
     buildRight.selectedSlot = buildRight.selectedSlot === slot ? null : slot;
     renderRgroupButtons(buildRightRg, buildRight, 'right');
@@ -1936,6 +1990,12 @@ async function convertNotation(target) {
 btnToBracket.addEventListener('click', () => convertNotation('bracket'));
 btnToBranch.addEventListener('click', () => convertNotation('branch'));
 
+btnReroll.addEventListener('click', () => {
+  if (!lastCabiln) return;
+  rerollSeed++;
+  doRenderCabiln(lastCabiln);
+});
+
 function setExportReady(svg, molBlock) {
   lastSvg      = svg || '';
   lastMolBlock = molBlock || '';
@@ -1969,6 +2029,7 @@ cabilnInput.addEventListener('input', () => {
   clearTimeout(cabilnTimer);
   const seq = cabilnInput.value.trim();
   if (seq === lastCabiln) return;
+  rerollSeed = 0;
   if (!seq) { resetCabiln(); return; }
   showSpinner(renderInner);
   cabilnTimer = setTimeout(() => doRenderCabiln(seq), 300);
@@ -1976,6 +2037,8 @@ cabilnInput.addEventListener('input', () => {
 
 function resetCabiln() {
   lastCabiln = '';
+  rerollSeed = 0;
+  btnReroll.disabled = true;
   cabilnInput.className = '';
   cabilnStatus.textContent = '';
   cabilnStatus.className = 'statusbar';
@@ -1996,7 +2059,7 @@ async function doRenderCabiln(seq) {
     const res  = await fetch('/render', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cabiln: seq, width: w, height: h })
+      body: JSON.stringify({ cabiln: seq, width: w, height: h, seed: rerollSeed })
     });
     const data = await res.json();
     if (data.error) {
@@ -2006,12 +2069,14 @@ async function doRenderCabiln(seq) {
       cabilnStatus.className = 'statusbar';
       cabilnInput.className = 'err';
       clearExports();
+      btnReroll.disabled = true;
       resChips.innerHTML = '';
     } else {
       setInner(renderInner, data.svg);
       cabilnStatus.textContent = data.info || '';
       cabilnStatus.className = 'statusbar ok';
       cabilnInput.className = 'ok';
+      btnReroll.disabled = false;
       setExportReady(data.svg, data.mol_block);
       buildResidueUI(data.residue_map, data.residues, data.chains, data.cabiln_echo, data.bracket_groups, data.crosslink_groups);
       if (verifyMode && lastSmiles) triggerVerify();
@@ -2443,12 +2508,12 @@ app = FastAPI()
 
 # ── shared drawing helper ─────────────────────────────────────────────────────
 
-def _draw_mol(romol, width: int, height: int, used_slots: set | None = None) -> str:
+def _draw_mol(romol, width: int, height: int, used_slots: set | None = None, seed: int = 0) -> str:
     import re as _re
     from rdkit.Chem import rdDepictor
     from rdkit.Chem.Draw import rdMolDraw2D
     rdDepictor.SetPreferCoordGen(True)
-    rdDepictor.Compute2DCoords(romol)
+    rdDepictor.Compute2DCoords(romol, randomSeed=seed)
     rdDepictor.NormalizeDepiction(romol)
     rdDepictor.StraightenDepiction(romol)
     drawer = rdMolDraw2D.MolDraw2DSVG(width, height)
@@ -2523,6 +2588,7 @@ class _CabilnReq(BaseModel):
     cabiln: str
     width:  int = 960
     height: int = 680
+    seed:   int = 0
 
 class _SmilesReq(BaseModel):
     smiles: str
@@ -3343,6 +3409,17 @@ async def validate_bond(req: _ValidateBondReq):
         return JSONResponse({"error": str(exc).split('\n')[0]}, status_code=500)
 
 
+@app.get("/reactions")
+async def list_reactions():
+    """Return all valid (chem_type_a, chem_type_b) pairs from the reaction index."""
+    try:
+        from pyPept.interfaces.reaction_library import REACTION_INDEX
+        pairs = [list(pair) for pair in REACTION_INDEX.keys()]
+        return JSONResponse(pairs)
+    except Exception as exc:
+        return JSONResponse({"error": str(exc)}, status_code=500)
+
+
 def _build_bracket_groups(seq, chain_ids, cabiln='', crosslink_groups=None):
     """Identify bracket branch groups and their host monomers.
 
@@ -3458,7 +3535,7 @@ async def render(req: _CabilnReq):
             return JSONResponse({"error": "Assembly produced no molecule"}, status_code=400)
 
         w, h  = max(400, req.width), max(300, req.height)
-        svg   = _draw_mol(romol, w, h)
+        svg   = _draw_mol(romol, w, h, seed=req.seed)
         block = _mol_block(romol)
 
         res_map = mol.get_residue_atom_map()
