@@ -1495,6 +1495,15 @@ function buildResidueUI(resMap, residues, chains, cabiln, bracketGroups, crossli
   groups.forEach(g => g.members.forEach(m => branchSet.add(m)));
   currentBranchSet = new Set(branchSet);
 
+  function expandWithXlinks(idxList) {
+    const out = new Set(idxList);
+    for (const m of idxList) {
+      const xls = xlinkByMember[m];
+      if (xls) xls.forEach(g => g.members.forEach(x => out.add(x)));
+    }
+    return [...out];
+  }
+
   function appendResidueWithBrackets(rIdx) {
     if (branchSet.has(rIdx)) return;
     prependXlinks(rIdx);
@@ -1502,8 +1511,8 @@ function buildResidueUI(resMap, residues, chains, cabiln, bracketGroups, crossli
     if (chip) resChips.appendChild(chip);
     const hostGroups = groupsByHost[rIdx];
     if (hostGroups) {
-      // $ chip selects residue + all its bracket branches (always, even single group)
-      const allMembers = [rIdx, ...hostGroups.flat()];
+      // $ chip: host + bracket members + their xlink partners
+      const allMembers = expandWithXlinks([rIdx, ...hostGroups.flat()]);
       const el = document.createElement('span');
       el.className = 'res-chip branch-chip xlink-chip';
       el.style.background = '#3a5050';
@@ -1516,13 +1525,16 @@ function buildResidueUI(resMap, residues, chains, cabiln, bracketGroups, crossli
       resChips.appendChild(el);
       const brk = cabiln && cabiln.includes('{') ? ['{', '}'] : ['[', ']'];
       hostGroups.forEach(members => {
-        resChips.appendChild(makeSeparator(brk[0], members));
+        // bracket [ ] highlight: members + their xlink partners
+        const brkMembers = expandWithXlinks(members);
+        resChips.appendChild(makeSeparator(brk[0], brkMembers));
         members.forEach(mIdx => {
-          const mc = makeChip(mIdx);
+          // bracket member chip: simple hover (self only)
+          const mc = makeChip(mIdx, true);
           if (mc) resChips.appendChild(mc);
           appendXlinks(mIdx);
         });
-        resChips.appendChild(makeSeparator(brk[1], members));
+        resChips.appendChild(makeSeparator(brk[1], brkMembers));
       });
     }
     appendXlinks(rIdx);
@@ -1552,8 +1564,8 @@ function buildResidueUI(resMap, residues, chains, cabiln, bracketGroups, crossli
         // Bracket groups on this host (from bracket notation)
         const hostGroups = groupsByHost[rIdx];
         if (hostGroups) {
-          // $ selects residue + all bracket branches (always, even single group)
-          const bracketMembers = [rIdx, ...hostGroups.flat()];
+          // $ selects host + bracket members + their xlink partners
+          const bracketMembers = expandWithXlinks([rIdx, ...hostGroups.flat()]);
           const el = document.createElement('span');
           el.className = 'res-chip branch-chip xlink-chip';
           el.style.background = '#3a5050';
@@ -1566,13 +1578,14 @@ function buildResidueUI(resMap, residues, chains, cabiln, bracketGroups, crossli
           resChips.appendChild(el);
           const brk = cabiln && cabiln.includes('{') ? ['{', '}'] : ['[', ']'];
           hostGroups.forEach(members => {
-            resChips.appendChild(makeSeparator(brk[0], members));
+            const brkMembers = expandWithXlinks(members);
+            resChips.appendChild(makeSeparator(brk[0], brkMembers));
             members.forEach(mIdx => {
-              const mc = makeChip(mIdx);
+              const mc = makeChip(mIdx, true);
               if (mc) resChips.appendChild(mc);
               appendXlinks(mIdx);
             });
-            resChips.appendChild(makeSeparator(brk[1], members));
+            resChips.appendChild(makeSeparator(brk[1], brkMembers));
           });
         }
 
