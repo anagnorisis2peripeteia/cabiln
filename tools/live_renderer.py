@@ -3278,26 +3278,35 @@ def _s2c_strip_c_cap(mol):
     """Convert C-terminal amide (-C(=O)NH2) to carboxylic acid (-COOH).
 
     Handles the 'am' cap: after am assembly the C-terminus is -C(=O)NH2
-    rather than -C(=O)OH, so lib matching fails.  Replace the terminal N with O.
+    rather than -C(=O)OH, so lib matching fails.  Only touches the BACKBONE
+    terminal C (found via NCC=O pattern) so Asn/Gln side-chain amides are safe.
     Returns (converted_mol, did_convert).
     """
     from rdkit import Chem as _C
     from rdkit.Chem import RWMol
 
-    for atom in mol.GetAtoms():
-        if atom.GetSymbol() != 'C':
-            continue
-        dbl_o_nb = None
+    patt = _C.MolFromSmarts('[N]-[C]-[C](=O)')
+    matches = mol.GetSubstructMatches(patt)
+    for match in matches:
+        n_idx, ca_idx, co_idx = match[0], match[1], match[2]
+        co_atom = mol.GetAtomWithIdx(co_idx)
+        dbl_o = False
+        already_acid = False
         nh2_nb = None
-        for nb in atom.GetNeighbors():
-            b = mol.GetBondBetweenAtoms(atom.GetIdx(), nb.GetIdx())
-            if nb.GetSymbol() == 'O' and b.GetBondTypeAsDouble() == 2.0:
-                dbl_o_nb = nb
+        for nb in co_atom.GetNeighbors():
+            if nb.GetIdx() == ca_idx:
+                continue
+            b = mol.GetBondBetweenAtoms(co_idx, nb.GetIdx())
+            if nb.GetSymbol() == 'O':
+                if b.GetBondTypeAsDouble() == 2.0:
+                    dbl_o = True
+                else:
+                    already_acid = True
             elif nb.GetSymbol() == 'N':
                 c_nbrs = [x for x in nb.GetNeighbors() if x.GetSymbol() == 'C']
                 if len(c_nbrs) == 1:
                     nh2_nb = nb
-        if dbl_o_nb is None or nh2_nb is None:
+        if already_acid or not dbl_o or nh2_nb is None:
             continue
         rw = RWMol(mol)
         rw.ReplaceAtom(nh2_nb.GetIdx(), _C.Atom('O'))
@@ -3352,7 +3361,9 @@ def _s2c_get_lib():
             orig_cm = cm                    # preserve stereochemistry
             norm_cm = _s2c_normalize(cm)    # resonance-normalised (strips stereo)
             if norm_cm is None: continue
-            lib.append((abbr, orig_cm, norm_cm, norm_cm.GetNumAtoms()))
+            from rdkit.Chem import rdMolDescriptors as _RDM
+            n_rings = _RDM.CalcNumRings(orig_cm)
+            lib.append((abbr, orig_cm, norm_cm, norm_cm.GetNumAtoms(), n_rings))
             seen.add(abbr)
         lib.sort(key=lambda x: x[3], reverse=True)
         _s2c_lib_cache = lib
@@ -3381,36 +3392,48 @@ def _s2c_cip_score(aa_mol, ref_mol, match_tuple):
 def _s2c_match(aa_mol, lib):
     """Match an isolated residue mol against the library.
 
-    Strategy:
-      1. Match connectivity with useChirality=False.
-      2. Rank by CIP stereo agreement (R/S at each stereocenter).
-      3. For resonance-ambiguous monomers (Arg guanidinium, His tautomers)
-         that have no direct match, fall back to InChI-normalised no-chirality.
+    Priority: (1) most atoms matched, (2) ring-count agreement (prevents linear
+    patterns false-matching cyclic residues like Pip/Aze), (3) CIP stereo score.
+    Early break only when all three are perfect (true graph isomorphism + full
+    CIP agreement), which also correctly handles allo-isomers (aIle vs I).
     """
+    from rdkit.Chem import rdMolDescriptors as _RDM
     norm_mol = _s2c_normalize(aa_mol)
     n_q = aa_mol.GetNumAtoms()
+    n_rings_aa = _RDM.CalcNumRings(aa_mol)
     best_abbr = None
     best_atom_n = 0
     best_stereo = -999
+    best_ring_match = False
 
-    for abbr, ref_orig, ref_norm, n_ref in lib:
+    for abbr, ref_orig, ref_norm, n_ref, n_rings_ref in lib:
         if n_ref > n_q: continue
-        # connectivity match (no chirality)
         match = aa_mol.GetSubstructMatches(ref_orig, useChirality=False)
         if match:
             n_m = len(match[0])
-            # best CIP agreement across all match orientations
             sc = max(_s2c_cip_score(aa_mol, ref_orig, m) for m in match)
         else:
-            # resonance fallback: normalised mol, no chirality, stereo score = 0
             match = norm_mol.GetSubstructMatches(ref_norm, useChirality=False)
             if not match: continue
             n_m = len(match[0])
             sc = 0
 
-        if n_m > best_atom_n or (n_m == best_atom_n and sc > best_stereo):
+        rings_match = (n_rings_ref == n_rings_aa)
+        better = (
+            n_m > best_atom_n or
+            (n_m == best_atom_n and rings_match and not best_ring_match) or
+            (n_m == best_atom_n and rings_match == best_ring_match and sc > best_stereo)
+        )
+        if better:
             best_atom_n = n_m; best_abbr = abbr; best_stereo = sc
-            if n_m == n_q and sc >= 0: break
+            best_ring_match = rings_match
+            if n_m == n_q and rings_match:
+                # Perfect break: CIP must agree at every stereocenter in the ref
+                n_cip_ref = sum(
+                    1 for a in ref_orig.GetAtoms() if a.GetPropsAsDict().get('_CIPCode')
+                )
+                if sc == n_cip_ref:
+                    break
     return best_abbr, best_atom_n
 
 
