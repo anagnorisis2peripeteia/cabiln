@@ -3219,6 +3219,97 @@ def _s2c_is_cyclic(pairs, n):
     return any(abs(i - j) > 1 for i, j in pbs)
 
 
+def _s2c_strip_n_cap(mol):
+    """Remove N-terminal carbonyl-type cap (ac, fmoc, Boc) from backbone N.
+
+    Only strips substituents whose first atom is a carbonyl C (has a =O).
+    N-methyl groups (plain CH3) are preserved.
+    Returns (stripped_mol, did_strip).
+    """
+    from rdkit import Chem as _C
+    from rdkit.Chem import RWMol
+
+    patt = _C.MolFromSmarts('[N]-[C]-[C](=O)')
+    matches = mol.GetSubstructMatches(patt)
+    if not matches:
+        return mol, False
+
+    n_idx, ca_idx = matches[0][0], matches[0][1]
+    n_atom = mol.GetAtomWithIdx(n_idx)
+
+    cap_starts = []
+    for nb in n_atom.GetNeighbors():
+        if nb.GetIdx() == ca_idx:
+            continue
+        if nb.GetSymbol() == 'C':
+            has_carbonyl = any(
+                x.GetSymbol() == 'O' and
+                mol.GetBondBetweenAtoms(nb.GetIdx(), x.GetIdx()).GetBondTypeAsDouble() == 2.0
+                for x in nb.GetNeighbors()
+            )
+            if has_carbonyl:
+                cap_starts.append(nb.GetIdx())
+
+    if not cap_starts:
+        return mol, False
+
+    cap_atoms = set()
+    queue = list(cap_starts)
+    while queue:
+        ai = queue.pop()
+        if ai in cap_atoms or ai == n_idx:
+            continue
+        cap_atoms.add(ai)
+        for nb in mol.GetAtomWithIdx(ai).GetNeighbors():
+            if nb.GetIdx() not in cap_atoms and nb.GetIdx() != n_idx:
+                queue.append(nb.GetIdx())
+
+    rw = RWMol(mol)
+    for ai in sorted(cap_atoms, reverse=True):
+        rw.RemoveAtom(ai)
+    try:
+        _C.SanitizeMol(rw)
+        return rw.GetMol(), True
+    except Exception:
+        return mol, False
+
+
+def _s2c_strip_c_cap(mol):
+    """Convert C-terminal amide (-C(=O)NH2) to carboxylic acid (-COOH).
+
+    Handles the 'am' cap: after am assembly the C-terminus is -C(=O)NH2
+    rather than -C(=O)OH, so lib matching fails.  Replace the terminal N with O.
+    Returns (converted_mol, did_convert).
+    """
+    from rdkit import Chem as _C
+    from rdkit.Chem import RWMol
+
+    for atom in mol.GetAtoms():
+        if atom.GetSymbol() != 'C':
+            continue
+        dbl_o_nb = None
+        nh2_nb = None
+        for nb in atom.GetNeighbors():
+            b = mol.GetBondBetweenAtoms(atom.GetIdx(), nb.GetIdx())
+            if nb.GetSymbol() == 'O' and b.GetBondTypeAsDouble() == 2.0:
+                dbl_o_nb = nb
+            elif nb.GetSymbol() == 'N':
+                c_nbrs = [x for x in nb.GetNeighbors() if x.GetSymbol() == 'C']
+                if len(c_nbrs) == 1:
+                    nh2_nb = nb
+        if dbl_o_nb is None or nh2_nb is None:
+            continue
+        rw = RWMol(mol)
+        rw.ReplaceAtom(nh2_nb.GetIdx(), _C.Atom('O'))
+        try:
+            _C.SanitizeMol(rw)
+            return rw.GetMol(), True
+        except Exception:
+            continue
+
+    return mol, False
+
+
 # Capped library cache (invalidates when SDF changes)
 _s2c_lib_cache: list = []
 _s2c_lib_mtime: float = 0.0
@@ -3348,17 +3439,28 @@ def smiles_to_cabiln_core(smiles: str):
     pairs = _s2c_connected_pairs(mol, mappings)
     order = _s2c_ordered_chain(pairs, n)
 
-    lib = _s2c_get_lib()
-    details = []
-    for idx in order:
-        abbr, score = _s2c_match(aas[idx], lib)
-        details.append((abbr or '?', score, aas[idx].GetNumAtoms()))
-
     pos_map = {v: i for i, v in enumerate(order)}
     remap = [(pos_map[i], pos_map[j], t) for i, j, t in pairs]
+    cyclic = _s2c_is_cyclic(remap, n)
+
+    lib = _s2c_get_lib()
+    details = []
+    for pos, idx in enumerate(order):
+        aa = aas[idx]
+        if not cyclic:
+            if pos == 0:
+                stripped, did = _s2c_strip_n_cap(aa)
+                if did:
+                    aa = stripped
+            elif pos == n - 1:
+                stripped, did = _s2c_strip_c_cap(aa)
+                if did:
+                    aa = stripped
+        abbr, score = _s2c_match(aa, lib)
+        details.append((abbr or '?', score, aas[idx].GetNumAtoms()))
 
     abbrs = [d[0] for d in details]
-    cabiln = ('!1-' + '-'.join(abbrs) + '-!1') if _s2c_is_cyclic(remap, n) else '-'.join(abbrs)
+    cabiln = ('!1-' + '-'.join(abbrs) + '-!1') if cyclic else '-'.join(abbrs)
     return cabiln, details
 
 
