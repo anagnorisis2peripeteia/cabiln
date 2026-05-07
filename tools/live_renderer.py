@@ -951,6 +951,7 @@ let hlEnabled  = true;
 let libLoaded  = false;
 let allMonomers = [];
 let cabilnTimer = null;
+let cabilnAbort = null;
 let smilesTimer = null;
 let lastCabiln  = '';
 let lastSmiles  = '';
@@ -2336,6 +2337,11 @@ function resetCabiln() {
 }
 
 async function doRenderCabiln(seq) {
+  // Abort any in-flight render so stale responses never overwrite newer ones.
+  if (cabilnAbort) cabilnAbort.abort();
+  cabilnAbort = new AbortController();
+  const signal = cabilnAbort.signal;
+
   const _seqChanged = seq !== lastCabiln;
   lastCabiln = seq;
   if (buildMode && _seqChanged) clearBuild();
@@ -2345,7 +2351,8 @@ async function doRenderCabiln(seq) {
     const res  = await fetch('/render', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cabiln: seq, width: w, height: h, seed: rerollSeed })
+      body: JSON.stringify({ cabiln: seq, width: w, height: h, seed: rerollSeed }),
+      signal
     });
     const data = await res.json();
     if (data.error) {
@@ -2368,6 +2375,7 @@ async function doRenderCabiln(seq) {
       if (verifyMode && lastSmiles) triggerVerify();
     }
   } catch (e) {
+    if (e.name === 'AbortError') return;  // superseded by newer input — discard silently
     cabilnStatus.textContent = 'Server error — is the renderer running?';
     cabilnStatus.className = 'statusbar';
   }
