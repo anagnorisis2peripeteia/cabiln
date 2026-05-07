@@ -4614,11 +4614,11 @@ class TestNotationConversion:
 
     @pytest.mark.parametrize("label,branch", [
         ("NH2_branch",
-         "ac-A-D.(4,1)-G-am%G-A-am"),
+         "ac-A-D.!1(4,1)-G-am%G.!1-A-am"),
         ("COOH_branch",
-         "A-D.(4,1)-A-am%G-A-am"),
+         "A-D.!1(4,1)-A-am%G.!1-A-am"),
         ("disulfide_branch",
-         "ac-C.(4,4)-A-G-am%C-A-am"),
+         "ac-C.!1(4,4)-A-G-am%C.!1-A-am"),
     ])
     def test_branch_roundtrip(self, label, branch):
         from pyPept.sequence import cabiln_to_bracket, cabiln_to_branch
@@ -4646,15 +4646,15 @@ class TestNotationConversion:
     @pytest.mark.parametrize("label,bracket,expected_branch", [
         ("bracket_COOH",
          "A-D.[G(4,1).A(2,1).am(2,1)]-A-am",
-         "A-D.(4,1)-A-am%G-A-am"),
+         "A-D.!1(4,1)-A-am%G.!1-A-am"),
 
         ("bracket_NH2",
          "ac-A-D.[G(4,1).A(2,1).am(2,1)]-G-am",
-         "ac-A-D.(4,1)-G-am%G-A-am"),
+         "ac-A-D.!1(4,1)-G-am%G.!1-A-am"),
 
         ("bracket_disulfide",
          "ac-C.[C(4,4).A(2,1).am(2,1)]-A-G-am",
-         "ac-C.(4,4)-A-G-am%C-A-am"),
+         "ac-C.!1(4,4)-A-G-am%C.!1-A-am"),
 
         ("bracket_single_monomer",
          "ac-K.[A(4,2)]-G-am",
@@ -4706,7 +4706,7 @@ class TestNotationConversion:
 
     def test_two_branches_roundtrip(self):
         from pyPept.sequence import cabiln_to_bracket, cabiln_to_branch
-        branch = "ac-C.(4,4)-A-K.(4,1)-G-am%C-A-am%G-am"
+        branch = "ac-C.!1(4,4)-A-K.!2(4,1)-G-am%C.!1-A-am%G.!2-am"
         bracket = cabiln_to_bracket(branch)
         assert "[" in bracket and "]" in bracket
         back = cabiln_to_branch(bracket)
@@ -4845,7 +4845,7 @@ class TestNotationConversion:
     def test_long_chain_two_positional_branches_roundtrip(self):
         """9-residue chain with two positional branches — D (isopeptide) and E (isopeptide)."""
         from pyPept.sequence import cabiln_to_bracket, cabiln_to_branch
-        branch = "ac-A-G-D.(4,1)-A-A-E.(4,1)-G-am%G-A-am%A-G-am"
+        branch = "ac-A-G-D.!1(4,1)-A-A-E.!2(4,1)-G-am%G.!1-A-am%A.!2-G-am"
         expected_bracket = (
             "ac-A-G-D.[G(4,1).A(2,1).am(2,1)]"
             "-A-A-E.[A(4,1).G(2,1).am(2,1)]-G-am"
@@ -4888,13 +4888,13 @@ class TestNotationConversion:
          "ac-K.!1(4,2)-G-am%AEEA-AEEA-AEEA-!1"),
         ("four_residue_branch",
          "ac-D.[G(4,1).A(2,1).G(2,1).am(2,1)]-G-am",
-         "ac-D.(4,1)-G-am%G-A-G-am"),
+         "ac-D.!1(4,1)-G-am%G.!1-A-G-am"),
         ("no_caps",
          "D.[G(4,1).A(2,1).am(2,1)]-G-A",
-         "D.(4,1)-G-A%G-A-am"),
+         "D.!1(4,1)-G-A%G.!1-A-am"),
         ("cyclic_plus_plain",
          "!1-A-D.[G(4,1).am(2,1)]-G-A-!1",
-         "!1-A-D.(4,1)-G-A-!1%G-am"),
+         "!1-A-D.!2(4,1)-G-A-!1%G.!2-am"),
         ("semaglutide_like",
          "His-Aib-Glu-Gly-Thr-Phe-Thr-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-am",
          "His-Aib-Glu-Gly-Thr-Phe-Thr-K.!1(4,4)-am%C20FA-AEEA-gGlu.!1"),
@@ -4903,29 +4903,32 @@ class TestNotationConversion:
          "ac-K.!1(4,2)-G-am%G-G-!1"),
         ("n_terminal_marker_normalised",
          "ac-D.[G(4,1).G(2,1).am(2,1)]-G-am",
-         "ac-D.(4,1)-G-am%G-G-am"),
+         "ac-D.!1(4,1)-G-am%G.!1-G-am"),
         # Exotic / mixed-type cases
         ("mixed_lipid_isopeptide",
          "ac-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-A-D.[G(4,1).A(2,1).am(2,1)]-am",
-         "ac-K.!1(4,4)-A-D.(4,1)-am%C20FA-AEEA-gGlu.!1%G-A-am"),
+         "ac-K.!1(4,4)-A-D.!2(4,1)-am%C20FA-AEEA-gGlu.!1%G.!2-A-am"),
         ("long_isopeptide_arm",
          "ac-E.[G(4,1).G(2,1).A(2,1).A(2,1).am(2,1)]-G-am",
-         "ac-E.(4,1)-G-am%G-G-A-A-am"),
+         "ac-E.!1(4,1)-G-am%G.!1-G-A-A-am"),
         ("cyclic_plus_two_residue_arm",
          "!1-A-D.[G(4,1).A(2,1).am(2,1)]-G-A-!1",
-         "!1-A-D.(4,1)-G-A-!1%G-A-am"),
+         "!1-A-D.!2(4,1)-G-A-!1%G.!2-A-am"),
         ("two_isopeptide_one_lipid",
          "ac-D.[G(4,1).am(2,1)]-G-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-A-D.[A(4,1).am(2,1)]-am",
-         "ac-D.(4,1)-G-K.!1(4,4)-A-D.(4,1)-am%G-am%C20FA-AEEA-gGlu.!1%A-am"),
+         "ac-D.!1(4,1)-G-K.!2(4,4)-A-D.!3(4,1)-am%G.!1-am%C20FA-AEEA-gGlu.!2%A.!3-am"),
         ("ameleu_slot3_arm",
          "ac-D.[aMeLeu(4,3).G(2,1).am(2,1)]-G-am",
-         "ac-D.(4,3)-G-am%aMeLeu-G-am"),
+         "ac-D.!1(4,3)-G-am%aMeLeu.!1-G-am"),
         ("dual_e_scaffold",
          "ac-E.[G(4,1).A(2,1).am(2,1)]-G-E.[A(4,1).G(2,1).am(2,1)]-am",
-         "ac-E.(4,1)-G-E.(4,1)-am%G-A-am%A-G-am"),
+         "ac-E.!1(4,1)-G-E.!2(4,1)-am%G.!1-A-am%A.!2-G-am"),
         ("rgd_pendant_arm",
          "ac-G-D.[R(4,1).G(2,1).D(2,1).am(2,1)]-S-am",
-         "ac-G-D.(4,1)-S-am%R-G-D-am"),
+         "ac-G-D.!1(4,1)-S-am%R.!1-G-D-am"),
+        ("cyclic_isopeptide_lipid",
+         "!1-A-D.[G(4,1).am(2,1)]-G-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-A-!1",
+         "!1-A-D.!2(4,1)-G-K.!3(4,4)-A-!1%G.!2-am%C20FA-AEEA-gGlu.!3"),
     ])
     def test_bracket_to_branch_comprehensive(self, label, bracket, expected_branch):
         """bracket -> branch: exact string + roundtrip + independent SMILES equivalence."""
@@ -4951,39 +4954,42 @@ class TestNotationConversion:
          "ac-K.!1(4,4)-G-K.!2(4,4)-am%C20FA-AEEA-gGlu.!1%C20FA-AEEA-gGlu.!2",
          "ac-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-am"),
         ("three_positional_branches",
-         "ac-D.(4,1)-A-D.(4,1)-A-D.(4,1)-am%G-am%A-am%G-G-am",
+         "ac-D.!1(4,1)-A-D.!2(4,1)-A-D.!3(4,1)-am%G.!1-am%A.!2-am%G.!3-G-am",
          "ac-D.[G(4,1).am(2,1)]-A-D.[A(4,1).am(2,1)]-A-D.[G(4,1).G(2,1).am(2,1)]-am"),
         ("four_residue_branch",
-         "ac-D.(4,1)-G-am%G-A-G-am",
+         "ac-D.!1(4,1)-G-am%G.!1-A-G-am",
          "ac-D.[G(4,1).A(2,1).G(2,1).am(2,1)]-G-am"),
         ("no_caps",
-         "D.(4,1)-G-A%G-A-am",
+         "D.!1(4,1)-G-A%G.!1-A-am",
          "D.[G(4,1).A(2,1).am(2,1)]-G-A"),
         ("cyclic_plus_plain",
-         "!1-A-D.(4,1)-G-A-!1%G-am",
+         "!1-A-D.!2(4,1)-G-A-!1%G.!2-am",
          "!1-A-D.[G(4,1).am(2,1)]-G-A-!1"),
         # Exotic / mixed-type cases
         ("mixed_lipid_isopeptide",
-         "ac-K.!1(4,4)-A-D.(4,1)-am%C20FA-AEEA-gGlu.!1%G-A-am",
+         "ac-K.!1(4,4)-A-D.!2(4,1)-am%C20FA-AEEA-gGlu.!1%G.!2-A-am",
          "ac-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-A-D.[G(4,1).A(2,1).am(2,1)]-am"),
         ("long_isopeptide_arm",
-         "ac-E.(4,1)-G-am%G-G-A-A-am",
+         "ac-E.!1(4,1)-G-am%G.!1-G-A-A-am",
          "ac-E.[G(4,1).G(2,1).A(2,1).A(2,1).am(2,1)]-G-am"),
         ("cyclic_plus_two_residue_arm",
-         "!1-A-D.(4,1)-G-A-!1%G-A-am",
+         "!1-A-D.!2(4,1)-G-A-!1%G.!2-A-am",
          "!1-A-D.[G(4,1).A(2,1).am(2,1)]-G-A-!1"),
         ("two_isopeptide_one_lipid",
-         "ac-D.(4,1)-G-K.!1(4,4)-A-D.(4,1)-am%G-am%C20FA-AEEA-gGlu.!1%A-am",
+         "ac-D.!1(4,1)-G-K.!2(4,4)-A-D.!3(4,1)-am%G.!1-am%C20FA-AEEA-gGlu.!2%A.!3-am",
          "ac-D.[G(4,1).am(2,1)]-G-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-A-D.[A(4,1).am(2,1)]-am"),
         ("ameleu_slot3_arm",
-         "ac-D.(4,3)-G-am%aMeLeu-G-am",
+         "ac-D.!1(4,3)-G-am%aMeLeu.!1-G-am",
          "ac-D.[aMeLeu(4,3).G(2,1).am(2,1)]-G-am"),
         ("dual_e_scaffold",
-         "ac-E.(4,1)-G-E.(4,1)-am%G-A-am%A-G-am",
+         "ac-E.!1(4,1)-G-E.!2(4,1)-am%G.!1-A-am%A.!2-G-am",
          "ac-E.[G(4,1).A(2,1).am(2,1)]-G-E.[A(4,1).G(2,1).am(2,1)]-am"),
         ("rgd_pendant_arm",
-         "ac-G-D.(4,1)-S-am%R-G-D-am",
+         "ac-G-D.!1(4,1)-S-am%R.!1-G-D-am",
          "ac-G-D.[R(4,1).G(2,1).D(2,1).am(2,1)]-S-am"),
+        ("cyclic_isopeptide_lipid",
+         "!1-A-D.!2(4,1)-G-K.!3(4,4)-A-!1%G.!2-am%C20FA-AEEA-gGlu.!3",
+         "!1-A-D.[G(4,1).am(2,1)]-G-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-A-!1"),
     ])
     def test_branch_to_bracket_comprehensive(self, label, branch, expected_bracket):
         """branch -> bracket: exact string + roundtrip + independent SMILES equivalence."""
@@ -5039,7 +5045,7 @@ class TestNotationConversion:
             f"bracket mismatch: {bracket!r}"
         )
         back = cabiln_to_branch(bracket)
-        assert back == "ac-D.(4,1)-G-am%G-G-am", f"back form: {back!r}"
+        assert back == "ac-D.!1(4,1)-G-am%G.!1-G-am", f"back form: {back!r}"
         assert self._smiles(bracket) == self._smiles(back), "N-terminal marker: bracket vs normalised branch differ"
 
     def test_c_terminal_marker_branch_to_bracket(self):
