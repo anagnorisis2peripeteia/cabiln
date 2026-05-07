@@ -158,9 +158,9 @@ EXAMPLES = [
         "category": "Branched Peptides",
         "items": [
             {
-                "name": "RGD pendant arm",
-                "description": "Aspartate isopeptide — RGD integrin-targeting arm via β-carboxyl",
-                "cabiln": "ac-G-D.[R(4,1).G(2,1).D(2,1).am(2,1)]-S-am",
+                "name": "Isopeptide pendant arm",
+                "description": "Glutamate γ-carboxyl isopeptide — A-L pendant arm on G-E backbone",
+                "cabiln": "ac-G-E.[A(4,1).L(2,1).am(2,1)]-G-am",
             },
             {
                 "name": "Dual-E isopeptide scaffold",
