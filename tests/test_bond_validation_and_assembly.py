@@ -4928,7 +4928,7 @@ class TestNotationConversion:
          "ac-G-D.(4,1)-S-am%R-G-D-am"),
     ])
     def test_bracket_to_branch_comprehensive(self, label, bracket, expected_branch):
-        """bracket -> branch: exact string output + full roundtrip string equality."""
+        """bracket -> branch: exact string + roundtrip + independent SMILES equivalence."""
         from pyPept.sequence import cabiln_to_bracket, cabiln_to_branch
         result = cabiln_to_branch(bracket)
         assert result == expected_branch, (
@@ -4941,6 +4941,9 @@ class TestNotationConversion:
             f"{label}: branch->bracket roundtrip\n"
             f"  expected: {bracket!r}\n"
             f"  got:      {back!r}"
+        )
+        assert self._smiles(bracket) == self._smiles(result), (
+            f"{label}: bracket and branch forms give different molecules"
         )
 
     @pytest.mark.parametrize("label,branch,expected_bracket", [
@@ -4983,7 +4986,7 @@ class TestNotationConversion:
          "ac-G-D.[R(4,1).G(2,1).D(2,1).am(2,1)]-S-am"),
     ])
     def test_branch_to_bracket_comprehensive(self, label, branch, expected_bracket):
-        """branch -> bracket: exact string output + full roundtrip string equality."""
+        """branch -> bracket: exact string + roundtrip + independent SMILES equivalence."""
         from pyPept.sequence import cabiln_to_bracket, cabiln_to_branch
         result = cabiln_to_bracket(branch)
         assert result == expected_bracket, (
@@ -4996,6 +4999,9 @@ class TestNotationConversion:
             f"{label}: bracket->branch roundtrip\n"
             f"  expected: {branch!r}\n"
             f"  got:      {back!r}"
+        )
+        assert self._smiles(branch) == self._smiles(result), (
+            f"{label}: branch and bracket forms give different molecules"
         )
 
     def test_retatrutide_bracket_roundtrip(self):
@@ -5034,6 +5040,7 @@ class TestNotationConversion:
         )
         back = cabiln_to_branch(bracket)
         assert back == "ac-D.(4,1)-G-am%G-G-am", f"back form: {back!r}"
+        assert self._smiles(bracket) == self._smiles(back), "N-terminal marker: bracket vs normalised branch differ"
 
     def test_c_terminal_marker_branch_to_bracket(self):
         """C-terminal !1 marker: %G-G-!1 converts to bracket; round-trip gives inline dot form."""
