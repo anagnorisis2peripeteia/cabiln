@@ -100,7 +100,7 @@ EXAMPLES = [
             {
                 "name": "Retatrutide",
                 "description": "GIP/GLP-1/glucagon triple agonist · 39 AA · C20 lipid conjugate",
-                "cabiln": "Y-Aib-Q-G-T-F-T-S-D-Y-S-I-aMeLeu-L-D-K-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-A-Q-Aib-A-F-I-E-Y-L-L-E-G-G-P-S-S-G-A-P-P-P-S-am",
+                "cabiln": "Y-Aib-Q-G-T-F-T-S-D-Y-S-I-aMeLeu-L-D-K-K.[AEEA(4,2).gGlu(1,2).C20FA(1,2)]-A-Q-Aib-A-F-I-E-Y-L-L-E-G-G-P-S-S-G-A-P-P-P-S-am",
             },
             {
                 "name": "Semaglutide-like",
