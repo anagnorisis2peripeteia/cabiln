@@ -71,6 +71,22 @@ from collections import OrderedDict as _OD
 _render_cache: _OD = _OD()
 _RENDER_CACHE_MAX = 200
 
+def _to_bracket(cabiln: str) -> str:
+    """Normalise positional-% branch notation to bracket form for Sequence.
+
+    Pure crosslink branches (%TBMB.!1.!2.!3, %C20FA-AEEA-gGlu.!1, etc.) are
+    already parseable by Sequence and are left untouched.  Only branches where
+    every segment lacks an !n marker need conversion.
+    """
+    if '%' not in cabiln:
+        return cabiln
+    branch_parts = cabiln.split('%')[1:]
+    if all('!' in p for p in branch_parts):
+        return cabiln          # all crosslink — Sequence handles it
+    from pyPept.sequence import cabiln_to_bracket
+    return cabiln_to_bracket(cabiln)
+
+
 def _rc_get(key):
     if key in _render_cache:
         _render_cache.move_to_end(key)
@@ -5439,7 +5455,7 @@ async def monomer_rgroups(abbr: str, residue_idx: int = -1, cabiln: str = ''):
         if cabiln.strip() and residue_idx >= 0:
             try:
                 from pyPept.sequence import Sequence, _slot_for_attachment
-                seq = Sequence(cabiln)
+                seq = Sequence(_to_bracket(cabiln))
                 for bond in seq.s_bonds:
                     m1, atom1, m2, atom2 = bond[0], bond[1], bond[2], bond[3]
                     if len(bond) > 4:
@@ -5625,7 +5641,7 @@ async def insert_bond(req: _InsertBondReq):
         # pendant residues (e.g. a Cys arm from TBMB) can be extended correctly.
         from pyPept.sequence import Sequence
         try:
-            seq = Sequence(cabiln)
+            seq = Sequence(_to_bracket(cabiln))
             chain_ids = seq.s_chains.get('s_monomerIDs', [])
             main_set = set(chain_ids[0]) if chain_ids else set()
         except Exception:
@@ -5796,7 +5812,7 @@ async def insert_backbone(req: _InsertBackboneReq):
             return {"result": req.new_abbr}
 
         from pyPept.sequence import Sequence
-        seq = Sequence(cabiln)
+        seq = Sequence(_to_bracket(cabiln))
         chain_ids = seq.s_chains.get('s_monomerIDs', [])
         if not chain_ids:
             return {"error": "No chains found"}
@@ -6043,7 +6059,7 @@ async def render(req: _CabilnReq):
         from pyPept.molecule import Molecule
         from pyPept.sequence import Sequence
 
-        seq   = Sequence(req.cabiln)
+        seq   = Sequence(_to_bracket(req.cabiln))
         mol   = Molecule(seq)
         romol = mol.get_molecule(fmt='ROMol')
         if romol is None:
@@ -6147,7 +6163,7 @@ async def render_reference(req: _ReferenceReq):
         try:
             from pyPept.sequence import Sequence
             from pyPept.molecule import Molecule
-            seq = Sequence(txt)
+            seq = Sequence(_to_bracket(txt))
             mol = Molecule(seq)
             romol = mol.get_molecule(fmt='ROMol')
             fmt = 'CABILN'
@@ -6202,7 +6218,7 @@ async def verify(req: _VerifyReq):
         if smiles_mol is None:
             return JSONResponse({"error": "Invalid SMILES"}, status_code=400)
 
-        seq        = Sequence(req.cabiln)
+        seq        = Sequence(_to_bracket(req.cabiln))
         mol        = Molecule(seq)
         cabiln_mol = mol.get_molecule(fmt='ROMol')
         if cabiln_mol is None:
