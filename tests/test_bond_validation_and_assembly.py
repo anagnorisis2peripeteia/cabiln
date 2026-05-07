@@ -5599,20 +5599,22 @@ class TestSmilesToCabiln:
         )
 
     def test_dual_lipid_branch_terminal_k(self):
-        """Rules 4+5: two K residues each with gGlu-AEEA-C20FA, K at N- and C-terminus.
+        """Rules 4+5: two K residues each with E(4,4)-AEEA-C20FA, K at N- and C-terminus.
 
         Exercises the terminal-K branch detection fix: K has degree 2 in the
-        peptide-bond graph (one backbone bond to G + one isopeptide to gGlu),
-        which previously prevented gGlu from being recognised as a branch_pos.
-        The isopeptide bond is now classified as 'side chain' and gGlu is detected
+        peptide-bond graph (one backbone bond to G + one isopeptide to E(4,4)),
+        which previously prevented E from being recognised as a branch_pos.
+        The isopeptide bond is now classified as 'side chain' and E is detected
         as a degree-0 backbone node with a side-chain connection to a backbone K.
+
+        E(4,4) = Glu attached via γ-COOH (R4) on both ends — formerly gGlu.
 
         Invariants:
           - output == input (exact round-trip)
           - Both K residues carry bracket notation
           - No '?' tokens
         """
-        biln = "ac-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-am"
+        biln = "ac-K.[E(4,4).AEEA(1,2).C20FA(1,2)]-G-K.[E(4,4).AEEA(1,2).C20FA(1,2)]-am"
         result, details = self._r(biln)
         assert result == biln, (
             f"Dual-lipid round-trip failed:\n"
