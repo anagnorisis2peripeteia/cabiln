@@ -154,21 +154,6 @@ EXAMPLES = [
             },
         ],
     },
-    {
-        "category": "Branched Peptides",
-        "items": [
-            {
-                "name": "D-branched dipeptide",
-                "description": "Aspartate sidechain isopeptide — G-A pendant arm via R4 carboxyl",
-                "cabiln": "ac-A-D.[G(4,1).A(2,1).am(2,1)]-G-am",
-            },
-            {
-                "name": "Triple-branched backbone",
-                "description": "Three positional isopeptide branches via D sidechain carboxyl",
-                "cabiln": "ac-D.[G(4,1).am(2,1)]-A-D.[A(4,1).am(2,1)]-A-D.[G(4,1).G(2,1).am(2,1)]-am",
-            },
-        ],
-    },
 ]
 
 _HTML = r"""<!DOCTYPE html>
