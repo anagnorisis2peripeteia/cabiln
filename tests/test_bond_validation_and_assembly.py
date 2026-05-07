@@ -5782,6 +5782,16 @@ class TestSmilesToCabiln:
             f"Expected 3 thioether CSC motifs in TBMB product, got {smi.count('CSC')}: {smi}"
         )
 
+    def test_tbmb_converter_roundtrip(self):
+        """TBMB: branch -> bracket (flat) -> branch roundtrip, and flat bracket -> branch."""
+        from pyPept.sequence import cabiln_to_bracket, cabiln_to_branch
+        branch = "ac-C.!1(4,4)-A-A-C.!2(4,5)-A-A-C.!3(4,6)-am%TBMB.!1.!2.!3"
+        flat   = "ac-C.[TBMB(4,4).!2(5,4).!3(6,4)]-A-A-C.!2-A-A-C.!3-am"
+        bracket = cabiln_to_bracket(branch)
+        assert bracket == flat, f"branch->bracket: {bracket!r}"
+        back = cabiln_to_branch(bracket)
+        assert back == branch, f"bracket->branch: {back!r}"
+
     def test_tbmb_assembly_partial_two_cys(self):
         """TBMB scaffold: partial use (two of three Cys crosslinks) also assembles.
 

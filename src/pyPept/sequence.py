@@ -699,6 +699,27 @@ def cabiln_to_branch(cabiln):
             search_start = m_end
             continue
 
+        # Flat multi-crosslink form: [TBMB(4,4).!2(5,4).!3(6,4)]
+        # All non-anchor items are bare !n tags — same processing as sub-bracket form.
+        _xpat = _re.compile(r'^!\d+$')
+        if all(_xpat.match(abbr) for abbr, rp, rt in items[1:]):
+            all_used = set(int(x) for x in _re.findall(r'!(\d+)', result))
+            new_n = next(i for i in range(1, len(all_used) + 2) if i not in all_used)
+            new_tag = f'!{new_n}'
+            _xlink_ctr[0] = new_n + 1
+            new_result = result[:m_start] + f'.{new_tag}({r_host},{r_branch})' + result[m_end:]
+            arm_tags = []
+            for abbr, rp, rt in items[1:]:
+                # rp = hub-side slot, rt = partner-side slot
+                new_result = _re.sub(
+                    r'\.' + _re.escape(abbr) + r'(?!\()',
+                    f'.{abbr}({rt},{rp})',
+                    new_result, count=1)
+                arm_tags.append(abbr)
+            result = new_result
+            branches.append(anchor_abbr + '.' + '.'.join([new_tag] + arm_tags))
+            continue
+
         cont = [(rp, rt) for _, rp, rt in items[1:] if rp and rt]
         all_21 = cont and all(rp == '2' and rt == '1' for rp, rt in cont)
         # all_1x: all continuations enter via R1; out-slot may vary
@@ -944,9 +965,10 @@ def cabiln_to_bracket(cabiln):
             if not remaining:
                 bracket_str = f'.[{inner}]'
             else:
-                # Use sub-bracket arm grammar: [hub[.arm1][.arm2]...]
-                arms = ''.join(f'[.{r}]' for r in remaining)
-                bracket_str = f'.[{inner}{arms}]'
+                # Flat dot notation: all additional arms are pure crosslinks,
+                # so sub-brackets are unnecessary — [hub.!2(5,4).!3(6,4)]
+                flat_arms = ''.join(f'.{r}' for r in remaining)
+                bracket_str = f'.[{inner}{flat_arms}]'
             host_pat = _re.escape(f'.{anchor_tag}') + r'\(\d+,\d+\)'
             main_seg = _re.sub(host_pat, bracket_str, main_seg, count=1)
             continue
