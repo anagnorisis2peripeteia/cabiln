@@ -697,7 +697,8 @@ def cabiln_to_branch(cabiln):
 
         cont = [(rp, rt) for _, rp, rt in items[1:] if rp and rt]
         all_21 = cont and all(rp == '2' and rt == '1' for rp, rt in cont)
-        all_12 = cont and all(rp == '1' and rt == '2' for rp, rt in cont)
+        # all_1x: all continuations enter via R1; out-slot may be non-standard (e.g. E(1,4))
+        all_1x = cont and all(rp == '1' for rp, rt in cont)
 
         if all_21:
             host_marker = f'.({r_host},{r_branch})'
@@ -705,11 +706,15 @@ def cabiln_to_branch(cabiln):
             branch_str = '-'.join(branch_parts)
             result = result[:m_start] + host_marker + result[m_end:]
             branches.append(branch_str)
-        elif all_12:
+        elif all_1x:
             tag = f'!{_xlink_ctr[0]}'
             _xlink_ctr[0] += 1
             host_marker = f'.{tag}({r_host},{r_branch})'
-            reversed_cont = [abbr for abbr, _, _ in items[1:]][::-1]
+            # Reversed order; preserve non-default (1,n) slot annotations inline
+            reversed_cont = [
+                (abbr if rt == '2' else f'{abbr}({rp},{rt})')
+                for abbr, rp, rt in items[1:][::-1]
+            ]
             # Use dot form: .!n attaches to anchor's sidechain slot.
             # Only use hyphen form (-!n) when anchor connects via R2 (backbone terminus).
             if r_branch == '2':
@@ -886,12 +891,12 @@ def cabiln_to_bracket(cabiln):
             bracket_items.append(
                 f'{abbr}({rp},{rt})' if rp and rt else f'{abbr}(2,1)')
 
-        # Before anchor (N-terminal side) — reverse order, swap R-groups
+        # Before anchor (N-terminal side) — reverse order
+        # Use inline slot annotation when present; otherwise default (1,2).
         for j in range(anchor_idx - 1, -1, -1):
-            abbr = parsed[j][0]
-            nxt = parsed[j + 1]
-            if nxt[1] and nxt[2]:
-                bracket_items.append(f'{abbr}({nxt[2]},{nxt[1]})')
+            abbr, cur_rp, cur_rt = parsed[j]
+            if cur_rp and cur_rt:
+                bracket_items.append(f'{abbr}({cur_rp},{cur_rt})')
             else:
                 bracket_items.append(f'{abbr}(1,2)')
 
