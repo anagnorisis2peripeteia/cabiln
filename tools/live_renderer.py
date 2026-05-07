@@ -154,6 +154,21 @@ EXAMPLES = [
             },
         ],
     },
+    {
+        "category": "Branched Peptides",
+        "items": [
+            {
+                "name": "RGD pendant arm",
+                "description": "Aspartate isopeptide — RGD integrin-targeting arm via β-carboxyl",
+                "cabiln": "ac-G-D.[R(4,1).G(2,1).D(2,1).am(2,1)]-S-am",
+            },
+            {
+                "name": "Dual-E isopeptide scaffold",
+                "description": "Two glutamate γ-carboxyl isopeptide arms — asymmetric dual-branch scaffold",
+                "cabiln": "ac-E.[G(4,1).A(2,1).am(2,1)]-G-E.[A(4,1).G(2,1).am(2,1)]-am",
+            },
+        ],
+    },
 ]
 
 _HTML = r"""<!DOCTYPE html>

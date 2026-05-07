@@ -4567,8 +4567,11 @@ class TestNotationConversion:
         from rdkit.Chem import MolToSmiles
         if '%' in cabiln:
             branch_parts = cabiln.split('%')[1:]
-            has_crosslink_branch = any('!' in p for p in branch_parts)
-            if not has_crosslink_branch:
+            # Convert unless EVERY branch segment uses an explicit !n crosslink
+            # marker — mixed forms (some crosslink, some positional) also need
+            # conversion because Sequence can't handle positional .(r,r) syntax.
+            all_crosslink = all('!' in p for p in branch_parts)
+            if not all_crosslink:
                 cabiln = cabiln_to_bracket(cabiln)
         romol = Molecule(Sequence(cabiln)).get_molecule(fmt="ROMol")
         return MolToSmiles(romol)
@@ -4929,6 +4932,28 @@ class TestNotationConversion:
         ("n_terminal_marker_normalised",
          "ac-D.[G(4,1).G(2,1).am(2,1)]-G-am",
          "ac-D.(4,1)-G-am%G-G-am"),
+        # Exotic / mixed-type cases
+        ("mixed_lipid_isopeptide",
+         "ac-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-A-D.[G(4,1).A(2,1).am(2,1)]-am",
+         "ac-K.!1(4,4)-A-D.(4,1)-am%C20FA-AEEA-gGlu.!1%G-A-am"),
+        ("long_isopeptide_arm",
+         "ac-E.[G(4,1).G(2,1).A(2,1).A(2,1).am(2,1)]-G-am",
+         "ac-E.(4,1)-G-am%G-G-A-A-am"),
+        ("cyclic_plus_two_residue_arm",
+         "!1-A-D.[G(4,1).A(2,1).am(2,1)]-G-A-!1",
+         "!1-A-D.(4,1)-G-A-!1%G-A-am"),
+        ("two_isopeptide_one_lipid",
+         "ac-D.[G(4,1).am(2,1)]-G-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-A-D.[A(4,1).am(2,1)]-am",
+         "ac-D.(4,1)-G-K.!1(4,4)-A-D.(4,1)-am%G-am%C20FA-AEEA-gGlu.!1%A-am"),
+        ("ameleu_slot3_arm",
+         "ac-D.[aMeLeu(4,3).G(2,1).am(2,1)]-G-am",
+         "ac-D.(4,3)-G-am%aMeLeu-G-am"),
+        ("dual_e_scaffold",
+         "ac-E.[G(4,1).A(2,1).am(2,1)]-G-E.[A(4,1).G(2,1).am(2,1)]-am",
+         "ac-E.(4,1)-G-E.(4,1)-am%G-A-am%A-G-am"),
+        ("rgd_pendant_arm",
+         "ac-G-D.[R(4,1).G(2,1).D(2,1).am(2,1)]-S-am",
+         "ac-G-D.(4,1)-S-am%R-G-D-am"),
     ])
     def test_bracket_to_branch_comprehensive(self, label, bracket, expected_branch):
         """bracket -> branch: exact string output + roundtrip + SMILES equivalence."""
@@ -4967,6 +4992,28 @@ class TestNotationConversion:
         ("cyclic_plus_plain",
          "!1-A-D.(4,1)-G-A-!1%G-am",
          "!1-A-D.[G(4,1).am(2,1)]-G-A-!1"),
+        # Exotic / mixed-type cases
+        ("mixed_lipid_isopeptide",
+         "ac-K.!1(4,4)-A-D.(4,1)-am%C20FA-AEEA-gGlu.!1%G-A-am",
+         "ac-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-A-D.[G(4,1).A(2,1).am(2,1)]-am"),
+        ("long_isopeptide_arm",
+         "ac-E.(4,1)-G-am%G-G-A-A-am",
+         "ac-E.[G(4,1).G(2,1).A(2,1).A(2,1).am(2,1)]-G-am"),
+        ("cyclic_plus_two_residue_arm",
+         "!1-A-D.(4,1)-G-A-!1%G-A-am",
+         "!1-A-D.[G(4,1).A(2,1).am(2,1)]-G-A-!1"),
+        ("two_isopeptide_one_lipid",
+         "ac-D.(4,1)-G-K.!1(4,4)-A-D.(4,1)-am%G-am%C20FA-AEEA-gGlu.!1%A-am",
+         "ac-D.[G(4,1).am(2,1)]-G-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-A-D.[A(4,1).am(2,1)]-am"),
+        ("ameleu_slot3_arm",
+         "ac-D.(4,3)-G-am%aMeLeu-G-am",
+         "ac-D.[aMeLeu(4,3).G(2,1).am(2,1)]-G-am"),
+        ("dual_e_scaffold",
+         "ac-E.(4,1)-G-E.(4,1)-am%G-A-am%A-G-am",
+         "ac-E.[G(4,1).A(2,1).am(2,1)]-G-E.[A(4,1).G(2,1).am(2,1)]-am"),
+        ("rgd_pendant_arm",
+         "ac-G-D.(4,1)-S-am%R-G-D-am",
+         "ac-G-D.[R(4,1).G(2,1).D(2,1).am(2,1)]-S-am"),
     ])
     def test_branch_to_bracket_comprehensive(self, label, branch, expected_bracket):
         """branch -> bracket: exact string output + roundtrip + SMILES equivalence."""
