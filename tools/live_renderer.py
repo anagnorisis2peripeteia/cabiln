@@ -3733,6 +3733,20 @@ def _s2c_r_group_at_atom(orig_mol, orig_atom_idx, frag_atoms, abbr, raw_lib):
             isos = dummy_nbrs.get(raw_idx, [])
             if isos:
                 return min(isos)
+
+    # Reverse: find stripped within core_frag.
+    # Needed when the assembled segment has extra free-cap atoms (e.g. unused R2 α-OH stays
+    # when R4 is the chain continuation) — core_frag > stripped so forward match fails.
+    rev_matches = core_frag.GetSubstructMatches(stripped, useChirality=False)
+    for rev_match in rev_matches:
+        for stripped_i, core_i in enumerate(rev_match):
+            if core_i == new_junct_idx:
+                raw_idx = stripped_to_raw.get(stripped_i)
+                if raw_idx is None:
+                    continue
+                isos = dummy_nbrs.get(raw_idx, [])
+                if isos:
+                    return min(isos)
     return None
 
 
