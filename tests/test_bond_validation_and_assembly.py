@@ -5490,11 +5490,12 @@ class TestSmilesToCabiln:
     def test_retatrutide_full_sequence(self):
         """Rules 4+5: Retatrutide round-trip (39 backbone AA + C20 lipid branch).
 
-        K16-K17 backbone; lipid branch on K17 (AEEA-gGlu-C20FA, Wikipedia/PubChem order).
+        K16-K17 backbone; lipid branch on K17: AEEA(4,2).E(1,4).C20FA(1,2).
+        E(1,4) = Glu via γ-COOH (R4) — no separate gGlu monomer needed.
         """
         biln = (
             "Y-Aib-Q-G-T-F-T-S-D-Y-S-I-aMeLeu-L-D-"
-            "K-K.[AEEA(4,2).gGlu(1,2).C20FA(1,2)]-A-Q-Aib-A-F-I-E-"
+            "K-K.[AEEA(4,2).E(1,4).C20FA(1,2)]-A-Q-Aib-A-F-I-E-"
             "Y-L-L-E-G-G-P-S-S-G-A-P-P-P-S-am"
         )
         result, details = self._r(biln)

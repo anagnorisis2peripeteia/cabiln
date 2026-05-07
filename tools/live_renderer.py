@@ -100,12 +100,12 @@ EXAMPLES = [
             {
                 "name": "Retatrutide",
                 "description": "GIP/GLP-1/glucagon triple agonist · 39 AA · C20 lipid conjugate",
-                "cabiln": "Y-Aib-Q-G-T-F-T-S-D-Y-S-I-aMeLeu-L-D-K-K.[AEEA(4,2).gGlu(1,2).C20FA(1,2)]-A-Q-Aib-A-F-I-E-Y-L-L-E-G-G-P-S-S-G-A-P-P-P-S-am",
+                "cabiln": "Y-Aib-Q-G-T-F-T-S-D-Y-S-I-aMeLeu-L-D-K-K.[AEEA(4,2).E(1,4).C20FA(1,2)]-A-Q-Aib-A-F-I-E-Y-L-L-E-G-G-P-S-S-G-A-P-P-P-S-am",
             },
             {
                 "name": "Semaglutide-like",
                 "description": "GLP-1 scaffold · γGlu–AEEA–C20 lipid linker on K8",
-                "cabiln": "His-Aib-Glu-Gly-Thr-Phe-Thr-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-am",
+                "cabiln": "His-Aib-Glu-Gly-Thr-Phe-Thr-K.[E(4,4).AEEA(1,2).C20FA(1,2)]-am",
             },
         ],
     },
@@ -3736,6 +3736,9 @@ def _s2c_r_group_at_atom(orig_mol, orig_atom_idx, frag_atoms, abbr, raw_lib):
     return None
 
 
+_BRANCH_SEG_SKIP = frozenset({'gGlu', 'D_gGlu', 'hAsp', 'D_hAsp'})
+
+
 def _s2c_match_branch_segment(seg_frag, full_lib):
     """Match a branch segment mol against the full library; return (abbr, n_matched).
 
@@ -3743,6 +3746,10 @@ def _s2c_match_branch_segment(seg_frag, full_lib):
     1. Forward: lib as subgraph of segment (segment >= lib in size).
     2. Reverse: segment as subgraph of lib (lib has one or two extra cap atoms like -OH
        that were consumed when forming the amide bond in the full peptide).
+
+    Variant monomers that are slot-remapped aliases of standard amino acids (gGlu,
+    hAsp, etc.) are skipped — the base monomer (E, D) is detected instead and the
+    actual R-group slot is determined by _s2c_r_group_at_atom from connectivity.
     """
     from rdkit import Chem as _C
     seg_norm = _s2c_normalize(seg_frag)
@@ -3750,24 +3757,33 @@ def _s2c_match_branch_segment(seg_frag, full_lib):
         return None, 0
     best_abbr = None
     best_n = 0
+    best_exact = False  # True when match was forward AND n_lib == seg_n (perfect size match)
     seg_n = seg_norm.GetNumAtoms()
     for abbr, cm, norm_cm, n_lib in full_lib:
+        if abbr in _BRANCH_SEG_SKIP:
+            continue
         n_m = 0
+        is_exact = False
         # Forward: find lib monomer as subgraph of our segment
         if n_lib <= seg_n + 2:
             matches = seg_norm.GetSubstructMatches(norm_cm, useChirality=False)
             if matches:
                 n_m = len(matches[0])
+                is_exact = (n_lib == seg_n)
         # Reverse: find our segment as subgraph of lib (lib has extra cap -OH/-H atoms)
+        # Only try reverse if forward failed — reverse matches protected/variant forms
+        # that share the core but carry extra atoms (e.g. Glu_OAll has allyl on γ-COOH).
         if n_m == 0 and seg_n < n_lib <= seg_n + 4:
             matches = norm_cm.GetSubstructMatches(seg_norm, useChirality=False)
             if matches:
                 n_m = len(matches[0])  # = seg_n atoms matched within lib
-        if n_m > best_n:
+        # Prefer: higher n_m; tie-break: forward exact match beats reverse match
+        if n_m > best_n or (n_m == best_n and is_exact and not best_exact):
             best_n = n_m
             best_abbr = abbr
-            if best_n == seg_n:
-                break
+            best_exact = is_exact
+            if best_n == seg_n and best_exact:
+                break  # perfect forward match — no need to search further
     return best_abbr, best_n
 
 
@@ -4821,9 +4837,11 @@ def smiles_to_cabiln_core(smiles: str):
     # isopeptide branches (gGlu/D_gGlu) over generic D/L amino acids (DGlu/E).
     # Priority 0 = most preferred; unlisted abbrs get 999.
     _ISOPEP_PRIORITY: dict = {
-        'gGlu': 0, 'D_gGlu': 1,       # gamma-glutamate: canonical isopeptide forms
-        'hAsp': 2, 'D_hAsp': 3,        # homo-aspartate: next in specificity
-        'DGlu': 4, 'E': 5, 'dE': 6,    # D/L glutamate: generic backbone forms
+        'E': 0, 'dE': 1,               # standard Glu: use slot annotation (e.g. E(4,4) or E(1,4))
+        'D': 2, 'dD': 3,               # standard Asp
+        'DGlu': 4,                      # D-Glu
+        'hAsp': 5, 'D_hAsp': 6,        # homo-Asp: deprecated, use D(4,4) notation
+        'gGlu': 7, 'D_gGlu': 8,        # deprecated: use E(4,4) / E(1,4) notation instead
     }
     _bp_by_key: dict = {}  # frozenset(mol_atoms) → best _PlacedNode
     for p in iso_placements:
