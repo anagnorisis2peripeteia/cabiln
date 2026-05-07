@@ -4816,17 +4816,29 @@ def smiles_to_cabiln_core(smiles: str):
     # Non-backbone placements whose out_co bonds to a backbone atom are branch
     # anchors (e.g. gGlu attached to K's epsilon-N via isopeptide bond).
     # Deduplicate branch placements by atom set: L/D pairs and similar monomers
-    # (DGlu/gGlu/E/hAsp) cover identical heavy atoms.  Keep only one per unique
-    # atom set (coverage lib is n_atoms-sorted, so we keep the largest first).
-    _seen_bps: set = set()
-    branch_placements = []
+    # (DGlu/gGlu/E/hAsp) cover identical heavy atoms.  When multiple abbrs
+    # match the same atoms, prefer monomers specifically designated for
+    # isopeptide branches (gGlu/D_gGlu) over generic D/L amino acids (DGlu/E).
+    # Priority 0 = most preferred; unlisted abbrs get 999.
+    _ISOPEP_PRIORITY: dict = {
+        'gGlu': 0, 'D_gGlu': 1,       # gamma-glutamate: canonical isopeptide forms
+        'hAsp': 2, 'D_hAsp': 3,        # homo-aspartate: next in specificity
+        'DGlu': 4, 'E': 5, 'dE': 6,    # D/L glutamate: generic backbone forms
+    }
+    _bp_by_key: dict = {}  # frozenset(mol_atoms) → best _PlacedNode
     for p in iso_placements:
         if p.mol_atoms & backbone_atoms_all:
             continue  # overlaps backbone — skip
         key = frozenset(p.mol_atoms)
-        if key not in _seen_bps:
-            _seen_bps.add(key)
-            branch_placements.append(p)
+        if key not in _bp_by_key:
+            _bp_by_key[key] = p
+        else:
+            # Keep the placement with higher isopeptide priority
+            cur_pri = _ISOPEP_PRIORITY.get(_bp_by_key[key].abbr, 999)
+            new_pri = _ISOPEP_PRIORITY.get(p.abbr, 999)
+            if new_pri < cur_pri:
+                _bp_by_key[key] = p
+    branch_placements = list(_bp_by_key.values())
     branch_junctions: dict = {}  # backbone_pos → list of {'main_at', 'glu_node'}
 
     for bi, bb_node in enumerate(backbone):

@@ -5487,12 +5487,10 @@ class TestSmilesToCabiln:
             f"Expected bracket/crosslink notation on K in: {result!r}"
         )
 
-    @pytest.mark.xfail(reason="gGlu detection broken when adjacent free K16 present; fix pending")
     def test_retatrutide_full_sequence(self):
         """Rules 4+5: Retatrutide round-trip (39 backbone AA + C20 lipid branch).
 
         K16-K17 backbone; lipid branch on K17 (gGlu-AEEA-C20FA).
-        xfail: free K16 ε-NH2 interferes with gGlu iso-SMARTS matching.
         """
         biln = (
             "Y-Aib-Q-G-T-F-T-S-D-Y-S-I-aMeLeu-L-D-"
