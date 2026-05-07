@@ -5500,13 +5500,9 @@ class TestSmilesToCabiln:
             "Y-L-L-E-G-G-P-S-S-G-A-P-P-P-S-am"
         )
         result, details = self._r(biln)
-        assert "?" not in result, (
-            f"Unknown residue in Retatrutide result: {result!r}"
+        assert result == biln, (
+            f"Retatrutide round-trip mismatch:\n  got: {result!r}\n  exp: {biln!r}"
         )
-        assert "K.[" in result or "K.!1" in result, (
-            f"Lipid branch on K missing in: {result!r}"
-        )
-        assert result.endswith("-am"), f"C-terminal am cap lost in: {result!r}"
 
     # ------------------------------------------------------------------
     # Rule 6 — Crosslink / staple annotation
