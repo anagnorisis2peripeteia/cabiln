@@ -697,7 +697,7 @@ def cabiln_to_branch(cabiln):
 
         cont = [(rp, rt) for _, rp, rt in items[1:] if rp and rt]
         all_21 = cont and all(rp == '2' and rt == '1' for rp, rt in cont)
-        # all_1x: all continuations enter via R1; out-slot may be non-standard (e.g. E(1,4))
+        # all_1x: all continuations enter via R1; out-slot may vary
         all_1x = cont and all(rp == '1' for rp, rt in cont)
 
         if all_21:
@@ -710,21 +710,32 @@ def cabiln_to_branch(cabiln):
             tag = f'!{_xlink_ctr[0]}'
             _xlink_ctr[0] += 1
             host_marker = f'.{tag}({r_host},{r_branch})'
-            # Reversed order; preserve non-default (1,n) slot annotations inline.
-            # Branch form uses swapped (rt,rp) perspective so cabiln_to_bracket's
-            # swap-back gives the correct bracket (rp,rt).  Default (1,2) → no annotation.
-            reversed_cont = [
-                (abbr if (rp == '1' and rt == '2') else f'{abbr}({rt},{rp})')
-                for abbr, rp, rt in items[1:][::-1]
-            ]
-            # Use dot form: .!n attaches to anchor's sidechain slot.
-            # Only use hyphen form (-!n) when anchor connects via R2 (backbone terminus).
-            if r_branch == '2':
-                branch_str = '-'.join(reversed_cont + [anchor_abbr, tag])
-            else:
-                branch_str = '-'.join(reversed_cont + [anchor_abbr]) + f'.{tag}'
             result = result[:m_start] + host_marker + result[m_end:]
-            branches.append(branch_str)
+            all_12 = all(rt == '2' for _, rt in cont)
+            if all_12:
+                # Standard (1,2) continuations: reversed chain representation.
+                reversed_cont = [abbr for abbr, _, _ in items[1:][::-1]]
+                if r_branch == '2':
+                    branch_str = '-'.join(reversed_cont + [anchor_abbr, tag])
+                else:
+                    branch_str = '-'.join(reversed_cont + [anchor_abbr]) + f'.{tag}'
+                branches.append(branch_str)
+            else:
+                # Non-standard out-slot (e.g. E(1,4)): each monomer becomes a
+                # standalone % segment, with one dedicated crosslink per bond.
+                # K.[AEEA(4,2).E(1,4).C20FA(1,2)] →
+                #   K.!1(4,2)-am%AEEA.!1.!2(1,4)%E.!2.!3(1,2)%C20FA.!3
+                conts = items[1:]
+                n = len(conts)
+                cont_tags = [f'!{_xlink_ctr[0] + i}' for i in range(n)]
+                _xlink_ctr[0] += n
+                rp0, rt0 = conts[0][1], conts[0][2]
+                branches.append(f'{anchor_abbr}.{tag}.{cont_tags[0]}({rp0},{rt0})')
+                for k in range(n - 1):
+                    rp_k, rt_k = conts[k + 1][1], conts[k + 1][2]
+                    branches.append(
+                        f'{conts[k][0]}.{cont_tags[k]}.{cont_tags[k + 1]}({rp_k},{rt_k})')
+                branches.append(f'{conts[-1][0]}.{cont_tags[-1]}')
         elif cont:
             after = []
             before = []
@@ -810,6 +821,84 @@ def cabiln_to_bracket(cabiln):
             crosslink.append(bs)
         else:
             positional.append(bs)
+
+    # --- Phase 0: single-monomer chain segments connected by crosslinks ---
+    # Pattern: main has .!n(r_host, r_branch); branch segments form a linear
+    # chain MONO.!n.!m(a,b) → MONO.!m.!p(c,d) → MONO.!p (terminal).
+    # These are emitted by cabiln_to_branch for non-standard (rt≠2) continuations.
+    def _parse_chain_seg(bs):
+        raw = [p.strip() for p in _re.split(r'(?<!\()[-](?!\))', bs) if p.strip()]
+        if len(raw) != 1:
+            return None
+        seg = raw[0]
+        monomer = _re.split(r'\.!', seg)[0].strip()
+        outgoing = {}
+        for m in _re.finditer(r'\.(!\d+)\((\d+),(\d+)\)', seg):
+            outgoing[m.group(1)] = (m.group(2), m.group(3))
+        all_tags = _re.findall(r'\.(!\d+)', seg)
+        incoming = [t for t in all_tags if t not in outgoing]
+        return monomer, incoming, outgoing
+
+    seg_parse = {}
+    for bs in crosslink:
+        p = _parse_chain_seg(bs)
+        if p is not None:
+            seg_parse[bs] = p
+
+    chain_processed = set()
+    new_crosslink = []
+    for bs in crosslink:
+        if bs in chain_processed:
+            continue
+        if bs not in seg_parse:
+            new_crosslink.append(bs)
+            continue
+        monomer, incoming, outgoing = seg_parse[bs]
+        if not outgoing:
+            new_crosslink.append(bs)
+            continue
+        anchor_tag = None
+        for t in incoming:
+            if _re.search(_re.escape(f'.{t}') + r'\((\d+),(\d+)\)', main_seg):
+                anchor_tag = t
+                break
+        if anchor_tag is None:
+            new_crosslink.append(bs)
+            continue
+        host_m = _re.search(_re.escape(f'.{anchor_tag}') + r'\((\d+),(\d+)\)', main_seg)
+        r_host, r_branch = host_m.group(1), host_m.group(2)
+        prev_processed = set(chain_processed)
+        chain = [(monomer, r_host, r_branch)]
+        chain_processed.add(bs)
+        cur_out = outgoing
+        ok = True
+        while cur_out:
+            if len(cur_out) != 1:
+                ok = False
+                break
+            out_tag, (rp, rt) = next(iter(cur_out.items()))
+            next_bs = None
+            for bs2, (m2, inc2, out2) in seg_parse.items():
+                if bs2 not in chain_processed and out_tag in inc2:
+                    next_bs = bs2
+                    break
+            if next_bs is None:
+                ok = False
+                break
+            m2, inc2, out2 = seg_parse[next_bs]
+            chain.append((m2, rp, rt))
+            chain_processed.add(next_bs)
+            cur_out = out2
+        if not ok:
+            chain_processed = prev_processed
+            new_crosslink.append(bs)
+            continue
+        bracket_items = [f'{chain[0][0]}({chain[0][1]},{chain[0][2]})']
+        for mono, rp, rt in chain[1:]:
+            bracket_items.append(f'{mono}({rp},{rt})')
+        bracket_str = '.[' + '.'.join(bracket_items) + ']'
+        main_seg = main_seg[:host_m.start()] + bracket_str + main_seg[host_m.end():]
+    crosslink = new_crosslink
 
     # --- Phase 1: crosslink branches (.!n anchor in the branch) ---
     unconverted_crosslink = []

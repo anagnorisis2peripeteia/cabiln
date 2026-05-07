@@ -4998,6 +4998,51 @@ class TestNotationConversion:
         )
         assert back == expected_back, f"back mismatch: {back!r}"
 
+    def test_nonstd_slot_e14_bracket_to_branch(self):
+        """E(1,4) non-standard γ-Glu slot: bracket → multi-crosslink chain branch."""
+        from pyPept.sequence import cabiln_to_bracket, cabiln_to_branch
+        bracket = "K.[AEEA(4,2).E(1,4).C20FA(1,2)]-am"
+        expected_branch = "K.!1(4,2)-am%AEEA.!1.!2(1,4)%E.!2.!3(1,2)%C20FA.!3"
+        branch = cabiln_to_branch(bracket)
+        assert branch == expected_branch, f"bracket->branch: {branch!r}"
+        back = cabiln_to_bracket(branch)
+        assert back == bracket, f"branch->bracket roundtrip: {back!r}"
+
+    def test_nonstd_slot_retatrutide_e14_roundtrip(self):
+        """Full Retatrutide with E(1,4) bracket: bracket → branch → bracket roundtrip."""
+        from pyPept.sequence import cabiln_to_bracket, cabiln_to_branch
+        bracket = (
+            "Y-Aib-Q-G-T-F-T-S-D-Y-S-I-aMeLeu-L-D-"
+            "K-K.[AEEA(4,2).E(1,4).C20FA(1,2)]-A-Q-Aib-A-F-I-E-"
+            "Y-L-L-E-G-G-P-S-S-G-A-P-P-P-S-am"
+        )
+        expected_branch = (
+            "Y-Aib-Q-G-T-F-T-S-D-Y-S-I-aMeLeu-L-D-"
+            "K-K.!1(4,2)-A-Q-Aib-A-F-I-E-Y-L-L-E-G-G-P-S-S-G-A-P-P-P-S-am"
+            "%AEEA.!1.!2(1,4)%E.!2.!3(1,2)%C20FA.!3"
+        )
+        branch = cabiln_to_branch(bracket)
+        assert branch == expected_branch, (
+            f"bracket->branch:\n  expected: {expected_branch!r}\n  got: {branch!r}"
+        )
+        back = cabiln_to_bracket(branch)
+        assert back == bracket, (
+            f"branch->bracket roundtrip:\n  expected: {bracket!r}\n  got: {back!r}"
+        )
+
+    def test_nonstd_slot_branch_assembly_matches_bracket(self):
+        """E(1,4) branch form assembles to identical SMILES as bracket form."""
+        from pyPept.sequence import cabiln_to_branch
+        bracket = "K.[AEEA(4,2).E(1,4).C20FA(1,2)]-am"
+        branch = cabiln_to_branch(bracket)
+        smi_bracket = _smiles(bracket)
+        smi_branch = _smiles(branch)
+        assert smi_bracket == smi_branch, (
+            f"E(1,4) branch/bracket SMILES mismatch\n"
+            f"  bracket: {smi_bracket}\n"
+            f"  branch:  {smi_branch}"
+        )
+
 
 class TestBracketBranchEquivalence:
     """Assembly-level tests: bracket and branch forms produce identical SMILES."""
