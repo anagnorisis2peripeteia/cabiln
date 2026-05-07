@@ -710,9 +710,11 @@ def cabiln_to_branch(cabiln):
             tag = f'!{_xlink_ctr[0]}'
             _xlink_ctr[0] += 1
             host_marker = f'.{tag}({r_host},{r_branch})'
-            # Reversed order; preserve non-default (1,n) slot annotations inline
+            # Reversed order; preserve non-default (1,n) slot annotations inline.
+            # Branch form uses swapped (rt,rp) perspective so cabiln_to_bracket's
+            # swap-back gives the correct bracket (rp,rt).  Default (1,2) → no annotation.
             reversed_cont = [
-                (abbr if rt == '2' else f'{abbr}({rp},{rt})')
+                (abbr if (rp == '1' and rt == '2') else f'{abbr}({rt},{rp})')
                 for abbr, rp, rt in items[1:][::-1]
             ]
             # Use dot form: .!n attaches to anchor's sidechain slot.
@@ -891,12 +893,12 @@ def cabiln_to_bracket(cabiln):
             bracket_items.append(
                 f'{abbr}({rp},{rt})' if rp and rt else f'{abbr}(2,1)')
 
-        # Before anchor (N-terminal side) — reverse order
-        # Use inline slot annotation when present; otherwise default (1,2).
+        # Before anchor (N-terminal side) — reverse order.
+        # Branch items use swapped (rt,rp) perspective; swap back to get bracket (rp,rt).
         for j in range(anchor_idx - 1, -1, -1):
             abbr, cur_rp, cur_rt = parsed[j]
             if cur_rp and cur_rt:
-                bracket_items.append(f'{abbr}({cur_rp},{cur_rt})')
+                bracket_items.append(f'{abbr}({cur_rt},{cur_rp})')
             else:
                 bracket_items.append(f'{abbr}(1,2)')
 
