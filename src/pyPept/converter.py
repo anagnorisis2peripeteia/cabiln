@@ -140,12 +140,16 @@ class Converter:
         chains = copy.deepcopy(self.polymerinfo["chains"])
         bonds = copy.deepcopy(self.polymerinfo["bonds"])
 
+        def _helm_slot(rg):
+            """HELM/old-BILN R3 (sidechain) → pyPept slot 4 (backbone_n_mod at slot 3)."""
+            return 4 if rg == 3 else rg
+
         # move bond info into monomers using CABILN .!n(y,z) inline notation
         for ibond, bond in enumerate(bonds):
             c1_value, res1, rgroup1, c2_value, res2, rgroup2 = bond
             bid = ibond + 1
             chains[c1_value][res1] = (
-                f"{chains[c1_value][res1]}.!{bid}({rgroup1},{rgroup2})")
+                f"{chains[c1_value][res1]}.!{bid}({_helm_slot(rgroup1)},{_helm_slot(rgroup2)})")
             chains[c2_value][res2] = (
                 f"{chains[c2_value][res2]}.!{bid}")
 

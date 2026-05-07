@@ -173,9 +173,12 @@ class Molecule:
             if isinstance(rg, str):
                 parts = [v.strip() for v in rg.split(',')]
             else:
-                parts = list(rg)
-            if 0 < slot <= len(parts) and parts[slot - 1] != 'None':
-                return parts[slot - 1]
+                parts = [v.strip() if isinstance(v, str) else v for v in rg]
+            if 0 < slot <= len(parts):
+                val = parts[slot - 1]
+                val_s = str(val).strip() if val is not None else 'None'
+                if val_s not in ('None', ''):
+                    return val_s
             return None
 
         # ── Step 1: relabel all dummies to globally unique isotopes ──────────
@@ -222,15 +225,12 @@ class Molecule:
             entry = REACTION_INDEX.get((ct1, ct2))
 
             if entry is None:
-                # Fall back to a generic single-bond SMIRKS built with the
-                # globally-unique isotopes already embedded. slot_a/slot_b
-                # are left None so run_bond_smirks skips the isotope substitution.
-                sym1 = monomers_orig[m1].GetAtomWithIdx(at1).GetAtomicNum()
-                sym2 = monomers_orig[m2].GetAtomWithIdx(at2).GetAtomicNum()
-                entry = {'id': f'generic_{ct1}_{ct2}',
-                         'steps': [_generic_bond_smirks(iso1, sym1, iso2, sym2)],
-                         'slot_a': None,
-                         'slot_b': None}
+                raise ValueError(
+                    f"No reaction defined for chem_type pair ({ct1!r}, {ct2!r}) "
+                    f"between monomer {m1} (slot {slot1}) and monomer {m2} "
+                    f"(slot {slot2}). Check the slot indices in your CABILN — "
+                    f"this is most likely a wrong R-group index."
+                )
             else:
                 # For YAML reactions, orient so frag1/iso1 correspond to the
                 # SMIRKS slot_a (first reactant template).  If m1 is the slot_b

@@ -1291,15 +1291,15 @@ class TestRoundTrips:
     # ------------------------------------------------------------------ #
 
     def test_biln_to_cabiln_symmetric(self):
-        """Old BILN symmetric crosslink converts to CABILN .!n(y,y) notation."""
+        """Old BILN R3 sidechain crosslink remaps to pyPept slot 4 (backbone_n_mod at slot 3)."""
         result = biln_to_cabiln('C(1,3)-A-A-A-C(1,3)')
-        assert '.!1(3,3)' in result
+        assert '.!1(4,4)' in result   # R3 → slot 4 (thiol for Cys)
         assert result.count('.!1') == 2
 
     def test_biln_to_cabiln_asymmetric(self):
-        """Old BILN asymmetric crosslink converts correctly (different R-groups)."""
+        """Old BILN asymmetric crosslink: R3 slots remapped to pyPept slot 4."""
         result = biln_to_cabiln('K(1,4)-A-A-A-D(1,3)')
-        assert '.!1(4,3)' in result   # first endpoint: K R4 → partner R3
+        assert '.!1(4,4)' in result   # K R4 stays 4; D R3 → slot 4 (sidechain carboxyl)
         assert 'D.!1' in result       # second endpoint: implicit
 
     def test_biln_to_cabiln_no_op(self):
@@ -4547,7 +4547,31 @@ class TestNotationConversion:
       - Mixed notation (multiple branches, branches + crosslinks)
       - Identity pass-through (no brackets / no %)
       - Multi-monomer branches, single-monomer branches
+
+    String-equality assertions verify the notation form.
+    SMILES-equality assertions (via _smiles) verify molecular identity
+    for roundtrip tests where both ends assemble.
     """
+
+    @staticmethod
+    def _smiles(cabiln):
+        """Assemble CABILN and return canonical SMILES.
+
+        Positional % branch notation (no !n crosslink marker on the branch
+        monomers) cannot be parsed directly by Sequence — it must be in
+        bracket [...] form.  This helper detects that case and converts
+        automatically so callers don't need to care.
+        """
+        from pyPept.sequence import Sequence, cabiln_to_bracket
+        from pyPept.molecule import Molecule
+        from rdkit.Chem import MolToSmiles
+        if '%' in cabiln:
+            branch_parts = cabiln.split('%')[1:]
+            has_crosslink_branch = any('!' in p for p in branch_parts)
+            if not has_crosslink_branch:
+                cabiln = cabiln_to_bracket(cabiln)
+        romol = Molecule(Sequence(cabiln)).get_molecule(fmt="ROMol")
+        return MolToSmiles(romol)
 
     # ------------------------------------------------------------------
     # Branch -> Bracket -> Branch  (% notation is canonical input)
@@ -4559,8 +4583,8 @@ class TestNotationConversion:
          "ac-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-am"),
 
         ("NH2_branch",
-         "ac-A-K.(4,1)-G-am%G-A(2,1)-am(2,1)",
-         "ac-A-K.[G(4,1).A(2,1).am(2,1)]-G-am"),
+         "ac-A-D.(4,1)-G-am%G-A(2,1)-am(2,1)",
+         "ac-A-D.[G(4,1).A(2,1).am(2,1)]-G-am"),
 
         ("COOH_branch",
          "A-D.(4,1)-A-am%G-A(2,1)-am(2,1)",
@@ -4575,8 +4599,8 @@ class TestNotationConversion:
          "ac-K.[A(4,2)]-G-am"),
 
         ("unannotated_defaults_2_1",
-         "ac-K.(4,1)-G-am%G-A-am",
-         "ac-K.[G(4,1).A(2,1).am(2,1)]-G-am"),
+         "ac-D.(4,1)-G-am%G-A-am",
+         "ac-D.[G(4,1).A(2,1).am(2,1)]-G-am"),
     ])
     def test_branch_to_bracket(self, label, branch, expected_bracket):
         from pyPept.sequence import cabiln_to_bracket
@@ -4587,7 +4611,7 @@ class TestNotationConversion:
 
     @pytest.mark.parametrize("label,branch", [
         ("NH2_branch",
-         "ac-A-K.(4,1)-G-am%G-A-am"),
+         "ac-A-D.(4,1)-G-am%G-A-am"),
         ("COOH_branch",
          "A-D.(4,1)-A-am%G-A-am"),
         ("disulfide_branch",
@@ -4601,6 +4625,13 @@ class TestNotationConversion:
             f"{label}: roundtrip failed\n"
             f"  branch  -> bracket: {bracket!r}\n"
             f"  bracket -> branch:  {back!r}"
+        )
+        smi_orig = self._smiles(branch)
+        smi_back = self._smiles(back)
+        assert smi_orig == smi_back, (
+            f"{label}: roundtrip changed molecule\n"
+            f"  branch SMILES: {smi_orig}\n"
+            f"  back   SMILES: {smi_back}"
         )
 
     def test_crosslink_branch_to_bracket_roundtrip(self):
@@ -4622,8 +4653,8 @@ class TestNotationConversion:
          "A-D.(4,1)-A-am%G-A-am"),
 
         ("bracket_NH2",
-         "ac-A-K.[G(4,1).A(2,1).am(2,1)]-G-am",
-         "ac-A-K.(4,1)-G-am%G-A-am"),
+         "ac-A-D.[G(4,1).A(2,1).am(2,1)]-G-am",
+         "ac-A-D.(4,1)-G-am%G-A-am"),
 
         ("bracket_disulfide",
          "ac-C.[C(4,4).A(2,1).am(2,1)]-A-G-am",
@@ -4644,7 +4675,7 @@ class TestNotationConversion:
         ("bracket_COOH",
          "A-D.[G(4,1).A(2,1).am(2,1)]-A-am"),
         ("bracket_NH2",
-         "ac-A-K.[G(4,1).A(2,1).am(2,1)]-G-am"),
+         "ac-A-D.[G(4,1).A(2,1).am(2,1)]-G-am"),
         ("bracket_disulfide",
          "ac-C.[C(4,4).A(2,1).am(2,1)]-A-G-am"),
     ])
@@ -4656,6 +4687,13 @@ class TestNotationConversion:
             f"{label}: roundtrip failed\n"
             f"  bracket -> branch:  {branch!r}\n"
             f"  branch  -> bracket: {back!r}"
+        )
+        smi_orig = self._smiles(bracket)
+        smi_back = self._smiles(back)
+        assert smi_orig == smi_back, (
+            f"{label}: roundtrip changed molecule\n"
+            f"  original SMILES: {smi_orig}\n"
+            f"  back     SMILES: {smi_back}"
         )
 
     # ------------------------------------------------------------------
@@ -4692,7 +4730,7 @@ class TestNotationConversion:
         from pyPept.sequence import cabiln_to_bracket, cabiln_to_branch
         bracket = (
             "ac-C.[C(4,4).A(2,1).am(2,1)]"
-            "-A-K.[G(4,1).am(2,1)]-G-am"
+            "-A-D.[G(4,1).am(2,1)]-G-am"
         )
         branch = cabiln_to_branch(bracket)
         assert "%" in branch, f"Should have branch separators: {branch}"
@@ -4700,6 +4738,13 @@ class TestNotationConversion:
         assert back == bracket, (
             f"Two-bracket roundtrip failed:\n"
             f"  {bracket!r} -> {branch!r} -> {back!r}"
+        )
+        smi_orig = self._smiles(bracket)
+        smi_back = self._smiles(back)
+        assert smi_orig == smi_back, (
+            f"Two-bracket roundtrip changed molecule\n"
+            f"  original: {smi_orig}\n"
+            f"  back:     {smi_back}"
         )
 
     # ------------------------------------------------------------------
@@ -4816,11 +4861,11 @@ class TestNotationConversion:
         )
 
     def test_long_chain_two_positional_branches_roundtrip(self):
-        """9-residue chain with two different positional branches at K and E."""
+        """9-residue chain with two positional branches — D (isopeptide) and E (isopeptide)."""
         from pyPept.sequence import cabiln_to_bracket, cabiln_to_branch
-        branch = "ac-A-G-K.(4,1)-A-A-E.(4,1)-G-am%G-A-am%A-G-am"
+        branch = "ac-A-G-D.(4,1)-A-A-E.(4,1)-G-am%G-A-am%A-G-am"
         expected_bracket = (
-            "ac-A-G-K.[G(4,1).A(2,1).am(2,1)]"
+            "ac-A-G-D.[G(4,1).A(2,1).am(2,1)]"
             "-A-A-E.[A(4,1).G(2,1).am(2,1)]-G-am"
         )
         bracket = cabiln_to_bracket(branch)
@@ -4829,6 +4874,13 @@ class TestNotationConversion:
         assert back == branch, (
             f"bracket->branch roundtrip failed:\n"
             f"  {branch!r} -> {bracket!r} -> {back!r}"
+        )
+        smi_orig = self._smiles(branch)
+        smi_back = self._smiles(back)
+        assert smi_orig == smi_back, (
+            f"long-chain roundtrip changed molecule\n"
+            f"  original: {smi_orig}\n"
+            f"  back:     {smi_back}"
         )
 
     def test_mixed_bracket_types_roundtrip(self):
@@ -4860,14 +4912,14 @@ class TestNotationConversion:
          "ac-K.[AEEA(4,2).AEEA(1,2).AEEA(1,2)]-G-am",
          "ac-K.!1(4,2)-G-am%AEEA-AEEA-AEEA-!1"),
         ("four_residue_branch",
-         "ac-K.[G(4,1).A(2,1).G(2,1).am(2,1)]-G-am",
-         "ac-K.(4,1)-G-am%G-A-G-am"),
+         "ac-D.[G(4,1).A(2,1).G(2,1).am(2,1)]-G-am",
+         "ac-D.(4,1)-G-am%G-A-G-am"),
         ("no_caps",
-         "K.[G(4,1).A(2,1).am(2,1)]-G-A",
-         "K.(4,1)-G-A%G-A-am"),
+         "D.[G(4,1).A(2,1).am(2,1)]-G-A",
+         "D.(4,1)-G-A%G-A-am"),
         ("cyclic_plus_plain",
-         "!1-A-K.[G(4,1).am(2,1)]-G-A-!1",
-         "!1-A-K.(4,1)-G-A-!1%G-am"),
+         "!1-A-D.[G(4,1).am(2,1)]-G-A-!1",
+         "!1-A-D.(4,1)-G-A-!1%G-am"),
         ("semaglutide_like",
          "His-Aib-Glu-Gly-Thr-Phe-Thr-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-am",
          "His-Aib-Glu-Gly-Thr-Phe-Thr-K.!1(4,4)-am%C20FA-AEEA-gGlu.!1"),
@@ -4875,11 +4927,11 @@ class TestNotationConversion:
          "ac-K.[G(4,2).G(1,2)]-G-am",
          "ac-K.!1(4,2)-G-am%G-G-!1"),
         ("n_terminal_marker_normalised",
-         "ac-K.[G(4,1).G(2,1).am(2,1)]-G-am",
-         "ac-K.(4,1)-G-am%G-G-am"),
+         "ac-D.[G(4,1).G(2,1).am(2,1)]-G-am",
+         "ac-D.(4,1)-G-am%G-G-am"),
     ])
     def test_bracket_to_branch_comprehensive(self, label, bracket, expected_branch):
-        """bracket -> branch conversion: exact expected output + round-trip back."""
+        """bracket -> branch: exact string output + roundtrip + SMILES equivalence."""
         from pyPept.sequence import cabiln_to_bracket, cabiln_to_branch
         result = cabiln_to_branch(bracket)
         assert result == expected_branch, (
@@ -4893,26 +4945,31 @@ class TestNotationConversion:
             f"  expected: {bracket!r}\n"
             f"  got:      {back!r}"
         )
+        # Compare original bracket vs converted branch — catches bugs where the
+        # conversion produces a different molecule even if string roundtrip passes.
+        assert self._smiles(bracket) == self._smiles(result), (
+            f"{label}: bracket and branch forms give different molecules"
+        )
 
     @pytest.mark.parametrize("label,branch,expected_bracket", [
         ("two_lipid_crosslinks",
          "ac-K.!1(4,4)-G-K.!2(4,4)-am%C20FA-AEEA-gGlu.!1%C20FA-AEEA-gGlu.!2",
          "ac-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-am"),
         ("three_positional_branches",
-         "ac-K.(4,1)-A-K.(4,1)-A-K.(4,1)-am%G-am%A-am%G-G-am",
-         "ac-K.[G(4,1).am(2,1)]-A-K.[A(4,1).am(2,1)]-A-K.[G(4,1).G(2,1).am(2,1)]-am"),
+         "ac-D.(4,1)-A-D.(4,1)-A-D.(4,1)-am%G-am%A-am%G-G-am",
+         "ac-D.[G(4,1).am(2,1)]-A-D.[A(4,1).am(2,1)]-A-D.[G(4,1).G(2,1).am(2,1)]-am"),
         ("four_residue_branch",
-         "ac-K.(4,1)-G-am%G-A-G-am",
-         "ac-K.[G(4,1).A(2,1).G(2,1).am(2,1)]-G-am"),
+         "ac-D.(4,1)-G-am%G-A-G-am",
+         "ac-D.[G(4,1).A(2,1).G(2,1).am(2,1)]-G-am"),
         ("no_caps",
-         "K.(4,1)-G-A%G-A-am",
-         "K.[G(4,1).A(2,1).am(2,1)]-G-A"),
+         "D.(4,1)-G-A%G-A-am",
+         "D.[G(4,1).A(2,1).am(2,1)]-G-A"),
         ("cyclic_plus_plain",
-         "!1-A-K.(4,1)-G-A-!1%G-am",
-         "!1-A-K.[G(4,1).am(2,1)]-G-A-!1"),
+         "!1-A-D.(4,1)-G-A-!1%G-am",
+         "!1-A-D.[G(4,1).am(2,1)]-G-A-!1"),
     ])
     def test_branch_to_bracket_comprehensive(self, label, branch, expected_bracket):
-        """branch -> bracket conversion: exact expected output + round-trip back."""
+        """branch -> bracket: exact string output + roundtrip + SMILES equivalence."""
         from pyPept.sequence import cabiln_to_bracket, cabiln_to_branch
         result = cabiln_to_bracket(branch)
         assert result == expected_bracket, (
@@ -4925,6 +4982,10 @@ class TestNotationConversion:
             f"{label}: bracket->branch roundtrip\n"
             f"  expected: {branch!r}\n"
             f"  got:      {back!r}"
+        )
+        # Compare original branch vs converted bracket — catches chemistry bugs.
+        assert self._smiles(branch) == self._smiles(result), (
+            f"{label}: branch and bracket forms give different molecules"
         )
 
     def test_retatrutide_bracket_roundtrip(self):
@@ -4956,13 +5017,14 @@ class TestNotationConversion:
     def test_n_terminal_marker_branch_to_bracket(self):
         """N-terminal !1 marker: %!1-G-G-am converts to bracket; normalises to positional on back-trip."""
         from pyPept.sequence import cabiln_to_bracket, cabiln_to_branch
-        branch = "ac-K.!1(4,1)-G-am%!1-G-G-am"
+        branch = "ac-D.!1(4,1)-G-am%!1-G-G-am"
         bracket = cabiln_to_bracket(branch)
-        assert bracket == "ac-K.[G(4,1).G(2,1).am(2,1)]-G-am", (
+        assert bracket == "ac-D.[G(4,1).G(2,1).am(2,1)]-G-am", (
             f"bracket mismatch: {bracket!r}"
         )
         back = cabiln_to_branch(bracket)
-        assert back == "ac-K.(4,1)-G-am%G-G-am", f"back form: {back!r}"
+        assert back == "ac-D.(4,1)-G-am%G-G-am", f"back form: {back!r}"
+        assert self._smiles(bracket) == self._smiles(back), "N-terminal marker roundtrip changed molecule"
 
     def test_c_terminal_marker_branch_to_bracket(self):
         """C-terminal !1 marker: %G-G-!1 converts to bracket; round-trip gives inline dot form."""
@@ -5079,8 +5141,8 @@ class TestBracketBranchEquivalence:
          "ac-C.[C(4,4).A(2,1).am(2,1)]-A-G-am",
          "ac-C.(4,4)-A-G-am%C-A-am"),
         ("NH2_branch",
-         "ac-A-K.[G(4,1).A(2,1).am(2,1)]-G-am",
-         "ac-A-K.(4,1)-G-am%G-A-am"),
+         "ac-A-K.[G(4,2).A(1,2).ac(1,2)]-G-am",
+         "ac-A-K.!1(4,2)-G-am%ac-A-G-!1"),
         ("COOH_branch",
          "A-D.[G(4,1).A(2,1).am(2,1)]-A-am",
          "A-D.(4,1)-A-am%G-A-am"),

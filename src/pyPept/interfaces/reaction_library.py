@@ -125,6 +125,7 @@ _HEURISTIC_TYPES = frozenset({
     'amine_secondary',  # falls through to amine_primary element heuristic
     'carbon',           # plain sp3 C without carbonyl; heuristic fallback at end of infer_chem_type
     'carboxyl',         # C-attachment COOH; infer_smarts=None, disambiguated via LG in heuristic
+    'element_16',       # sulfonyl/sulfonate S; detected by element number heuristic (element_{sym})
 })
 _registry_types = {ct for ct, *_, lo in _CHEM_TYPE_REGISTRY if not lo}
 _bond_types = {ct for e in REACTIONS.values() for pair in e.get('reactant_pairs', []) for ct in pair}
@@ -171,6 +172,18 @@ def infer_chem_type(mol, attach_idx: int, slot: int = None,
                     bond = mol.GetBondBetweenAtoms(attach_idx, nb.GetIdx())
                     if bond and bond.GetBondTypeAsDouble() == 2.0:
                         return 'backbone_c'
+
+    # ── Early carboxyl guard — must precede SMARTS loop ─────────────────────
+    # Carboxyl C ([4*]C(=O)...) and aldehyde C ([4*]C(=O)...) are
+    # structurally identical in CHUCKLES; the aldehyde infer_smarts
+    # [CX3;H0,H1](=O)[!N] would match both.  Disambiguate via leaving group
+    # BEFORE the SMARTS scan so carboxyl is never misclassified as aldehyde.
+    if sym == 6 and leaving == '[OH]':
+        for _nb in atom.GetNeighbors():
+            if _nb.GetAtomicNum() == 8:
+                _b = mol.GetBondBetweenAtoms(attach_idx, _nb.GetIdx())
+                if _b and _b.GetBondTypeAsDouble() == 2.0:
+                    return 'carboxyl'
 
     # ── SMARTS-based detection (covers thiol, selenol, and all exotic types) ───
     for patt, ct in _EXOTIC_SMARTS:

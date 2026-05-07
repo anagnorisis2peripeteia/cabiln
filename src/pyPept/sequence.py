@@ -190,14 +190,18 @@ def biln_to_cabiln(biln):
 
     CABILN uses inline dot notation::
 
-        C.!1(3,3)-A-A-A-C.!1  # first endpoint declares both R-groups; second is implicit
+        C.!1(4,4)-A-A-A-C.!1  # slot 3 in HELM/old-BILN = slot 4 in pyPept (sidechain)
 
-    The conversion groups matches by bond ID, assigns the first occurrence as the
-    defining endpoint (with both R-groups), and the second as the implicit endpoint.
+    Old BILN/HELM R3 means "first sidechain".  pyPept inserts backbone_n_mod at
+    slot 3, pushing sidechains to slot 4+, so R3 maps to pyPept slot 4.
 
     :param biln: BILN string, possibly containing old crosslink annotations.
     :returns: equivalent CABILN string.
     """
+    def _remap_slot(rg_str):
+        """HELM/BILN R3 (sidechain) → pyPept slot 4 (backbone_n_mod occupies slot 3)."""
+        return '4' if rg_str == '3' else rg_str
+
     matches = list(_OLD_BILN_RE.finditer(biln))
     if not matches:
         return biln
@@ -212,8 +216,8 @@ def biln_to_cabiln(biln):
         if len(endpoints) != 2:
             continue
         m1, m2 = endpoints
-        tok1, rg1 = m1.group(1), m1.group(3)
-        tok2, rg2 = m2.group(1), m2.group(3)
+        tok1, rg1 = m1.group(1), _remap_slot(m1.group(3))
+        tok2, rg2 = m2.group(1), _remap_slot(m2.group(3))
         replacements[m1.start()] = (m1, f'{tok1}.!{bid}({rg1},{rg2})')
         replacements[m2.start()] = (m2, f'{tok2}.!{bid}')
 
@@ -572,7 +576,7 @@ def cabiln_to_branch(cabiln):
 
     All (2,1) continuations — positional branch, anchor at N-term::
 
-        K.[G(4,1).A(2,1).am(2,1)]-G-am  →  K.(4,1)-G-am%G-A-am
+        D.[G(4,1).A(2,1).am(2,1)]-G-am  →  D.(4,1)-G-am%G-A-am
 
     All (1,2) continuations — reversed chain, anchor at C-term with crosslink::
 

@@ -56,6 +56,42 @@
   steps:
     - "[1*][N:2].[4*][C:4](=[O:5]) >> [N:2][C:4](=[O:5])"
 
+- id: isopeptide
+  description: Amide bond from sidechain carboxyl to backbone N-terminus (isopeptide branch anchor)
+  reactant_pairs:
+    - [carboxyl, backbone_n]
+  slot_a: 4
+  slot_b: 1
+  steps:
+    - "[4*][C:1](=[O:2]).[1*][N:3] >> [C:1](=[O:2])[N:3]"
+
+- id: aspartimide
+  description: Succinimide/glutarimide ring — sidechain carboxyl + backbone N-mod (aspartimide artefact)
+  reactant_pairs:
+    - [carboxyl, backbone_n_mod]
+  slot_a: 4
+  slot_b: 3
+  steps:
+    - "[4*][C:1](=[O:2]).[3*][N:3] >> [C:1](=[O:2])[N:3]"
+
+- id: hydroxylamine_cap
+  description: O-N hydroxylamine bond (OBn_/OMe_ N-terminal caps) — unusual chemistry
+  reactant_pairs:
+    - [backbone_o, backbone_n]
+  slot_a: 1
+  slot_b: 1
+  steps:
+    - "[1*][O:1].[1*][N:2] >> [O:1][N:2]"
+
+- id: sulfonamide
+  description: N-S sulfonamide protecting group bond (e.g. pbf on Arg) — unusual chemistry
+  reactant_pairs:
+    - [amine_primary, element_16]
+  slot_a: 4
+  slot_b: 2
+  steps:
+    - "[4*][N:1].[2*][S:2] >> [N:1][S:2]"
+
 - id: backbone_ester
   description: Depsipeptide ester bond (O-to-C)
   reactant_pairs:

@@ -158,14 +158,14 @@ EXAMPLES = [
         "category": "Branched Peptides",
         "items": [
             {
-                "name": "K-branched dipeptide",
-                "description": "Lysine with G–A pendant arm via R4→R1 bond",
-                "cabiln": "ac-A-K.[G(4,1).A(2,1).am(2,1)]-G-am",
+                "name": "D-branched dipeptide",
+                "description": "Aspartate sidechain isopeptide — G-A pendant arm via R4 carboxyl",
+                "cabiln": "ac-A-D.[G(4,1).A(2,1).am(2,1)]-G-am",
             },
             {
                 "name": "Triple-branched backbone",
-                "description": "Three positional branches — each K carries a distinct arm",
-                "cabiln": "ac-K.[G(4,1).am(2,1)]-A-K.[A(4,1).am(2,1)]-A-K.[G(4,1).G(2,1).am(2,1)]-am",
+                "description": "Three positional isopeptide branches via D sidechain carboxyl",
+                "cabiln": "ac-D.[G(4,1).am(2,1)]-A-D.[A(4,1).am(2,1)]-A-D.[G(4,1).G(2,1).am(2,1)]-am",
             },
         ],
     },
