@@ -16,9 +16,9 @@ BILN already handles crosslinks and cyclic peptides. CABILN adds three things BI
 The result is that complex peptides that previously required separate files or hand-crafted CHUCKLES fragments can be written as a single string:
 
 ```
-# GLP-1 agonist — 39-residue backbone, C20 isopeptide lipidation on Lys
-# bracket reads synthesis order: K → gGlu(γ-COOH isopeptide) → AEEA → C20FA
-Y-Aib-Q-G-T-F-T-S-D-Y-S-I-aMeLeu-L-D-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-A-Q-Aib-A-F-I-E-Y-L-L-E-G-G-P-S-S-G-A-P-P-P-S-am
+# Retatrutide — 39-residue backbone, K16-K17 with C20 lipid conjugate on K17
+# bracket reads synthesis order: K17 → gGlu(γ-COOH isopeptide) → AEEA → C20FA
+Y-Aib-Q-G-T-F-T-S-D-Y-S-I-aMeLeu-L-D-K-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-A-Q-Aib-A-F-I-E-Y-L-L-E-G-G-P-S-S-G-A-P-P-P-S-am
 
 # Maleimide conjugation then AEEA linker on Cys — two sequential reactions,
 # each step's R-group refers to the preceding fragment, not to Cys directly
@@ -154,7 +154,7 @@ seq = Sequence('ac-K.!1(4,4)-G-am%C20FA-AEEA-gGlu.!1')
 Full Retatrutide (GIP/GLP-1/glucagon triple agonist, 39 residues) — bracket notation (synthesis order):
 
 ```python
-seq = Sequence('Y-Aib-Q-G-T-F-T-S-D-Y-S-I-aMeLeu-L-D-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-A-Q-Aib-A-F-I-E-Y-L-L-E-G-G-P-S-S-G-A-P-P-P-S-am')
+seq = Sequence('Y-Aib-Q-G-T-F-T-S-D-Y-S-I-aMeLeu-L-D-K-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-A-Q-Aib-A-F-I-E-Y-L-L-E-G-G-P-S-S-G-A-P-P-P-S-am')
 ```
 
 Branch notation (same molecule — fatty acid chain reversed, C20FA leads because it has no R1):

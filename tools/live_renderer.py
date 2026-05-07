@@ -100,7 +100,7 @@ EXAMPLES = [
             {
                 "name": "Retatrutide",
                 "description": "GIP/GLP-1/glucagon triple agonist · 39 AA · C20 lipid conjugate",
-                "cabiln": "Y-Aib-Q-G-T-F-T-S-D-Y-S-I-aMeLeu-L-D-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-A-Q-Aib-A-F-I-E-Y-L-L-E-G-G-P-S-S-G-A-P-P-P-S-am",
+                "cabiln": "Y-Aib-Q-G-T-F-T-S-D-Y-S-I-aMeLeu-L-D-K-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-A-Q-Aib-A-F-I-E-Y-L-L-E-G-G-P-S-S-G-A-P-P-P-S-am",
             },
             {
                 "name": "Semaglutide-like",
@@ -3167,6 +3167,38 @@ def _s2c_isolate_residues(m, aa_units):
                             pass
         mol_out = rw.GetMol()
         _C.SanitizeMol(mol_out)
+        # Fix chirality: AddAtom copies ChiralTags, but they are relative to
+        # the original molecule's neighbor ordering.  In the fragment the
+        # neighbor order may differ, flipping the effective CW/CCW meaning.
+        # Correct each chiral centre so its CIP code matches the original.
+        from rdkit.Chem import AllChem as _AC2, rdchem as _RC2
+        _AC2.AssignStereochemistry(mol_out, cleanIt=True, force=True)
+        inv_map = {v: k for k, v in amap.items()}
+        needs_fix = False
+        for frag_idx, orig_idx in inv_map.items():
+            orig_cip = m.GetAtomWithIdx(orig_idx).GetPropsAsDict().get('_CIPCode')
+            if not orig_cip:
+                continue
+            frag_cip = mol_out.GetAtomWithIdx(frag_idx).GetPropsAsDict().get('_CIPCode')
+            if frag_cip and frag_cip != orig_cip:
+                needs_fix = True
+                break
+        if needs_fix:
+            rw2 = _C.RWMol(mol_out)
+            for frag_idx, orig_idx in inv_map.items():
+                orig_cip = m.GetAtomWithIdx(orig_idx).GetPropsAsDict().get('_CIPCode')
+                if not orig_cip:
+                    continue
+                frag_cip = mol_out.GetAtomWithIdx(frag_idx).GetPropsAsDict().get('_CIPCode')
+                if frag_cip and frag_cip != orig_cip:
+                    ct = rw2.GetAtomWithIdx(frag_idx).GetChiralTag()
+                    if ct == _RC2.ChiralType.CHI_TETRAHEDRAL_CW:
+                        rw2.GetAtomWithIdx(frag_idx).SetChiralTag(
+                            _RC2.ChiralType.CHI_TETRAHEDRAL_CCW)
+                    elif ct == _RC2.ChiralType.CHI_TETRAHEDRAL_CCW:
+                        rw2.GetAtomWithIdx(frag_idx).SetChiralTag(
+                            _RC2.ChiralType.CHI_TETRAHEDRAL_CW)
+            mol_out = rw2.GetMol()
         aas.append(mol_out)
     return aas, mappings
 
@@ -3739,12 +3771,14 @@ def _s2c_match_branch_segment(seg_frag, full_lib):
     return best_abbr, best_n
 
 
-def _s2c_walk_branch(mol, glu_atoms, glu_outgoing_n, orphan_atoms, full_lib, raw_lib, anchor_abbr, anchor_n_atom):
-    """Walk the branch chain starting from gGlu outward through orphan atoms.
+def _s2c_walk_branch(mol, glu_atoms, glu_outgoing_n, orphan_atoms, full_lib, raw_lib, anchor_abbr, anchor_n_atom, junction_abbr='gGlu'):
+    """Walk the branch chain starting from the junction monomer outward.
 
-    Returns list of (abbr, prev_r, cur_r) for each piece in the branch (including gGlu).
-    glu_outgoing_n: gGlu's alpha-N atom index (outgoing junction to AEEA)
+    Returns list of (abbr, prev_r, cur_r) for each piece in the branch
+    (including the junction monomer).
+    glu_outgoing_n: junction monomer's alpha-N atom index (outgoing)
     anchor_n_atom: K's epsilon-N atom index (main_at)
+    junction_abbr: abbreviation of the junction monomer (detected, not hardcoded)
     """
     from rdkit import Chem as _C
     from rdkit.Chem import RWMol as _RW
@@ -3752,8 +3786,7 @@ def _s2c_walk_branch(mol, glu_atoms, glu_outgoing_n, orphan_atoms, full_lib, raw
 
     results = []
 
-    # ── Step 1: R-group for K (anchor) → gGlu connection ───────────────────
-    # Find gGlu's incoming junction atom: the branch_at in gGlu = the C=O bonded to anchor's N
+    # ── Step 1: R-group for K (anchor) → junction monomer connection ───────
     branch_at = None
     for nb in mol.GetAtomWithIdx(anchor_n_atom).GetNeighbors():
         if nb.GetIdx() in glu_atoms:
@@ -3763,12 +3796,12 @@ def _s2c_walk_branch(mol, glu_atoms, glu_outgoing_n, orphan_atoms, full_lib, raw
     anchor_r = _s2c_r_group_at_atom(mol, anchor_n_atom,
                                      set(range(mol.GetNumAtoms())) - glu_atoms - orphan_atoms,
                                      anchor_abbr, raw_lib)
-    glu_in_r = _s2c_r_group_at_atom(mol, branch_at, glu_atoms, 'gGlu', raw_lib) if branch_at is not None else None
+    glu_in_r = _s2c_r_group_at_atom(mol, branch_at, glu_atoms, junction_abbr, raw_lib) if branch_at is not None else None
 
-    # ── Step 2: Identify gGlu's outgoing R-group (at glu_outgoing_n) ────────
-    glu_out_r = _s2c_r_group_at_atom(mol, glu_outgoing_n, glu_atoms, 'gGlu', raw_lib)
+    # ── Step 2: Identify junction monomer's outgoing R-group ────────────────
+    glu_out_r = _s2c_r_group_at_atom(mol, glu_outgoing_n, glu_atoms, junction_abbr, raw_lib)
 
-    results.append(('gGlu', anchor_r or 4, glu_in_r or 4))
+    results.append((junction_abbr, anchor_r or 4, glu_in_r or 4))
 
     if glu_outgoing_n is None or not orphan_atoms:
         return results
@@ -3941,21 +3974,27 @@ def _s2c_walk_branch(mol, glu_atoms, glu_outgoing_n, orphan_atoms, full_lib, raw
 
 
 def _s2c_cip_score(aa_mol, ref_mol, match_tuple):
-    """Count CIP stereo agreements (+1) vs disagreements (-1) for a match.
+    """Score CIP stereo agreement for a match.
 
-    RDKit's useChirality=True checks SMARTS @/@@ which is context-dependent,
-    not absolute.  This function compares CIP R/S codes directly instead.
+    Returns (n_agree, n_ref_stereo) where n_agree counts stereocenters with
+    matching CIP codes and n_ref_stereo counts defined stereocenters in ref.
+    Disagreements score 0 (not -1) because CIP codes are context-dependent:
+    the same absolute configuration can produce different R/S labels when the
+    molecular graph changes (e.g. isolated fragment vs full peptide chain).
     """
     from rdkit.Chem import AllChem as _AC
     _AC.AssignStereochemistry(aa_mol, cleanIt=True, force=True)
     _AC.AssignStereochemistry(ref_mol, cleanIt=True, force=True)
-    score = 0
+    n_agree = 0
+    n_ref_stereo = 0
     for ref_idx, aa_idx in enumerate(match_tuple):
         ref_cip = ref_mol.GetAtomWithIdx(ref_idx).GetPropsAsDict().get('_CIPCode')
         aa_cip  = aa_mol.GetAtomWithIdx(aa_idx).GetPropsAsDict().get('_CIPCode')
-        if ref_cip and aa_cip:
-            score += 1 if ref_cip == aa_cip else -1
-    return score
+        if ref_cip:
+            n_ref_stereo += 1
+            if aa_cip and ref_cip == aa_cip:
+                n_agree += 1
+    return n_agree, n_ref_stereo
 
 
 def _s2c_match(aa_mol, lib):
@@ -3986,6 +4025,7 @@ def _s2c_match(aa_mol, lib):
     best_abbr = None
     best_atom_n = 0
     best_stereo = -999
+    best_n_ref_stereo = 0
     best_ring_match = False
     best_ez = -2
 
@@ -3994,12 +4034,15 @@ def _s2c_match(aa_mol, lib):
         match = aa_mol.GetSubstructMatches(ref_orig, useChirality=False)
         if match:
             n_m = len(match[0])
-            sc = max(_s2c_cip_score(aa_mol, ref_orig, m) for m in match)
+            pairs = [_s2c_cip_score(aa_mol, ref_orig, m) for m in match]
+            sc = max(a for a, _ in pairs)
+            n_rs = max(r for _, r in pairs)
         else:
             match = norm_mol.GetSubstructMatches(ref_norm, useChirality=False)
             if not match: continue
             n_m = len(match[0])
             sc = 0
+            n_rs = 0
 
         rings_match = (n_rings_ref == n_rings_aa)
 
@@ -4026,17 +4069,15 @@ def _s2c_match(aa_mol, lib):
             n_m > best_atom_n or
             (n_m == best_atom_n and rings_match and not best_ring_match) or
             (n_m == best_atom_n and rings_match == best_ring_match and sc > best_stereo) or
-            (n_m == best_atom_n and rings_match == best_ring_match and sc == best_stereo and ez_sc > best_ez)
+            (n_m == best_atom_n and rings_match == best_ring_match and sc == best_stereo and n_rs > best_n_ref_stereo) or
+            (n_m == best_atom_n and rings_match == best_ring_match and sc == best_stereo and n_rs == best_n_ref_stereo and ez_sc > best_ez)
         )
         if better:
             best_atom_n = n_m; best_abbr = abbr; best_stereo = sc
+            best_n_ref_stereo = n_rs
             best_ring_match = rings_match; best_ez = ez_sc
             if n_m == n_q and rings_match:
-                n_cip_ref = sum(
-                    1 for a in ref_orig.GetAtoms() if a.GetPropsAsDict().get('_CIPCode')
-                )
-                # Only break when E/Z is either absent in query or explicitly confirmed
-                if sc == n_cip_ref and (not query_has_ez or ez_sc > 0):
+                if sc == n_rs and (not query_has_ez or ez_sc > 0):
                     break
     return best_abbr, best_atom_n
 
@@ -4728,6 +4769,8 @@ def smiles_to_cabiln_core(smiles: str):
                     break
 
     # ── 4. Match each backbone residue with stereo-aware matching ────────────
+    from rdkit.Chem import AllChem as _AC3
+    _AC3.AssignStereochemistry(mol, cleanIt=True, force=True)
     lib = _s2c_get_lib()
     details = []
     abbrs = []
@@ -4845,6 +4888,7 @@ def smiles_to_cabiln_core(smiles: str):
                 chain = _s2c_walk_branch(
                     mol, glu_atoms, glu_outgoing_n, orphan_atoms,
                     full_lib, raw_lib, anchor_abbr, main_at,
+                    junction_abbr=glu_node.abbr,
                 )
                 if chain:
                     parts = '.'.join(f'{a}({p},{c})' for a, p, c in chain)
