@@ -3757,33 +3757,32 @@ def _s2c_match_branch_segment(seg_frag, full_lib):
         return None, 0
     best_abbr = None
     best_n = 0
-    best_exact = False  # True when match was forward AND n_lib == seg_n (perfect size match)
+    best_lib_n = float('inf')  # prefer smallest library entry for same n_m (tightest fit)
     seg_n = seg_norm.GetNumAtoms()
     for abbr, cm, norm_cm, n_lib in full_lib:
         if abbr in _BRANCH_SEG_SKIP:
             continue
         n_m = 0
-        is_exact = False
         # Forward: find lib monomer as subgraph of our segment
         if n_lib <= seg_n + 2:
             matches = seg_norm.GetSubstructMatches(norm_cm, useChirality=False)
             if matches:
                 n_m = len(matches[0])
-                is_exact = (n_lib == seg_n)
-        # Reverse: find our segment as subgraph of lib (lib has extra cap -OH/-H atoms)
-        # Only try reverse if forward failed — reverse matches protected/variant forms
-        # that share the core but carry extra atoms (e.g. Glu_OAll has allyl on γ-COOH).
+        # Reverse: find our segment as subgraph of lib (lib has extra cap -OH/-H atoms).
+        # Only try reverse if forward failed — protected variants (e.g. Glu_OAll) share
+        # the Glu core but carry extra atoms; tightest-fit tie-break below prefers base E.
         if n_m == 0 and seg_n < n_lib <= seg_n + 4:
             matches = norm_cm.GetSubstructMatches(seg_norm, useChirality=False)
             if matches:
                 n_m = len(matches[0])  # = seg_n atoms matched within lib
-        # Prefer: higher n_m; tie-break: forward exact match beats reverse match
-        if n_m > best_n or (n_m == best_n and is_exact and not best_exact):
+        # Prefer: (1) higher n_m; (2) smaller n_lib for same n_m (tightest match).
+        # This ensures E (n_lib=10) beats Glu_OAll (n_lib=13) when both match 9 atoms.
+        if n_m > best_n or (n_m == best_n and n_m > 0 and n_lib < best_lib_n):
             best_n = n_m
             best_abbr = abbr
-            best_exact = is_exact
-            if best_n == seg_n and best_exact:
-                break  # perfect forward match — no need to search further
+            best_lib_n = n_lib
+            if best_n == seg_n and best_lib_n == seg_n:
+                break  # perfect exact-size match — stop searching
     return best_abbr, best_n
 
 
