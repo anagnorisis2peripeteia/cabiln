@@ -1108,8 +1108,8 @@ class TestExpandedMonomers:
         assert _natoms('A-Aib-A') == 17
 
     def test_gamma_glutamic_acid_dipeptide(self):
-        """gGlu: γ-linked Glu (backbone through γ-carboxyl)."""
-        assert _natoms('gGlu-A') == 15
+        """E_g: γ-linked Glu (backbone through γ-carboxyl)."""
+        assert _natoms('E_g-A') == 15
 
     # ── α-Methyl amino acids ─────────────────────────────────────────────
 
@@ -1396,7 +1396,7 @@ class TestFattyAcidBranching:
     """Sidechain fatty-acid branching via the new amine_primary+backbone_c amide reaction.
 
     Models the GLP-1/GIP agonist lipidation architecture:
-    Lys(ε-NH2) → amide → AEEA → gGlu → C18/C20 fatty diacid.
+    Lys(ε-NH2) → amide → AEEA → E_g → C18/C20 fatty diacid.
     """
 
     def test_aeea_linear(self):
@@ -1407,31 +1407,31 @@ class TestFattyAcidBranching:
         """aMeLeu (alpha-methyl-L-leucine): Cα-disubstituted, backbone stabiliser."""
         assert _natoms('ac-aMeLeu-am') == 13
 
-    def test_c20fa_gGlu_branch_linear(self):
-        """C20 fatty diacid cap + gGlu chain assembles correctly."""
-        assert _natoms('C20FA-gGlu-am') == 33
+    def test_c20fa_E_g_branch_linear(self):
+        """C20 fatty diacid cap + E_g chain assembles correctly."""
+        assert _natoms('C20FA-E_g-am') == 33
 
-    def test_c20fa_gGlu_aeea_linear(self):
-        """Full linker chain: C20FA-gGlu-AEEA with backbone amide bonds."""
-        assert _natoms('C20FA-gGlu-AEEA-am') == 43
+    def test_c20fa_E_g_aeea_linear(self):
+        """Full linker chain: C20FA-E_g-AEEA with backbone amide bonds."""
+        assert _natoms('C20FA-E_g-AEEA-am') == 43
 
     def test_lys_sidechain_amide_bond(self):
         """Lys R4 (epsilon-amine) forms amide with AEEA R2 (carboxyl).
 
         Tests the new amine_primary+backbone_c reaction added to BOND_TABLE.
         """
-        assert _natoms('ac-K.!1(4,2)-G-am%C20FA-gGlu-AEEA-!1') == 59
+        assert _natoms('ac-K.!1(4,2)-G-am%C20FA-E_g-AEEA-!1') == 59
 
     def test_retatrutide(self):
         """Retatrutide (LY3437943): GIP/GLP-1/glucagon triple agonist, 39 AAs.
 
-        Sequence: Y-Aib-QGTFTSDYSI-aMeLeu-LD-K-K(C20FA-gGlu-AEEA)-AQAAFI-Aib-EYL
+        Sequence: Y-Aib-QGTFTSDYSI-aMeLeu-LD-K-K(C20FA-E_g-AEEA)-AQAAFI-Aib-EYL
                   LEGGPSSGAPPPSam with C20 fatty diacid branch on Lys17 (K16-K17).
         """
         retatrutide = (
             "Y-Aib-Q-G-T-F-T-S-D-Y-S-I-aMeLeu-L-D-K-K.!1(4,2)"
             "-A-Q-Aib-A-F-I-E-Y-L-L-E-G-G-P-S-S-G-A-P-P-P-S-am"
-            "%C20FA-gGlu-AEEA-!1"
+            "%C20FA-E_g-AEEA-!1"
         )
         mol = _romol(retatrutide)
         assert mol.GetNumAtoms() == 335
@@ -3903,13 +3903,13 @@ class TestRestoreRgroups:
     # ── Group 1: homo-Asp/Glu variants (C-attachment carboxyl, LG=[OH]) ──────
 
     def test_hasp_carboxyl_restores(self):
-        """hAsp slot-4 C-attachment carboxyl (LG=[OH]) restores to free COOH."""
-        c = self._counts('ac-hAsp-am')
+        """E slot-4 C-attachment carboxyl (LG=[OH]) restores to free COOH."""
+        c = self._counts('ac-E-am')
         assert c['acid'] == 1 and c['dummy'] == 0
 
     def test_d_hasp_carboxyl_restores(self):
-        """D_hAsp D-isomer slot-4 carboxyl restores correctly."""
-        c = self._counts('ac-D_hAsp-am')
+        """DGlu D-isomer slot-4 carboxyl restores correctly."""
+        c = self._counts('ac-DGlu-am')
         assert c['acid'] == 1 and c['dummy'] == 0
 
     def test_hglu_carboxyl_restores(self):
@@ -4024,8 +4024,8 @@ class TestRestoreRgroups:
         assert c['acid'] == 5 and c['dummy'] == 0
 
     def test_mixed_hasp_hglu_two_carboxyls(self):
-        """hAsp + hGlu (both C-attachment slot-4): 2 sidechain COOHs restored."""
-        c = self._counts('ac-hAsp-hGlu-am')
+        """E + hGlu (both C-attachment slot-4): 2 sidechain COOHs restored."""
+        c = self._counts('ac-E-hGlu-am')
         assert c['acid'] == 2 and c['dummy'] == 0
 
     def test_asp_glu_two_carboxyls_restored(self):
@@ -4059,8 +4059,8 @@ class TestRestoreRgroups:
     # ── Group 6: D/L isomer parity ────────────────────────────────────────────
 
     def test_d_hasp_and_l_hasp_same_acid_count(self):
-        """D_hAsp and hAsp are stereoisomers: restore yields identical COOH count."""
-        assert self._counts('ac-hAsp-am')['acid'] == self._counts('ac-D_hAsp-am')['acid'] == 1
+        """DGlu and E are stereoisomers: restore yields identical COOH count."""
+        assert self._counts('ac-E-am')['acid'] == self._counts('ac-DGlu-am')['acid'] == 1
 
     def test_d_b3hglu_and_l_b3hglu_same_acid_count(self):
         """D_b3hGlu and b3hGlu: D-isomer restore identical to L-isomer."""
@@ -4074,8 +4074,8 @@ class TestRestoreRgroups:
         assert c['dummy'] == 0
 
     def test_no_dummies_complex_mixed_sequence(self):
-        """ac-D-K-C-hAsp-am: all four restore paths exercised; zero residual dummies."""
-        c = self._counts('ac-D-K-C-hAsp-am')
+        """ac-D-K-C-E-am: all four restore paths exercised; zero residual dummies."""
+        c = self._counts('ac-D-K-C-E-am')
         assert c['acid'] == 2 and c['thiol'] == 1 and c['nh2'] == 1 and c['dummy'] == 0
 
     def test_no_dummies_after_disulfide_crosslink(self):
@@ -4277,9 +4277,9 @@ class TestRestoreRgroups:
     # ── Group 20: Atom-count parity between D/L assembled products ───────────
 
     def test_d_l_asp_heavy_atom_count_equal(self):
-        """ac-D-am vs ac-D_hAsp-am: D-isomer has same heavy atom count as L."""
-        m_l = self._romol('ac-hAsp-am')
-        m_d = self._romol('ac-D_hAsp-am')
+        """ac-D-am vs ac-DGlu-am: D-isomer has same heavy atom count as L."""
+        m_l = self._romol('ac-E-am')
+        m_d = self._romol('ac-DGlu-am')
         assert m_l.GetNumHeavyAtoms() == m_d.GetNumHeavyAtoms()
 
     def test_d_l_glu_heavy_atom_count_equal(self):
@@ -4582,8 +4582,8 @@ class TestNotationConversion:
 
     @pytest.mark.parametrize("label,branch,expected_bracket", [
         ("lipid_linker",
-         "ac-K.!1(4,4)-G-am%C20FA-AEEA(2,1)-gGlu(2,1).!1",
-         "ac-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-am"),
+         "ac-K.!1(4,4)-G-am%C20FA-AEEA(2,1)-E_g(2,1).!1",
+         "ac-K.[E_g(4,4).AEEA(1,2).C20FA(1,2)]-G-am"),
 
         ("NH2_branch",
          "ac-A-D.(4,1)-G-am%G-A(2,1)-am(2,1)",
@@ -4633,11 +4633,11 @@ class TestNotationConversion:
     def test_crosslink_branch_to_bracket_roundtrip(self):
         """Crosslink !n branches convert to (1,2) bracket and back."""
         from pyPept.sequence import cabiln_to_bracket, cabiln_to_branch
-        branch = "ac-K.!1(4,4)-G-am%C20FA-AEEA-gGlu.!1"
+        branch = "ac-K.!1(4,4)-G-am%C20FA-AEEA-E_g.!1"
         bracket = cabiln_to_bracket(branch)
-        assert bracket == "ac-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-am"
+        assert bracket == "ac-K.[E_g(4,4).AEEA(1,2).C20FA(1,2)]-G-am"
         back = cabiln_to_branch(bracket)
-        assert back == "ac-K.!1(4,4)-G-am%C20FA-AEEA-gGlu.!1"
+        assert back == "ac-K.!1(4,4)-G-am%C20FA-AEEA-E_g.!1"
 
     # ------------------------------------------------------------------
     # Bracket -> Branch -> Bracket  (bracket notation is canonical input)
@@ -4736,9 +4736,9 @@ class TestNotationConversion:
     def test_crosslink_plus_bracket_converts(self):
         """(1,2) bracket converts to reversed chain with crosslink anchor."""
         from pyPept.sequence import cabiln_to_branch
-        bracket = "!1-A-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-A-!1"
+        bracket = "!1-A-K.[E_g(4,4).AEEA(1,2).C20FA(1,2)]-G-A-!1"
         result = cabiln_to_branch(bracket)
-        assert result == "!1-A-K.!2(4,4)-G-A-!1%C20FA-AEEA-gGlu.!2", (
+        assert result == "!1-A-K.!2(4,4)-G-A-!1%C20FA-AEEA-E_g.!2", (
             f"(1,2) bracket should convert to reversed crosslink branch: {result}"
         )
 
@@ -4760,14 +4760,14 @@ class TestNotationConversion:
 
     @pytest.mark.parametrize("label, bracket, expected_branch", [
         ("lipid_linker_12",
-         "K.[C20FA(4,4).AEEA(1,2).gGlu(1,2)]-G-am",
-         "K.!1(4,4)-G-am%gGlu-AEEA-C20FA.!1"),
+         "K.[C20FA(4,4).AEEA(1,2).E_g(1,2)]-G-am",
+         "K.!1(4,4)-G-am%E_g-AEEA-C20FA.!1"),
         ("two_monomer_12",
          "ac-A.[C(4,4).G(1,2)]-am",
          "ac-A.!1(4,4)-am%G-C.!1"),
         ("lipid_correct",
-         "ac-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-am",
-         "ac-K.!1(4,4)-G-am%C20FA-AEEA-gGlu.!1"),
+         "ac-K.[E_g(4,4).AEEA(1,2).C20FA(1,2)]-G-am",
+         "ac-K.!1(4,4)-G-am%C20FA-AEEA-E_g.!1"),
     ])
     def test_12_bracket_converts_to_reversed_branch(self, label, bracket, expected_branch):
         from pyPept.sequence import cabiln_to_branch
@@ -4779,8 +4779,8 @@ class TestNotationConversion:
     @pytest.mark.parametrize("label, branch, expected_bracket", [
         (
             "crosslink_lipid_to_bracket",
-            "K.!1(4,4)-G-am%gGlu-AEEA(2,1)-C20FA(2,1).!1",
-            "K.[C20FA(4,4).AEEA(1,2).gGlu(1,2)]-G-am",
+            "K.!1(4,4)-G-am%E_g-AEEA(2,1)-C20FA(2,1).!1",
+            "K.[C20FA(4,4).AEEA(1,2).E_g(1,2)]-G-am",
         ),
         (
             "crosslink_two_monomer_to_bracket",
@@ -4801,17 +4801,17 @@ class TestNotationConversion:
 
     # ------------------------------------------------------------------
     # Midpoint anchor — anchor in the middle of the branch chain
-    # Bracket: K.[gGlu(4,4).AEEA(2,1).C(2,1).A(1,2).G(1,2)]-am
-    #   gGlu is anchor, AEEA-C grow C-terminal (2,1), A-G grow N-terminal (1,2)
+    # Bracket: K.[E_g(4,4).AEEA(2,1).C(2,1).A(1,2).G(1,2)]-am
+    #   E_g is anchor, AEEA-C grow C-terminal (2,1), A-G grow N-terminal (1,2)
     # Branch: anchor at midpoint → need crosslink for the N-terminal arm
     # ------------------------------------------------------------------
 
     def test_12_lipid_bracket_converts(self):
         """(1,2) lipid linker bracket converts to reversed crosslink branch."""
         from pyPept.sequence import cabiln_to_branch
-        bracket = "K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-am"
+        bracket = "K.[E_g(4,4).AEEA(1,2).C20FA(1,2)]-G-am"
         result = cabiln_to_branch(bracket)
-        assert result == "K.!1(4,4)-G-am%C20FA-AEEA-gGlu.!1", f"Got: {result}"
+        assert result == "K.!1(4,4)-G-am%C20FA-AEEA-E_g.!1", f"Got: {result}"
 
     # ------------------------------------------------------------------
     # Complex round-trips
@@ -4820,8 +4820,8 @@ class TestNotationConversion:
     def test_cyclic_plus_lipid_branch_roundtrip(self):
         """Head-to-tail cyclic peptide with lipid branch: both notation directions."""
         from pyPept.sequence import cabiln_to_bracket, cabiln_to_branch
-        branch = "!1-A-K.!2(4,4)-G-A-!1%C20FA-AEEA-gGlu.!2"
-        expected_bracket = "!1-A-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-A-!1"
+        branch = "!1-A-K.!2(4,4)-G-A-!1%C20FA-AEEA-E_g.!2"
+        expected_bracket = "!1-A-K.[E_g(4,4).AEEA(1,2).C20FA(1,2)]-G-A-!1"
         bracket = cabiln_to_bracket(branch)
         assert bracket == expected_bracket, f"branch->bracket: {bracket!r}"
         back = cabiln_to_branch(bracket)
@@ -4833,9 +4833,9 @@ class TestNotationConversion:
     def test_cyclic_plus_lipid_bracket_roundtrip(self):
         """Bracket form of cyclic+lipid round-trips through branch and back."""
         from pyPept.sequence import cabiln_to_bracket, cabiln_to_branch
-        bracket = "!1-A-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-A-!1"
+        bracket = "!1-A-K.[E_g(4,4).AEEA(1,2).C20FA(1,2)]-G-A-!1"
         branch = cabiln_to_branch(bracket)
-        assert branch == "!1-A-K.!2(4,4)-G-A-!1%C20FA-AEEA-gGlu.!2", f"bracket->branch: {branch!r}"
+        assert branch == "!1-A-K.!2(4,4)-G-A-!1%C20FA-AEEA-E_g.!2", f"bracket->branch: {branch!r}"
         back = cabiln_to_bracket(branch)
         assert back == bracket, (
             f"branch->bracket roundtrip failed:\n"
@@ -4862,8 +4862,8 @@ class TestNotationConversion:
         """Single-monomer bracket (passthrough) + lipid (1,2) bracket coexist."""
         from pyPept.sequence import cabiln_to_bracket, cabiln_to_branch
         # [A(4,1)] single-monomer stays as-is; lipid converts to crosslink branch
-        bracket = "ac-K.[A(4,1)]-G-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-am"
-        expected_branch = "ac-K.[A(4,1)]-G-K.!1(4,4)-am%C20FA-AEEA-gGlu.!1"
+        bracket = "ac-K.[A(4,1)]-G-K.[E_g(4,4).AEEA(1,2).C20FA(1,2)]-am"
+        expected_branch = "ac-K.[A(4,1)]-G-K.!1(4,4)-am%C20FA-AEEA-E_g.!1"
         branch = cabiln_to_branch(bracket)
         assert branch == expected_branch, f"bracket->branch: {branch!r}"
         back = cabiln_to_bracket(branch)
@@ -4878,8 +4878,8 @@ class TestNotationConversion:
 
     @pytest.mark.parametrize("label,bracket,expected_branch", [
         ("two_lipid_brackets",
-         "ac-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-am",
-         "ac-K.!1(4,4)-G-K.!2(4,4)-am%C20FA-AEEA-gGlu.!1%C20FA-AEEA-gGlu.!2"),
+         "ac-K.[E_g(4,4).AEEA(1,2).C20FA(1,2)]-G-K.[E_g(4,4).AEEA(1,2).C20FA(1,2)]-am",
+         "ac-K.!1(4,4)-G-K.!2(4,4)-am%C20FA-AEEA-E_g.!1%C20FA-AEEA-E_g.!2"),
         ("two_aeea_peg",
          "ac-K.[AEEA(4,2).AEEA(1,2)]-G-am",
          "ac-K.!1(4,2)-G-am%AEEA-AEEA-!1"),
@@ -4896,8 +4896,8 @@ class TestNotationConversion:
          "!1-A-D.[G(4,1).am(2,1)]-G-A-!1",
          "!1-A-D.!2(4,1)-G-A-!1%G.!2-am"),
         ("semaglutide_like",
-         "His-Aib-Glu-Gly-Thr-Phe-Thr-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-am",
-         "His-Aib-Glu-Gly-Thr-Phe-Thr-K.!1(4,4)-am%C20FA-AEEA-gGlu.!1"),
+         "His-Aib-Glu-Gly-Thr-Phe-Thr-K.[E_g(4,4).AEEA(1,2).C20FA(1,2)]-am",
+         "His-Aib-Glu-Gly-Thr-Phe-Thr-K.!1(4,4)-am%C20FA-AEEA-E_g.!1"),
         ("c_terminal_marker_normalised",
          "ac-K.[G(4,2).G(1,2)]-G-am",
          "ac-K.!1(4,2)-G-am%G-G-!1"),
@@ -4906,8 +4906,8 @@ class TestNotationConversion:
          "ac-D.!1(4,1)-G-am%G.!1-G-am"),
         # Exotic / mixed-type cases
         ("mixed_lipid_isopeptide",
-         "ac-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-A-D.[G(4,1).A(2,1).am(2,1)]-am",
-         "ac-K.!1(4,4)-A-D.!2(4,1)-am%C20FA-AEEA-gGlu.!1%G.!2-A-am"),
+         "ac-K.[E_g(4,4).AEEA(1,2).C20FA(1,2)]-A-D.[G(4,1).A(2,1).am(2,1)]-am",
+         "ac-K.!1(4,4)-A-D.!2(4,1)-am%C20FA-AEEA-E_g.!1%G.!2-A-am"),
         ("long_isopeptide_arm",
          "ac-E.[G(4,1).G(2,1).A(2,1).A(2,1).am(2,1)]-G-am",
          "ac-E.!1(4,1)-G-am%G.!1-G-A-A-am"),
@@ -4915,8 +4915,8 @@ class TestNotationConversion:
          "!1-A-D.[G(4,1).A(2,1).am(2,1)]-G-A-!1",
          "!1-A-D.!2(4,1)-G-A-!1%G.!2-A-am"),
         ("two_isopeptide_one_lipid",
-         "ac-D.[G(4,1).am(2,1)]-G-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-A-D.[A(4,1).am(2,1)]-am",
-         "ac-D.!1(4,1)-G-K.!2(4,4)-A-D.!3(4,1)-am%G.!1-am%C20FA-AEEA-gGlu.!2%A.!3-am"),
+         "ac-D.[G(4,1).am(2,1)]-G-K.[E_g(4,4).AEEA(1,2).C20FA(1,2)]-A-D.[A(4,1).am(2,1)]-am",
+         "ac-D.!1(4,1)-G-K.!2(4,4)-A-D.!3(4,1)-am%G.!1-am%C20FA-AEEA-E_g.!2%A.!3-am"),
         ("ameleu_slot3_arm",
          "ac-D.[aMeLeu(4,3).G(2,1).am(2,1)]-G-am",
          "ac-D.!1(4,3)-G-am%aMeLeu.!1-G-am"),
@@ -4927,8 +4927,8 @@ class TestNotationConversion:
          "ac-G-D.[R(4,1).G(2,1).D(2,1).am(2,1)]-S-am",
          "ac-G-D.!1(4,1)-S-am%R.!1-G-D-am"),
         ("cyclic_isopeptide_lipid",
-         "!1-A-D.[G(4,1).am(2,1)]-G-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-A-!1",
-         "!1-A-D.!2(4,1)-G-K.!3(4,4)-A-!1%G.!2-am%C20FA-AEEA-gGlu.!3"),
+         "!1-A-D.[G(4,1).am(2,1)]-G-K.[E_g(4,4).AEEA(1,2).C20FA(1,2)]-A-!1",
+         "!1-A-D.!2(4,1)-G-K.!3(4,4)-A-!1%G.!2-am%C20FA-AEEA-E_g.!3"),
     ])
     def test_bracket_to_branch_comprehensive(self, label, bracket, expected_branch):
         """bracket -> branch: exact string + roundtrip + independent SMILES equivalence."""
@@ -4951,8 +4951,8 @@ class TestNotationConversion:
 
     @pytest.mark.parametrize("label,branch,expected_bracket", [
         ("two_lipid_crosslinks",
-         "ac-K.!1(4,4)-G-K.!2(4,4)-am%C20FA-AEEA-gGlu.!1%C20FA-AEEA-gGlu.!2",
-         "ac-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-am"),
+         "ac-K.!1(4,4)-G-K.!2(4,4)-am%C20FA-AEEA-E_g.!1%C20FA-AEEA-E_g.!2",
+         "ac-K.[E_g(4,4).AEEA(1,2).C20FA(1,2)]-G-K.[E_g(4,4).AEEA(1,2).C20FA(1,2)]-am"),
         ("three_positional_branches",
          "ac-D.!1(4,1)-A-D.!2(4,1)-A-D.!3(4,1)-am%G.!1-am%A.!2-am%G.!3-G-am",
          "ac-D.[G(4,1).am(2,1)]-A-D.[A(4,1).am(2,1)]-A-D.[G(4,1).G(2,1).am(2,1)]-am"),
@@ -4967,8 +4967,8 @@ class TestNotationConversion:
          "!1-A-D.[G(4,1).am(2,1)]-G-A-!1"),
         # Exotic / mixed-type cases
         ("mixed_lipid_isopeptide",
-         "ac-K.!1(4,4)-A-D.!2(4,1)-am%C20FA-AEEA-gGlu.!1%G.!2-A-am",
-         "ac-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-A-D.[G(4,1).A(2,1).am(2,1)]-am"),
+         "ac-K.!1(4,4)-A-D.!2(4,1)-am%C20FA-AEEA-E_g.!1%G.!2-A-am",
+         "ac-K.[E_g(4,4).AEEA(1,2).C20FA(1,2)]-A-D.[G(4,1).A(2,1).am(2,1)]-am"),
         ("long_isopeptide_arm",
          "ac-E.!1(4,1)-G-am%G.!1-G-A-A-am",
          "ac-E.[G(4,1).G(2,1).A(2,1).A(2,1).am(2,1)]-G-am"),
@@ -4976,8 +4976,8 @@ class TestNotationConversion:
          "!1-A-D.!2(4,1)-G-A-!1%G.!2-A-am",
          "!1-A-D.[G(4,1).A(2,1).am(2,1)]-G-A-!1"),
         ("two_isopeptide_one_lipid",
-         "ac-D.!1(4,1)-G-K.!2(4,4)-A-D.!3(4,1)-am%G.!1-am%C20FA-AEEA-gGlu.!2%A.!3-am",
-         "ac-D.[G(4,1).am(2,1)]-G-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-A-D.[A(4,1).am(2,1)]-am"),
+         "ac-D.!1(4,1)-G-K.!2(4,4)-A-D.!3(4,1)-am%G.!1-am%C20FA-AEEA-E_g.!2%A.!3-am",
+         "ac-D.[G(4,1).am(2,1)]-G-K.[E_g(4,4).AEEA(1,2).C20FA(1,2)]-A-D.[A(4,1).am(2,1)]-am"),
         ("ameleu_slot3_arm",
          "ac-D.!1(4,3)-G-am%aMeLeu.!1-G-am",
          "ac-D.[aMeLeu(4,3).G(2,1).am(2,1)]-G-am"),
@@ -4988,8 +4988,8 @@ class TestNotationConversion:
          "ac-G-D.!1(4,1)-S-am%R.!1-G-D-am",
          "ac-G-D.[R(4,1).G(2,1).D(2,1).am(2,1)]-S-am"),
         ("cyclic_isopeptide_lipid",
-         "!1-A-D.!2(4,1)-G-K.!3(4,4)-A-!1%G.!2-am%C20FA-AEEA-gGlu.!3",
-         "!1-A-D.[G(4,1).am(2,1)]-G-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-A-!1"),
+         "!1-A-D.!2(4,1)-G-K.!3(4,4)-A-!1%G.!2-am%C20FA-AEEA-E_g.!3",
+         "!1-A-D.[G(4,1).am(2,1)]-G-K.[E_g(4,4).AEEA(1,2).C20FA(1,2)]-A-!1"),
     ])
     def test_branch_to_bracket_comprehensive(self, label, branch, expected_bracket):
         """branch -> bracket: exact string + roundtrip + independent SMILES equivalence."""
@@ -5015,13 +5015,13 @@ class TestNotationConversion:
         from pyPept.sequence import cabiln_to_bracket, cabiln_to_branch
         bracket = (
             "Y-Aib-Q-G-T-F-T-S-D-Y-S-I-aMeLeu-L-D-"
-            "K-K.[AEEA(4,2).gGlu(1,2).C20FA(1,2)]-A-Q-Aib-A-F-I-E-"
+            "K-K.[AEEA(4,2).E_g(1,2).C20FA(1,2)]-A-Q-Aib-A-F-I-E-"
             "Y-L-L-E-G-G-P-S-S-G-A-P-P-P-S-am"
         )
         expected_branch = (
             "Y-Aib-Q-G-T-F-T-S-D-Y-S-I-aMeLeu-L-D-"
             "K-K.!1(4,2)-A-Q-Aib-A-F-I-E-Y-L-L-E-G-G-P-S-S-G-A-P-P-P-S-am"
-            "%C20FA-gGlu-AEEA-!1"
+            "%C20FA-E_g-AEEA-!1"
         )
         branch = cabiln_to_branch(bracket)
         assert branch == expected_branch, (
@@ -5065,11 +5065,11 @@ class TestNotationConversion:
         branch = (
             "Y-Aib-Q-G-T-F-T-S-D-Y-S-I-aMeLeu-L-D-"
             "K-K.!1(4,2)-A-Q-Aib-A-F-I-E-Y-L-L-E-G-G-P-S-S-G-A-P-P-P-S-am"
-            "%C20FA-gGlu-AEEA-!1"
+            "%C20FA-E_g-AEEA-!1"
         )
         expected_bracket = (
             "Y-Aib-Q-G-T-F-T-S-D-Y-S-I-aMeLeu-L-D-"
-            "K-K.[AEEA(4,2).gGlu(1,2).C20FA(1,2)]-A-Q-Aib-A-F-I-E-"
+            "K-K.[AEEA(4,2).E_g(1,2).C20FA(1,2)]-A-Q-Aib-A-F-I-E-"
             "Y-L-L-E-G-G-P-S-S-G-A-P-P-P-S-am"
         )
         bracket = cabiln_to_bracket(branch)
@@ -5078,7 +5078,7 @@ class TestNotationConversion:
         expected_back = (
             "Y-Aib-Q-G-T-F-T-S-D-Y-S-I-aMeLeu-L-D-"
             "K-K.!1(4,2)-A-Q-Aib-A-F-I-E-Y-L-L-E-G-G-P-S-S-G-A-P-P-P-S-am"
-            "%C20FA-gGlu-AEEA-!1"
+            "%C20FA-E_g-AEEA-!1"
         )
         assert back == expected_back, f"back mismatch: {back!r}"
 
@@ -5143,8 +5143,8 @@ class TestBracketBranchEquivalence:
 
     @pytest.mark.parametrize("label,bracket,branch", [
         ("lipid_linker",
-         "ac-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-am",
-         "ac-K.!1(4,4)-G-am%C20FA-AEEA-gGlu.!1"),
+         "ac-K.[E_g(4,4).AEEA(1,2).C20FA(1,2)]-G-am",
+         "ac-K.!1(4,4)-G-am%C20FA-AEEA-E_g.!1"),
         ("TBMB_crosslinker",
          "ac-C.!1(4,4)-A-A-C.!2(4,5)-A-A-C.!3(4,6)-am%TBMB.!1.!2.!3",
          "ac-C.!1(4,4)-A-A-C.!2(4,5)-A-A-C.!3(4,6)-am%TBMB.!1.!2.!3"),
@@ -5180,7 +5180,7 @@ class TestBracketBranchEquivalence:
     def test_lipid_linker_converter_and_assembly(self):
         """Converter roundtrip + assembly via bracket for lipid linker."""
         from pyPept.sequence import cabiln_to_branch, cabiln_to_bracket
-        bracket = "ac-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-am"
+        bracket = "ac-K.[E_g(4,4).AEEA(1,2).C20FA(1,2)]-G-am"
         branch = cabiln_to_branch(bracket)
         bracket_back = cabiln_to_bracket(branch)
         assert bracket_back == bracket, f"Roundtrip failed: {bracket} -> {branch} -> {bracket_back}"
@@ -5191,15 +5191,15 @@ class TestBracketBranchEquivalence:
     def test_retatrutide_bracket_assembles(self):
         """Full retatrutide with (1,2) lipid linker bracket assembles."""
         cabiln = ("Y-Aib-Q-G-T-F-T-S-D-Y-S-I-aMeLeu-L-D-"
-                  "K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-A-Q-Aib-A-F-I-E-"
+                  "K.[E_g(4,4).AEEA(1,2).C20FA(1,2)]-A-Q-Aib-A-F-I-E-"
                   "Y-L-L-E-G-G-P-S-S-G-A-P-P-P-S-am")
         smi = self._smiles(cabiln)
         assert smi and len(smi) > 100, f"Retatrutide should produce a large SMILES: {smi}"
 
     def test_cyclic_plus_lipid_same_smiles(self):
         """Cyclic peptide with lipid branch: bracket and branch forms assemble identically."""
-        bracket = "!1-A-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-A-!1"
-        branch = "!1-A-K.!2(4,4)-G-A-!1%C20FA-AEEA-gGlu.!2"
+        bracket = "!1-A-K.[E_g(4,4).AEEA(1,2).C20FA(1,2)]-G-A-!1"
+        branch = "!1-A-K.!2(4,4)-G-A-!1%C20FA-AEEA-E_g.!2"
         smi_bracket = self._smiles(bracket)
         smi_branch = self._smiles(branch)
         assert smi_bracket == smi_branch, (
@@ -5210,8 +5210,8 @@ class TestBracketBranchEquivalence:
 
     def test_two_lipid_brackets_same_smiles(self):
         """Two lipid brackets on same chain: bracket and branch forms assemble identically."""
-        bracket = "ac-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-am"
-        branch = "ac-K.!1(4,4)-G-K.!2(4,4)-am%C20FA-AEEA-gGlu.!1%C20FA-AEEA-gGlu.!2"
+        bracket = "ac-K.[E_g(4,4).AEEA(1,2).C20FA(1,2)]-G-K.[E_g(4,4).AEEA(1,2).C20FA(1,2)]-am"
+        branch = "ac-K.!1(4,4)-G-K.!2(4,4)-am%C20FA-AEEA-E_g.!1%C20FA-AEEA-E_g.!2"
         smi_bracket = self._smiles(bracket)
         smi_branch = self._smiles(branch)
         assert smi_bracket == smi_branch, (
@@ -5222,8 +5222,8 @@ class TestBracketBranchEquivalence:
 
     def test_semaglutide_like_same_smiles(self):
         """8AA semaglutide-like with C20FA lipid: bracket and branch assemble identically."""
-        bracket = "His-Aib-Glu-Gly-Thr-Phe-Thr-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-am"
-        branch = "His-Aib-Glu-Gly-Thr-Phe-Thr-K.!1(4,4)-am%C20FA-AEEA-gGlu.!1"
+        bracket = "His-Aib-Glu-Gly-Thr-Phe-Thr-K.[E_g(4,4).AEEA(1,2).C20FA(1,2)]-am"
+        branch = "His-Aib-Glu-Gly-Thr-Phe-Thr-K.!1(4,4)-am%C20FA-AEEA-E_g.!1"
         smi_bracket = self._smiles(bracket)
         smi_branch = self._smiles(branch)
         assert smi_bracket == smi_branch, (
@@ -5381,7 +5381,7 @@ class TestSmilesToCabiln:
                over modified forms; CIP stereo used to pick D vs L)
       Rule 3 — cyclic detection (!1-…-!1 wrapping)
       Rule 4+5 — sidechain branch-position detection + lipid-linker bracket
-               notation (.[gGlu(4,4).AEEA(1,2).C20FA(1,2)])
+               notation (.[E_g(4,4).AEEA(1,2).C20FA(1,2)])
       Rule 6 — crosslink / staple annotation (.!n(r,r))
 
     Design note on cap semantics
@@ -5601,15 +5601,15 @@ class TestSmilesToCabiln:
     # ------------------------------------------------------------------
 
     def test_minimal_lipid_linker_bracket(self):
-        """Rules 4+5: K with a gGlu-AEEA-C20FA sidechain in a 3-residue backbone.
+        """Rules 4+5: K with a E_g-AEEA-C20FA sidechain in a 3-residue backbone.
 
-        The isopeptide-bonded branch (gGlu) is detected as a degree-1 node
+        The isopeptide-bonded branch (E_g) is detected as a degree-1 node
         in the peptide-bond graph whose neighbour (K) has degree > 2.  K must
-        emerge with bracket notation K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)].
+        emerge with bracket notation K.[E_g(4,4).AEEA(1,2).C20FA(1,2)].
         The backbone residues A and G must also be recognised.
         No '?' tokens allowed.
         """
-        biln   = "A-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-am"
+        biln   = "A-K.[E_g(4,4).AEEA(1,2).C20FA(1,2)]-G-am"
         result, details = self._r(biln)
         assert "?" not in result, f"Unknown residue in lipid-linker result: {result!r}"
         assert "K.[" in result or "K.!1" in result, (
@@ -5619,12 +5619,12 @@ class TestSmilesToCabiln:
     def test_retatrutide_full_sequence(self):
         """Rules 4+5: Retatrutide round-trip (39 backbone AA + C20 lipid branch).
 
-        K16-K17 backbone; lipid branch on K17: AEEA(4,2).E(1,4).C20FA(1,2).
-        E(1,4) = Glu via γ-COOH (R4) — no separate gGlu monomer needed.
+        K16-K17 backbone; lipid branch on K17: AEEA(4,2).E_g(1,2).C20FA(1,2).
+        E_g(1,2) = Glu via γ-COOH entry (R2) — preferred over E(1,4) by 1-2 rule.
         """
         biln = (
             "Y-Aib-Q-G-T-F-T-S-D-Y-S-I-aMeLeu-L-D-"
-            "K-K.[AEEA(4,2).E(1,4).C20FA(1,2)]-A-Q-Aib-A-F-I-E-"
+            "K-K.[AEEA(4,2).E_g(1,2).C20FA(1,2)]-A-Q-Aib-A-F-I-E-"
             "Y-L-L-E-G-G-P-S-S-G-A-P-P-P-S-am"
         )
         result, details = self._r(biln)
@@ -5684,7 +5684,7 @@ class TestSmilesToCabiln:
           (b) no '?' tokens appear (matching succeeds for every detected residue).
         Cap presence is topology-dependent and is NOT asserted here.
         """
-        biln   = "ac-A-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-am"
+        biln   = "ac-A-K.[E_g(4,4).AEEA(1,2).C20FA(1,2)]-G-am"
         result, details = self._r(biln)
         assert "?" not in result, f"Unknown residue: {result!r}"
         assert "K.[" in result or "K.!1" in result, (
@@ -5708,7 +5708,7 @@ class TestSmilesToCabiln:
         """Rules 3+4+5: cyclic backbone AND a lipid sidechain branch on K.
 
         On a cyclic backbone, every backbone node has peptide-bond degree 2,
-        so K has degree 3 (two backbone bonds + one isopeptide bond to gGlu).
+        so K has degree 3 (two backbone bonds + one isopeptide bond to E_g).
         The branch_pos heuristic (degree-1 nodes) does not apply directly,
         but the BFS cyclic detection and branch detection interact correctly:
         the output is cyclic-wrapped (!1-…-!1) and K carries its bracket.
@@ -5718,7 +5718,7 @@ class TestSmilesToCabiln:
           - K bracket notation present (lipid branch not lost)
           - no '?' tokens (all residues matched)
         """
-        biln   = "!1-A-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-A-!1"
+        biln   = "!1-A-K.[E_g(4,4).AEEA(1,2).C20FA(1,2)]-G-A-!1"
         result, details = self._r(biln)
         assert "?" not in result, f"Unknown residue in cyclic+branch: {result!r}"
         assert result.startswith("!1-"), f"Cyclic prefix lost: {result!r}"
@@ -5736,7 +5736,7 @@ class TestSmilesToCabiln:
         The isopeptide bond is now classified as 'side chain' and E is detected
         as a degree-0 backbone node with a side-chain connection to a backbone K.
 
-        E(4,4) = Glu attached via γ-COOH (R4) on both ends — formerly gGlu.
+        E(4,4) = Glu attached via γ-COOH (R4) on both ends — formerly E_g.
 
         Invariants:
           - output == input (exact round-trip)

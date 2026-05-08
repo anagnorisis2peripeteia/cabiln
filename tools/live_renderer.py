@@ -74,7 +74,7 @@ _RENDER_CACHE_MAX = 200
 def _to_bracket(cabiln: str) -> str:
     """Normalise positional-% branch notation to bracket form for Sequence.
 
-    Pure crosslink branches (%TBMB.!1.!2.!3, %C20FA-AEEA-gGlu.!1, etc.) are
+    Pure crosslink branches (%TBMB.!1.!2.!3, %C20FA-AEEA-E_g.!1, etc.) are
     already parseable by Sequence and are left untouched.  Only branches where
     every segment lacks an !n marker need conversion.
     """
@@ -146,7 +146,7 @@ EXAMPLES = [
             {
                 "name": "Head-to-tail cyclic with lipid",
                 "description": "N→C cyclised backbone with C20 lipid branch on K",
-                "cabiln": "!1-A-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-A-!1",
+                "cabiln": "!1-A-K.[E_g(4,4).AEEA(1,2).C20FA(1,2)]-G-A-!1",
             },
             {
                 "name": "Head-to-tail cyclic",
@@ -161,7 +161,7 @@ EXAMPLES = [
             {
                 "name": "Dual-lipid backbone",
                 "description": "Two independent γGlu–AEEA–C20 arms on a 3-residue backbone",
-                "cabiln": "ac-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-am",
+                "cabiln": "ac-K.[E_g(4,4).AEEA(1,2).C20FA(1,2)]-G-K.[E_g(4,4).AEEA(1,2).C20FA(1,2)]-am",
             },
             {
                 "name": "AEEA PEG spacer",
@@ -3093,7 +3093,7 @@ def _s2c_detect_backbone(mol):
     n = len(mol.GetSubstructMatches(_C.MolFromSmiles('NCC=O')))
     if n == 0:
         return '', None
-    # Branched peptides (e.g. K with gGlu lipid linker) have extra NCC=O units
+    # Branched peptides (e.g. K with E_g lipid linker) have extra NCC=O units
     # in side-chain amino acids; scan from n down to 1 for longest real backbone.
     for length in range(n, 0, -1):
         matches = mol.GetSubstructMatches(_C.MolFromSmiles('C(=O)CN' * length))
@@ -3231,7 +3231,7 @@ def _s2c_isolate_residues(m, aa_units):
 def _s2c_connected_pairs(m, mappings):
     from rdkit import Chem as _C
     # Backbone alpha-N atoms: the N in every NCC=O backbone unit.
-    # Isopeptide bonds (e.g. K epsilon-N → gGlu gamma-CO) use a non-alpha N and
+    # Isopeptide bonds (e.g. K epsilon-N → E_g gamma-CO) use a non-alpha N and
     # must not be counted as backbone peptide bonds — they are 'side chain'.
     backbone_n_set = {match[0] for match in m.GetSubstructMatches(_C.MolFromSmiles('NCC=O'))}
     aa_idxs = [set(mp.keys()) for mp in mappings]
@@ -3301,7 +3301,7 @@ def _s2c_is_cyclic(pairs, n):
         pb_set = {(min(i, j), max(i, j)) for i, j in pbs}
         return bool(pb_set & scs)
     # BFS cycle detection on peptide-bond graph; correctly handles sidechain
-    # isopeptide branches (e.g. lipid-modified K→gGlu) without false positives
+    # isopeptide branches (e.g. lipid-modified K→E_g) without false positives
     adj = defaultdict(set)
     for i, j in pbs:
         adj[i].add(j)
@@ -3786,7 +3786,7 @@ def _s2c_r_group_at_atom(orig_mol, orig_atom_idx, frag_atoms, abbr, raw_lib):
     return None
 
 
-_BRANCH_SEG_SKIP = frozenset({'gGlu', 'D_gGlu', 'hAsp', 'D_hAsp'})
+_BRANCH_SEG_SKIP: frozenset = frozenset()  # no deprecated aliases remain
 
 
 def _s2c_match_branch_segment(seg_frag, full_lib):
@@ -3797,9 +3797,7 @@ def _s2c_match_branch_segment(seg_frag, full_lib):
     2. Reverse: segment as subgraph of lib (lib has one or two extra cap atoms like -OH
        that were consumed when forming the amide bond in the full peptide).
 
-    Variant monomers that are slot-remapped aliases of standard amino acids (gGlu,
-    hAsp, etc.) are skipped — the base monomer (E, D) is detected instead and the
-    actual R-group slot is determined by _s2c_r_group_at_atom from connectivity.
+    R-group slot is determined by _s2c_r_group_at_atom from connectivity.
     """
     from rdkit import Chem as _C
     seg_norm = _s2c_normalize(seg_frag)
@@ -3836,7 +3834,7 @@ def _s2c_match_branch_segment(seg_frag, full_lib):
     return best_abbr, best_n
 
 
-def _s2c_walk_branch(mol, glu_atoms, glu_outgoing_n, orphan_atoms, full_lib, raw_lib, anchor_abbr, anchor_n_atom, junction_abbr='gGlu'):
+def _s2c_walk_branch(mol, glu_atoms, glu_outgoing_n, orphan_atoms, full_lib, raw_lib, anchor_abbr, anchor_n_atom, junction_abbr='E_g'):
     """Walk the branch chain starting from the junction monomer outward.
 
     Returns list of (abbr, prev_r, cur_r) for each piece in the branch
@@ -3866,17 +3864,7 @@ def _s2c_walk_branch(mol, glu_atoms, glu_outgoing_n, orphan_atoms, full_lib, raw
     # ── Step 2: Identify junction monomer's outgoing R-group ────────────────
     glu_out_r = _s2c_r_group_at_atom(mol, glu_outgoing_n, glu_atoms, junction_abbr, raw_lib)
 
-    # If the junction connects via backbone slot 2 (C-terminal exit) it is the
-    # same bond as the canonical E/D form via slot 4.  gGlu(4,2) == E(4,4) —
-    # the "double reverse": gGlu already moves γ-COOH from slot 4→2, so using
-    # slot 2 undoes the reversal and lands on γ-COOH just like E slot 4.
-    _SLOT2_ALIAS = {'gGlu': 'E', 'D_gGlu': 'dE', 'hAsp': 'D', 'D_hAsp': 'dD'}
-    _j_abbr  = junction_abbr
-    _glu_in  = glu_in_r or 4
-    if _glu_in == 2 and _j_abbr in _SLOT2_ALIAS:
-        _j_abbr = _SLOT2_ALIAS[_j_abbr]
-        _glu_in = 4
-    results.append((_j_abbr, anchor_r or 4, _glu_in))
+    results.append((junction_abbr, anchor_r or 4, glu_in_r or 4))
 
     if glu_outgoing_n is None or not orphan_atoms:
         return results
@@ -3963,7 +3951,7 @@ def _s2c_walk_branch(mol, glu_atoms, glu_outgoing_n, orphan_atoms, full_lib, raw
             segments.append(remaining)
 
     # ── Step 4: Match each segment and find R-groups ─────────────────────────
-    prev_out_r = glu_out_r or 1  # gGlu's outgoing R (R1 for backbone_n/in_n)
+    prev_out_r = glu_out_r or 1  # E_g's outgoing R (R1 for backbone_n/in_n)
     seg_entry_atoms = []  # entry atom for each segment (bonded to previous piece)
 
     # Reconstruct entry atom for each segment
@@ -4017,6 +4005,34 @@ def _s2c_walk_branch(mol, glu_atoms, glu_outgoing_n, orphan_atoms, full_lib, raw
 
         abbr, n_matched = _s2c_match_branch_segment(seg_mol, full_lib)
 
+        # 1-2 rule: prefer the alternative whose ENTRY slot uses the lowest R-group.
+        # E_g (R2=γ-COOH entry) beats E (R4=γ-COOH entry) for γ-linked chains.
+        if abbr:
+            _seg_in = seg_entry_atoms[seg_idx] if seg_idx < len(seg_entry_atoms) else None
+            if _seg_in is not None:
+                _cur_in_r = _s2c_r_group_at_atom(mol, _seg_in, seg, abbr, raw_lib)
+                if _cur_in_r is not None and _cur_in_r > 2:
+                    _seg_norm = _s2c_normalize(seg_mol)
+                    _seg_n = _seg_norm.GetNumAtoms() if _seg_norm else 0
+                    for _alt_abbr, _alt_cm, _alt_norm, _alt_n in full_lib:
+                        if _alt_abbr == abbr or _alt_abbr in _BRANCH_SEG_SKIP:
+                            continue
+                        _alt_nm = 0
+                        if _seg_norm and _alt_n <= _seg_n + 2:
+                            _m = _seg_norm.GetSubstructMatches(_alt_norm, useChirality=False)
+                            if _m:
+                                _alt_nm = len(_m[0])
+                        if _alt_nm == 0 and _seg_n < _alt_n <= _seg_n + 4:
+                            _m = _alt_norm.GetSubstructMatches(_seg_norm, useChirality=False)
+                            if _m:
+                                _alt_nm = _seg_n
+                        if _alt_nm < n_matched:
+                            continue
+                        _alt_in_r = _s2c_r_group_at_atom(mol, _seg_in, seg, _alt_abbr, raw_lib)
+                        if _alt_in_r is not None and _alt_in_r < _cur_in_r:
+                            abbr = _alt_abbr
+                            break
+
         seg_in_atom = seg_entry_atoms[seg_idx] if seg_idx < len(seg_entry_atoms) else None
 
         # cur_r: R-group on this segment at incoming junction
@@ -4036,8 +4052,8 @@ def _s2c_walk_branch(mol, glu_atoms, glu_outgoing_n, orphan_atoms, full_lib, raw
                 if seg_out_atom is not None:
                     break
 
-        # Format: (abbr, prev_out_R, cur_R) — AEEA(1,2) means gGlu's R1 connects
-        # to AEEA's R2; prev_out_R=1 (gGlu.in_n), cur_R=2 (AEEA.out_co).
+        # Format: (abbr, prev_out_R, cur_R) — AEEA(1,2) means E_g's R1 connects
+        # to AEEA's R2; prev_out_R=1 (E_g.in_n), cur_R=2 (AEEA.out_co).
         results.append((abbr or '?', prev_out_r, cur_r or 2))
 
         if seg_out_atom is not None and abbr:
@@ -4165,7 +4181,7 @@ _CovEntry = _nt2('_CovEntry', [
     'smarts_in_n_idx', 'smarts_out_co_idx',  # indices into smarts_mol
     'n_atoms', 'n_rings', 'has_ez',
     'bb_dist',                           # shortest-path bond count N→backbone-C
-    # iso SMARTS: carboxyl cap O removed so isopeptide-bonded monomers (gGlu→K)
+    # iso SMARTS: carboxyl cap O removed so isopeptide-bonded monomers (E_g→K)
     # match without pulling the backbone N into the match set.  None if no
     # carboxyl R-groups are present.
     'smarts_mol_iso', 'smarts_in_n_idx_iso', 'smarts_out_co_idx_iso',
@@ -4238,7 +4254,7 @@ def _s2c_build_cov_lib():
         # connectivity changes during crosslinking (terminal_alkene → =CH2→=CH-).
         # Restrict to alkene-type R-groups ONLY — other non-backbone R-groups
         # like formamide_c/amide_nh must keep their exact H count or they absorb
-        # neighbouring residue fragments (e.g. Lys_For absorbing gGlu gamma-CO).
+        # neighbouring residue fragments (e.g. Lys_For absorbing E_g gamma-CO).
         _MAP_XL = 9904
         _XL_ACTIVE_TYPES = frozenset({'terminal_alkene', 'crosslink_alkene'})
         xl_raw_attach: set = set()
@@ -4339,7 +4355,7 @@ def _s2c_build_cov_lib():
                 break
         # Use a per-atom map number to track carboxyl-cap O atoms so we can
         # replace their SMARTS with [#8,#7] (O or N) rather than [#8] alone.
-        # This lets gGlu match in both free-carboxyl (-OH) and isopeptide (-N)
+        # This lets E_g match in both free-carboxyl (-OH) and isopeptide (-N)
         # forms while still requiring D/E's carboxyl in free-acid contexts.
         _MAP_CR_CAP = 9907
         rw_s = _RW(cm)
@@ -4374,7 +4390,7 @@ def _s2c_build_cov_lib():
             elif _si in cap_remove_cap_set:
                 # Carboxyl R-group cap atom: keep as [#8] in standard SMARTS
                 # (correct for D/E backbone detection).  The iso SMARTS removes
-                # this atom entirely so gGlu matches in isopeptide form.
+                # this atom entirely so E_g matches in isopeptide form.
                 _repl = f'[#{_sa.GetAtomicNum()}{_cs}:{_MAP_CR_CAP}]'
             elif _sa.GetAtomicNum() in (7, 8, 16):
                 # Side-chain heteroatoms (N/O/S) may form crosslinks/isopeptide
@@ -4403,7 +4419,7 @@ def _s2c_build_cov_lib():
                 rw_sm0.RemoveAtom(_cap_idx)
             smarts_mol = rw_sm0.GetMol()
         # Build iso SMARTS by further removing the carboxyl cap atoms (tagged
-        # _MAP_CR_CAP).  This lets gGlu match in isopeptide form (no -OH at
+        # _MAP_CR_CAP).  This lets E_g match in isopeptide form (no -OH at
         # gamma-carboxyl) without pulling K's epsilon-N into the match set.
         _cr_cap_idxs = sorted(
             [a.GetIdx() for a in smarts_mol.GetAtoms()
@@ -4501,7 +4517,7 @@ def _s2c_build_backbone(mol, placements):
 
     A→B when A.out_co bonds to B.in_n.  Among equal-length chains prefers
     those with the most m_type='aa' members (avoids picking lipid branch chains
-    of the same length as the backbone, e.g. C20FA-AEEA-gGlu vs K-G-K).
+    of the same length as the backbone, e.g. C20FA-AEEA-E_g vs K-G-K).
     Returns list of _PlacedNode in N→C order.
     """
     from collections import defaultdict as _dd3
@@ -4778,7 +4794,7 @@ def smiles_to_cabiln_core(smiles: str):
     placements = _s2c_place_monomers(mol, cov_lib)
     # iso_placements: like placements but uses the iso SMARTS (carboxyl cap
     # removed) for monomers that have one.  Used only for branch detection so
-    # that isopeptide-bonded monomers (gGlu→K) are found without pulling the
+    # that isopeptide-bonded monomers (E_g→K) are found without pulling the
     # backbone amide-N into the match set.
     iso_placements: list = []
     for _ie in cov_lib:
@@ -4911,18 +4927,18 @@ def smiles_to_cabiln_core(smiles: str):
 
     # ── 5. Branch detection and formatting ────────────────────────────────────
     # Non-backbone placements whose out_co bonds to a backbone atom are branch
-    # anchors (e.g. gGlu attached to K's epsilon-N via isopeptide bond).
+    # anchors (e.g. E_g attached to K's epsilon-N via isopeptide bond).
     # Deduplicate branch placements by atom set: L/D pairs and similar monomers
-    # (DGlu/gGlu/E/hAsp) cover identical heavy atoms.  When multiple abbrs
-    # match the same atoms, prefer monomers specifically designated for
-    # isopeptide branches (gGlu/D_gGlu) over generic D/L amino acids (DGlu/E).
+    # (DGlu/E_g/E) cover identical heavy atoms.  When multiple abbrs match
+    # the same atoms, prefer standard E/D (whose R4=γ/β-COOH gives E(4,4) etc.)
+    # over gamma-form E_g at the isopeptide junction; E_g is preferred only in
+    # orphan-segment matching (step 4 of _s2c_walk_branch) via the 1-2 rule.
     # Priority 0 = most preferred; unlisted abbrs get 999.
     _ISOPEP_PRIORITY: dict = {
-        'E': 0, 'dE': 1,               # standard Glu: use slot annotation (e.g. E(4,4) or E(1,4))
+        'E': 0, 'dE': 1,               # standard Glu: slot annotation e.g. E(4,4)
         'D': 2, 'dD': 3,               # standard Asp
-        'DGlu': 4,                      # D-Glu
-        'hAsp': 5, 'D_hAsp': 6,        # homo-Asp: deprecated, use D(4,4) notation
-        'gGlu': 7, 'D_gGlu': 8,        # deprecated: use E(4,4) / E(1,4) notation instead
+        'DGlu': 4, 'DGlu_g': 5,        # D-Glu variants
+        'E_g': 6,                       # gamma-backbone Glu (lower — E preferred at isopeptide junction)
     }
     _bp_by_key: dict = {}  # frozenset(mol_atoms) → best _PlacedNode
     for p in iso_placements:
@@ -4945,7 +4961,7 @@ def smiles_to_cabiln_core(smiles: str):
         for bp in branch_placements:
             main_at = -1
             # Check ALL atoms of bp for a bond to any backbone atom — not just
-            # bp.out_co, because gGlu's isopeptide attachment is its gamma-C=O
+            # bp.out_co, because E_g's isopeptide attachment is its gamma-C=O
             # (in mol_atoms) rather than its alpha-C=O (out_co).
             for bpa in bp.mol_atoms:
                 for ba in bb_node.mol_atoms:
@@ -4972,10 +4988,10 @@ def smiles_to_cabiln_core(smiles: str):
                 main_at = jinfo['main_at']
                 glu_node = jinfo['glu_node']
                 glu_atoms = set(glu_node.mol_atoms)
-                # in_n (alpha-N) is the junction from gGlu toward AEEA/C20FA —
-                # AEEA's out_co forms an amide bond with gGlu's in_n.
+                # in_n (alpha-N) is the junction from E_g toward AEEA/C20FA —
+                # AEEA's out_co forms an amide bond with E_g's in_n.
                 # out_co (alpha-C=O) is a free carboxyl terminus in the assembled
-                # molecule when gGlu is used as a branch (isopeptide via R4).
+                # molecule when E_g is used as a branch (isopeptide via R4).
                 glu_outgoing_n = glu_node.in_n
 
                 # Orphan atoms: reachable from glu_outgoing_n, outside backbone+glu
