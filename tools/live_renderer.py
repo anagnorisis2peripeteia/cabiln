@@ -5679,8 +5679,40 @@ async def insert_bond(req: _InsertBondReq):
                         return cabiln[:bs] + '[' + new_content + ']' + cabiln[be:]
                 return cabiln
 
+            def _annotate_percent_residue(cabiln, res_idx, ann, seq, main_set):
+                """Append ann to the right occurrence of a residue inside a % branch."""
+                try:
+                    abbr = seq.s_monomers[res_idx].get('m_abbr', '')
+                except (IndexError, KeyError):
+                    return cabiln
+                pendant_indices = [i for i in range(len(seq.s_monomers))
+                                   if i not in main_set]
+                same_abbr = [i for i in pendant_indices
+                             if seq.s_monomers[i].get('m_abbr', '') == abbr]
+                try:
+                    target_occ = same_abbr.index(res_idx)
+                except ValueError:
+                    return cabiln
+                main_part, *branches = cabiln.split('%')
+                found = 0
+                for bi, branch in enumerate(branches):
+                    tokens = branch.split('-')
+                    for ti, tok in enumerate(tokens):
+                        dot_pos = tok.find('.')
+                        base = tok[:dot_pos] if dot_pos != -1 else tok
+                        if base == abbr:
+                            if found == target_occ:
+                                tokens[ti] = tok + ann
+                                branches[bi] = '-'.join(tokens)
+                                return main_part + '%' + '%'.join(branches)
+                            found += 1
+                return cabiln
+
             ann_host   = f'.{_tag}({req.r_host},{req.r_new})'
             ann_target = f'.{_tag}({req.r_new},{req.r_host})'
+            # In % branch notation crosslinks use just the tag (R-groups are
+            # encoded on the backbone side only, e.g. K.!2(4,4) implies C20FA.!2)
+            ann_tag_only = f'.{_tag}'
 
             result = cabiln
             for _ridx, _ann in [(req.host_residue_idx, ann_host),
@@ -5688,7 +5720,12 @@ async def insert_bond(req: _InsertBondReq):
                 if _main2 and _ridx in _main2:
                     result = _annotate_main(result, _ridx, _ann)
                 elif _seq2 is not None:
+                    prev = result
                     result = _annotate_pendant(result, _ridx, _ann, _seq2, _main2)
+                    if result == prev and '%' in result:
+                        # Residue lives in a % branch — annotate there
+                        result = _annotate_percent_residue(
+                            result, _ridx, ann_tag_only, _seq2, _main2)
                 else:
                     result = _annotate_main(result, _ridx, _ann)
 
