@@ -4507,38 +4507,37 @@ def _s2c_build_backbone(mol, placements):
     if not placements:
         return []
     # Deduplicate by atom coverage: L and D amino acids share identical heavy-atom
-    # SMARTS (useChirality=False), so both match the same position. Only one path
-    # through each atom set is needed — _s2c_match (step 4) resolves the correct
-    # abbr from stereochemistry. Sort first so we keep the highest-quality entry.
-    #
-    # Backbone-exit preference: when two placements cover the same atoms but use
-    # different out_co atoms (e.g. E alpha-backbone vs E_g gamma-backbone), prefer
-    # the one whose out_co is actually bonded to another residue's backbone N.
-    # This gives "prefer (1,2) connections" — the real amide exit wins over the
-    # sidechain carboxylate, so E_g is chosen over E when the gamma-COOH is the
-    # chain bond without any special-case logic per residue.
-    _all_in_ns = {p.in_n for p in placements}
-    def _out_co_key(p):
-        return not any(
-            nb.GetIdx() in _all_in_ns and nb.GetIdx() != p.in_n
-            for nb in mol.GetAtomWithIdx(p.out_co).GetNeighbors()
-        )
-    placements.sort(key=lambda p: (p.m_type != 'aa', _out_co_key(p), -p.entry.n_atoms, p.abbr))
-    seen_mol_atoms: set = set()
+    # L and D amino acids share identical heavy-atom SMARTS (useChirality=False)
+    # so they produce the same placement — _s2c_match (step 4) resolves stereo.
+    # HOWEVER beta/gamma backbone variants (E vs E_g, D vs D_b) cover identical
+    # atoms but use a DIFFERENT out_co (different carbonyl as R2).  Both must
+    # survive deduplication so the chain DAG can select whichever one's R2 is the
+    # actual amide-bond exit — that is the (1,2) backbone connection.
+    # Dedup key: (mol_atoms, out_co) keeps one entry per distinct backbone exit.
+    placements.sort(key=lambda p: (p.m_type != 'aa', -p.entry.n_atoms, p.abbr))
+    seen_mol_out: set = set()
     deduped: list = []
     for p in placements:
-        if p.mol_atoms not in seen_mol_atoms:
-            seen_mol_atoms.add(p.mol_atoms)
+        key = (p.mol_atoms, p.out_co)
+        if key not in seen_mol_out:
+            seen_mol_out.add(key)
             deduped.append(p)
 
     in_n_map = _dd3(list)
     for p in deduped:
         in_n_map[p.in_n].append(p)
-    out_co_atoms = {p.out_co for p in deduped}
+
+    # out_cos from placements that don't share atoms with a given node — these
+    # are genuine predecessor exits from OTHER residues.  Excludes the node's own
+    # out_co and any alternate-backbone out_co for the same atom set (e.g. E and
+    # E_g share mol_atoms; neither should count as the other's predecessor).
+    def _external_out_cos(node):
+        return {p.out_co for p in deduped if not (p.mol_atoms & node.mol_atoms)}
 
     def has_predecessor(node):
+        ext = _external_out_cos(node)
         for nb in mol.GetAtomWithIdx(node.in_n).GetNeighbors():
-            if nb.GetIdx() in out_co_atoms:
+            if nb.GetIdx() in ext:
                 return True
         return False
 
