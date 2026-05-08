@@ -381,3 +381,5 @@ CyoLys,N[C@@H](CCCCC1CCCCC#CC1)C(=O)O,L-2-amino-6-(cyclooct-2-yn-1-yl)hexanoic a
 D_b,N[C@@H](CC(=O)O)C(=O)O,L-beta-Aspartate backbone,aa,bD,[1*]N([3*])[C@@H](CC([2*])=O)C([4*])=O,[H],[OH],[H],[OH],,
 DAsp_b,N[C@H](CC(=O)O)C(=O)O,D-beta-Aspartate backbone,aa,dbD,[1*]N([3*])[C@H](CC([2*])=O)C([4*])=O,[H],[OH],[H],[OH],,
 Gla_a,N[C@@H](CC(C(=O)O)C(=O)O)C(=O)O,gamma-Carboxyglutamic acid alpha-backbone,aa,,[1*]N([3*])[C@@H](CC(C([4*])=O)C([5*])=O)C([2*])=O,[H],[OH],[H],[OH],[OH],
+E_g,N[C@@H](CCC(=O)O)C(=O)O,L-Glutamate gamma-backbone,aa,,[1*]N([3*])[C@@H](CCC([2*])=O)C([4*])=O,[H],[OH],[H],[OH],,
+DGlu_g,N[C@H](CCC(=O)O)C(=O)O,D-Glutamate gamma-backbone,aa,,[1*]N([3*])[C@H](CCC([2*])=O)C([4*])=O,[H],[OH],[H],[OH],,
