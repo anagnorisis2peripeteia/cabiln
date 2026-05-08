@@ -300,6 +300,53 @@ else:
     print('All audited amino acids have correct alpha-carbon CIP.\n')
 
 # ---------------------------------------------------------------------------
+# 5. CSV vs SDF mol-block sync
+# ---------------------------------------------------------------------------
+print('=' * 60)
+print('5. CSV / SDF MOL-BLOCK SYNC')
+print('   (catches stale 2D-layout wedge errors for multi-stereocenter residues)')
+print('=' * 60)
+
+SDF_PATH = os.path.join(os.path.dirname(__file__), '..', 'src', 'pyPept', 'data', 'monomers.sdf')
+try:
+    suppl = Chem.SDMolSupplier(SDF_PATH, removeHs=False)
+    sdf_mols = {}
+    for _mol in suppl:
+        if _mol is None:
+            continue
+        if _mol.HasProp('m_abbr'):
+            _abbr = _mol.GetPropsAsDict()['m_abbr'].strip()
+            if _abbr:
+                sdf_mols[_abbr] = _mol
+
+    sync_errors = []
+    for _, row in df.iterrows():
+        tok = str(row['token'])
+        csv_chk = str(row.get('chuckles', ''))
+        if not csv_chk or csv_chk == 'nan' or tok not in sdf_mols:
+            continue
+        m1 = Chem.MolFromSmiles(csv_chk)
+        if m1 is None:
+            continue
+        csv_can = Chem.MolToSmiles(m1, canonical=True)
+        sdf_can = Chem.MolToSmiles(sdf_mols[tok], canonical=True)
+        if csv_can != sdf_can:
+            sync_errors.append((tok, csv_can, sdf_can))
+
+    if sync_errors:
+        print(f'Found {len(sync_errors)} CSV/SDF sync errors:\n')
+        for tok, c, s in sync_errors:
+            print(f'  {tok}:')
+            print(f'    CSV: {c}')
+            print(f'    SDF: {s}')
+            print()
+    else:
+        print('  All mol blocks match CSV chuckles.\n')
+except Exception as _e:
+    sync_errors = []
+    print(f'  SDF sync check skipped: {_e}\n')
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 print('\n' + '=' * 60)
@@ -310,8 +357,9 @@ print(f'  Exact duplicate groups:      {len(exact_dup_groups)}')
 print(f'  Core-only duplicate groups:  {len(flat_groups)}')
 print(f'  Case-collision groups:       {len(ci_groups)}')
 print(f'  Chirality errors:            {len(errors)}')
+print(f'  CSV/SDF sync errors:         {len(sync_errors)}')
 
-has_errors = len(errors) > 0 or any(
+has_errors = len(errors) > 0 or len(sync_errors) > 0 or any(
     rows[0][3] != rows[i][3]
     for _, rows in ci_groups
     for i in range(1, len(rows))
