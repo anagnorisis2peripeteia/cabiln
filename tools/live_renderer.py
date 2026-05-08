@@ -3585,8 +3585,19 @@ def _s2c_get_lib():
                     k, v = item.split(':', 1)
                     try: cts[int(k)] = v.strip()
                     except ValueError: pass
-            if not any(v == 'backbone_n' for v in cts.values()): continue
-            if not any(v == 'backbone_c' for v in cts.values()): continue
+            bn_r = next((r for r, t in cts.items() if t == 'backbone_n'), None)
+            bc_r = next((r for r, t in cts.items() if t == 'backbone_c'), None)
+            if bn_r is None or bc_r is None: continue
+            bn_atom = next((a for a in mol.GetAtoms()
+                            if a.GetAtomicNum() == 0 and a.GetIsotope() == bn_r), None)
+            bc_atom = next((a for a in mol.GetAtoms()
+                            if a.GetAtomicNum() == 0 and a.GetIsotope() == bc_r), None)
+            if bn_atom is None or bc_atom is None: continue
+            bn_nbrs = [nb.GetIdx() for nb in bn_atom.GetNeighbors()]
+            bc_nbrs = [nb.GetIdx() for nb in bc_atom.GetNeighbors()]
+            if not bn_nbrs or not bc_nbrs: continue
+            _bb_path = _C.GetShortestPath(mol, bn_nbrs[0], bc_nbrs[0])
+            bb_dist = len(_bb_path) - 1 if _bb_path else 0
             smi = _C.MolToSmiles(mol, allHsExplicit=False)
             capped_smi = _s2c_cap_smiles(smi, rg_str)
             try: cm = _C.MolFromSmiles(capped_smi)
@@ -3604,7 +3615,7 @@ def _s2c_get_lib():
                 for b in orig_cm.GetBonds()
                 if b.GetBondTypeAsDouble() == 2.0
             )
-            lib.append((abbr, orig_cm, norm_cm, norm_cm.GetNumAtoms(), n_rings, has_ez))
+            lib.append((abbr, orig_cm, norm_cm, norm_cm.GetNumAtoms(), n_rings, has_ez, bb_dist))
             seen.add(abbr)
         lib.sort(key=lambda x: x[3], reverse=True)
         _s2c_lib_cache = lib
@@ -3854,7 +3865,17 @@ def _s2c_walk_branch(mol, glu_atoms, glu_outgoing_n, orphan_atoms, full_lib, raw
     # ── Step 2: Identify junction monomer's outgoing R-group ────────────────
     glu_out_r = _s2c_r_group_at_atom(mol, glu_outgoing_n, glu_atoms, junction_abbr, raw_lib)
 
-    results.append((junction_abbr, anchor_r or 4, glu_in_r or 4))
+    # If the junction connects via backbone slot 2 (C-terminal exit) it is the
+    # same bond as the canonical E/D form via slot 4.  gGlu(4,2) == E(4,4) —
+    # the "double reverse": gGlu already moves γ-COOH from slot 4→2, so using
+    # slot 2 undoes the reversal and lands on γ-COOH just like E slot 4.
+    _SLOT2_ALIAS = {'gGlu': 'E', 'D_gGlu': 'dE', 'hAsp': 'D', 'D_hAsp': 'dD'}
+    _j_abbr  = junction_abbr
+    _glu_in  = glu_in_r or 4
+    if _glu_in == 2 and _j_abbr in _SLOT2_ALIAS:
+        _j_abbr = _SLOT2_ALIAS[_j_abbr]
+        _glu_in = 4
+    results.append((_j_abbr, anchor_r or 4, _glu_in))
 
     if glu_outgoing_n is None or not orphan_atoms:
         return results
@@ -4082,7 +4103,7 @@ def _s2c_match(aa_mol, lib):
     best_ring_match = False
     best_ez = -2
 
-    for abbr, ref_orig, ref_norm, n_ref, n_rings_ref, ref_has_ez in lib:
+    for abbr, ref_orig, ref_norm, n_ref, n_rings_ref, ref_has_ez, *_ in lib:
         if n_ref > n_q: continue
         match = aa_mol.GetSubstructMatches(ref_orig, useChirality=False)
         if match:
@@ -4142,6 +4163,7 @@ _CovEntry = _nt2('_CovEntry', [
     'in_n_idx', 'out_co_idx',            # indices into orig_mol / norm_mol
     'smarts_in_n_idx', 'smarts_out_co_idx',  # indices into smarts_mol
     'n_atoms', 'n_rings', 'has_ez',
+    'bb_dist',                           # shortest-path bond count N→backbone-C
     # iso SMARTS: carboxyl cap O removed so isopeptide-bonded monomers (gGlu→K)
     # match without pulling the backbone N into the match set.  None if no
     # carboxyl R-groups are present.
@@ -4439,12 +4461,15 @@ def _s2c_build_cov_lib():
             b.GetStereo() not in (_BS.STEREONONE, _BS.STEREOANY)
             for b in orig_cm.GetBonds() if b.GetBondTypeAsDouble() == 2.0
         )
+        _bb_path = _C.GetShortestPath(raw_mol, in_n_raw, out_co_raw)
+        _bb_dist = len(_bb_path) - 1 if _bb_path else 0
         lib.append(_CovEntry(
             abbr=abbr, m_type=m_type,
             orig_mol=orig_cm, norm_mol=norm_cm, smarts_mol=smarts_mol,
             in_n_idx=in_n_idx, out_co_idx=out_co_idx,
             smarts_in_n_idx=smarts_in_n_idx, smarts_out_co_idx=smarts_out_co_idx,
             n_atoms=norm_cm.GetNumAtoms(), n_rings=n_rings, has_ez=has_ez,
+            bb_dist=_bb_dist,
             smarts_mol_iso=smarts_mol_iso,
             smarts_in_n_idx_iso=smarts_in_n_idx_iso,
             smarts_out_co_idx_iso=smarts_out_co_idx_iso,
@@ -4485,7 +4510,20 @@ def _s2c_build_backbone(mol, placements):
     # SMARTS (useChirality=False), so both match the same position. Only one path
     # through each atom set is needed — _s2c_match (step 4) resolves the correct
     # abbr from stereochemistry. Sort first so we keep the highest-quality entry.
-    placements.sort(key=lambda p: (p.m_type != 'aa', -p.entry.n_atoms, p.abbr))
+    #
+    # Backbone-exit preference: when two placements cover the same atoms but use
+    # different out_co atoms (e.g. E alpha-backbone vs E_g gamma-backbone), prefer
+    # the one whose out_co is actually bonded to another residue's backbone N.
+    # This gives "prefer (1,2) connections" — the real amide exit wins over the
+    # sidechain carboxylate, so E_g is chosen over E when the gamma-COOH is the
+    # chain bond without any special-case logic per residue.
+    _all_in_ns = {p.in_n for p in placements}
+    def _out_co_key(p):
+        return not any(
+            nb.GetIdx() in _all_in_ns and nb.GetIdx() != p.in_n
+            for nb in mol.GetAtomWithIdx(p.out_co).GetNeighbors()
+        )
+    placements.sort(key=lambda p: (p.m_type != 'aa', _out_co_key(p), -p.entry.n_atoms, p.abbr))
     seen_mol_atoms: set = set()
     deduped: list = []
     for p in placements:
@@ -4855,7 +4893,13 @@ def smiles_to_cabiln_core(smiles: str):
                 stripped, did = _s2c_strip_c_cap(aa_mol)
                 if did:
                     aa_mol = stripped
-        abbr, score = _s2c_match(aa_mol, lib)
+        # Filter lib to entries with the same backbone path length as the
+        # backbone-chain placement.  This ensures E_g is preferred over E when
+        # the gamma-COOH was the actual chain exit (bb_dist=4 vs 2).  Falls
+        # back to the full lib if nothing matches (e.g. novel unregistered dist).
+        _node_bb_dist = node.entry.bb_dist
+        _lib_filtered = [e for e in lib if e[6] == _node_bb_dist]
+        abbr, score = _s2c_match(aa_mol, _lib_filtered or lib)
         if abbr is None:
             raise ValueError(
                 f'Unrecognised monomer at backbone position {pos} '
