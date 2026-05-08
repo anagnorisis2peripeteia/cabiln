@@ -114,14 +114,34 @@ EXAMPLES = [
         "category": "GLP-1 / Incretin Agonists",
         "items": [
             {
+                "name": "Semaglutide",
+                "description": "GLP-1 agonist · 31 AA · C18 diacid via AEEA–AEEA–γGlu on K26 · Ozempic/Wegovy",
+                "cabiln": "H-Aib-E-G-T-F-T-S-D-V-S-S-Y-L-E-G-Q-A-A-K.[AEEA(4,2).AEEA(1,2).E_g(1,2).C18FA(1,2)]-E-F-I-A-W-L-V-R-G-R-G",
+            },
+            {
+                "name": "Liraglutide",
+                "description": "GLP-1 agonist · 31 AA · C16 palmitoyl via γGlu on K26 · Victoza/Saxenda",
+                "cabiln": "H-A-E-G-T-F-T-S-D-V-S-S-Y-L-E-G-Q-A-A-K.[E(4,4).Pal(1,2)]-E-F-I-A-W-L-V-R-G-R-G",
+            },
+            {
+                "name": "Tirzepatide",
+                "description": "GIP/GLP-1 dual agonist · 39 AA · C20 diacid via AEEA–AEEA–γGlu on K20 · Mounjaro/Zepbound",
+                "cabiln": "Y-Aib-E-G-T-F-T-S-D-Y-S-I-Aib-L-D-K-I-A-Q-K.[AEEA(4,2).AEEA(1,2).E_g(1,2).C20FA(1,2)]-A-F-V-Q-W-L-I-A-G-G-P-S-S-G-A-P-P-P-S-am",
+            },
+            {
                 "name": "Retatrutide",
-                "description": "GIP/GLP-1/glucagon triple agonist · 39 AA · C20 lipid conjugate",
+                "description": "GIP/GLP-1/GCG triple agonist · 39 AA · C20 diacid via AEEA–γGlu on K17 · LY3437943",
                 "cabiln": "Y-Aib-Q-G-T-F-T-S-D-Y-S-I-aMeLeu-L-D-K-K.[AEEA(4,2).E_g(1,2).C20FA(1,2)]-A-Q-Aib-A-F-I-E-Y-L-L-E-G-G-P-S-S-G-A-P-P-P-S-am",
             },
             {
-                "name": "Semaglutide-like",
-                "description": "GLP-1 scaffold · γGlu–AEEA–C20 lipid linker on K8",
-                "cabiln": "His-Aib-Glu-Gly-Thr-Phe-Thr-K.[E(4,4).AEEA(1,2).C20FA(1,2)]-am",
+                "name": "Exenatide",
+                "description": "GLP-1 agonist · 39 AA · exendin-4 · amidated C-terminus · no lipid · Byetta",
+                "cabiln": "H-G-E-G-T-F-T-S-D-L-S-K-Q-M-E-E-E-A-V-R-L-F-I-E-W-L-K-N-G-G-P-S-S-G-A-P-P-P-S-am",
+            },
+            {
+                "name": "Lixisenatide",
+                "description": "GLP-1 agonist · 44 AA · exendin-4 + 6×Lys C-terminal extension · amidated · Adlyxin",
+                "cabiln": "H-G-E-G-T-F-T-S-D-L-S-K-Q-M-E-E-E-A-V-R-L-F-I-E-W-L-K-N-G-G-P-S-S-G-A-P-P-S-K-K-K-K-K-K-am",
             },
         ],
     },

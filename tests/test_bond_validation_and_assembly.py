@@ -4450,8 +4450,6 @@ class TestReactionPairSMIRKS:
         """cyclooctyne_c + azide_alpha_c -> triazole (copper-free)."""
         self._run_pair('cyclooctyne_c', 'azide_alpha_c')
 
-    @pytest.mark.xfail(reason="SMIRKS bug: unmapped ring bonds on cyclic TCO "
-                        "cause C valence overflow in dihydropyridazine product")
     def test_iedda_tetrazine_tco(self):
         """tetrazine_c + tco_c -> dihydropyridazine (iEDDA)."""
         self._run_pair('tetrazine_c', 'tco_c')
@@ -5886,6 +5884,164 @@ class TestSmilesToCabiln:
         with _mock.patch.object(_lr, '_s2c_match', return_value=(None, 0)):
             with pytest.raises(ValueError, match='Unrecognised monomer'):
                 _lr.smiles_to_cabiln_core(smi)
+
+
+# ---------------------------------------------------------------------------
+# GLP-1 agonist drug SMILES → CABILN regression tests
+# SMILES sourced from Wikipedia infoboxes and PubChem (CID noted inline).
+# Each test passes the drug's canonical SMILES directly to smiles_to_cabiln_core
+# and asserts (a) zero unknown residues and (b) the expected CABILN string.
+# ---------------------------------------------------------------------------
+class TestGLP1DrugSMILES:
+    """Regression tests for smiles_to_cabiln_core on approved GLP-1 agonist drugs."""
+
+    @staticmethod
+    def _smiles_to_cabiln(smi: str):
+        import sys as _sys, os as _os
+        _repo_root = _os.path.abspath(_os.path.join(_os.path.dirname(__file__), '..'))
+        if _repo_root not in _sys.path:
+            _sys.path.insert(0, _repo_root)
+        from tools.live_renderer import smiles_to_cabiln_core
+        return smiles_to_cabiln_core(smi)
+
+    @pytest.mark.parametrize("drug,smiles,expected_cabiln,n_res", [
+        pytest.param(
+            "semaglutide",
+            # Wikipedia — C187H291N45O59, MW 4113.6
+            (
+                "CC[C@H](C)[C@H](NC(=O)[C@H](Cc1ccccc1)NC(=O)[C@H](CCC(=O)O)NC(=O)"
+                "[C@H](CCCCNC(=O)COCCOCCNC(=O)COCCOCCNC(=O)CC[C@H](NC(=O)CCCCCCCCCCCCCCCCC(=O)O)C(=O)O)"
+                "NC(=O)[C@H](C)NC(=O)[C@H](C)NC(=O)[C@H](CCC(N)=O)NC(=O)CNC(=O)[C@H](CCC(=O)O)"
+                "NC(=O)[C@H](CC(C)C)NC(=O)[C@H](Cc1ccc(O)cc1)NC(=O)[C@H](CO)NC(=O)[C@H](CO)"
+                "NC(=O)[C@@H](NC(=O)[C@H](CC(=O)O)NC(=O)[C@H](CO)NC(=O)[C@@H](NC(=O)[C@H](Cc1ccccc1)"
+                "NC(=O)[C@@H](NC(=O)CNC(=O)[C@H](CCC(=O)O)NC(=O)C(C)(C)NC(=O)[C@@H](N)Cc1c[nH]cn1)"
+                "[C@@H](C)O)[C@@H](C)O)C(C)C)C(=O)N[C@@H](C)C(=O)N[C@@H](Cc1c[nH]c2ccccc12)"
+                "C(=O)N[C@@H](CC(C)C)C(=O)N[C@H](C(=O)N[C@@H](CCCNC(=N)N)C(=O)NCC(=O)"
+                "N[C@@H](CCCNC(=N)N)C(=O)NCC(=O)O)C(C)C"
+            ),
+            "H-Aib-E-G-T-F-T-S-D-V-S-S-Y-L-E-G-Q-A-A-K.[AEEA(4,2).AEEA(1,2).E_g(1,2).C18FA(1,2)]-E-F-I-A-W-L-V-R-G-R-G",
+            31,
+            id="semaglutide",
+        ),
+        pytest.param(
+            "liraglutide",
+            # Wikipedia — C172H265N43O51, MW 3751.3
+            (
+                "CCCCCCCCCCCCCCCC(=O)N[C@@H](CCC(=O)NCCCC[C@H](NC(=O)[C@H](C)NC(=O)[C@H](C)"
+                "NC(=O)[C@H](CCC(N)=O)NC(=O)CNC(=O)[C@H](CCC(O)=O)NC(=O)[C@H](CC(C)C)"
+                "NC(=O)[C@H](CC1=CC=C(O)C=C1)NC(=O)[C@H](CO)NC(=O)[C@H](CO)NC(=O)[C@@H]"
+                "(NC(=O)[C@H](CC(O)=O)NC(=O)[C@H](CO)NC(=O)[C@@H](NC(=O)[C@H](CC1=CC=CC=C1)"
+                "NC(=O)[C@@H](NC(=O)CNC(=O)[C@H](CCC(O)=O)NC(=O)[C@H](C)NC(=O)[C@@H](N)"
+                "CC1=CN=CN1)[C@@H](C)O)[C@@H](C)O)C(C)C)C(=O)N[C@@H](CCC(O)=O)C(=O)"
+                "N[C@@H](CC1=CC=CC=C1)C(=O)N[C@@H]([C@@H](C)CC)C(=O)N[C@@H](C)C(=O)"
+                "N[C@@H](CC1=CNC2=CC=CC=C12)C(=O)N[C@@H](CC(C)C)C(=O)N[C@@H](C(C)C)C(=O)"
+                "N[C@@H](CCCNC(N)=N)C(=O)NCC(=O)N[C@@H](CCCNC(N)=N)C(=O)NCC(O)=O)C(O)=O"
+            ),
+            "H-A-E-G-T-F-T-S-D-V-S-S-Y-L-E-G-Q-A-A-K.[E(4,4).Pal(1,2)]-E-F-I-A-W-L-V-R-G-R-G",
+            31,
+            id="liraglutide",
+        ),
+        pytest.param(
+            "exenatide",
+            # Wikipedia — C184H282N50O60S, MW 4186.6
+            (
+                "[H]/N=C(\\N)/NCCC[C@@H](C(=O)N[C@@H](CC(C)C)C(=O)N[C@@H](Cc1ccccc1)C(=O)"
+                "N[C@@H]([C@@H](C)CC)C(=O)N[C@@H](CCC(=O)O)C(=O)N[C@@H](Cc2c[nH]c3c2cccc3)"
+                "C(=O)N[C@@H](CC(C)C)C(=O)N[C@@H](CCCCN)C(=O)N[C@@H](CC(=O)N)C(=O)NCC(=O)"
+                "NCC(=O)N4CCC[C@H]4C(=O)N[C@@H](CO)C(=O)N[C@@H](CO)C(=O)NCC(=O)N[C@@H](C)"
+                "C(=O)N5CCC[C@H]5C(=O)N6CCC[C@H]6C(=O)N7CCC[C@H]7C(=O)N[C@@H](CO)C(=O)N)"
+                "NC(=O)[C@H](C(C)C)NC(=O)[C@H](C)NC(=O)[C@H](CCC(=O)O)NC(=O)[C@H](CCC(=O)O)"
+                "NC(=O)[C@H](CCC(=O)O)NC(=O)[C@H](CCSC)NC(=O)[C@H](CCC(=O)N)NC(=O)[C@H](CCCCN)"
+                "NC(=O)[C@H](CO)NC(=O)[C@H](CC(C)C)NC(=O)[C@H](CC(=O)O)NC(=O)[C@H](CO)"
+                "NC(=O)[C@H]([C@@H](C)O)NC(=O)[C@H](Cc8ccccc8)NC(=O)[C@H]([C@@H](C)O)"
+                "NC(=O)CNC(=O)[C@H](CCC(=O)O)NC(=O)CNC(=O)[C@H](Cc9cnc[nH]9)N"
+            ),
+            "H-G-E-G-T-F-T-S-D-L-S-K-Q-M-E-E-E-A-V-R-L-F-I-E-W-L-K-N-G-G-P-S-S-G-A-P-P-P-S-am",
+            39,
+            id="exenatide",
+        ),
+        pytest.param(
+            "lixisenatide",
+            # PubChem CID 90472060 — MW 4858.6
+            (
+                "CC[C@H](C)[C@@H](C(=O)N[C@@H](CCC(=O)O)C(=O)N[C@@H](CC1=CNC2=CC=CC=C21)"
+                "C(=O)N[C@@H](CC(C)C)C(=O)N[C@@H](CCCCN)C(=O)N[C@@H](CC(=O)N)C(=O)NCC(=O)"
+                "NCC(=O)N3CCC[C@H]3C(=O)N[C@@H](CO)C(=O)N[C@@H](CO)C(=O)NCC(=O)N[C@@H](C)"
+                "C(=O)N4CCC[C@H]4C(=O)N5CCC[C@H]5C(=O)N[C@@H](CO)C(=O)N[C@@H](CCCCN)"
+                "C(=O)N[C@@H](CCCCN)C(=O)N[C@@H](CCCCN)C(=O)N[C@@H](CCCCN)C(=O)N[C@@H](CCCCN)"
+                "C(=O)N[C@@H](CCCCN)C(=O)N)NC(=O)[C@H](CC6=CC=CC=C6)NC(=O)[C@H](CC(C)C)"
+                "NC(=O)[C@H](CCCNC(=N)N)NC(=O)[C@H](C(C)C)NC(=O)[C@H](C)NC(=O)[C@H](CCC(=O)O)"
+                "NC(=O)[C@H](CCC(=O)O)NC(=O)[C@H](CCC(=O)O)NC(=O)[C@H](CCSC)NC(=O)[C@H](CCC(=O)N)"
+                "NC(=O)[C@H](CCCCN)NC(=O)[C@H](CO)NC(=O)[C@H](CC(C)C)NC(=O)[C@H](CC(=O)O)"
+                "NC(=O)[C@H](CO)NC(=O)[C@H]([C@@H](C)O)NC(=O)[C@H](CC7=CC=CC=C7)NC(=O)"
+                "[C@H]([C@@H](C)O)NC(=O)CNC(=O)[C@H](CCC(=O)O)NC(=O)CNC(=O)[C@H](CC8=CNC=N8)N"
+            ),
+            "H-G-E-G-T-F-T-S-D-L-S-K-Q-M-E-E-E-A-V-R-L-F-I-E-W-L-K-N-G-G-P-S-S-G-A-P-P-S-K-K-K-K-K-K-am",
+            44,
+            id="lixisenatide",
+        ),
+        pytest.param(
+            "tirzepatide",
+            # PubChem CID 166567236 — C225H348N48O68, MW 4813.5
+            (
+                "CC[C@H](C)[C@@H](C(=O)N[C@@H](C)C(=O)N[C@@H](CCC(=O)N)C(=O)N[C@@H]"
+                "(CCCCNC(=O)COCCOCCNC(=O)COCCOCCNC(=O)CC[C@@H](C(=O)O)NC(=O)CCCCCCCCCCCCCCCCCCC(=O)O)"
+                "C(=O)N[C@@H](C)C(=O)N[C@@H](CC1=CC=CC=C1)C(=O)N[C@@H](C(C)C)C(=O)"
+                "N[C@@H](CCC(=O)N)C(=O)N[C@@H](CC2=CNC3=CC=CC=C32)C(=O)N[C@@H](CC(C)C)"
+                "C(=O)N[C@@H]([C@@H](C)CC)C(=O)N[C@@H](C)C(=O)NCC(=O)NCC(=O)N4CCC[C@H]4"
+                "C(=O)N[C@@H](CO)C(=O)N[C@@H](CO)C(=O)NCC(=O)N[C@@H](C)C(=O)N5CCC[C@H]5"
+                "C(=O)N6CCC[C@H]6C(=O)N7CCC[C@H]7C(=O)N[C@@H](CO)C(=O)N)NC(=O)[C@H](CCCCN)"
+                "NC(=O)[C@H](CC(=O)O)NC(=O)[C@H](CC(C)C)NC(=O)C(C)(C)NC(=O)[C@H]([C@@H](C)CC)"
+                "NC(=O)[C@H](CO)NC(=O)[C@H](CC8=CC=C(C=C8)O)NC(=O)[C@H](CC(=O)O)NC(=O)"
+                "[C@H](CO)NC(=O)[C@H]([C@@H](C)O)NC(=O)[C@H](CC9=CC=CC=C9)NC(=O)"
+                "[C@H]([C@@H](C)O)NC(=O)CNC(=O)[C@H](CCC(=O)O)NC(=O)C(C)(C)"
+                "NC(=O)[C@H](CC1=CC=C(C=C1)O)N"
+            ),
+            "Y-Aib-E-G-T-F-T-S-D-Y-S-I-Aib-L-D-K-I-A-Q-K.[AEEA(4,2).AEEA(1,2).E_g(1,2).C20FA(1,2)]-A-F-V-Q-W-L-I-A-G-G-P-S-S-G-A-P-P-P-S-am",
+            39,
+            id="tirzepatide",
+        ),
+        pytest.param(
+            "retatrutide",
+            # PubChem CID 171390338 — MW 4731.4 (triple GIP/GLP-1/GCG agonist)
+            (
+                "CC[C@H](C)C(C(=O)N[C@@H](CCC(=O)O)C(=O)N[C@@H](CC1=CC=C(C=C1)O)C(=O)"
+                "N[C@@H](CC(C)C)C(=O)N[C@@H](CC(C)C)C(=O)N[C@@H](CCC(=O)O)C(=O)NCC(=O)"
+                "NCC(=O)N2CCC[C@H]2C(=O)N[C@@H](CO)C(=O)N[C@@H](CO)C(=O)NCC(=O)N[C@@H](C)"
+                "C(=O)N3CCC[C@H]3C(=O)N4CCC[C@H]4C(=O)N5CCC[C@H]5C(=O)N[C@@H](CO)C(=O)N)"
+                "NC(=O)[C@H](CC6=CC=CC=C6)NC(=O)[C@H](C)NC(=O)C(C)(C)NC(=O)[C@H](CCC(=O)N)"
+                "NC(=O)[C@H](C)NC(=O)[C@H](CCCCNC(=O)COCCOCCNC(=O)CC[C@@H](C(=O)O)"
+                "NC(=O)CCCCCCCCCCCCCCCCCCC(=O)O)NC(=O)[C@H](CCCCN)NC(=O)[C@H](CC(=O)O)"
+                "NC(=O)[C@H](CC(C)C)NC(=O)[C@@](C)(CC(C)C)NC(=O)C([C@@H](C)CC)NC(=O)"
+                "[C@H](CO)NC(=O)[C@H](CC7=CC=C(C=C7)O)NC(=O)[C@H](CC(=O)O)NC(=O)"
+                "[C@H](CO)NC(=O)[C@H]([C@@H](C)O)NC(=O)[C@H](CC8=CC=CC=C8)NC(=O)"
+                "[C@H]([C@@H](C)O)NC(=O)CNC(=O)[C@H](CCC(=O)N)NC(=O)C(C)(C)"
+                "NC(=O)[C@H](CC9=CC=C(C=C9)O)N"
+            ),
+            "Y-Aib-Q-G-T-F-T-S-D-Y-S-I-aMeLeu-L-D-K-K.[AEEA(4,2).E_g(1,2).C20FA(1,2)]-A-Q-Aib-A-F-I-E-Y-L-L-E-G-G-P-S-S-G-A-P-P-P-S-am",
+            39,
+            id="retatrutide",
+        ),
+    ])
+    def test_glp1_drug_smiles_roundtrip(self, drug, smiles, expected_cabiln, n_res):
+        """Wikipedia/PubChem SMILES for approved GLP-1 agonists must decode to
+        the expected CABILN with the correct number of residues and zero unknowns.
+
+        SMILES sources:
+          semaglutide, liraglutide, exenatide — Wikipedia infobox
+          lixisenatide, tirzepatide, retatrutide — PubChem canonical SMILES
+        """
+        cabiln, details = self._smiles_to_cabiln(smiles)
+        unknown = [abbr for abbr, _, _ in details if abbr == '?']
+        assert not unknown, (
+            f"{drug}: {len(unknown)} unknown residue(s) in {cabiln!r}"
+        )
+        assert len(details) == n_res, (
+            f"{drug}: expected {n_res} residues, got {len(details)}"
+        )
+        assert cabiln == expected_cabiln, (
+            f"{drug}: CABILN mismatch\n  got:      {cabiln!r}\n  expected: {expected_cabiln!r}"
+        )
 
 
 if __name__ == '__main__':
