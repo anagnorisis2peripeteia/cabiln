@@ -5447,6 +5447,26 @@ class _ConvertReq(BaseModel):
     cabiln: str
     target: str  # "bracket" or "branch"
 
+def _renumber_xlinks(cabiln: str) -> str:
+    """Renumber !X tags so they appear as !1, !2, … in left-to-right reading order."""
+    import re as _re2
+    seen: dict = {}
+    counter = 1
+    for m in _re2.finditer(r'!(\d+)', cabiln):
+        n = int(m.group(1))
+        if n not in seen:
+            seen[n] = counter
+            counter += 1
+    if not seen or seen == {i: i for i in seen}:
+        return cabiln  # already in order
+    # Two-pass to avoid collision (e.g. !2→!1 while !1 still exists)
+    result = cabiln
+    for old, new in seen.items():
+        result = result.replace(f'!{old}', f'!__T{new}__')
+    result = _re2.sub(r'!__T(\d+)__', lambda m: f'!{m.group(1)}', result)
+    return result
+
+
 @app.post("/convert_notation")
 async def convert_notation(req: _ConvertReq):
     from pyPept.sequence import cabiln_to_bracket, cabiln_to_branch
@@ -5454,7 +5474,8 @@ async def convert_notation(req: _ConvertReq):
         if req.target == 'bracket':
             return {"result": cabiln_to_bracket(req.cabiln)}
         elif req.target == 'branch':
-            return {"result": cabiln_to_branch(req.cabiln)}
+            result = cabiln_to_branch(req.cabiln)
+            return {"result": _renumber_xlinks(result)}
         else:
             return JSONResponse({"error": "target must be 'bracket' or 'branch'"},
                                 status_code=400)
