@@ -318,7 +318,8 @@ _HTML = r"""<!DOCTYPE html>
     text-overflow: ellipsis;
     padding-left: 2px;
   }
-  .statusbar.ok { color: #3dbe6c; }
+  .statusbar.ok   { color: #3dbe6c; }
+  .statusbar.warn { color: #f0a030; }
 
   /* ── main area ── */
   #main { flex: 1; display: flex; min-height: 0; position: relative; }
@@ -409,8 +410,9 @@ _HTML = r"""<!DOCTYPE html>
     align-items: center;
     gap: 12px;
   }
-  #compare-bar .match   { color: #3dbe6c; font-weight: 600; }
-  #compare-bar .nomatch { color: #d9534f; font-weight: 600; }
+  #compare-bar .match      { color: #3dbe6c; font-weight: 600; }
+  #compare-bar .nomatch    { color: #d9534f; font-weight: 600; }
+  #compare-bar .warn-badge { color: #f0a030; font-weight: 600; font-size: 11px; cursor: help; }
   #compare-bar .canon   { color: #7aaeff; font-size: 10.5px; flex: 1;
                           overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
@@ -2218,8 +2220,13 @@ btnS2c.addEventListener('click', async () => {
     } else {
       cabilnInput.value = data.cabiln;
       cabilnInput.dispatchEvent(new Event('input'));
-      smilesStatus.textContent = `Converted: ${data.details.length} residue(s)`;
-      smilesStatus.className = 'statusbar ok';
+      if (data.warning) {
+        smilesStatus.textContent = `⚠ ${data.warning}`;
+        smilesStatus.className = 'statusbar warn';
+      } else {
+        smilesStatus.textContent = `Converted: ${data.details.length} residue(s)`;
+        smilesStatus.className = 'statusbar ok';
+      }
     }
   } catch (e) {
     smilesStatus.textContent = 'S2C error — is server running?';
@@ -2509,10 +2516,13 @@ async function triggerVerify() {
       return;
     }
     const badge = data.match
-      ? '<span class="match">✓ EXACT MATCH</span>'
+      ? '<span class="match">✓ MATCH</span>'
       : '<span class="nomatch">✗ MISMATCH</span>';
+    const warnBadge = data.warning
+      ? `<span class="warn-badge" title="${escAttr(data.warning)}">⚠ achiral input</span>`
+      : '';
     compareBar.innerHTML =
-      badge +
+      badge + warnBadge +
       `<span class="canon" title="SMILES canonical: ${escAttr(data.smiles_canonical)}">` +
       `SMILES: ${escHtml(data.smiles_canonical.slice(0, 80))}${data.smiles_canonical.length > 80 ? '…' : ''}</span>` +
       `<span class="canon" title="CABILN canonical: ${escAttr(data.cabiln_canonical)}">` +
@@ -3039,6 +3049,23 @@ def _mol_block(romol) -> str:
 def _canon(romol) -> str:
     from rdkit.Chem import MolToSmiles
     return MolToSmiles(romol, canonical=True)
+
+
+def _count_defined_stereo(mol) -> int:
+    """Count atoms with explicitly defined chirality (not CHI_UNSPECIFIED)."""
+    from rdkit import Chem
+    return sum(
+        1 for a in mol.GetAtoms()
+        if a.GetChiralTag() != Chem.ChiralType.CHI_UNSPECIFIED
+    )
+
+
+def _canon_flat(romol) -> str:
+    """Canonical SMILES with all stereo stripped."""
+    from rdkit import Chem
+    rw = Chem.RWMol(romol)
+    Chem.RemoveStereochemistry(rw)
+    return Chem.MolToSmiles(rw, canonical=True)
 
 
 # ── request models ────────────────────────────────────────────────────────────
@@ -5992,11 +6019,20 @@ class _SmilesToCabilnReq(BaseModel):
 async def smiles_to_cabiln_endpoint(req: _SmilesToCabilnReq):
     """Convert a peptide SMILES to CABILN notation using pyPept's monomer library."""
     try:
-        cabiln, details = smiles_to_cabiln_core(req.smiles.strip())
-        return {
+        from rdkit import Chem as _C
+        smi = req.smiles.strip()
+        cabiln, details = smiles_to_cabiln_core(smi)
+        warning = None
+        mol_in = _C.MolFromSmiles(smi)
+        if mol_in is not None and _count_defined_stereo(mol_in) == 0:
+            warning = "Achiral SMILES detected — chirality inferred from library (L-form assumed). Result may not match intended stereoisomer."
+        resp = {
             "cabiln": cabiln,
             "details": [{"abbr": a, "score": s, "total": t} for a, s, t in details],
         }
+        if warning:
+            resp["warning"] = warning
+        return resp
     except Exception as exc:
         return JSONResponse({"error": str(exc).split('\n')[0]}, status_code=400)
 
@@ -6377,19 +6413,29 @@ async def verify(req: _VerifyReq):
         smi_canon    = _canon(smiles_mol)
         cabiln_canon = _canon(cabiln_mol)
 
-        # Primary match via InChI (handles tautomers like His imidazole ring).
-        # Falls back to canonical SMILES comparison if InChI unavailable.
-        try:
-            from rdkit.Chem.inchi import MolToInchi
-            match = MolToInchi(smiles_mol) == MolToInchi(cabiln_mol)
-        except Exception:
-            match = smi_canon == cabiln_canon
+        warning = None
+        if _count_defined_stereo(smiles_mol) == 0:
+            # Flat/achiral input — strip stereo from assembled before comparing
+            # so connectivity can still be verified meaningfully.
+            warning = "Achiral SMILES detected — stereo stripped from CABILN output for comparison. Connectivity only."
+            match = _canon_flat(smiles_mol) == _canon_flat(cabiln_mol)
+        else:
+            # Primary match via InChI (handles tautomers like His imidazole ring).
+            # Falls back to canonical SMILES comparison if InChI unavailable.
+            try:
+                from rdkit.Chem.inchi import MolToInchi
+                match = MolToInchi(smiles_mol) == MolToInchi(cabiln_mol)
+            except Exception:
+                match = smi_canon == cabiln_canon
 
-        return {
+        resp = {
             "match":            match,
             "smiles_canonical": smi_canon,
             "cabiln_canonical": cabiln_canon,
         }
+        if warning:
+            resp["warning"] = warning
+        return resp
 
     except Exception as exc:
         return JSONResponse({"error": str(exc).split('\n')[0]}, status_code=400)
