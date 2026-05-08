@@ -116,7 +116,7 @@ EXAMPLES = [
             {
                 "name": "Retatrutide",
                 "description": "GIP/GLP-1/glucagon triple agonist · 39 AA · C20 lipid conjugate",
-                "cabiln": "Y-Aib-Q-G-T-F-T-S-D-Y-S-I-aMeLeu-L-D-K-K.[AEEA(4,2).E(1,4).C20FA(1,2)]-A-Q-Aib-A-F-I-E-Y-L-L-E-G-G-P-S-S-G-A-P-P-P-S-am",
+                "cabiln": "Y-Aib-Q-G-T-F-T-S-D-Y-S-I-aMeLeu-L-D-K-K.[AEEA(4,2).E_g(1,2).C20FA(1,2)]-A-Q-Aib-A-F-I-E-Y-L-L-E-G-G-P-S-S-G-A-P-P-P-S-am",
             },
             {
                 "name": "Semaglutide-like",
@@ -1871,6 +1871,7 @@ function clearBuild() {
   buildStatus.textContent = '';
   buildStatus.className = 'build-status';
   buildHint.textContent = 'Select a chip on the sequence, then right-click a monomer in the library';
+  resChips.querySelectorAll('.res-chip').forEach(c => c.style.outline = '');
   btnRxnFilter.disabled = true;
   if (rxnFilterActive) {
     rxnFilterActive = false;
@@ -5574,6 +5575,9 @@ async def insert_bond(req: _InsertBondReq):
         cabiln = req.cabiln.strip()
         if not cabiln:
             return {"result": req.new_abbr}
+        # Normalize % branch notation to bracket form so all downstream string
+        # scanning (bracket spans, crosslink annotation) works uniformly.
+        cabiln = _to_bracket(cabiln)
 
         # ── Intramolecular crosslink: annotate two EXISTING residues ─────────
         if req.target_residue_idx >= 0 and req.target_residue_idx != req.host_residue_idx:
