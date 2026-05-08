@@ -4133,12 +4133,19 @@ def _s2c_match(aa_mol, lib):
                 _ez_saved[frozenset((b.GetBeginAtomIdx(), b.GetEndAtomIdx()))] = s
     query_has_ez = bool(_ez_saved)
 
+    # D-form tiebreaker: when CIP scores are equal (e.g. flat/achiral input),
+    # prefer L-form entries so T beats dT, A beats dA, etc.
+    import re as _re2
+    def _is_d_form(tok):
+        return bool(_re2.match(r'^(D_|[Dd][A-Z])', tok))
+
     best_abbr = None
     best_atom_n = 0
     best_stereo = -999
     best_n_ref_stereo = 0
     best_ring_match = False
     best_ez = -2
+    best_is_d = True   # so the first L-form candidate always beats the initial state
 
     for abbr, ref_orig, ref_norm, n_ref, n_rings_ref, ref_has_ez, *_ in lib:
         if n_ref > n_q: continue
@@ -4176,17 +4183,19 @@ def _s2c_match(aa_mol, lib):
         else:
             ez_sc = 0
 
+        is_d = _is_d_form(abbr)
         better = (
             n_m > best_atom_n or
             (n_m == best_atom_n and rings_match and not best_ring_match) or
             (n_m == best_atom_n and rings_match == best_ring_match and sc > best_stereo) or
             (n_m == best_atom_n and rings_match == best_ring_match and sc == best_stereo and n_rs > best_n_ref_stereo) or
-            (n_m == best_atom_n and rings_match == best_ring_match and sc == best_stereo and n_rs == best_n_ref_stereo and ez_sc > best_ez)
+            (n_m == best_atom_n and rings_match == best_ring_match and sc == best_stereo and n_rs == best_n_ref_stereo and ez_sc > best_ez) or
+            (n_m == best_atom_n and rings_match == best_ring_match and sc == best_stereo and n_rs == best_n_ref_stereo and ez_sc == best_ez and not is_d and best_is_d)
         )
         if better:
             best_atom_n = n_m; best_abbr = abbr; best_stereo = sc
             best_n_ref_stereo = n_rs
-            best_ring_match = rings_match; best_ez = ez_sc
+            best_ring_match = rings_match; best_ez = ez_sc; best_is_d = is_d
             if n_m == n_q and rings_match:
                 if sc == n_rs and (not query_has_ez or ez_sc > 0):
                     break
