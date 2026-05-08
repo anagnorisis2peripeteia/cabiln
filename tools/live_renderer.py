@@ -6367,8 +6367,17 @@ async def verify(req: _VerifyReq):
 
         smi_canon    = _canon(smiles_mol)
         cabiln_canon = _canon(cabiln_mol)
+
+        # Primary match via InChI (handles tautomers like His imidazole ring).
+        # Falls back to canonical SMILES comparison if InChI unavailable.
+        try:
+            from rdkit.Chem.inchi import MolToInchi
+            match = MolToInchi(smiles_mol) == MolToInchi(cabiln_mol)
+        except Exception:
+            match = smi_canon == cabiln_canon
+
         return {
-            "match":            smi_canon == cabiln_canon,
+            "match":            match,
             "smiles_canonical": smi_canon,
             "cabiln_canonical": cabiln_canon,
         }
