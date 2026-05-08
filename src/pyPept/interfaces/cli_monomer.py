@@ -92,7 +92,7 @@ def _append_mol_to_sdf(mol, sdf_path):
 
 
 def register_monomer(smiles, symbol, name=None, m_type='aa', m_subtype='modified',
-                     sdf_path=None):
+                     sdf_path=None, backbone_indices=None):
     """
     Pre-activate a monomer SMILES and append it to the library SDF.
 
@@ -109,6 +109,9 @@ def register_monomer(smiles, symbol, name=None, m_type='aa', m_subtype='modified
         Default ``'modified'``.
     :param sdf_path: path to the library SDF to append to.  Defaults to the
         installed ``monomers.sdf`` when ``None``.
+    :param backbone_indices: {1: n_idx, 2: c_idx} to force specific backbone
+        atoms for β/γ orientation variants.  Passed to
+        :func:`~pyPept.interfaces.monomer_pipeline.pre_activate` unchanged.
     :returns: :class:`~pyPept.interfaces.monomer_pipeline.ActivationResult`.
     :raises ActivationError: if :func:`pre_activate` cannot process the SMILES.
     """
@@ -118,7 +121,7 @@ def register_monomer(smiles, symbol, name=None, m_type='aa', m_subtype='modified
     if name is None:
         name = symbol
 
-    result = pre_activate(smiles)
+    result = pre_activate(smiles, backbone_indices=backbone_indices)
 
     mol = Chem.MolFromSmiles(result.chuckles)
     if mol is None:

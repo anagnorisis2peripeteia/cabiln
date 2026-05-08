@@ -457,7 +457,74 @@ def validate_leaving_group(mol, attachment_idx, leaving_smiles):
     )
 
 
-def pre_activate(smiles, slot_overrides=None, leaving_overrides=None):
+def find_all_backbone_slots(mol):
+    """Return ALL (N, COOH) backbone pairings sorted by bond-path length.
+
+    Unlike find_backbone_slots which returns only the shortest-path (alpha)
+    assignment, this returns every distinct COOH paired with the nearest N,
+    ordered by increasing path length.  Use this to generate β, γ, δ backbone
+    orientation registrations for multi-COOH monomers like Asp, Gla.
+
+    :param mol: RDKit mol with explicit H (call AddHs first).
+    :returns: list of ({1: n_idx, 2: c_idx}, path_len) sorted by path_len.
+              First entry matches find_backbone_slots (shortest = alpha).
+    """
+    n_idxs = [m[0] for m in mol.GetSubstructMatches(_BB_N_PAT)]
+    c_idxs = [m[0] for m in mol.GetSubstructMatches(_BB_COOH_PAT)]
+    if not n_idxs or not c_idxs:
+        return []
+
+    triples = []
+    for n_idx in n_idxs:
+        for c_idx in c_idxs:
+            path = Chem.GetShortestPath(mol, n_idx, c_idx)
+            if path:
+                triples.append((len(path) - 1, n_idx, c_idx))
+    triples.sort()
+
+    seen_c = set()
+    result = []
+    for dist, n_idx, c_idx in triples:
+        if c_idx not in seen_c:
+            seen_c.add(c_idx)
+            result.append(({1: n_idx, 2: c_idx}, dist))
+    return result
+
+
+_DIST_SUFFIXES = {2: '', 3: '_b', 4: '_g', 5: '_d'}
+
+
+def pre_activate_all(smiles):
+    """Generate CHUCKLES registrations for every backbone orientation.
+
+    Calls pre_activate once per distinct (N, COOH) pairing found by
+    find_all_backbone_slots.  Monomers with only one COOH return a single-
+    element list identical to pre_activate.  Monomers with two COOHs (e.g.
+    Asp, Glu) return two entries; three COOHs return three, and so on.
+
+    :param smiles: full monomer SMILES.
+    :returns: list of (suffix, ActivationResult) sorted by path length.
+              Suffix is '' (alpha), '_b' (beta, path 3), '_g' (gamma, path 4),
+              '_d' (delta, path 5), or '_xN' for longer paths.
+    :raises ActivationError: if no backbone pairings found.
+    """
+    mol = Chem.MolFromSmiles(smiles)
+    if mol is None:
+        raise ActivationError(f"Invalid SMILES: {smiles}")
+    mol_h = Chem.AddHs(mol)
+    pairings = find_all_backbone_slots(mol_h)
+    if not pairings:
+        raise ActivationError(f"No backbone pairings found in: {smiles}")
+    results = []
+    for backbone_dict, dist in pairings:
+        suffix = _DIST_SUFFIXES.get(dist, f'_x{dist}')
+        result = pre_activate(smiles, backbone_indices=backbone_dict)
+        results.append((suffix, result))
+    return results
+
+
+def pre_activate(smiles, slot_overrides=None, leaving_overrides=None,
+                 backbone_indices=None):
     """
     Convert a full monomer SMILES to a pre-activated CHUCKLES fragment.
 
@@ -469,6 +536,9 @@ def pre_activate(smiles, slot_overrides=None, leaving_overrides=None):
     :param slot_overrides: {slot: attachment_atom_idx} to add/override slots.
     :param leaving_overrides: {slot: leaving_smiles} to override auto-derived
            leaving groups.  Each override is validated against the mol.
+    :param backbone_indices: {1: n_idx, 2: c_idx} to force specific backbone
+           atoms, bypassing find_backbone_slots.  Atom indices must correspond
+           to the mol AFTER AddHs.  Used by pre_activate_all for β/γ variants.
     :returns: ActivationResult with .chuckles, .leaving, .chem_types.
               Raises ActivationError on failure.
               Also supports legacy tuple unpacking: chuckles, leaving, chem_types, err = pre_activate(...)
@@ -479,9 +549,12 @@ def pre_activate(smiles, slot_overrides=None, leaving_overrides=None):
         raise ActivationError(f"Invalid SMILES: {smiles}")
     mol = Chem.AddHs(mol)
 
-    backbone = find_backbone_slots(mol)
     _is_cap = False
     _sidechain_only = False
+    if backbone_indices is not None:
+        backbone = dict(backbone_indices)
+    else:
+        backbone = find_backbone_slots(mol)
     if backbone is None:
         backbone, backbone_chem_types = find_cap_slots(mol)
         _is_cap = True
