@@ -5808,15 +5808,53 @@ class TestSmilesToCabiln:
         )
         assert 'CBr' in smi, f"Expected unreacted CH2Br (CBr) in partial TBMB: {smi}"
 
-    @pytest.mark.xfail(reason=(
-        "smiles_to_cabiln_core cannot yet reconstruct %%TBMB scaffold notation: "
-        "TBMB atoms are absorbed into Cys expanded units, producing Cys_Bn "
-        "mis-identification rather than C+%%TBMB. Multi-residue scaffold "
-        "detection requires a dedicated registry path."
-    ))
     def test_tbmb_smiles_to_cabiln_roundtrip(self):
-        """TBMB SMILES→CABILN round-trip (xfail: scaffold detection not yet implemented)."""
+        """TBMB SMILES→CABILN round-trip."""
         cabiln = "ac-C.!1(4,4)-A-A-C.!2(4,5)-A-A-C.!3(4,6)-am%TBMB.!1.!2.!3"
+        result, _ = self._r(cabiln)
+        assert result == cabiln
+
+    def test_tbmb_asymmetric_roundtrip(self):
+        """Asymmetric-loop TBMB bicycle SMILES→CABILN round-trip."""
+        cabiln = "ac-C.!1(4,4)-G-A-K-C.!2(4,5)-E-L-F-C.!3(4,6)-am%TBMB.!1.!2.!3"
+        result, _ = self._r(cabiln)
+        assert result == cabiln
+
+    # ── TATA scaffold (thio-Michael) ──────────────────────────────────────────
+
+    def test_tata_assembly_three_cys(self):
+        """TATA scaffold: assembly of three Cys thio-Michael crosslinks succeeds."""
+        cabiln = "ac-C.!1(4,4)-A-A-C.!2(4,5)-A-A-C.!3(4,6)-am%TATA.!1.!2.!3"
+        seq = Sequence(cabiln)
+        mol = Molecule(seq)
+        romol = mol.get_molecule(fmt='ROMol')
+        assert romol is not None
+        smi = Chem.MolToSmiles(romol)
+        assert '.' not in smi, "TATA product is disconnected"
+        assert smi.count('CSC') == 3, f"Expected 3 CSC thioether motifs, got {smi.count('CSC')}"
+
+    def test_tata_smiles_to_cabiln_roundtrip(self):
+        """TATA SMILES→CABILN round-trip."""
+        cabiln = "ac-C.!1(4,4)-G-A-K-C.!2(4,5)-E-L-F-C.!3(4,6)-am%TATA.!1.!2.!3"
+        result, _ = self._r(cabiln)
+        assert result == cabiln
+
+    # ── TBAB scaffold (benzene triamide, alkyl halide arms) ───────────────────
+
+    def test_tbab_assembly_three_cys(self):
+        """TBAB scaffold: assembly of three Cys thioether crosslinks succeeds."""
+        cabiln = "ac-C.!1(4,4)-A-A-C.!2(4,5)-A-A-C.!3(4,6)-am%TBAB.!1.!2.!3"
+        seq = Sequence(cabiln)
+        mol = Molecule(seq)
+        romol = mol.get_molecule(fmt='ROMol')
+        assert romol is not None
+        smi = Chem.MolToSmiles(romol)
+        assert '.' not in smi, "TBAB product is disconnected"
+        assert smi.count('CSC') == 3, f"Expected 3 CSC thioether motifs, got {smi.count('CSC')}"
+
+    def test_tbab_smiles_to_cabiln_roundtrip(self):
+        """TBAB SMILES→CABILN round-trip."""
+        cabiln = "ac-C.!1(4,4)-G-A-K-C.!2(4,5)-E-L-F-C.!3(4,6)-am%TBAB.!1.!2.!3"
         result, _ = self._r(cabiln)
         assert result == cabiln
 

@@ -3607,6 +3607,10 @@ _s2c_raw_lib_mtime: float = 0.0
 _s2c_full_lib_cache: list = []
 _s2c_full_lib_mtime: float = 0.0
 
+# Scaffold crosslink patterns (multi-arm non-amide linkers, e.g. TBMB)
+_s2c_scaffold_cache: list | None = None
+_s2c_scaffold_mtime: float = 0.0
+
 
 def _s2c_get_lib():
     """Return (or rebuild) the capped monomer library."""
@@ -3754,6 +3758,79 @@ def _s2c_get_full_lib():
         _s2c_full_lib_cache = lib
         _s2c_full_lib_mtime = mtime
         return lib
+
+
+def _s2c_get_scaffold_patterns():
+    """Return scaffold crosslink patterns for all multi-arm non-backbone linkers.
+
+    A scaffold linker is any SDF monomer whose CHUCKLES has ≥ 2 dummy atoms with
+    isotope ≥ 4 (non-backbone attachment points) and NO dummy atoms with isotopes
+    1 or 2 (backbone N/C connections), making it a pure crosslink scaffold.
+
+    Each entry: (abbr, smarts_mol, {smarts_atom_idx: r_group_num})
+    where smarts_atom_idx is the index in the SMARTS mol for each attachment-point
+    wildcard (the backbone atoms that bond into the scaffold in the assembled mol).
+
+    Detection strategy: replace [n*] (n ≥ 4) in the CHUCKLES canonical SMILES with
+    [*:n] (atom-mapped wildcard) so GetAtomMapNum() recovers the R-group number from
+    the SMARTS match, then verify each matched atom sits inside a backbone node.
+    """
+    import re as _re2
+    from rdkit import Chem as _C
+
+    global _s2c_scaffold_cache, _s2c_scaffold_mtime
+    mtime = _SDF_PATH.stat().st_mtime
+    with _s2c_lib_lock:
+        if _s2c_scaffold_cache is not None and _s2c_scaffold_mtime == mtime:
+            return _s2c_scaffold_cache
+
+    # Load raw lib OUTSIDE the lock — _s2c_get_raw_lib acquires the same
+    # non-reentrant lock and would deadlock if called inside our with-block.
+    raw_lib = _s2c_get_raw_lib()
+    patterns = []
+
+    for abbr, raw_mol in raw_lib.items():
+        if raw_mol is None:
+            continue
+        atoms = list(raw_mol.GetAtoms())
+        # Attachment points: dummy atoms (atomic num 0) with isotope ≥ 4
+        attach = [(a.GetIdx(), a.GetIsotope()) for a in atoms
+                  if a.GetAtomicNum() == 0 and a.GetIsotope() >= 4]
+        if len(attach) < 2:
+            continue
+        # Exclude backbone linkers (they have R1 or R2 = backbone N/C)
+        if any(a.GetAtomicNum() == 0 and a.GetIsotope() in (1, 2) for a in atoms):
+            continue
+
+        try:
+            chuckles = _C.MolToSmiles(raw_mol, canonical=True)
+        except Exception:
+            continue
+
+        # [n*] → [*:n] for n ≥ 4; leave backbone R-groups unchanged
+        smarts_str = _re2.sub(
+            r'\[(\d+)\*\]',
+            lambda m: f'[*:{m.group(1)}]' if int(m.group(1)) >= 4 else m.group(0),
+            chuckles,
+        )
+        smarts_mol = _C.MolFromSmarts(smarts_str)
+        if smarts_mol is None:
+            continue
+
+        r_positions = {
+            a.GetIdx(): a.GetAtomMapNum()
+            for a in smarts_mol.GetAtoms()
+            if a.GetAtomMapNum() >= 4
+        }
+        if len(r_positions) < 2:
+            continue
+
+        patterns.append((abbr, smarts_mol, r_positions))
+
+    with _s2c_lib_lock:
+        _s2c_scaffold_cache = patterns
+        _s2c_scaffold_mtime = mtime
+    return patterns
 
 
 def _s2c_r_group_at_atom(orig_mol, orig_atom_idx, frag_atoms, abbr, raw_lib):
@@ -5081,6 +5158,60 @@ def smiles_to_cabiln_core(smiles: str):
 
         abbrs = [a + branch_brackets.get(i, '') for i, a in enumerate(abbrs)]
 
+    # ── 5.5 Scaffold crosslink detection ─────────────────────────────────────
+    # Detect multi-arm non-amide crosslink scaffolds (TBMB, etc.) library-
+    # driven: any SDF monomer with ≥2 non-backbone dummy attachment points.
+    # For each pattern, [n*] in its CHUCKLES was converted to [*:n] SMARTS;
+    # matched atoms at those positions must be backbone atoms.  R-group labels
+    # are assigned in backbone chain order (!1, !2, …) for deterministic output.
+    scaffold_suffix = ''
+    _scaffold_xlinks = 0
+    _scaffold_patterns = _s2c_get_scaffold_patterns()
+
+    if _scaffold_patterns:
+        _rlib = _s2c_get_raw_lib()
+        for _sc_abbr, _sc_smarts, _sc_r_pos in _scaffold_patterns:
+            _found = False
+            for _match in mol.GetSubstructMatches(_sc_smarts, useChirality=False):
+                # Each R-group position must map to a backbone atom
+                _attach: dict = {}  # smarts_idx → (backbone_pos, r_num)
+                _valid = True
+                for _si, _rnum in _sc_r_pos.items():
+                    _mat_idx = _match[_si]
+                    _bp = next(
+                        (pos for pos, node in enumerate(backbone)
+                         if _mat_idx in node.mol_atoms),
+                        None,
+                    )
+                    if _bp is None:
+                        _valid = False
+                        break
+                    _attach[_si] = (_bp, _rnum)
+
+                if not _valid or len(_attach) != len(_sc_r_pos):
+                    continue
+
+                # Sort attachments by backbone chain order; assign scaffold
+                # R-groups in ascending order so notation is canonical regardless
+                # of how MolToSmiles reorders the arms (safe for symmetric
+                # scaffolds like TBMB; would need revisiting for asymmetric ones).
+                _sorted_bpos = sorted(_attach.values(), key=lambda x: x[0])
+                _sorted_r = sorted(r for _, r in _sorted_bpos)
+                _tags = []
+                for _xi, ((_bp, _), _scaffold_r) in enumerate(
+                    zip(_sorted_bpos, _sorted_r), start=1
+                ):
+                    _res_r = _s2c_crosslink_r(details[_bp][0], _rlib)
+                    _tags.append(f'!{_xi}')
+                    abbrs[_bp] += f'.!{_xi}({_res_r},{_scaffold_r})'
+                scaffold_suffix = f'%{_sc_abbr}.' + '.'.join(_tags)
+                _scaffold_xlinks = len(_tags)
+                _found = True
+                break
+
+            if _found:
+                break  # one scaffold per molecule
+
     # ── 6. Crosslink detection ────────────────────────────────────────────────
     # Side-chain bonds between pairs of backbone residues that are not the
     # adjacent backbone amide bonds (out_co[i] → in_n[i+1]).
@@ -5110,7 +5241,7 @@ def smiles_to_cabiln_core(smiles: str):
     if sc_pairs:
         if not branch_junctions:
             raw_lib = _s2c_get_raw_lib()
-        xlink_ctr = 1
+        xlink_ctr = _scaffold_xlinks + 1  # continue after any scaffold labels
         for bi, bj in sc_pairs:
             base_i = details[bi][0]
             base_j = details[bj][0]
@@ -5128,6 +5259,8 @@ def smiles_to_cabiln_core(smiles: str):
         cabiln = '-'.join(abbrs)
         if c_cap:
             cabiln += '-' + c_cap
+    if scaffold_suffix:
+        cabiln += scaffold_suffix
     if n_cap:
         cabiln = n_cap + '-' + cabiln
     return cabiln, details

@@ -109,6 +109,8 @@ _CHEM_TYPE_REGISTRY = [
     # maleimide_c: ring alkene CH1 (pre) → CH0 after dummy
     # infer_smarts adds ([*]) so the dummy-bearing vinyl C is match[0] not the other vinyl C
     ('maleimide_c',       '[CH1:1]1=[C][C](=[O])[N][C]1=[O]',    '[H]',  '[CH0,CH1:1]([*])1=[C][C](=[O])[N][C]1=[O]', False),
+    # thia_michael_c: beta-C of acrylamide; dummy on terminal CH2 (pre) → sp3 CH1 after activation
+    ('thia_michael_c',    '[CH2:1]=[CH]C(=O)[NX3]',              '[H]',  '[CX4:1]([*])CC(=O)[NX3]',                   False),
 ]
 
 # Derived detection lists — do not edit directly.

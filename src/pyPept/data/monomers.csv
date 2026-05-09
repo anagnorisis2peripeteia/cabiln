@@ -1049,3 +1049,5 @@ Cy5Mal,C[N+]1=C(C=CC=CC=C2N(CCCCCC(=O)NCCN3C(=O)C=CC3=O)c3ccccc3C2(C)C)C(C)(C)c2
 AZDye488,Nc1ccc2c(-c3ccc(C(=O)NCCCCCN4C(=O)C=CC4=O)cc3C(=O)O)c3ccc(=[NH2+])c(S(=O)(=O)O)c-3oc2c1S(=O)(=O)[O-],AZDye 488 maleimide,linker,,[4*]C1=CC(=O)N(CCCCCNC(=O)c2ccc(-c3c4ccc(=[NH2+])c(S(=O)(=O)O)c-4oc4c(S(=O)(=O)[O-])c(N)ccc34)c(C(=O)O)c2)C1=O,,,,[H],,
 AZDye550,C[N+]1=C(C=CC=C2N(CCCCCC(=O)NCCN3C(=O)C=CC3=O)c3ccccc3C2(C)C)C(C)(C)c2ccccc21,AZDye 550 maleimide,linker,,[4*]C1=CC(=O)N(CCNC(=O)CCCCCN2C(=CC=CC3=[N+](C)c4ccccc4C3(C)C)C(C)(C)c3ccccc32)C1=O,,,,[H],,
 AZDye647,CC1(C)C(C=CC=CC=C2N(CCCS(=O)(=O)[O-])c3ccc(S(=O)(=O)O)cc3C2(C)CCCCC(=O)NCCN2C(=O)C=CC2=O)=[N+](CCCS(=O)(=O)O)c2ccc(S(=O)(=O)O)cc21,AZDye 647 maleimide,linker,,[4*]C1=CC(=O)N(CCNC(=O)CCCCC2(C)C(=CC=CC=CC3=[N+](CCCS(=O)(=O)O)c4ccc(S(=O)(=O)O)cc4C3(C)C)N(CCCS(=O)(=O)[O-])c3ccc(S(=O)(=O)O)cc32)C1=O,,,,[H],,
+TATA,O=C(C=C)N1CN(C(=O)C=C)CN(C(=O)C=C)C1,"1,3,5-Triacryloyl-1,3,5-triazinane",linker,,[4*]CCC(=O)N1CN(C(=O)CC[5*])CN(C(=O)CC[6*])C1,,,,,,
+TBAB,BrCC(=O)Nc1cc(NC(=O)CBr)cc(NC(=O)CBr)c1,"N,N',N''-Benzene-1,3,5-triyl-tris(2-bromoacetamide)",linker,,[4*]CC(=O)Nc1cc(NC(=O)C[5*])cc(NC(=O)C[6*])c1,,,,[Br],[Br],[Br]

@@ -148,6 +148,15 @@
   steps:
     - "[4*][S:2].[4*][C:4] >> [S:2][C:4]"
 
+- id: thia_michael
+  description: Thio-Michael addition; thiol adds to beta-carbon of acrylamide (no leaving group)
+  reactant_pairs:
+    - [thiol, thia_michael_c]
+  slot_a: 4
+  slot_b: 4
+  steps:
+    - "[4*][S:2].[4*][C:4] >> [S:2][C:4]"
+
 - id: thiol_maleimide
   description: Thiol-maleimide Michael addition; succinimide ring retained
   reactant_pairs:
