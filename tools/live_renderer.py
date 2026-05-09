@@ -5178,9 +5178,10 @@ def smiles_to_cabiln_core(smiles: str):
         for _sc_abbr, _sc_smarts, _sc_r_pos in _scaffold_patterns:
             _found = False
             for _match in mol.GetSubstructMatches(_sc_smarts, useChirality=False):
-                # Each R-group position must map to a backbone atom
+                # Collect R-group positions that map to backbone atoms.
+                # Allow partial matches: require ≥2 backbone hits so a scaffold
+                # with one unreacted arm is still detected.
                 _attach: dict = {}  # smarts_idx → (backbone_pos, r_num)
-                _valid = True
                 for _si, _rnum in _sc_r_pos.items():
                     _mat_idx = _match[_si]
                     _bp = next(
@@ -5188,20 +5189,20 @@ def smiles_to_cabiln_core(smiles: str):
                          if _mat_idx in node.mol_atoms),
                         None,
                     )
-                    if _bp is None:
-                        _valid = False
-                        break
-                    _attach[_si] = (_bp, _rnum)
+                    if _bp is not None:
+                        _attach[_si] = (_bp, _rnum)
 
-                if not _valid or len(_attach) != len(_sc_r_pos):
+                _min_arms = max(2, len(_sc_r_pos) - 1)
+                if len(_attach) < _min_arms:
                     continue
 
-                # Sort attachments by backbone chain order; assign scaffold
-                # R-groups in ascending order so notation is canonical regardless
-                # of how MolToSmiles reorders the arms (safe for symmetric
-                # scaffolds like TBMB; would need revisiting for asymmetric ones).
+                # Sort attachments by backbone chain order.  Renumber R-groups
+                # consecutively from the scaffold's minimum slot (e.g. R4,R5,R6
+                # for TBMB) so partial matches (2-of-3 arms) don't produce
+                # non-consecutive slot numbers like (4,6) when (4,5) is canonical.
                 _sorted_bpos = sorted(_attach.values(), key=lambda x: x[0])
-                _sorted_r = sorted(r for _, r in _sorted_bpos)
+                _min_slot = min(_sc_r_pos.values())
+                _sorted_r = list(range(_min_slot, _min_slot + len(_sorted_bpos)))
                 _tags = []
                 for _xi, ((_bp, _), _scaffold_r) in enumerate(
                     zip(_sorted_bpos, _sorted_r), start=1

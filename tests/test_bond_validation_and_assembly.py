@@ -5820,6 +5820,18 @@ class TestSmilesToCabiln:
         result, _ = self._r(cabiln)
         assert result == cabiln
 
+    def test_tbmb_partial_two_arm_roundtrip(self):
+        """TBMB 2-of-3 arms reacted: SMILES→CABILN detects partial scaffold."""
+        cabiln = "ac-C.!1(4,4)-A-A-C.!2(4,5)-am%TBMB.!1.!2"
+        result, _ = self._r(cabiln)
+        assert result == cabiln
+
+    def test_tbmb_scaffold_plus_disulfide_roundtrip(self):
+        """TBMB scaffold + independent Cys-Cys disulfide on same peptide."""
+        cabiln = "ac-C.!1(4,4)-A-C.!4(4,4)-A-C.!4(4,4)-C.!2(4,5)-A-A-C.!3(4,6)-am%TBMB.!1.!2.!3"
+        result, _ = self._r(cabiln)
+        assert result == cabiln
+
     # ── TATA scaffold (thio-Michael) ──────────────────────────────────────────
 
     def test_tata_assembly_three_cys(self):
