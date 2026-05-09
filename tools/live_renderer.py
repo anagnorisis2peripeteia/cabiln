@@ -4757,24 +4757,30 @@ def _s2c_build_backbone(mol, placements):
         starts.sort(key=lambda p: (p.m_type != 'aa', -p.entry.n_atoms))
 
     _all_placed = frozenset().union(*(p.mol_atoms for p in deduped))
+    _true_starts = frozenset(p for p in deduped if not has_predecessor(p))
 
     best: list = []
-    best_score = (-1, -1, -1, -1)
+    best_score = (-1, -1, -1, -1, 1, -1)
 
     def chain_score(c):
-        # Primary: chain length.  Tiebreaker: whether the start node's in_n has
-        # an unclaimed heavy neighbor (an atom outside all backbone placements).
-        # That signals an N-cap like ac/fmoc/boc is attached — caps lack backbone_n
-        # so they're absent from the coverage lib.  Among equal-length chains this
-        # prefers ac-K→G over E_g→AEEA when both reach length 2 but only K's αN
-        # has a cap carbonyl neighbour.  Length is primary so a shorter capped arm
-        # never beats a longer uncapped backbone (e.g. AEEA-cap vs. A-K-G).
+        # (1) True start: residues with no predecessor in the DAG are genuine
+        #     N-termini; cyclic_cands (added for mixed-topology peptides) are
+        #     mid-chain and should only win if no true-start chain beats them.
+        # (2) Chain length: more residues = better backbone.
+        # (3) Unclaimed neighbour on in_n: signals an N-cap (ac/fmoc/boc) is
+        #     present.  Caps have only backbone_c so they're absent from the
+        #     coverage lib, but their carbonyl sits on in_n as an unclaimed atom.
+        #     Among equal-length true-start chains this prefers K→G (has ac cap)
+        #     over E_g→AEEA (free αN, no cap), which have equal monomer counts.
+        # (4/5) AA count and atom count as final tiebreakers.
+        _is_true_start = c[0] in _true_starts
         _in_n_unclaimed = any(
             _nb.GetAtomicNum() > 1 and _nb.GetIdx() not in _all_placed
             for _nb in mol.GetAtomWithIdx(c[0].in_n).GetNeighbors()
         )
-        return (len(c), int(_in_n_unclaimed),
+        return (len(c), int(_is_true_start), int(_in_n_unclaimed),
                 sum(1 for nd in c if nd.m_type == 'aa'),
+                -sum(nd.entry.bb_dist for nd in c),
                 sum(len(nd.mol_atoms) for nd in c))
 
     def dfs(node, chain, used):
