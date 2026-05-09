@@ -5666,7 +5666,7 @@ async def convert_notation(req: _ConvertReq):
     from pyPept.sequence import cabiln_to_bracket, cabiln_to_branch
     try:
         if req.target == 'bracket':
-            return {"result": cabiln_to_bracket(req.cabiln)}
+            return {"result": _renumber_xlinks(cabiln_to_bracket(req.cabiln))}
         elif req.target == 'branch':
             result = cabiln_to_branch(req.cabiln)
             return {"result": _renumber_xlinks(result)}
@@ -6163,7 +6163,7 @@ async def smiles_to_cabiln_endpoint(req: _SmilesToCabilnReq):
         cabiln, details = smiles_to_cabiln_core(smi)
         if req.notation == 'bracket':
             from pyPept.sequence import cabiln_to_bracket
-            cabiln = cabiln_to_bracket(cabiln)
+            cabiln = _renumber_xlinks(cabiln_to_bracket(cabiln))
         warning = None
         mol_in = _C.MolFromSmiles(smi)
         if mol_in is not None and _count_defined_stereo(mol_in) == 0:
