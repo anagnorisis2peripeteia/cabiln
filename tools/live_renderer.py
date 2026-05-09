@@ -5196,6 +5196,80 @@ def smiles_to_cabiln_core(smiles: str):
 
         abbrs = [a + branch_brackets.get(i, '') for i, a in enumerate(abbrs)]
 
+    # ── 5.3 Generic sidechain cap detection ──────────────────────────────────
+    # After multi-monomer branch detection, atoms not in any backbone residue
+    # or branch anchor (e.g. trt on Cys thiol, boc on Lys ε-N) are matched
+    # against the full library as single-monomer sidechain caps.
+    #
+    # _sc_claimed tracks atoms already attributed so we don't double-annotate.
+    _sc_claimed: set = set(backbone_atoms_all)
+    for _jl in branch_junctions.values():
+        for _j in _jl:
+            _sc_claimed.update(_j['glu_node'].mol_atoms)
+
+    _sc_unclaimed: set = set(range(mol.GetNumAtoms())) - _sc_claimed
+    if _sc_unclaimed:
+        from rdkit.Chem import RWMol as _RW2
+        _sc_raw = _s2c_get_raw_lib()
+        _sc_full = _s2c_get_full_lib()
+
+        for _bi, _node in enumerate(backbone):
+            _base_abbr = details[_bi][0]
+            # Find all junction points: backbone atoms bonded to unclaimed atoms
+            for _ai in list(_node.mol_atoms):
+                for _nb in mol.GetAtomWithIdx(_ai).GetNeighbors():
+                    _ni = _nb.GetIdx()
+                    if _ni not in _sc_unclaimed:
+                        continue
+                    # BFS to collect the full connected unclaimed cluster
+                    _cluster: set = set()
+                    _q2 = _dq([_ni])
+                    while _q2:
+                        _ci = _q2.popleft()
+                        if _ci in _sc_claimed or _ci in _cluster:
+                            continue
+                        _cluster.add(_ci)
+                        for _cnb in mol.GetAtomWithIdx(_ci).GetNeighbors():
+                            if _cnb.GetIdx() not in _sc_claimed:
+                                _q2.append(_cnb.GetIdx())
+                    if not _cluster:
+                        continue
+                    # Build a fragment mol from the cluster
+                    _rw_cap = _RW2()
+                    _cap_s2n: dict = {}
+                    for _cai in sorted(_cluster):
+                        _cap_s2n[_cai] = _rw_cap.AddAtom(
+                            _C.Atom(mol.GetAtomWithIdx(_cai).GetAtomicNum()))
+                    for _bond in mol.GetBonds():
+                        _bai, _eai = _bond.GetBeginAtomIdx(), _bond.GetEndAtomIdx()
+                        if _bai in _cap_s2n and _eai in _cap_s2n:
+                            _rw_cap.AddBond(_cap_s2n[_bai], _cap_s2n[_eai],
+                                            _bond.GetBondType())
+                    _cap_frag = _C.RemoveHs(_rw_cap.GetMol())
+                    if _cap_frag is None or _cap_frag.GetNumAtoms() == 0:
+                        continue
+                    # Match against library
+                    _cap_abbr, _ = _s2c_match_branch_segment(_cap_frag, _sc_full)
+                    if not _cap_abbr or _cap_abbr == '?':
+                        continue
+                    # Skip scaffold monomers — they're handled in step 5.5
+                    if _cap_abbr in {a for a, *_ in _s2c_get_scaffold_patterns()}:
+                        continue
+                    # Determine R-groups at the junction
+                    _res_r = _s2c_r_group_at_atom(
+                        mol, _ai, _node.mol_atoms, _base_abbr, _sc_raw)
+                    _cap_r = _s2c_r_group_at_atom(
+                        mol, _ni, _cluster, _cap_abbr, _sc_raw)
+                    # Only accept sidechain attachments (R4+).
+                    # R1/R2/R3 are backbone N/C connections — those are terminal
+                    # caps (ac, am, fmoc, boc) already handled by cap stripping.
+                    if _res_r is None or _res_r < 4 or _cap_r is None:
+                        continue
+                    abbrs[_bi] += f'.{_cap_abbr}({_res_r},{_cap_r})'
+                    _sc_claimed.update(_cluster)
+                    _sc_unclaimed -= _cluster
+                    break  # one cap per junction atom; next junction
+
     # ── 5.5 Scaffold crosslink detection ─────────────────────────────────────
     # Detect multi-arm non-amide crosslink scaffolds (TBMB, etc.) library-
     # driven: any SDF monomer with ≥2 non-backbone dummy attachment points.
