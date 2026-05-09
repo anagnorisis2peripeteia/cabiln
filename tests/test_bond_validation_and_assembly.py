@@ -5870,6 +5870,240 @@ class TestSmilesToCabiln:
         result, _ = self._r(cabiln)
         assert result == cabiln
 
+    # ── Gap 1: TATA 2-arm partial roundtrip ───────────────────────────────────
+
+    def test_tata_partial_two_arm_roundtrip(self):
+        """TATA 2-of-3 arms reacted: partial scaffold detected, slots normalise to (4,4)/(4,5)."""
+        cabiln = "ac-C.!1(4,4)-A-A-C.!2(4,5)-am%TATA.!1.!2"
+        result, _ = self._r(cabiln)
+        assert result == cabiln, (
+            f"TATA 2-arm partial round-trip failed:\n"
+            f"  expected: {cabiln!r}\n"
+            f"  got:      {result!r}"
+        )
+
+    # ── Gap 2: TBAB 2-arm partial roundtrip ───────────────────────────────────
+
+    def test_tbab_partial_two_arm_roundtrip(self):
+        """TBAB 2-of-3 arms reacted: partial scaffold detected, slots normalise to (4,4)/(4,5)."""
+        cabiln = "ac-C.!1(4,4)-A-A-C.!2(4,5)-am%TBAB.!1.!2"
+        result, _ = self._r(cabiln)
+        assert result == cabiln, (
+            f"TBAB 2-arm partial round-trip failed:\n"
+            f"  expected: {cabiln!r}\n"
+            f"  got:      {result!r}"
+        )
+
+    # ── Gap 3: Bracket notation (→ []) assembles same SMILES ──────────────────
+
+    @pytest.mark.parametrize("pct_cabiln", [
+        pytest.param("ac-C.!1(4,4)-A-A-C.!2(4,5)-A-A-C.!3(4,6)-am%TBMB.!1.!2.!3", id="tbmb_3arm"),
+        pytest.param("ac-C.!1(4,4)-A-A-C.!2(4,5)-am%TBMB.!1.!2",                   id="tbmb_2arm"),
+        pytest.param("ac-C.!1(4,4)-A-A-C.!1(4,4)-am",                               id="disulfide"),
+    ])
+    def test_bracket_notation_assembles_same_smiles(self, pct_cabiln):
+        """→ [] path: bracket CABILN assembles to the identical SMILES as the percent form."""
+        import sys as _sys, os as _os
+        _repo_root = _os.path.abspath(_os.path.join(_os.path.dirname(__file__), '..'))
+        if _repo_root not in _sys.path:
+            _sys.path.insert(0, _repo_root)
+        from tools.live_renderer import _renumber_xlinks
+        from pyPept.sequence import cabiln_to_bracket
+
+        ref_mol = Molecule(Sequence(pct_cabiln)).get_molecule(fmt='ROMol')
+        ref_smi = Chem.MolToSmiles(ref_mol)
+
+        bracket_cabiln = _renumber_xlinks(cabiln_to_bracket(pct_cabiln))
+        brk_mol = Molecule(Sequence(bracket_cabiln)).get_molecule(fmt='ROMol')
+        brk_smi = Chem.MolToSmiles(brk_mol)
+
+        assert brk_smi == ref_smi, (
+            f"Bracket form yields different SMILES for {pct_cabiln!r}:\n"
+            f"  percent:  {ref_smi}\n"
+            f"  bracket:  {brk_smi}\n"
+            f"  (bracket CABILN: {bracket_cabiln!r})"
+        )
+
+    # ── Gap 3b: Bracket form round-trips back to percent via SMILES→CABILN ───
+
+    @pytest.mark.parametrize("pct_cabiln", [
+        pytest.param("ac-C.!1(4,4)-A-A-C.!2(4,5)-A-A-C.!3(4,6)-am%TBMB.!1.!2.!3", id="tbmb_3arm_rtrip"),
+        pytest.param("ac-C.!1(4,4)-A-A-C.!2(4,5)-am%TBMB.!1.!2",                   id="tbmb_2arm_rtrip"),
+    ])
+    def test_bracket_to_percent_roundtrip(self, pct_cabiln):
+        """Bracket CABILN assembled to SMILES then decoded via SMILES→CABILN gives percent form."""
+        import sys as _sys, os as _os
+        _repo_root = _os.path.abspath(_os.path.join(_os.path.dirname(__file__), '..'))
+        if _repo_root not in _sys.path:
+            _sys.path.insert(0, _repo_root)
+        from tools.live_renderer import _renumber_xlinks, smiles_to_cabiln_core
+        from pyPept.sequence import cabiln_to_bracket
+
+        bracket_cabiln = _renumber_xlinks(cabiln_to_bracket(pct_cabiln))
+        brk_mol = Molecule(Sequence(bracket_cabiln)).get_molecule(fmt='ROMol')
+        brk_smi = Chem.MolToSmiles(brk_mol)
+        result, _ = smiles_to_cabiln_core(brk_smi)
+
+        assert result == pct_cabiln, (
+            f"Bracket→SMILES→percent round-trip failed:\n"
+            f"  expected: {pct_cabiln!r}\n"
+            f"  got:      {result!r}"
+        )
+
+    # ── Gap 3c: Endpoint _renumber_xlinks produces consecutive crosslink IDs ──
+
+    def test_bracket_notation_endpoint_renumbers_crosslinks(self):
+        """_renumber_xlinks(cabiln_to_bracket(…)) produces !1/!2/… with no gaps."""
+        import sys as _sys, os as _os, re as _re
+        _repo_root = _os.path.abspath(_os.path.join(_os.path.dirname(__file__), '..'))
+        if _repo_root not in _sys.path:
+            _sys.path.insert(0, _repo_root)
+        from tools.live_renderer import _renumber_xlinks
+        from pyPept.sequence import cabiln_to_bracket
+
+        pct = "ac-C.!1(4,4)-A-A-C.!2(4,5)-A-A-C.!3(4,6)-am%TBMB.!1.!2.!3"
+        bracket = _renumber_xlinks(cabiln_to_bracket(pct))
+
+        assert 'TBMB' in bracket, f"TBMB scaffold lost in bracket conversion: {bracket!r}"
+        ids = sorted(set(int(m) for m in _re.findall(r'\.!(\d+)', bracket)))
+        assert ids == list(range(1, len(ids) + 1)), (
+            f"Non-consecutive crosslink IDs in bracket form: {ids!r} ({bracket!r})"
+        )
+
+    # ── Gap 4: CuAAC assembly produces a triazole ring ────────────────────────
+
+    def test_cuaac_assembly_forms_triazole(self):
+        """CuAAC: Pra (terminal alkyne R4) + AzK (azide R4) forms a 1,2,3-triazole."""
+        cabiln = "ac-Pra.!1(4,4)-A-A-AzK.!1(4,4)-am"
+        seq = Sequence(cabiln)
+        mol = Molecule(seq).get_molecule(fmt='ROMol')
+        assert mol is not None, "CuAAC assembly returned None"
+        smi = Chem.MolToSmiles(mol)
+        assert '.' not in smi, f"CuAAC product is disconnected: {smi!r}"
+        triazole_smarts = Chem.MolFromSmarts('[n]1[n][n][c][c]1')
+        assert mol.HasSubstructMatch(triazole_smarts), (
+            f"No 1,2,3-triazole ring in CuAAC product: {smi!r}"
+        )
+
+    @pytest.mark.xfail(reason="SMILES→CABILN detection of click-chemistry crosslinks not yet implemented")
+    def test_cuaac_smiles_to_cabiln_roundtrip(self):
+        """CuAAC SMILES→CABILN round-trip: marks the known gap; xfail until implemented."""
+        cabiln = "ac-Pra.!1(4,4)-A-A-AzK.!1(4,4)-am"
+        result, _ = self._r(cabiln)
+        assert result == cabiln
+
+    # ── Gap 5: Cyclic backbone + sidechain disulfide ──────────────────────────
+
+    def test_cyclic_backbone_with_disulfide_roundtrip(self):
+        """Head-to-tail cyclic peptide with an internal Cys-Cys disulfide round-trips.
+
+        The ring-opening point and crosslink ID numbering may differ from the
+        input (canonical form), so we verify structural invariants rather than
+        exact string equality.
+        """
+        import re as _re
+        cabiln = "!1-A-C.!2(4,4)-G-C.!2(4,4)-A-!1"
+        result, _ = self._r(cabiln)
+        assert result.startswith("!1-"),  f"Cyclic prefix lost: {result!r}"
+        assert result.endswith("-!1"),    f"Cyclic suffix lost: {result!r}"
+        assert "?" not in result,         f"Unknown residue in cyclic+disulfide: {result!r}"
+        # Both Cys residues must carry a disulfide annotation (4,4); ID may be renumbered
+        disulfide_hits = _re.findall(r'\.!\d+\(4,4\)', result)
+        assert len(disulfide_hits) == 2, (
+            f"Expected 2 Cys-Cys disulfide annotations in cyclic+disulfide: {result!r}"
+        )
+
+    # ── Gap 6: Stereo (L vs D) preserved through SMILES→CABILN ───────────────
+
+    def test_l_and_d_stereo_preserved(self):
+        """CIP @/@@ stereocenters survive SMILES→CABILN→SMILES without inversion."""
+        for cabiln in ("ac-A-V-L-I-am", "ac-dA-G-V-am"):
+            mol_before = Molecule(Sequence(cabiln)).get_molecule(fmt='ROMol')
+            smi_before = Chem.MolToSmiles(mol_before)
+            assert '@' in smi_before, f"No stereocenters in {cabiln!r} SMILES: {smi_before!r}"
+            result, _ = self._r(cabiln)
+            mol_after = Molecule(Sequence(result)).get_molecule(fmt='ROMol')
+            smi_after = Chem.MolToSmiles(mol_after)
+            assert smi_before == smi_after, (
+                f"Stereo changed in round-trip for {cabiln!r}:\n"
+                f"  before: {smi_before}\n"
+                f"  after:  {smi_after}"
+            )
+
+    # ── Gap 7: Full scaffold match preferred over partial ─────────────────────
+
+    def test_tata_full_match_preferred_over_partial(self):
+        """3-arm TATA product: full (3-arm) scaffold detected, not a 2-arm partial."""
+        cabiln = "ac-C.!1(4,4)-A-A-C.!2(4,5)-A-A-C.!3(4,6)-am%TATA.!1.!2.!3"
+        result, _ = self._r(cabiln)
+        assert result == cabiln, (
+            f"Full TATA match degraded to partial:\n"
+            f"  expected: {cabiln!r}\n"
+            f"  got:      {result!r}"
+        )
+        assert "%TATA.!1.!2.!3" in result, f"3-arm TATA suffix missing: {result!r}"
+
+    # ── Gap 8: thia_michael_c SMARTS specificity ─────────────────────────────
+
+    def test_thia_michael_c_smarts_specificity(self):
+        """thia_michael_c pre_smarts matches beta-acrylamide C but not thiol, carboxyl, or alkene."""
+        thia_smarts = Chem.MolFromSmarts('[CH2:1]=[CH]C(=O)[NX3]')
+        assert thia_smarts is not None, "thia_michael_c pre_smarts failed to compile"
+
+        for smi_match in ('C=CC(=O)N', 'C=CC(=O)NC', 'C=CC(=O)N1CCCC1'):
+            mol = Chem.MolFromSmiles(smi_match)
+            assert mol is not None and mol.HasSubstructMatch(thia_smarts), (
+                f"thia_michael_c SMARTS should match acrylamide {smi_match!r}"
+            )
+        for smi_no in ('NCC(S)C(=O)O', 'NCC(CC(=O)O)C(=O)O', 'C=C', 'C=CC=O', 'C=CC(=O)O'):
+            mol = Chem.MolFromSmiles(smi_no)
+            assert mol is not None and not mol.HasSubstructMatch(thia_smarts), (
+                f"thia_michael_c SMARTS must NOT match {smi_no!r}"
+            )
+
+    # ── Gap 9 & 10: Partial scaffold assembly produces no dummy atoms ─────────
+
+    @pytest.mark.parametrize("pct_cabiln", [
+        pytest.param("ac-C.!1(4,4)-A-A-C.!2(4,5)-am%TATA.!1.!2", id="tata_2arm"),
+        pytest.param("ac-C.!1(4,4)-A-A-C.!2(4,5)-am%TBMB.!1.!2", id="tbmb_2arm"),
+        pytest.param("ac-C.!1(4,4)-A-A-C.!2(4,5)-am%TBAB.!1.!2", id="tbab_2arm"),
+    ])
+    def test_partial_scaffold_no_dummy_atoms(self, pct_cabiln):
+        """2-of-3 scaffold arms reacted: assembled SMILES has no unresolved dummy (*) and is connected."""
+        seq = Sequence(pct_cabiln)
+        mol = Molecule(seq).get_molecule(fmt='ROMol')
+        assert mol is not None, f"Assembly returned None for {pct_cabiln!r}"
+        smi = Chem.MolToSmiles(mol)
+        assert '*' not in smi, f"Dummy atom (*) in 2-arm partial product: {smi!r}"
+        assert '.' not in smi, f"Disconnected 2-arm partial product: {smi!r}"
+
+    # ── Cyclic backbone + sidechain crosslink: !n ID collision fix ────────────
+
+    def test_cyclic_backbone_plus_disulfide_no_id_collision(self):
+        """Cyclic backbone ring uses !1; sidechain crosslinks must start from !2.
+
+        Before the fix, smiles_to_cabiln_core assigned !1 to both the ring
+        closure and the disulfide, producing an un-reassemblable CABILN.
+        After the fix the sidechain crosslinks are numbered from !2 onwards.
+        """
+        import re as _re
+        input_biln = '!1-A-C.!2(4,4)-G-C.!2(4,4)-A-!1'
+        result, _ = self._r(input_biln)
+        # The ring-closure markers must be the only bare !1 at boundaries
+        assert result.startswith('!1-') and result.endswith('-!1'), (
+            f"Ring closure markers lost: {result!r}"
+        )
+        # Sidechain crosslinks must NOT use !1 (reserved for ring closure)
+        sidechain_ids = _re.findall(r'\.!(\d+)\(', result)
+        assert '1' not in sidechain_ids, (
+            f"Sidechain crosslink incorrectly reused !1 (ring ID): {result!r}"
+        )
+        # Must reassemble cleanly
+        mol2 = Molecule(Sequence(result)).get_molecule(fmt='ROMol')
+        assert mol2 is not None, f"Reassembly of {result!r} returned None"
+        smi2 = Chem.MolToSmiles(mol2)
+        assert '.' not in smi2, f"Reassembled molecule is disconnected: {smi2!r}"
+
     # ------------------------------------------------------------------
     # N-cap identification (all types, not just 'ac')
     # ------------------------------------------------------------------
@@ -5934,6 +6168,309 @@ class TestSmilesToCabiln:
         with _mock.patch.object(_lr, '_s2c_match', return_value=(None, 0)):
             with pytest.raises(ValueError, match='Unrecognised monomer'):
                 _lr.smiles_to_cabiln_core(smi)
+
+    # ------------------------------------------------------------------
+    # Edge-case tests 14-20, 22-30
+    # ------------------------------------------------------------------
+
+    def test_explicit_h_amide_smiles(self):
+        """Explicit H on backbone amide N/C atoms does not confuse residue matching."""
+        import sys as _sys, os as _os
+        _repo_root = _os.path.abspath(_os.path.join(_os.path.dirname(__file__), '..'))
+        if _repo_root not in _sys.path:
+            _sys.path.insert(0, _repo_root)
+        from tools.live_renderer import smiles_to_cabiln_core
+        smi = 'CC(=O)[NH][C@@H](C)C(=O)[NH2]'  # ac-A-am with explicit H
+        result, details = smiles_to_cabiln_core(smi)
+        assert 'A' in result, f"Expected A residue in output, got {result!r}"
+        assert '?' not in result, f"Unexpected '?' in {result!r}"
+
+    def test_protonated_sidechain_roundtrip(self):
+        """Lys (protonated amine sidechain) round-trips cleanly through CABILN."""
+        result, _ = self._r('ac-K-R-am')
+        assert 'K' in result, f"Lys residue lost: {result!r}"
+        assert 'R' in result, f"Arg residue lost: {result!r}"
+        assert '?' not in result
+
+    def test_isotope_labels_not_in_output(self):
+        """smiles_to_cabiln_core must not leak isotope-label dummy atoms into output."""
+        import re as _re
+        result, _ = self._r('ac-A-G-V-am')
+        assert not _re.search(r'\[\d+\*\]', result), (
+            f"Isotope-label dummy found in CABILN output: {result!r}"
+        )
+
+    @pytest.mark.parametrize("biln", [
+        pytest.param("ac-W-am", id="trp"),
+        pytest.param("ac-H-am", id="his"),
+        pytest.param("ac-Y-am", id="tyr"),
+        pytest.param("ac-F-am", id="phe"),
+        pytest.param("ac-P-am", id="pro"),
+    ])
+    def test_aromatic_sidechain_roundtrip(self, biln):
+        """Aromatic and cyclic sidechains (W/H/Y/F/P) survive the SMILES roundtrip."""
+        expected_abbr = biln[3]  # 'W', 'H', 'Y', 'F', or 'P'
+        result, _ = self._r(biln)
+        assert expected_abbr in result, (
+            f"Expected {expected_abbr!r} in roundtrip output for {biln!r}, got {result!r}"
+        )
+        assert '?' not in result
+
+    def test_cabiln_to_bracket_idempotent(self):
+        """Applying cabiln_to_bracket twice returns the same string (idempotent)."""
+        from pyPept.sequence import cabiln_to_bracket
+        original = 'ac-K.[E_g(4,4).AEEA(1,2).C20FA(1,2)]-G-am'
+        once = cabiln_to_bracket(original)
+        twice = cabiln_to_bracket(once)
+        assert once == twice, (
+            f"cabiln_to_bracket not idempotent:\n  first:  {once!r}\n  second: {twice!r}"
+        )
+
+    def test_renumber_xlinks_renumbers_nonconsecutive(self):
+        """_renumber_xlinks maps non-consecutive IDs (e.g. !1, !3) to consecutive ones."""
+        import sys as _sys, os as _os
+        _repo_root = _os.path.abspath(_os.path.join(_os.path.dirname(__file__), '..'))
+        if _repo_root not in _sys.path:
+            _sys.path.insert(0, _repo_root)
+        from tools.live_renderer import _renumber_xlinks
+        cabiln = 'ac-C.!1(4,4)-A-A-C.!3(4,4)-am'
+        result = _renumber_xlinks(cabiln)
+        assert '.!3' not in result, f"Non-consecutive ID !3 not renumbered in {result!r}"
+        assert '.!2' in result, f"Expected .!2 after renumber, got {result!r}"
+        assert '.!1' in result, f"Expected .!1 preserved in {result!r}"
+
+    def test_boc_ncap_roundtrip(self):
+        """boc N-cap on a peptide with a disulfide crosslink round-trips correctly."""
+        result, _ = self._r('boc-C.!1(4,4)-A-G-C.!1(4,4)-am')
+        assert result.startswith('boc-'), f"boc cap lost: {result!r}"
+        assert '.!1(4,4)' in result, f"Disulfide annotation lost: {result!r}"
+        assert '?' not in result
+
+    def test_fmoc_ncap_with_scaffold_roundtrip(self):
+        """fmoc N-cap with TATA scaffold annotation survives SMILES roundtrip."""
+        result, _ = self._r('fmoc-C.!1(4,4)-A-A-C.!2(4,5)-am%TATA.!1.!2')
+        assert result.startswith('fmoc-'), f"fmoc cap lost: {result!r}"
+        assert '%TATA' in result, f"TATA scaffold lost: {result!r}"
+
+    def test_n_terminal_proline_assembles(self):
+        """N-terminal Pro (secondary amine backbone) assembles and round-trips cleanly."""
+        result, _ = self._r('ac-P-A-G-am')
+        assert result.startswith('ac-P-'), f"Pro at position 1 lost: {result!r}"
+        assert '?' not in result
+
+    def test_nmethyl_aa_chain_roundtrip(self):
+        """N-methyl amino acid (meA) in chain round-trips correctly."""
+        result, _ = self._r('ac-meA-G-A-am')
+        assert 'meA' in result, f"meA residue lost: {result!r}"
+        assert '?' not in result
+
+    def test_alternative_ncap_with_scaffold_roundtrip(self):
+        """fmoc N-cap with 2-arm TATA partial scaffold round-trips."""
+        cabiln = 'fmoc-C.!1(4,4)-A-A-C.!2(4,5)-am%TATA.!1.!2'
+        result, _ = self._r(cabiln)
+        assert 'fmoc' in result, f"fmoc cap lost: {result!r}"
+        assert '%TATA' in result, f"TATA scaffold lost: {result!r}"
+
+    def test_scaffold_detected_at_most_once(self):
+        """smiles_to_cabiln_core annotates a TBMB scaffold exactly once."""
+        import re as _re
+        result, _ = self._r('ac-C.!1(4,4)-A-C.!2(4,5)-A-C.!3(4,6)-am%TBMB.!1.!2.!3')
+        count = len(_re.findall(r'%TBMB', result))
+        assert count == 1, f"Expected exactly 1 %TBMB, found {count} in {result!r}"
+
+    def test_scaffold_patterns_min_two_rgroups(self):
+        """1-arm-reacted TBMB is below min_arms threshold; not annotated as scaffold."""
+        result, _ = self._r('ac-C.!1(4,4)-A-A-am%TBMB.!1')
+        assert '%TBMB' not in result, (
+            f"Single-arm product must not carry scaffold annotation: {result!r}"
+        )
+
+    def test_tbmb_mol_not_annotated_as_tata(self):
+        """A TBMB-crosslinked peptide is labelled %TBMB, never %TATA."""
+        result, _ = self._r('ac-C.!1(4,4)-A-A-C.!2(4,5)-am%TBMB.!1.!2')
+        assert '%TBMB' in result, f"Expected %TBMB in {result!r}"
+        assert '%TATA' not in result, f"Spurious %TATA annotation in {result!r}"
+
+    def test_large_peptide_performance(self):
+        """20-residue peptide round-trips in under 10 seconds."""
+        import time as _time
+        residues = ['A', 'G', 'V', 'L', 'I', 'P', 'F', 'W', 'M', 'S'] * 2
+        biln = 'ac-' + '-'.join(residues) + '-am'
+        t0 = _time.time()
+        result, _ = self._r(biln)
+        elapsed = _time.time() - t0
+        assert elapsed < 10.0, f"20-mer round-trip took {elapsed:.1f}s (limit 10s)"
+        assert '?' not in result, f"Unexpected '?' in 20-mer output: {result!r}"
+
+
+# ---------------------------------------------------------------------------
+# Edge-case / error-handling tests (standalone classes)
+# ---------------------------------------------------------------------------
+
+class TestEdgeCasesErrorHandling:
+    """Tests for boundary conditions and invalid-input behaviour."""
+
+    @staticmethod
+    def _setup():
+        import sys as _sys, os as _os
+        _repo_root = _os.path.abspath(_os.path.join(_os.path.dirname(__file__), '..'))
+        if _repo_root not in _sys.path:
+            _sys.path.insert(0, _repo_root)
+        from tools.live_renderer import smiles_to_cabiln_core
+        return smiles_to_cabiln_core
+
+    def test_disconnected_smiles_does_not_crash(self):
+        """Disconnected SMILES (two fragments separated by '.') does not raise.
+
+        smiles_to_cabiln_core processes the largest connected fragment; the
+        smaller fragment is silently ignored.  The key guarantee is that the
+        call completes without an exception and produces no '?' tokens.
+        """
+        smiles_to_cabiln_core = self._setup()
+        smi = 'CC(=O)N[C@@H](CS)C(=O)N.OC(=O)C'  # Cys-am fragment + acetic acid
+        result, _ = smiles_to_cabiln_core(smi)
+        assert '?' not in result, f"Unexpected '?' in output for disconnected SMILES: {result!r}"
+
+    def test_self_crosslink_same_id_twice_does_not_raise(self):
+        """Duplicate crosslink ID on the same residue (.!1.!1) is accepted without error.
+
+        This is a degenerate input that falls through to single-arm (no bond
+        formed); the Sequence constructor must not raise.
+        """
+        seq = Sequence('ac-C.!1(4,4).!1(4,4)-am')
+        assert seq is not None
+
+    def test_scaffold_with_zero_crosslinks_assembles(self):
+        """Scaffold suffix with no crosslink annotations assembles (scaffold unattached)."""
+        import warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            seq = Sequence('ac-A-am%TBMB')
+            mol = Molecule(seq).get_molecule(fmt='ROMol')
+        assert mol is not None, "Assembly returned None for scaffold with no crosslinks"
+
+    def test_invalid_rgroup_slot_raises(self):
+        """R-group slot number outside valid range raises ValueError."""
+        with pytest.raises(ValueError):
+            Sequence('ac-C.!1(4,9)-am%TBMB.!1')
+
+    def test_same_rgroup_dual_crosslinks_assembles(self):
+        """R4 of Cys annotated for two different crosslinks: only one bond forms; no crash."""
+        import warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            seq = Sequence('ac-C.!1(4,4).!2(4,4)-am%TBMB.!1.!2')
+            mol = Molecule(seq).get_molecule(fmt='ROMol')
+        assert mol is not None
+
+    def test_crosslink_id_zero_assembles(self):
+        """Crosslink ID !0 (zero) is accepted and forms a bond (disulfide)."""
+        import warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            seq = Sequence('ac-C.!0(4,4)-A-A-C.!0(4,4)-am')
+            mol = Molecule(seq).get_molecule(fmt='ROMol')
+        assert mol is not None, "Assembly with crosslink ID !0 returned None"
+        smi = Chem.MolToSmiles(mol)
+        assert '.' not in smi, f"Disconnected product for !0 crosslink: {smi!r}"
+
+
+# ---------------------------------------------------------------------------
+# Additional chemistry edge-case tests
+# ---------------------------------------------------------------------------
+
+class TestAdditionalChemistryEdgeCases:
+    """Assembly and SMIRKS correctness for less-common reaction types."""
+
+    def test_thiol_maleimide_adduct_assembly(self):
+        """Thiol-maleimide ligation (Cys + 5FM) forms the expected thioether-succinimide."""
+        import warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            mol = Molecule(Sequence('ac-C.!1(4,4)-am%5FM.!1')).get_molecule(fmt='ROMol')
+        assert mol is not None, "Thiol-maleimide assembly returned None"
+        smi = Chem.MolToSmiles(mol)
+        thioether_succ = Chem.MolFromSmarts('SC1CC(=O)NC1=O')
+        assert mol.HasSubstructMatch(thioether_succ), (
+            f"Thioether-succinimide ring not found in product: {smi!r}"
+        )
+
+    def test_rcm_alkene_staple_assembly(self):
+        """Ring-closing metathesis staple (S5 + R8) forms a macrocycle with an internal alkene."""
+        mol = Molecule(Sequence('ac-S5.!1(4,4)-A-A-R8.!1(4,4)-am')).get_molecule(fmt='ROMol')
+        assert mol is not None, "RCM staple assembly returned None"
+        smi = Chem.MolToSmiles(mol)
+        alkene = Chem.MolFromSmarts('C=C')
+        assert mol.HasSubstructMatch(alkene), f"Internal alkene not found after RCM: {smi!r}"
+        assert '*' not in smi, f"Unreacted dummy (*) in RCM product: {smi!r}"
+        assert '.' not in smi, f"Disconnected RCM product: {smi!r}"
+
+    def test_depsipeptide_backbone_ester(self):
+        """Depsipeptide (backbone ester) test is skipped — no hydroxy-acid residue in standard library."""
+        pytest.skip("No backbone hydroxy-acid residue in standard library")
+
+    def test_diselenide_assembly(self):
+        """Selenocysteine (Sec) diselenoide crosslink assembles with Se–Se bond."""
+        mol = Molecule(Sequence('ac-Sec.!1(4,4)-A-A-Sec.!1(4,4)-am')).get_molecule(fmt='ROMol')
+        assert mol is not None, "Diselenide assembly returned None"
+        smi = Chem.MolToSmiles(mol)
+        sese = Chem.MolFromSmarts('[Se][Se]')
+        assert mol.HasSubstructMatch(sese), f"Se–Se bond not found in product: {smi!r}"
+        assert '*' not in smi, f"Unreacted dummy in diselenide product: {smi!r}"
+        assert '.' not in smi, f"Disconnected diselenide product: {smi!r}"
+
+    def test_hydrazone_smirks_produces_imine(self):
+        """Hydrazone-forming SMIRKS converts aldehyde + hydrazine → C=N–NH2."""
+        from rdkit.Chem import AllChem
+        smirks = '[CH:1]=[O:2].[NH2:3][NH2:4] >> [CH:1]=[N:3][NH2:4]'
+        rxn = AllChem.ReactionFromSmarts(smirks)
+        assert rxn is not None, "Hydrazone SMIRKS failed to parse"
+        aldehyde = Chem.MolFromSmiles('CCC=O')
+        hydrazine = Chem.MolFromSmiles('NN')
+        products = rxn.RunReactants((aldehyde, hydrazine))
+        assert products, "Hydrazone SMIRKS produced no products"
+        prod_smi = Chem.MolToSmiles(products[0][0])
+        imine = Chem.MolFromSmarts('C=N')
+        prod_mol = Chem.MolFromSmiles(prod_smi)
+        assert prod_mol.HasSubstructMatch(imine), (
+            f"Expected C=N imine in hydrazone product, got {prod_smi!r}"
+        )
+
+    def test_oxime_smirks_produces_oxime(self):
+        """Oxime-forming SMIRKS converts aldehyde + hydroxylamine → C=N–OH."""
+        from rdkit.Chem import AllChem
+        smirks = '[CH:1]=[O:2].[NH2:3][OH:4] >> [CH:1]=[N:3][OH:4]'
+        rxn = AllChem.ReactionFromSmarts(smirks)
+        assert rxn is not None, "Oxime SMIRKS failed to parse"
+        aldehyde = Chem.MolFromSmiles('CCC=O')
+        hydroxylamine = Chem.MolFromSmiles('NO')
+        products = rxn.RunReactants((aldehyde, hydroxylamine))
+        assert products, "Oxime SMIRKS produced no products"
+        prod_smi = Chem.MolToSmiles(products[0][0])
+        oxime_pat = Chem.MolFromSmarts('C=NO')
+        prod_mol = Chem.MolFromSmiles(prod_smi)
+        assert prod_mol.HasSubstructMatch(oxime_pat), (
+            f"Expected C=NO oxime in product, got {prod_smi!r}"
+        )
+
+    def test_preformed_phosphoserine_in_peptide(self):
+        """Phosphoserine (pSer) assembles into a peptide with a phosphate group."""
+        mol = Molecule(Sequence('ac-pSer-A-G-am')).get_molecule(fmt='ROMol')
+        assert mol is not None, "pSer peptide assembly returned None"
+        smi = Chem.MolToSmiles(mol)
+        assert 'P' in smi, f"Phosphate group not found in pSer product: {smi!r}"
+        assert '?' not in smi
+
+    def test_aspartimide_ring_closure(self):
+        """Aspartimide ring closure (Asp R4 → backbone N R3) forms the 5-membered succinimide."""
+        mol = Molecule(Sequence('ac-D.!1(4,3)-A.!1(3,4)-G-am')).get_molecule(fmt='ROMol')
+        assert mol is not None, "Aspartimide assembly returned None"
+        smi = Chem.MolToSmiles(mol)
+        ring5 = Chem.MolFromSmarts('C1CC(=O)NC1=O')
+        assert mol.HasSubstructMatch(ring5), (
+            f"5-membered succinimide ring not found in aspartimide product: {smi!r}"
+        )
+        assert '.' not in smi, f"Disconnected aspartimide product: {smi!r}"
 
 
 # ---------------------------------------------------------------------------

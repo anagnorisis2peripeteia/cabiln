@@ -3830,7 +3830,40 @@ def _s2c_get_scaffold_patterns():
         if len(r_positions) < 2:
             continue
 
-        patterns.append((abbr, smarts_mol, r_positions))
+        global_min_slot = min(iso for _, iso in attach)
+        patterns.append((abbr, smarts_mol, r_positions, global_min_slot))
+
+        # For thia_michael_c arms (no leaving group; unreacted form = vinyl CH2=CH-):
+        # the full SMARTS CC[*:n] can't match the terminal vinyl because CH2= has no
+        # non-H atom for [*:n] to bind.  Generate partial SMARTS for each such arm
+        # by removing its [*:n] token, so partial products are detected correctly.
+        mol_props = raw_mol.GetPropsAsDict()
+        m_chem_str = mol_props.get('m_chem_types', '')
+        thia_slots = set()
+        for _part in m_chem_str.split(','):
+            if ':' in _part:
+                _slot_str, _ct = _part.strip().split(':', 1)
+                try:
+                    if _ct.strip() == 'thia_michael_c':
+                        thia_slots.add(int(_slot_str))
+                except ValueError:
+                    pass
+
+        for _unreacted_slot in thia_slots:
+            _partial_str = _re2.sub(
+                r'\[\*:' + str(_unreacted_slot) + r'\]', '', smarts_str
+            )
+            _partial_mol = _C.MolFromSmarts(_partial_str)
+            if _partial_mol is None:
+                continue
+            _partial_r_pos = {
+                a.GetIdx(): a.GetAtomMapNum()
+                for a in _partial_mol.GetAtoms()
+                if a.GetAtomMapNum() >= 4
+            }
+            if len(_partial_r_pos) < 2:
+                continue
+            patterns.append((abbr, _partial_mol, _partial_r_pos, global_min_slot))
 
     with _s2c_lib_lock:
         _s2c_scaffold_cache = patterns
@@ -5175,7 +5208,7 @@ def smiles_to_cabiln_core(smiles: str):
 
     if _scaffold_patterns:
         _rlib = _s2c_get_raw_lib()
-        for _sc_abbr, _sc_smarts, _sc_r_pos in _scaffold_patterns:
+        for _sc_abbr, _sc_smarts, _sc_r_pos, _sc_min_slot in _scaffold_patterns:
             _found = False
             for _match in mol.GetSubstructMatches(_sc_smarts, useChirality=False):
                 # Collect R-group positions that map to backbone atoms.
@@ -5201,8 +5234,7 @@ def smiles_to_cabiln_core(smiles: str):
                 # for TBMB) so partial matches (2-of-3 arms) don't produce
                 # non-consecutive slot numbers like (4,6) when (4,5) is canonical.
                 _sorted_bpos = sorted(_attach.values(), key=lambda x: x[0])
-                _min_slot = min(_sc_r_pos.values())
-                _sorted_r = list(range(_min_slot, _min_slot + len(_sorted_bpos)))
+                _sorted_r = list(range(_sc_min_slot, _sc_min_slot + len(_sorted_bpos)))
                 _tags = []
                 for _xi, ((_bp, _), _scaffold_r) in enumerate(
                     zip(_sorted_bpos, _sorted_r), start=1
@@ -5247,7 +5279,9 @@ def smiles_to_cabiln_core(smiles: str):
     if sc_pairs:
         if not branch_junctions:
             raw_lib = _s2c_get_raw_lib()
-        xlink_ctr = _scaffold_xlinks + 1  # continue after any scaffold labels
+        # !1 is reserved for the backbone ring-closure marker when cyclic.
+        # Sidechain crosslinks must not reuse it, so start from at least 2.
+        xlink_ctr = max(1 if cyclic else 0, _scaffold_xlinks) + 1
         for bi, bj in sc_pairs:
             base_i = details[bi][0]
             base_j = details[bj][0]
