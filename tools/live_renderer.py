@@ -4756,13 +4756,25 @@ def _s2c_build_backbone(mol, placements):
         starts = starts + cyclic_cands
         starts.sort(key=lambda p: (p.m_type != 'aa', -p.entry.n_atoms))
 
+    _all_placed = frozenset().union(*(p.mol_atoms for p in deduped))
+
     best: list = []
-    best_score = (-1, -1, -1)
+    best_score = (-1, -1, -1, -1)
 
     def chain_score(c):
-        # Prefer longer chains, then more AAs, then more total atoms covered
-        # (larger atom sets = greedier match, e.g. G over Gly_al).
-        return (len(c), sum(1 for nd in c if nd.m_type == 'aa'),
+        # Primary: chain length.  Tiebreaker: whether the start node's in_n has
+        # an unclaimed heavy neighbor (an atom outside all backbone placements).
+        # That signals an N-cap like ac/fmoc/boc is attached — caps lack backbone_n
+        # so they're absent from the coverage lib.  Among equal-length chains this
+        # prefers ac-K→G over E_g→AEEA when both reach length 2 but only K's αN
+        # has a cap carbonyl neighbour.  Length is primary so a shorter capped arm
+        # never beats a longer uncapped backbone (e.g. AEEA-cap vs. A-K-G).
+        _in_n_unclaimed = any(
+            _nb.GetAtomicNum() > 1 and _nb.GetIdx() not in _all_placed
+            for _nb in mol.GetAtomWithIdx(c[0].in_n).GetNeighbors()
+        )
+        return (len(c), int(_in_n_unclaimed),
+                sum(1 for nd in c if nd.m_type == 'aa'),
                 sum(len(nd.mol_atoms) for nd in c))
 
     def dfs(node, chain, used):
