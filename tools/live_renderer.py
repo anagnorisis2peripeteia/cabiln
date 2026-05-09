@@ -5227,7 +5227,19 @@ def smiles_to_cabiln_core(smiles: str):
 
                 _min_arms = max(2, len(_sc_r_pos) - 1)
                 if len(_attach) < _min_arms:
-                    continue
+                    # Relax the threshold when unreacted arms hit halogen
+                    # leaving-group atoms (Br/Cl/I) still present in the SMILES.
+                    # A scaffold arm that terminated at a halogen is unambiguously
+                    # part of this scaffold — no peptide context produces that.
+                    if len(_attach) >= 1:
+                        _halogen_nos = {35, 17, 53}  # Br, Cl, I
+                        _unmatched = [_match[_si] for _si in _sc_r_pos
+                                      if _si not in _attach]
+                        if all(mol.GetAtomWithIdx(_ai).GetAtomicNum() in _halogen_nos
+                               for _ai in _unmatched):
+                            pass  # accept — all unreacted arms are halogens
+                        else:
+                            continue
 
                 # Sort attachments by backbone chain order.  Renumber R-groups
                 # consecutively from the scaffold's minimum slot (e.g. R4,R5,R6

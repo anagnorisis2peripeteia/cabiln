@@ -6278,11 +6278,19 @@ class TestSmilesToCabiln:
         count = len(_re.findall(r'%TBMB', result))
         assert count == 1, f"Expected exactly 1 %TBMB, found {count} in {result!r}"
 
-    def test_scaffold_patterns_min_two_rgroups(self):
-        """1-arm-reacted TBMB is below min_arms threshold; not annotated as scaffold."""
-        result, _ = self._r('ac-C.!1(4,4)-A-A-am%TBMB.!1')
-        assert '%TBMB' not in result, (
-            f"Single-arm product must not carry scaffold annotation: {result!r}"
+    def test_scaffold_patterns_1arm_halogen_detected(self):
+        """1-arm TBMB with 2 remaining CBr arms is detected as %TBMB.
+
+        The halogen-relaxation rule: when all unmatched scaffold arms hit Br/Cl/I
+        atoms (leaving groups still present in the SMILES), the min_arms threshold
+        is relaxed and the partial scaffold is annotated correctly.
+        """
+        result, _ = self._r('ac-C.!1(4,4)-G-A-K-C-E-L-F-C-am%TBMB.!1')
+        assert '%TBMB' in result, (
+            f"1-arm TBMB with Br leaving groups must carry scaffold annotation: {result!r}"
+        )
+        assert result.endswith('%TBMB.!1'), (
+            f"Expected single-arm annotation %%TBMB.!1, got {result!r}"
         )
 
     def test_tbmb_mol_not_annotated_as_tata(self):
