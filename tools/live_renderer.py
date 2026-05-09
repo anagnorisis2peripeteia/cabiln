@@ -5247,15 +5247,19 @@ def smiles_to_cabiln_core(smiles: str):
                 # non-consecutive slot numbers like (4,6) when (4,5) is canonical.
                 _sorted_bpos = sorted(_attach.values(), key=lambda x: x[0])
                 _sorted_r = list(range(_sc_min_slot, _sc_min_slot + len(_sorted_bpos)))
+                # Scaffold XL IDs must not reuse !1 when the backbone ring
+                # closure already claims it. Start from 2 for cyclic peptides.
+                _xl_id = 2 if cyclic else 1
                 _tags = []
-                for _xi, ((_bp, _), _scaffold_r) in enumerate(
-                    zip(_sorted_bpos, _sorted_r), start=1
-                ):
+                for (_bp, _), _scaffold_r in zip(_sorted_bpos, _sorted_r):
                     _res_r = _s2c_crosslink_r(details[_bp][0], _rlib)
-                    _tags.append(f'!{_xi}')
-                    abbrs[_bp] += f'.!{_xi}({_res_r},{_scaffold_r})'
+                    _tags.append(f'!{_xl_id}')
+                    abbrs[_bp] += f'.!{_xl_id}({_res_r},{_scaffold_r})'
+                    _xl_id += 1
                 scaffold_suffix = f'%{_sc_abbr}.' + '.'.join(_tags)
-                _scaffold_xlinks = len(_tags)
+                # Track the highest XL ID used so sidechain crosslinks start
+                # after it (the sidechain counter uses _scaffold_xlinks + 1).
+                _scaffold_xlinks = _xl_id - 1
                 _found = True
                 break
 
