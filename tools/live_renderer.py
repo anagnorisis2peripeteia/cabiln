@@ -964,7 +964,8 @@ _HTML = r"""<!DOCTYPE html>
           📂 .mol
           <input type="file" id="mol-upload" accept=".mol,.sdf" style="display:none;">
         </label>
-        <button id="btn-s2c" class="hbtn green" style="font-size:10px;padding:2px 10px;" title="Convert SMILES to CABILN">→ CABILN</button>
+        <button id="btn-s2c" class="hbtn green" style="font-size:10px;padding:2px 10px;" title="Convert SMILES → % CABILN (branch form)">→ %</button>
+        <button id="btn-s2c-bracket" class="hbtn green" style="font-size:10px;padding:2px 10px;" title="Convert SMILES → [] CABILN (bracket form)">→ []</button>
       </div>
       <textarea id="smiles-input" placeholder="Paste SMILES, BILN, or HELM here…"
                 spellcheck="false" autocomplete="off"></textarea>
@@ -1062,6 +1063,7 @@ const buildInsertInfo = document.getElementById('build-insert-info');
 const buildInsertBtn = document.getElementById('build-insert-btn');
 const btnReroll     = document.getElementById('btn-reroll');
 const btnS2c        = document.getElementById('btn-s2c');
+const btnS2cBracket = document.getElementById('btn-s2c-bracket');
 const btnRxnFilter  = document.getElementById('btn-rxn-filter');
 const notationSelect = document.getElementById('notation-select');
 const btnToCabiln   = document.getElementById('btn-to-cabiln');
@@ -2201,17 +2203,18 @@ btnReroll.addEventListener('click', () => {
 });
 
 // ─── SMILES → CABILN conversion ───────────────────────────────────────────────
-btnS2c.addEventListener('click', async () => {
+async function doS2c(notation) {
   const smiles = smilesInput.value.trim();
   if (!smiles) return;
-  const origText = btnS2c.textContent;
-  btnS2c.textContent = '…';
-  btnS2c.disabled = true;
+  const btn = notation === 'bracket' ? btnS2cBracket : btnS2c;
+  const origText = btn.textContent;
+  btn.textContent = '…';
+  btn.disabled = true;
   try {
     const res = await fetch('/smiles_to_cabiln', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ smiles })
+      body: JSON.stringify({ smiles, notation })
     });
     const data = await res.json();
     if (data.error) {
@@ -2224,7 +2227,7 @@ btnS2c.addEventListener('click', async () => {
         smilesStatus.textContent = `⚠ ${data.warning}`;
         smilesStatus.className = 'statusbar warn';
       } else {
-        smilesStatus.textContent = `Converted: ${data.details.length} residue(s)`;
+        smilesStatus.textContent = `Converted (${notation}): ${data.details.length} residue(s)`;
         smilesStatus.className = 'statusbar ok';
       }
     }
@@ -2232,10 +2235,12 @@ btnS2c.addEventListener('click', async () => {
     smilesStatus.textContent = 'S2C error — is server running?';
     smilesStatus.className = 'statusbar';
   } finally {
-    btnS2c.textContent = origText;
-    btnS2c.disabled = false;
+    btn.textContent = origText;
+    btn.disabled = false;
   }
-});
+}
+btnS2c.addEventListener('click', () => doS2c('percent'));
+btnS2cBracket.addEventListener('click', () => doS2c('bracket'));
 
 // ─── main input → CABILN convert button ──────────────────────────────────────
 btnToCabiln.addEventListener('click', async () => {
@@ -6147,6 +6152,7 @@ async def insert_backbone(req: _InsertBackboneReq):
 
 class _SmilesToCabilnReq(BaseModel):
     smiles: str
+    notation: str = 'percent'  # 'percent' (%) or 'bracket' ([])
 
 @app.post("/smiles_to_cabiln")
 async def smiles_to_cabiln_endpoint(req: _SmilesToCabilnReq):
@@ -6155,6 +6161,9 @@ async def smiles_to_cabiln_endpoint(req: _SmilesToCabilnReq):
         from rdkit import Chem as _C
         smi = req.smiles.strip()
         cabiln, details = smiles_to_cabiln_core(smi)
+        if req.notation == 'bracket':
+            from pyPept.sequence import cabiln_to_bracket
+            cabiln = cabiln_to_bracket(cabiln)
         warning = None
         mol_in = _C.MolFromSmiles(smi)
         if mol_in is not None and _count_defined_stereo(mol_in) == 0:
