@@ -6507,7 +6507,8 @@ class TestAdditionalChemistryEdgeCases:
         ('ac-D_Lac-D_Lac-am', 'two consecutive depsi residues'),
     ])
     def test_depsipeptide_backbone_ester(self, cabiln, description):
-        """Backbone ester bond (depsipeptide): D_Lac/L_Lac/GlyAc residues assemble via backbone_ester SMIRKS."""
+        """Backbone ester bond (depsipeptide): D_Lac/L_Lac/GlyAc residues assemble and round-trip."""
+        from tools.live_renderer import smiles_to_cabiln_core
         ester_pat = Chem.MolFromSmarts('[C:1](=O)[O:2][C:3]')
         mol = Molecule(Sequence(cabiln)).get_molecule(fmt='ROMol')
         assert mol is not None, f"Assembly returned None for {cabiln!r}"
@@ -6515,6 +6516,8 @@ class TestAdditionalChemistryEdgeCases:
         assert '*' not in smi, f"Unreacted dummy in {cabiln!r}: {smi!r}"
         assert '.' not in smi, f"Disconnected product for {cabiln!r}: {smi!r}"
         assert mol.HasSubstructMatch(ester_pat), f"No ester bond in {cabiln!r}: {smi!r}"
+        result, _ = smiles_to_cabiln_core(smi)
+        assert result == cabiln, f"Round-trip failed for {cabiln!r}: got {result!r}"
 
     def test_diselenide_assembly(self):
         """Selenocysteine (Sec) diselenoide crosslink assembles with Se–Se bond."""

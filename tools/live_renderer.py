@@ -3667,7 +3667,7 @@ def _s2c_get_lib():
                     k, v = item.split(':', 1)
                     try: cts[int(k)] = v.strip()
                     except ValueError: pass
-            bn_r = next((r for r, t in cts.items() if t == 'backbone_n'), None)
+            bn_r = next((r for r, t in cts.items() if t in ('backbone_n', 'backbone_o')), None)
             bc_r = next((r for r, t in cts.items() if t == 'backbone_c'), None)
             if bn_r is None or bc_r is None: continue
             bn_atom = next((a for a in mol.GetAtoms()
@@ -4715,7 +4715,7 @@ def _s2c_build_cov_lib():
                     cts[int(k)] = v.strip()
                 except ValueError:
                     pass
-        bn_r = next((r for r, t in cts.items() if t == 'backbone_n'), None)
+        bn_r = next((r for r, t in cts.items() if t in ('backbone_n', 'backbone_o')), None)
         bc_r = next((r for r, t in cts.items() if t == 'backbone_c'), None)
         if bn_r is None or bc_r is None:
             continue
@@ -4863,7 +4863,7 @@ def _s2c_build_cov_lib():
             _ch = _sa.GetFormalCharge()
             _cs = (f'+{_ch}' if _ch > 0 else (str(_ch) if _ch < 0 else ''))
             if _si == in_n_idx:
-                _repl = f'[#7:{_MAP_IN}]'   # permissive N
+                _repl = f'[#{_sa.GetAtomicNum()}:{_MAP_IN}]'  # permissive; #7 for amide N, #8 for ester O
             elif _si == out_co_idx:
                 _repl = f'[#{_sa.GetAtomicNum()}H{_nh}{_cs}:{_MAP_OUT}]'  # exact H count
             elif _si == bc_r_cap_idx:
