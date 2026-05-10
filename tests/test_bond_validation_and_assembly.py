@@ -6497,9 +6497,24 @@ class TestAdditionalChemistryEdgeCases:
         assert '*' not in smi, f"Unreacted dummy (*) in RCM product: {smi!r}"
         assert '.' not in smi, f"Disconnected RCM product: {smi!r}"
 
-    def test_depsipeptide_backbone_ester(self):
-        """Depsipeptide (backbone ester) test is skipped — no hydroxy-acid residue in standard library."""
-        pytest.skip("No backbone hydroxy-acid residue in standard library")
+    @pytest.mark.parametrize('cabiln,description', [
+        ('ac-D_Lac-A-am',     'D-lactic acid N-terminal depsi'),
+        ('ac-L_Lac-A-am',     'L-lactic acid N-terminal depsi'),
+        ('ac-GlyAc-A-am',     'glycolic acid N-terminal depsi'),
+        ('ac-D_Lac-G-am',     'D-lactic acid + Gly'),
+        ('ac-D_Lac-A-G-am',   'D-lactic acid + 2 residues'),
+        ('ac-A-D_Lac-A-am',   'D-lactic acid mid-chain'),
+        ('ac-D_Lac-D_Lac-am', 'two consecutive depsi residues'),
+    ])
+    def test_depsipeptide_backbone_ester(self, cabiln, description):
+        """Backbone ester bond (depsipeptide): D_Lac/L_Lac/GlyAc residues assemble via backbone_ester SMIRKS."""
+        ester_pat = Chem.MolFromSmarts('[C:1](=O)[O:2][C:3]')
+        mol = Molecule(Sequence(cabiln)).get_molecule(fmt='ROMol')
+        assert mol is not None, f"Assembly returned None for {cabiln!r}"
+        smi = Chem.MolToSmiles(mol)
+        assert '*' not in smi, f"Unreacted dummy in {cabiln!r}: {smi!r}"
+        assert '.' not in smi, f"Disconnected product for {cabiln!r}: {smi!r}"
+        assert mol.HasSubstructMatch(ester_pat), f"No ester bond in {cabiln!r}: {smi!r}"
 
     def test_diselenide_assembly(self):
         """Selenocysteine (Sec) diselenoide crosslink assembles with Se–Se bond."""
