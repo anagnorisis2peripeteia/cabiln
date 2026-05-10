@@ -5178,6 +5178,18 @@ def _s2c_identify_n_cap_from_atom(mol, n_idx, cap_start_atom, excluded_atoms):
             continue
         rw2 = RWMol(cap_mol)
         rw2.ReplaceAtom(dummy_idx, Atom('N'))
+        _rg_str = p.get('m_Rgroups', '')
+        _rg_list = [r.strip() for r in _rg_str.split(',')] if _rg_str else []
+        _dummies = [(a.GetIdx(), a.GetIsotope())
+                    for a in rw2.GetAtoms()
+                    if a.GetAtomicNum() == 0 and a.GetIsotope() != r_num]
+        for _d_idx, _iso in sorted(_dummies, key=lambda x: -x[0]):
+            _rg = _rg_list[_iso - 1].strip() if 0 < _iso <= len(_rg_list) else None
+            if _rg == '[OH]':   rw2.ReplaceAtom(_d_idx, Atom('O'))
+            elif _rg == '[Cl]': rw2.ReplaceAtom(_d_idx, Atom('Cl'))
+            elif _rg == '[Br]': rw2.ReplaceAtom(_d_idx, Atom('Br'))
+            elif _rg == '[I]':  rw2.ReplaceAtom(_d_idx, Atom('I'))
+            else:               rw2.RemoveAtom(_d_idx)
         try:
             _C.SanitizeMol(rw2)
         except Exception:
@@ -5259,6 +5271,18 @@ def _s2c_identify_c_cap_from_atom(mol, co_idx, cap_start_atom, excluded_atoms):
             continue
         rw2 = RWMol(cap_mol)
         rw2.ReplaceAtom(dummy_idx, Atom('C'))
+        _rg_str = p.get('m_Rgroups', '')
+        _rg_list = [r.strip() for r in _rg_str.split(',')] if _rg_str else []
+        _dummies = [(a.GetIdx(), a.GetIsotope())
+                    for a in rw2.GetAtoms()
+                    if a.GetAtomicNum() == 0 and a.GetIsotope() != r_num]
+        for _d_idx, _iso in sorted(_dummies, key=lambda x: -x[0]):
+            _rg = _rg_list[_iso - 1].strip() if 0 < _iso <= len(_rg_list) else None
+            if _rg == '[OH]':   rw2.ReplaceAtom(_d_idx, Atom('O'))
+            elif _rg == '[Cl]': rw2.ReplaceAtom(_d_idx, Atom('Cl'))
+            elif _rg == '[Br]': rw2.ReplaceAtom(_d_idx, Atom('Br'))
+            elif _rg == '[I]':  rw2.ReplaceAtom(_d_idx, Atom('I'))
+            else:               rw2.RemoveAtom(_d_idx)
         try:
             _C.SanitizeMol(rw2)
         except Exception:
