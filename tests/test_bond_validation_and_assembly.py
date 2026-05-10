@@ -5985,12 +5985,35 @@ class TestSmilesToCabiln:
             f"No 1,2,3-triazole ring in CuAAC product: {smi!r}"
         )
 
-    @pytest.mark.xfail(reason="SMILES→CABILN detection of click-chemistry crosslinks not yet implemented")
     def test_cuaac_smiles_to_cabiln_roundtrip(self):
-        """CuAAC SMILES→CABILN round-trip: marks the known gap; xfail until implemented."""
+        """CuAAC SMILES→CABILN round-trip via de-reacted backbone detection."""
         cabiln = "ac-Pra.!1(4,4)-A-A-AzK.!1(4,4)-am"
         result, _ = self._r(cabiln)
         assert result == cabiln
+
+    # ── Gap 4b: Backbone-less fallback — cap-only and standalone monomers ─────
+
+    @pytest.mark.parametrize("cabiln", [
+        pytest.param("ac-am",   id="ac_am"),
+        pytest.param("fmoc-am", id="fmoc_am"),
+        pytest.param("boc-am",  id="boc_am"),
+    ])
+    def test_caponly_chain_roundtrip(self, cabiln):
+        """Two-cap chains (no backbone residues) round-trip through SMILES."""
+        result, _ = self._r(cabiln)
+        assert result == cabiln, f"Expected {cabiln!r}, got {result!r}"
+
+    def test_standalone_tbmb_smiles_detected(self):
+        """Unreacted TBMB scaffold (all three Br arms present) is identified as 'TBMB'."""
+        import sys as _sys, os as _os
+        _repo_root = _os.path.abspath(_os.path.join(_os.path.dirname(__file__), '..'))
+        if _repo_root not in _sys.path:
+            _sys.path.insert(0, _repo_root)
+        from tools.live_renderer import smiles_to_cabiln_core
+        # Unreacted TBMB: three CH2Br arms, no Cys thioether bonds formed
+        smi = 'BrCc1cc(CBr)cc(CBr)c1'
+        result, _ = smiles_to_cabiln_core(smi)
+        assert result == 'TBMB', f"Expected 'TBMB', got {result!r}"
 
     # ── Gap 5: Cyclic backbone + sidechain disulfide ──────────────────────────
 
@@ -6126,6 +6149,30 @@ class TestSmilesToCabiln:
             f"Expected N-cap {expected_cap_token!r} in output, got: {result!r}"
         )
         assert "?" not in result, f"Unknown residue in capped peptide: {result!r}"
+
+    @pytest.mark.parametrize("biln,expected_c_cap", [
+        pytest.param("ac-A-am",    "am",    id="c_cap_am"),
+        pytest.param("ac-A-NHMe",  "NHMe",  id="c_cap_NHMe"),
+        pytest.param("ac-A-NHEt",  "NHEt",  id="c_cap_NHEt"),
+        pytest.param("ac-A-OEt",   "OEt",   id="c_cap_OEt"),
+        pytest.param("ac-A-OtBu",  "OtBu",  id="c_cap_OtBu"),
+        pytest.param("ac-A-_OMe",  "_OMe",  id="c_cap_OMe"),
+        pytest.param("ac-A-_OBn",  "_OBn",  id="c_cap_OBn"),
+        pytest.param("fmoc-G-G-OEt", "OEt", id="c_cap_OEt_multi"),
+    ])
+    def test_c_cap_type_identification(self, biln, expected_c_cap):
+        """C-cap type identified from library for both amide-N and ester-O caps.
+
+        Ester C-caps (OEt, OtBu, _OMe, _OBn) were previously broken: cutting
+        a C(=O)-O bond left a bare aldehyde instead of a carboxyl, so the
+        residue matched Ala_al/Gly_al.  The fix adds -OH when the outside atom
+        of the cut bond is O (not just N).
+        """
+        result, _ = self._r(biln)
+        assert result == biln, f"Expected {biln!r}, got {result!r}"
+        assert result.endswith('-' + expected_c_cap), (
+            f"Expected C-cap {expected_c_cap!r} at end of output, got: {result!r}"
+        )
 
     # ------------------------------------------------------------------
     # Unknown monomer raises ValueError
@@ -6293,11 +6340,48 @@ class TestSmilesToCabiln:
             f"Expected single-arm annotation %%TBMB.!1, got {result!r}"
         )
 
+    def test_scaffold_patterns_1arm_tata_detected(self):
+        """1-arm TATA (2 unreacted vinyl arms) is detected as %TATA.
+
+        pyPept H-caps unconnected dummy atoms so the unreacted vinyl arm becomes
+        propanoyl (-CH2-CH3).  The partial SMARTS with both unreacted arm tokens
+        removed must still match the TATA core and annotate the 1 reacted Cys.
+        """
+        result, _ = self._r('ac-C.!1(4,4)-A-A-am%TATA.!1')
+        assert '%TATA' in result, (
+            f"1-arm TATA must carry scaffold annotation: {result!r}"
+        )
+        assert result.endswith('%TATA.!1'), (
+            f"Expected single-arm annotation %TATA.!1, got {result!r}"
+        )
+
     def test_tbmb_mol_not_annotated_as_tata(self):
         """A TBMB-crosslinked peptide is labelled %TBMB, never %TATA."""
         result, _ = self._r('ac-C.!1(4,4)-A-A-C.!2(4,5)-am%TBMB.!1.!2')
         assert '%TBMB' in result, f"Expected %TBMB in {result!r}"
         assert '%TATA' not in result, f"Spurious %TATA annotation in {result!r}"
+
+    # ── Multi-amide backbone-less chains ──────────────────────────────────────
+
+    @pytest.mark.parametrize("biln", [
+        pytest.param("ac-G-am",     id="ac_G_am"),
+        pytest.param("ac-A-am",     id="ac_A_am"),
+        pytest.param("ac-V-am",     id="ac_V_am"),
+        pytest.param("ac-G-G-am",   id="ac_G_G_am"),
+        pytest.param("ac-A-G-am",   id="ac_A_G_am"),
+        pytest.param("ac-G-A-am",   id="ac_G_A_am"),
+        pytest.param("ac-G-G-G-am", id="ac_G_G_G_am"),
+        pytest.param("fmoc-G-am",   id="fmoc_G_am"),
+        pytest.param("boc-A-G-am",  id="boc_A_G_am"),
+    ])
+    def test_multi_amide_backbone_less_chain_roundtrip(self, biln):
+        """Capped peptide SMILES round-trips even if backbone detection fails.
+
+        The multi-amide fallback walker handles chains with ≥2 amide bonds that
+        the primary backbone detector misses (e.g. very short or cap-heavy chains).
+        """
+        result, _ = self._r(biln)
+        assert result == biln, f"Expected {biln!r}, got {result!r}"
 
     def test_large_peptide_performance(self):
         """20-residue peptide round-trips in under 10 seconds."""

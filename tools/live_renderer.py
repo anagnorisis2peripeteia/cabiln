@@ -879,7 +879,8 @@ _HTML = r"""<!DOCTYPE html>
     <textarea id="cabiln-input"
               placeholder="e.g.  fmoc-A-G-L-am&#10;fmoc-C.trt(4,1)-A-K.boc(4,1)-am&#10;fmoc-K.!1(4,1)-G-G-E.!1-am"
               spellcheck="false" autocomplete="off"></textarea>
-    <button id="btn-to-cabiln" class="hbtn green" style="display:none;font-size:10px;padding:2px 10px;white-space:nowrap;" title="Convert to CABILN">→ CABILN</button>
+    <button id="btn-to-cabiln-pct"     class="hbtn green" style="display:none;font-size:10px;padding:2px 10px;white-space:nowrap;" title="Convert to CABILN (% branch notation)">→ %</button>
+    <button id="btn-to-cabiln-bracket" class="hbtn green" style="display:none;font-size:10px;padding:2px 10px;white-space:nowrap;" title="Convert to CABILN ([] bracket notation)">→ []</button>
   </div>
   <div id="cabiln-status" class="statusbar"></div>
   <div id="residue-chips"></div>
@@ -1066,7 +1067,8 @@ const btnS2c        = document.getElementById('btn-s2c');
 const btnS2cBracket = document.getElementById('btn-s2c-bracket');
 const btnRxnFilter  = document.getElementById('btn-rxn-filter');
 const notationSelect = document.getElementById('notation-select');
-const btnToCabiln   = document.getElementById('btn-to-cabiln');
+const btnToCabilnPct     = document.getElementById('btn-to-cabiln-pct');
+const btnToCabilnBracket = document.getElementById('btn-to-cabiln-bracket');
 
 // ─── dark mode ────────────────────────────────────────────────────────────────
 btnDark.addEventListener('click', () => {
@@ -2242,18 +2244,19 @@ async function doS2c(notation) {
 btnS2c.addEventListener('click', () => doS2c('percent'));
 btnS2cBracket.addEventListener('click', () => doS2c('bracket'));
 
-// ─── main input → CABILN convert button ──────────────────────────────────────
-btnToCabiln.addEventListener('click', async () => {
+// ─── main input → CABILN convert buttons ─────────────────────────────────────
+async function doToCabiln(notation) {
   const txt = cabilnInput.value.trim();
   if (!txt) return;
-  const origText = btnToCabiln.textContent;
-  btnToCabiln.textContent = '…';
-  btnToCabiln.disabled = true;
+  const btn = notation === 'bracket' ? btnToCabilnBracket : btnToCabilnPct;
+  const origText = btn.textContent;
+  btn.textContent = '…';
+  btn.disabled = true;
   try {
     const res = await fetch('/to_cabiln', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ input: txt })
+      body: JSON.stringify({ input: txt, notation })
     });
     const data = await res.json();
     if (data.error) {
@@ -2261,7 +2264,8 @@ btnToCabiln.addEventListener('click', async () => {
       cabilnStatus.className = 'statusbar';
     } else {
       notationSelect.value = 'cabiln';
-      btnToCabiln.style.display = 'none';
+      btnToCabilnPct.style.display = 'none';
+      btnToCabilnBracket.style.display = 'none';
       cabilnInput.placeholder = NOTATION_PLACEHOLDER.cabiln;
       cabilnInput.value = data.cabiln;
       cabilnInput.dispatchEvent(new Event('input'));
@@ -2272,10 +2276,12 @@ btnToCabiln.addEventListener('click', async () => {
     cabilnStatus.textContent = '→ CABILN error — is server running?';
     cabilnStatus.className = 'statusbar';
   } finally {
-    btnToCabiln.textContent = origText;
-    btnToCabiln.disabled = false;
+    btn.textContent = origText;
+    btn.disabled = false;
   }
-});
+}
+btnToCabilnPct.addEventListener('click',     () => doToCabiln('percent'));
+btnToCabilnBracket.addEventListener('click', () => doToCabiln('bracket'));
 
 function setExportReady(svg, molBlock) {
   lastSvg      = svg || '';
@@ -2316,7 +2322,9 @@ const NOTATION_PLACEHOLDER = {
 notationSelect.addEventListener('change', () => {
   const mode = notationSelect.value;
   cabilnInput.placeholder = NOTATION_PLACEHOLDER[mode] || '';
-  btnToCabiln.style.display = mode === 'cabiln' ? 'none' : '';
+  const showConvert = mode !== 'cabiln';
+  btnToCabilnPct.style.display     = showConvert ? '' : 'none';
+  btnToCabilnBracket.style.display = showConvert ? '' : 'none';
   cabilnInput.value = '';
   cabilnInput.className = '';
   resetCabiln();
@@ -3218,7 +3226,7 @@ def _s2c_isolate_residues(m, aa_units):
                 outside = ei if inside == bi else bi
                 ia = m.GetAtomWithIdx(inside)
                 oa = m.GetAtomWithIdx(outside)
-                if ia.GetSymbol() == 'C' and oa.GetSymbol() == 'N':
+                if ia.GetSymbol() == 'C' and oa.GetSymbol() in ('N', 'O'):
                     has_dbl_o = any(
                         nb.GetSymbol() == 'O' and
                         m.GetBondBetweenAtoms(inside, nb.GetIdx()).GetBondType() == _C.BondType.DOUBLE
@@ -3243,7 +3251,21 @@ def _s2c_isolate_residues(m, aa_units):
                         except Exception:
                             pass
         mol_out = rw.GetMol()
-        _C.SanitizeMol(mol_out)
+        try:
+            _C.SanitizeMol(mol_out)
+        except Exception:
+            # An aromatic ring atom (e.g. triazole N from a CuAAC crosslink) was
+            # cut from its ring by the extraction, making it aromatic-but-not-in-ring.
+            # Strip all aromaticity from the fragment and re-sanitize.
+            _rw2 = _C.RWMol(mol_out)
+            for _at2 in _rw2.GetAtoms():
+                _at2.SetIsAromatic(False)
+            for _bd2 in _rw2.GetBonds():
+                if _bd2.GetBondTypeAsDouble() == 1.5:
+                    _bd2.SetBondType(_C.BondType.SINGLE)
+            mol_out = _rw2.GetMol()
+            _C.SanitizeMol(mol_out,
+                           _C.SanitizeFlags.SANITIZE_ALL ^ _C.SanitizeFlags.SANITIZE_KEKULIZE)
         # Fix chirality: AddAtom copies ChiralTags, but they are relative to
         # the original molecule's neighbor ordering.  In the fragment the
         # neighbor order may differ, flipping the effective CW/CCW meaning.
@@ -3616,6 +3638,9 @@ _s2c_full_lib_mtime: float = 0.0
 _s2c_scaffold_cache: list | None = None
 _s2c_scaffold_mtime: float = 0.0
 
+# Ring-forming crosslink patterns derived from reactions.yaml product SMARTS
+_s2c_ring_xlink_cache: list | None = None
+
 
 def _s2c_get_lib():
     """Return (or rebuild) the capped monomer library."""
@@ -3839,35 +3864,320 @@ def _s2c_get_scaffold_patterns():
         # by removing its [*:n] token, so partial products are detected correctly.
         mol_props = raw_mol.GetPropsAsDict()
         m_chem_str = mol_props.get('m_chem_types', '')
-        thia_slots = set()
+        arm_chem_types: dict = {}  # r_slot_int → chem_type_str
         for _part in m_chem_str.split(','):
             if ':' in _part:
                 _slot_str, _ct = _part.strip().split(':', 1)
                 try:
-                    if _ct.strip() == 'thia_michael_c':
-                        thia_slots.add(int(_slot_str))
+                    arm_chem_types[int(_slot_str)] = _ct.strip()
                 except ValueError:
                     pass
 
-        for _unreacted_slot in thia_slots:
-            _partial_str = _re2.sub(
-                r'\[\*:' + str(_unreacted_slot) + r'\]', '', smarts_str
-            )
-            _partial_mol = _C.MolFromSmarts(_partial_str)
-            if _partial_mol is None:
-                continue
-            _partial_r_pos = {
-                a.GetIdx(): a.GetAtomMapNum()
-                for a in _partial_mol.GetAtoms()
-                if a.GetAtomMapNum() >= 4
-            }
-            if len(_partial_r_pos) < 2:
-                continue
-            patterns.append((abbr, _partial_mol, _partial_r_pos, global_min_slot))
+        # Patch the full-match pattern tuple to include arm_chem_types and min_required.
+        # Full pattern: allow N-1 arms to match (1 unreacted arm tolerated via relaxation).
+        # is_partial=False: relaxation is allowed for the one unmatched arm.
+        patterns[-1] = (abbr, smarts_mol, r_positions, global_min_slot, arm_chem_types,
+                        max(2, len(r_positions) - 1), False)
+
+        # For thia_michael_c arms the SMARTS token CC[*:n] requires a heavy atom after
+        # the beta-carbon, but pyPept's mol builder H-caps unconnected dummy atoms, turning
+        # the arm into a terminal propanoyl (-CH2-CH3) with no such heavy neighbour.
+        # The full SMARTS therefore cannot match any unreacted thia_michael_c arm.
+        # Fix: generate partial SMARTS for every non-trivial proper subset of thia_michael_c
+        # arm slots removed (1 up to N-1 slots removed).  Each partial SMARTS replaces the
+        # removed [*:n] tokens with nothing, so the H-capped arm tail matches exactly.
+        # min_required for partial patterns = number of remaining [*:n] slots (all must hit).
+        import itertools as _it
+        thia_slots = sorted(s for s, ct in arm_chem_types.items() if ct == 'thia_michael_c')
+        if thia_slots:
+            for _k in range(1, len(thia_slots)):  # remove 1…N-1 slots
+                for _remove in _it.combinations(thia_slots, _k):
+                    _partial_str = smarts_str
+                    for _slot in _remove:
+                        _partial_str = _re2.sub(
+                            r'\[\*:' + str(_slot) + r'\]', '', _partial_str
+                        )
+                    _partial_mol = _C.MolFromSmarts(_partial_str)
+                    if _partial_mol is None:
+                        continue
+                    _partial_r_pos = {
+                        a.GetIdx(): a.GetAtomMapNum()
+                        for a in _partial_mol.GetAtoms()
+                        if a.GetAtomMapNum() >= 4
+                    }
+                    if len(_partial_r_pos) < 1:
+                        continue
+                    # is_partial=True: all remaining arms must hit backbone; no relaxation.
+                    patterns.append((abbr, _partial_mol, _partial_r_pos, global_min_slot,
+                                     arm_chem_types, len(_partial_r_pos), True))
 
     with _s2c_lib_lock:
         _s2c_scaffold_cache = patterns
         _s2c_scaffold_mtime = mtime
+    return patterns
+
+
+def _s2c_extract_triazole_derx_ops(prod_mol, idx_a, idx_b):
+    """Extract bond-surgery ops to de-react a 1,2,3-triazole back to alkyne + azide.
+
+    Used as a pre-processing step before backbone detection so the coverage library
+    can recognise alkyne residues (e.g. Pra) and azide residues (e.g. AzK) whose
+    reactive groups have been consumed into the triazole ring.
+
+    prod_mol : RDKit Mol built from the product SMARTS (MolFromSmarts).
+    idx_a    : atom index in prod_mol of the alkyne-side attachment (e.g. Pra Cβ, map 1).
+    idx_b    : atom index in prod_mol of the azide-side attachment (e.g. AzK Cε, map 5).
+
+    Returns a dict with keys:
+      'new_bond_pairs'  – list of (prod_idx_a, prod_idx_b) ring closure bonds to REMOVE
+      'bond_restores'   – list of (prod_idx_a, prod_idx_b, BondType) pre-reaction bonds
+      'atom_restores'   – dict prod_idx → {formal_charge, explicit_H, is_aromatic}
+    or None if prod_mol does not contain a 1,2,3-triazole ring.
+    """
+    from rdkit import Chem as _C
+    BT = _C.BondType
+
+    _C.FastFindRings(prod_mol)
+    ring_info = prod_mol.GetRingInfo()
+
+    # Locate the unique 1,2,3-triazole ring: 5-membered, 3 N + 2 C
+    triazole_ring = None
+    for ring in ring_info.AtomRings():
+        if len(ring) != 5:
+            continue
+        atoms = [prod_mol.GetAtomWithIdx(i) for i in ring]
+        if (sum(1 for a in atoms if a.GetAtomicNum() == 7) == 3 and
+                sum(1 for a in atoms if a.GetAtomicNum() == 6) == 2):
+            triazole_ring = set(ring)
+            break
+    if triazole_ring is None:
+        return None
+
+    # C4: the ring carbon bonded to the exocyclic alkyne attachment (idx_a, e.g. Pra Cβ)
+    # C5: the other ring carbon (bonded to N1)
+    c4_idx = c5_idx = None
+    for ai in triazole_ring:
+        atom = prod_mol.GetAtomWithIdx(ai)
+        if atom.GetAtomicNum() != 6:
+            continue
+        nb_idxs = {nb.GetIdx() for nb in atom.GetNeighbors()}
+        if idx_a in nb_idxs:
+            c4_idx = ai
+        else:
+            c5_idx = ai
+    if c4_idx is None or c5_idx is None:
+        return None
+
+    # N1: ring nitrogen bonded to the azide attachment (idx_b, e.g. AzK Cε)
+    n1_idx = next(
+        (nb.GetIdx() for nb in prod_mol.GetAtomWithIdx(idx_b).GetNeighbors()
+         if nb.GetIdx() in triazole_ring and nb.GetAtomicNum() == 7),
+        None)
+    # N3: ring nitrogen bonded to C4
+    n3_idx = next(
+        (nb.GetIdx() for nb in prod_mol.GetAtomWithIdx(c4_idx).GetNeighbors()
+         if nb.GetIdx() in triazole_ring and nb.GetAtomicNum() == 7),
+        None)
+    if n1_idx is None or n3_idx is None:
+        return None
+    ring_n_idxs = [ai for ai in triazole_ring
+                   if prod_mol.GetAtomWithIdx(ai).GetAtomicNum() == 7]
+    n2_idx = next((ai for ai in ring_n_idxs if ai != n1_idx and ai != n3_idx), None)
+    if n2_idx is None:
+        return None
+
+    return {
+        # These two bonds are the ring-closure bonds formed in the cycloaddition
+        'new_bond_pairs': [(c5_idx, n1_idx), (c4_idx, n3_idx)],
+        # Restore pre-reaction bond types (were aromatic in triazole, now restored)
+        'bond_restores': [
+            (c4_idx, c5_idx, BT.TRIPLE),   # alkyne triple bond
+            (n1_idx, n2_idx, BT.DOUBLE),   # N1=N2 in azide
+            (n2_idx, n3_idx, BT.DOUBLE),   # N2=N3 in azide
+        ],
+        # Restore formal charges, H counts, and aromaticity for ring atoms
+        'atom_restores': {
+            n1_idx: {'formal_charge': 0,  'explicit_H': 0, 'is_aromatic': False},
+            n2_idx: {'formal_charge': 1,  'explicit_H': 0, 'is_aromatic': False},
+            n3_idx: {'formal_charge': -1, 'explicit_H': 0, 'is_aromatic': False},
+            c4_idx: {'formal_charge': 0,  'explicit_H': 0, 'is_aromatic': False},
+            c5_idx: {'formal_charge': 0,  'explicit_H': 1, 'is_aromatic': False},
+        },
+    }
+
+
+def _s2c_pre_detect_ring_xlinks(mol, patterns):
+    """Pre-detect ring crosslinks and build a de-reacted mol for backbone detection.
+
+    For each ring crosslink pattern with de-reaction ops (e.g. CuAAC triazole),
+    applies bond surgery to restore the pre-reaction functional groups (alkyne,
+    azide) so the coverage library can correctly identify all backbone residues.
+
+    Since only bond types / formal charges are changed (no atoms added or removed),
+    the de-reacted mol has identical atom indices to the original mol.
+
+    Returns (xlink_pairs, derx_mol) where:
+      xlink_pairs : list of (matom_a, matom_b, slot_a, slot_b) with original atom indices
+      derx_mol    : mol with ring bonds de-reacted (same atom count/indices as mol)
+                    Falls back to mol if de-reaction is not possible / fails.
+    """
+    from rdkit import Chem as _C
+    BT = _C.BondType
+
+    xlink_pairs = []
+    rw = None  # lazy-init RWMol
+
+    for pat in patterns:
+        rxn_id, prod_mol, idx_a, idx_b, slot_a, slot_b = pat[:6]
+        derx_ops = pat[6] if len(pat) > 6 else None
+        if derx_ops is None:
+            continue
+
+        for rmatch in mol.GetSubstructMatches(prod_mol, useChirality=False):
+            matom_a = rmatch[idx_a]
+            matom_b = rmatch[idx_b]
+            xlink_pairs.append((matom_a, matom_b, slot_a, slot_b))
+
+            if rw is None:
+                rw = _C.RWMol(mol)
+
+            # 1. Remove new ring-closure bonds (cross-reactant bonds formed in reaction)
+            for pa, pb in derx_ops.get('new_bond_pairs', []):
+                oa, ob = rmatch[pa], rmatch[pb]
+                if rw.GetBondBetweenAtoms(oa, ob) is not None:
+                    rw.RemoveBond(oa, ob)
+
+            # 2. Restore pre-reaction bond types (e.g. aromatic → triple/double)
+            for pa, pb, bt in derx_ops.get('bond_restores', []):
+                oa, ob = rmatch[pa], rmatch[pb]
+                bd = rw.GetBondBetweenAtoms(oa, ob)
+                if bd is not None:
+                    bd.SetBondType(bt)
+                    bd.SetIsAromatic(False)
+
+            # 3. Restore atom formal charges, H counts, and aromaticity
+            for pa, props in derx_ops.get('atom_restores', {}).items():
+                oa = rmatch[pa]
+                atom = rw.GetAtomWithIdx(oa)
+                atom.SetIsAromatic(props.get('is_aromatic', False))
+                atom.SetFormalCharge(props.get('formal_charge', 0))
+                atom.SetNumExplicitHs(props.get('explicit_H', 0))
+                atom.SetNoImplicit(True)
+
+            break  # one match per pattern type
+
+    if rw is None or not xlink_pairs:
+        return xlink_pairs, mol
+
+    # Sanitize the de-reacted mol (no atom addition/removal, just bond/charge changes)
+    try:
+        _C.SanitizeMol(rw)
+        return xlink_pairs, rw.GetMol()
+    except Exception:
+        try:
+            _C.SanitizeMol(rw, _C.SanitizeFlags.SANITIZE_ALL ^
+                           _C.SanitizeFlags.SANITIZE_KEKULIZE)
+            return xlink_pairs, rw.GetMol()
+        except Exception:
+            return xlink_pairs, mol  # fallback: original mol
+
+
+def _s2c_get_ring_crosslink_patterns():
+    """Return patterns for ring-forming crosslinks derived from reactions.yaml.
+
+    For each reaction whose product places >1 atom between the two sidechain
+    attachment points (e.g. CuAAC 1,2,3-triazole, SPAAC, IEDDA), extract a
+    product SMARTS mol suitable for substructure matching, plus the atom indices
+    of the two attachment points within that mol and the R-group slot numbers.
+
+    Returns list of (rxn_id, prod_mol, attach_idx_a, attach_idx_b, slot_a, slot_b, derx_ops)
+    where derx_ops is a dict of bond-surgery instructions (or None if not de-reactable).
+    Cached for the process lifetime (derived from the static reactions.yaml).
+    """
+    global _s2c_ring_xlink_cache
+    with _s2c_lib_lock:
+        if _s2c_ring_xlink_cache is not None:
+            return _s2c_ring_xlink_cache
+
+    from rdkit import Chem as _C
+    from rdkit.Chem import AllChem as _AC, rdmolops as _rmo
+    try:
+        from pyPept.interfaces.reaction_library import REACTIONS as _RXNS
+    except Exception:
+        with _s2c_lib_lock:
+            _s2c_ring_xlink_cache = []
+        return []
+
+    patterns = []
+    for rxn_id, entry in _RXNS.items():
+        steps = entry.get('steps', [])
+        if not steps:
+            continue
+        slot_a = entry.get('slot_a', 4)
+        slot_b = entry.get('slot_b', 4)
+
+        smirks = steps[-1]
+        if ' >> ' not in smirks:
+            continue
+        try:
+            rxn = _AC.ReactionFromSmarts(smirks)
+        except Exception:
+            continue
+        if rxn is None or rxn.GetNumProductTemplates() == 0:
+            continue
+
+        # Find which mapped atoms are directly bonded to dummy [n*] in reactants.
+        # Those are the sidechain attachment points that trace back to backbone residues.
+        attach_mapnums = []
+        for ri in range(rxn.GetNumReactantTemplates()):
+            tmpl = rxn.GetReactantTemplate(ri)
+            for atom in tmpl.GetAtoms():
+                if atom.GetAtomicNum() == 0 and atom.GetIsotope() > 0:
+                    for nb in atom.GetNeighbors():
+                        mn = nb.GetAtomMapNum()
+                        if mn > 0:
+                            attach_mapnums.append(mn)
+                            break
+        if len(attach_mapnums) != 2:
+            continue
+
+        mapnum_a, mapnum_b = attach_mapnums
+
+        # Convert product template to a SMARTS query mol.
+        prod_tmpl = rxn.GetProductTemplate(0)
+        try:
+            prod_smarts = _C.MolToSmarts(prod_tmpl)
+            prod_mol = _C.MolFromSmarts(prod_smarts)
+        except Exception:
+            continue
+        if prod_mol is None:
+            continue
+
+        # Locate attachment point atom indices in the product mol.
+        idx_a = next((a.GetIdx() for a in prod_mol.GetAtoms()
+                      if a.GetAtomMapNum() == mapnum_a), None)
+        idx_b = next((a.GetIdx() for a in prod_mol.GetAtoms()
+                      if a.GetAtomMapNum() == mapnum_b), None)
+        if idx_a is None or idx_b is None:
+            continue
+
+        # Only keep ring-forming crosslinks: attachment points separated by ≥3 bonds
+        # (shortest path through the product ≥ 4 atoms).
+        # - Single-bond crosslinks (S-S, S-C): path length 2 → excluded
+        # - 2-bond links (NHS amide N-CO-C, oxime, hydrazone): path length 3 → excluded
+        # - Triazole (CuAAC/SPAAC): path goes through 3 ring atoms → length ≥ 4 → kept
+        try:
+            path = _rmo.GetShortestPath(prod_mol, idx_a, idx_b)
+        except Exception:
+            continue
+        if len(path) < 4:
+            continue
+
+        derx_ops = _s2c_extract_triazole_derx_ops(prod_mol, idx_a, idx_b)
+        patterns.append((rxn_id, prod_mol, idx_a, idx_b, slot_a, slot_b, derx_ops))
+
+    with _s2c_lib_lock:
+        _s2c_ring_xlink_cache = patterns
     return patterns
 
 
@@ -4954,11 +5264,232 @@ def _s2c_identify_c_cap_from_atom(mol, co_idx, cap_start_atom, excluded_atoms):
         except Exception:
             continue
         candidates.append((cap_mol.GetNumAtoms(), abbr, rw2.GetMol()))
-    candidates.sort(key=lambda x: -x[0])
+    candidates.sort(key=lambda x: (-x[0], x[1].lstrip('_')))
     for _, abbr, qmol in candidates:
         if cap_frag.HasSubstructMatch(qmol, useChirality=False):
             return abbr
     return None
+
+
+def _s2c_cap_standalone(smi, rgroups_str):
+    """Replace [n*] dummies with their leaving-group atom for standalone matching.
+
+    Extends _s2c_cap_smiles: [OH]→O, [H]→[H], [Br]→Br, [Cl]→Cl, [I]→I, None→[H].
+    This reconstructs the actual assembled mol when a monomer stands alone (e.g.
+    TBMB with no Cys reacted → BrCc1cc(CBr)cc(CBr)c1, not mesitylene).
+    """
+    rgroups = [r.strip() for r in rgroups_str.split(',')]
+    def _rep(m):
+        n = int(m.group(1))
+        rg = rgroups[n - 1] if n - 1 < len(rgroups) else 'None'
+        if rg == '[OH]':  return 'O'
+        if rg == '[Br]':  return 'Br'
+        if rg == '[Cl]':  return 'Cl'
+        if rg == '[I]':   return 'I'
+        return '[H]'
+    return _re.sub(r'\[(\d+)\*\]', _rep, smi)
+
+
+def _s2c_find_amide_bonds(mol):
+    """Return list of (n_idx, co_idx) for every N-C(=O) amide bond in mol."""
+    amide_bonds = []
+    for bond in mol.GetBonds():
+        bi, ei = bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()
+        for n_idx, c_idx in ((bi, ei), (ei, bi)):
+            a_n = mol.GetAtomWithIdx(n_idx)
+            a_c = mol.GetAtomWithIdx(c_idx)
+            if a_n.GetAtomicNum() != 7 or a_c.GetAtomicNum() != 6:
+                continue
+            if any(
+                mol.GetAtomWithIdx(nb.GetIdx()).GetAtomicNum() == 8 and
+                mol.GetBondBetweenAtoms(c_idx, nb.GetIdx()).GetBondTypeAsDouble() == 2.0
+                for nb in mol.GetAtomWithIdx(c_idx).GetNeighbors()
+            ):
+                amide_bonds.append((n_idx, c_idx))
+                break
+    return amide_bonds
+
+
+def _s2c_multi_amide_chain(mol, amide_pairs):
+    """Walk a chain of ≥2 amide bonds when normal backbone detection failed.
+
+    Finds the start amide (CO-side not reachable from any other amide N), then
+    walks segment by segment toward the C-terminus.  Each middle segment's atoms
+    — from the amide N (inclusive) to the next amide CO (inclusive, but excluding
+    the next amide's N) — are isolated and matched against the backbone library.
+    The N-cap and C-cap are identified using the existing cap-helper functions.
+
+    Robustness: when multiple amide COs are reachable from the current N (e.g.
+    sidechain amides in Asn/Gln), the one found first by BFS (shortest bond path)
+    is chosen as the backbone CO.  This works for most standard residues; unusual
+    branching may produce incorrect results, so the function returns None on any
+    matching failure rather than raising.
+
+    Returns (cabiln_str, details) or None.
+    """
+    from rdkit import Chem as _C
+    from collections import deque as _dq2
+
+    all_amide_ns = {n for n, _ in amide_pairs}
+    all_amide_cos = {co for _, co in amide_pairs}
+    by_co = {co: (n, co) for n, co in amide_pairs}
+
+    # Find the start amide: its CO-side is NOT reachable from any other amide N.
+    def _co_reached_from_other_n(n_idx, co_idx):
+        for other_n, other_co in amide_pairs:
+            if other_n == n_idx:
+                continue
+            visited = {other_co}
+            q = _dq2([other_n])
+            while q:
+                ai = q.popleft()
+                if ai in visited:
+                    continue
+                visited.add(ai)
+                if ai == co_idx:
+                    return True
+                for nb in mol.GetAtomWithIdx(ai).GetNeighbors():
+                    if nb.GetIdx() not in visited:
+                        q.append(nb.GetIdx())
+        return False
+
+    start = next(
+        ((n, co) for n, co in amide_pairs if not _co_reached_from_other_n(n, co)),
+        None,
+    )
+    if start is None:
+        return None  # cyclic or complex topology
+
+    start_n, start_co = start
+    n_cap = _s2c_identify_n_cap_from_atom(mol, start_n, start_co, set())
+    if n_cap is None:
+        return None
+
+    lib = _s2c_get_lib()
+    middle_abbrs = []
+    current_n = start_n
+    prev_co = start_co
+
+    while True:
+        # BFS from current_n (excluding prev_co) to find the nearest amide CO.
+        visited = {prev_co}
+        q = _dq2([current_n])
+        next_co = None
+        while q:
+            ai = q.popleft()
+            if ai in visited:
+                continue
+            visited.add(ai)
+            if ai != current_n and ai in all_amide_cos:
+                next_co = ai
+                break
+            for nb in mol.GetAtomWithIdx(ai).GetNeighbors():
+                if nb.GetIdx() not in visited:
+                    q.append(nb.GetIdx())
+
+        if next_co is None:
+            # No more amide COs reachable → current_n starts the C-cap.
+            c_cap = _s2c_identify_c_cap_from_atom(mol, prev_co, current_n, set())
+            break
+
+        next_amide = by_co.get(next_co)
+        if next_amide is None:
+            return None
+        next_n = next_amide[0]
+
+        # Collect middle-segment atoms: BFS from current_n, excluding prev_co
+        # and next_n.  This includes next_co and its =O so isolation can cap it
+        # with -OH (giving the correct free amino acid form for _s2c_match).
+        seg_atoms: set = set()
+        vis2 = {prev_co, next_n}
+        sq = _dq2([current_n])
+        while sq:
+            ai = sq.popleft()
+            if ai in vis2:
+                continue
+            vis2.add(ai)
+            seg_atoms.add(ai)
+            for nb in mol.GetAtomWithIdx(ai).GetNeighbors():
+                if nb.GetIdx() not in vis2:
+                    sq.append(nb.GetIdx())
+
+        if not seg_atoms:
+            return None
+
+        aas, _ = _s2c_isolate_residues(mol, [list(seg_atoms)])
+        aa_mol = aas[0] if aas else None
+        if aa_mol is None:
+            return None
+
+        abbr, _ = _s2c_match(aa_mol, lib)
+        if abbr is None:
+            return None
+        middle_abbrs.append(abbr)
+
+        current_n = next_n
+        prev_co = next_co
+
+    if c_cap is None:
+        return None
+
+    all_abbrs = [n_cap] + middle_abbrs + [c_cap]
+    return '-'.join(all_abbrs), [(a, 1.0, 0) for a in all_abbrs]
+
+
+def _s2c_backbone_less_fallback(mol):
+    """Identify backbone-less molecules: single entities, two-cap, or multi-amide chains.
+
+    Called when smiles_to_cabiln_core finds no backbone monomers (no residue
+    with both R1 and R2).  Handles in order:
+
+    1. Whole-molecule single entity — SMILES matches one library monomer exactly
+       after capping dummies with the actual leaving-group atom.  Catches
+       standalone scaffolds (TBMB, TATA, …) and single cap molecules.
+
+    2. Single-amide two-cap chain — one N-C(=O) joins an N-cap to a C-cap
+       (e.g. ac-am, fmoc-am, boc-am).
+
+    3. Multi-amide chain (≥2 amide bonds) — N-cap + zero or more middle residues
+       + C-cap, identified by walking the amide-bond graph.  Middle segments are
+       isolated and matched against the backbone library.  Handles molecules whose
+       coverage-library SMARTS failed to match despite the residues being known.
+
+    Returns (cabiln_str, match_details) or (None, None).
+    """
+    from rdkit import Chem as _C
+
+    input_can = _C.MolToSmiles(mol)
+
+    # ── 1. Whole-molecule match ───────────────────────────────────────────────
+    rlib = _s2c_get_raw_lib()
+    for abbr, raw_mol in rlib.items():
+        p = raw_mol.GetPropsAsDict()
+        rg_str = p.get('m_Rgroups', '')
+        raw_smi = _C.MolToSmiles(raw_mol)
+        try:
+            standalone_smi = _s2c_cap_standalone(raw_smi, rg_str)
+            sm = _C.MolFromSmiles(standalone_smi)
+            if sm is not None and _C.MolToSmiles(sm) == input_can:
+                return abbr, [(abbr, 1.0, mol.GetNumAtoms())]
+        except Exception:
+            pass
+
+    # ── 2 & 3. Amide-bond chain walk ─────────────────────────────────────────
+    amide_bonds = _s2c_find_amide_bonds(mol)
+
+    if len(amide_bonds) == 1:
+        n_idx, co_idx = amide_bonds[0]
+        n_cap = _s2c_identify_n_cap_from_atom(mol, n_idx, co_idx, set())
+        c_cap = _s2c_identify_c_cap_from_atom(mol, co_idx, n_idx, set())
+        if n_cap and c_cap:
+            return f'{n_cap}-{c_cap}', [(n_cap, 1.0, 0), (c_cap, 1.0, 0)]
+
+    if len(amide_bonds) >= 2:
+        result = _s2c_multi_amide_chain(mol, amide_bonds)
+        if result is not None:
+            return result
+
+    return None, None
 
 
 def smiles_to_cabiln_core(smiles: str):
@@ -4978,9 +5509,20 @@ def smiles_to_cabiln_core(smiles: str):
     if mol is None:
         raise ValueError(f'Invalid SMILES: {smiles[:80]}')
 
+    # ── 0. Pre-detect ring crosslinks; build de-reacted mol for backbone detection
+    # Ring-forming reactions (e.g. CuAAC triazole) consume reactive sidechains
+    # (alkyne, azide) into the ring, making coverage-library detection fail.
+    # Bond surgery restores the pre-reaction groups without changing atom indices,
+    # so the de-reacted mol's backbone atom indices are valid for the original mol.
+    _raw_xlinks: list = []   # (matom_a, matom_b, slot_a, slot_b) – original indices
+    _rxlink_pats = _s2c_get_ring_crosslink_patterns()
+    _derx_mol = mol
+    if _rxlink_pats:
+        _raw_xlinks, _derx_mol = _s2c_pre_detect_ring_xlinks(mol, _rxlink_pats)
+
     # ── 1. Library-first backbone detection ──────────────────────────────────
     cov_lib = _s2c_get_coverage_lib()
-    placements = _s2c_place_monomers(mol, cov_lib)
+    placements = _s2c_place_monomers(_derx_mol, cov_lib)
     # iso_placements: like placements but uses the iso SMARTS (carboxyl cap
     # removed) for monomers that have one.  Used only for branch detection so
     # that isopeptide-bonded monomers (E_g→K) are found without pulling the
@@ -4995,7 +5537,7 @@ def smiles_to_cabiln_core(smiles: str):
             _ism, _ini, _ioi = (_ie.smarts_mol,
                                 _ie.smarts_in_n_idx,
                                 _ie.smarts_out_co_idx)
-        for _imatch in mol.GetSubstructMatches(_ism, useChirality=False):
+        for _imatch in _derx_mol.GetSubstructMatches(_ism, useChirality=False):
             iso_placements.append(_PlacedNode(
                 abbr=_ie.abbr, m_type=_ie.m_type,
                 mol_atoms=frozenset(_imatch),
@@ -5003,8 +5545,11 @@ def smiles_to_cabiln_core(smiles: str):
                 out_co=_imatch[_ioi],
                 entry=_ie, match_tuple=_imatch,
             ))
-    backbone = _s2c_build_backbone(mol, placements)
+    backbone = _s2c_build_backbone(_derx_mol, placements)
     if not backbone:
+        _fb_cabiln, _fb_details = _s2c_backbone_less_fallback(mol)
+        if _fb_cabiln is not None:
+            return _fb_cabiln, _fb_details
         raise ValueError('Cannot detect peptide backbone (no library monomers matched)')
 
     n = len(backbone)
@@ -5070,20 +5615,25 @@ def smiles_to_cabiln_core(smiles: str):
     lib = _s2c_get_lib()
     details = []
     abbrs = []
+    # Use de-reacted mol for residue isolation/matching when ring crosslinks
+    # consumed reactive sidechains into a ring (e.g. CuAAC triazole consumes
+    # Pra's alkyne and AzK's azide). _derx_mol has identical atom indices but
+    # correct pre-reaction bond types so library matching works correctly.
+    _match_mol = _derx_mol
     for pos, node in enumerate(backbone):
         atom_list = list(node.mol_atoms)
         # For free-acid C-terminus (no am cap): include the carboxyl OH in the
         # atom list so isolation gives COOH not CHO (which would match Gly_al).
         if not cyclic and pos == n - 1 and c_cap is None:
-            for _nb in mol.GetAtomWithIdx(node.out_co).GetNeighbors():
-                _bd = mol.GetBondBetweenAtoms(node.out_co, _nb.GetIdx())
+            for _nb in _match_mol.GetAtomWithIdx(node.out_co).GetNeighbors():
+                _bd = _match_mol.GetBondBetweenAtoms(node.out_co, _nb.GetIdx())
                 if (_nb.GetIdx() not in backbone_atoms_all and
                         _nb.GetSymbol() == 'O' and
                         _nb.GetTotalNumHs() > 0 and
                         _bd.GetBondTypeAsDouble() == 1.0):
                     atom_list.append(_nb.GetIdx())
                     break
-        aas, _ = _s2c_isolate_residues(mol, [atom_list])
+        aas, _ = _s2c_isolate_residues(_match_mol, [atom_list])
         aa_mol = aas[0]
         # Terminal residues: strip cap artifact introduced by isolate_residues
         # (the cap atoms are outside node.mol_atoms so the isolated mol already
@@ -5263,7 +5813,15 @@ def smiles_to_cabiln_core(smiles: str):
                         if _bai in _cap_s2n and _eai in _cap_s2n:
                             _rw_cap.AddBond(_cap_s2n[_bai], _cap_s2n[_eai],
                                             _bond.GetBondType())
-                    _cap_frag = _C.RemoveHs(_rw_cap.GetMol())
+                    try:
+                        _cap_frag = _C.RemoveHs(_rw_cap.GetMol())
+                    except Exception:
+                        for _aat in _rw_cap.GetAtoms():
+                            _aat.SetIsAromatic(False)
+                        for _abd in _rw_cap.GetBonds():
+                            if _abd.GetBondTypeAsDouble() == 1.5:
+                                _abd.SetBondType(_C.BondType.SINGLE)
+                        _cap_frag = _C.RemoveHs(_rw_cap.GetMol(), sanitize=False)
                     if _cap_frag is None or _cap_frag.GetNumAtoms() == 0:
                         continue
                     # Match against library
@@ -5300,7 +5858,8 @@ def smiles_to_cabiln_core(smiles: str):
 
     if _scaffold_patterns:
         _rlib = _s2c_get_raw_lib()
-        for _sc_abbr, _sc_smarts, _sc_r_pos, _sc_min_slot in _scaffold_patterns:
+        for _sc_abbr, _sc_smarts, _sc_r_pos, _sc_min_slot, _sc_arm_types, _sc_min_required, *_sc_flags in _scaffold_patterns:
+            _sc_is_partial = bool(_sc_flags[0]) if _sc_flags else False
             _found = False
             for _match in mol.GetSubstructMatches(_sc_smarts, useChirality=False):
                 # Collect R-group positions that map to backbone atoms.
@@ -5317,20 +5876,35 @@ def smiles_to_cabiln_core(smiles: str):
                     if _bp is not None:
                         _attach[_si] = (_bp, _rnum)
 
-                _min_arms = max(2, len(_sc_r_pos) - 1)
-                if len(_attach) < _min_arms:
-                    # Relax the threshold when unreacted arms hit halogen
-                    # leaving-group atoms (Br/Cl/I) still present in the SMILES.
-                    # A scaffold arm that terminated at a halogen is unambiguously
-                    # part of this scaffold — no peptide context produces that.
+                if len(_attach) < _sc_min_required:
+                    # Partial patterns already encode only the reacted arms in their SMARTS;
+                    # every remaining [*:n] slot must hit backbone — no further slack allowed.
+                    if _sc_is_partial:
+                        continue
+                    # Relax when unreacted arms end at an atom consistent with
+                    # that arm's chem_type (scaffold-local, not a generic halogen check).
+                    # alkyl_halide_c → unreacted = Br/Cl/I leaving group still present
+                    # thia_michael_c → unreacted = terminal alkene C (has a C=C double bond)
                     if len(_attach) >= 1:
-                        _halogen_nos = {35, 17, 53}  # Br, Cl, I
-                        _unmatched = [_match[_si] for _si in _sc_r_pos
-                                      if _si not in _attach]
-                        if all(mol.GetAtomWithIdx(_ai).GetAtomicNum() in _halogen_nos
-                               for _ai in _unmatched):
-                            pass  # accept — all unreacted arms are halogens
-                        else:
+                        _unmatched_slots = [_si for _si in _sc_r_pos if _si not in _attach]
+                        _accept = True
+                        for _usi in _unmatched_slots:
+                            _uatom = mol.GetAtomWithIdx(_match[_usi])
+                            _ct = _sc_arm_types.get(_sc_r_pos[_usi], '')
+                            if _ct == 'alkyl_halide_c':
+                                if _uatom.GetAtomicNum() not in {35, 17, 53}:
+                                    _accept = False
+                                    break
+                            elif _ct == 'thia_michael_c':
+                                # Unreacted arm is H-capped by the mol builder (propanoyl
+                                # terminus CH3, not vinyl =CH2), so just check for carbon.
+                                if _uatom.GetAtomicNum() != 6:
+                                    _accept = False
+                                    break
+                            else:
+                                _accept = False
+                                break
+                        if not _accept:
                             continue
 
                 # Sort attachments by backbone chain order.  Renumber R-groups
@@ -5358,6 +5932,45 @@ def smiles_to_cabiln_core(smiles: str):
             if _found:
                 break  # one scaffold per molecule
 
+    # ── 5.7 Ring-forming crosslink detection (YAML-driven) ────────────────────
+    # Reactions that produce a ring between two sidechain attachment points
+    # (e.g. CuAAC 1,4-triazole) cannot be caught by the inter-residue bond
+    # scan below — the ring atoms belong to neither residue's mol_atoms.
+    # When _raw_xlinks were pre-detected (step 0), the attachment atom indices
+    # are already known; we just look them up in the backbone.  Fallback to
+    # substructure matching on the original mol for non-de-reactable patterns.
+    _ring_xlinks: list = []  # (bi, bj, slot_a, slot_b)
+    _ring_xlink_pairs: set = set()  # frozenset({bi, bj}) — to suppress sc_pairs duplication
+    if _raw_xlinks:
+        for _matom_a, _matom_b, _rslot_a, _rslot_b in _raw_xlinks:
+            _rbp_a = next((pos for pos, nd in enumerate(backbone)
+                           if _matom_a in nd.mol_atoms), None)
+            _rbp_b = next((pos for pos, nd in enumerate(backbone)
+                           if _matom_b in nd.mol_atoms), None)
+            if _rbp_a is None or _rbp_b is None or _rbp_a == _rbp_b:
+                continue
+            _pair_key = frozenset((_rbp_a, _rbp_b))
+            if _pair_key in _ring_xlink_pairs:
+                continue  # duplicate: same residue pair from another matching pattern
+            _ring_xlink_pairs.add(_pair_key)
+            _ring_xlinks.append((_rbp_a, _rbp_b, _rslot_a, _rslot_b))
+    elif _rxlink_pats:
+        # Fallback: no de-reacted backbone was built, try direct substructure match
+        if not branch_junctions:
+            _rlib = _s2c_get_raw_lib()
+        for _rxn_id, _prod_mol, _ridx_a, _ridx_b, _rslot_a, _rslot_b, *_ in _rxlink_pats:
+            for _rmatch in mol.GetSubstructMatches(_prod_mol, useChirality=False):
+                _matom_a = _rmatch[_ridx_a]
+                _matom_b = _rmatch[_ridx_b]
+                _rbp_a = next((pos for pos, nd in enumerate(backbone)
+                               if _matom_a in nd.mol_atoms), None)
+                _rbp_b = next((pos for pos, nd in enumerate(backbone)
+                               if _matom_b in nd.mol_atoms), None)
+                if _rbp_a is None or _rbp_b is None or _rbp_a == _rbp_b:
+                    continue
+                _ring_xlinks.append((_rbp_a, _rbp_b, _rslot_a, _rslot_b))
+                break  # one match per reaction type
+
     # ── 6. Crosslink detection ────────────────────────────────────────────────
     # Side-chain bonds between pairs of backbone residues that are not the
     # adjacent backbone amide bonds (out_co[i] → in_n[i+1]).
@@ -5375,6 +5988,9 @@ def smiles_to_cabiln_core(smiles: str):
         backbone_amide_pairs.add(frozenset((backbone[-1].out_co, backbone[0].in_n)))
     for bi in range(n):
         for bj in range(bi + 1, n):
+            if frozenset((bi, bj)) in _ring_xlink_pairs:
+                continue  # already annotated as ring crosslink; ring atoms aren't
+                           # direct mol bonds between backbone nodes anyway
             ni_atoms = backbone[bi].mol_atoms
             nj_atoms = backbone[bj].mol_atoms
             for bond in mol.GetBonds():
@@ -5384,12 +6000,20 @@ def smiles_to_cabiln_core(smiles: str):
                         sc_pairs.append((bi, bj))
                     break
 
-    if sc_pairs:
+    if sc_pairs or _ring_xlinks:
         if not branch_junctions:
             raw_lib = _s2c_get_raw_lib()
         # !1 is reserved for the backbone ring-closure marker when cyclic.
         # Sidechain crosslinks must not reuse it, so start from at least 2.
         xlink_ctr = max(1 if cyclic else 0, _scaffold_xlinks) + 1
+
+        # Ring crosslinks (e.g. CuAAC triazole) — R-group slots from YAML.
+        for bi, bj, slot_i, slot_j in _ring_xlinks:
+            tag = f'!{xlink_ctr}'
+            xlink_ctr += 1
+            abbrs[bi] += f'.{tag}({slot_i},{slot_j})'
+            abbrs[bj] += f'.{tag}({slot_j},{slot_i})'
+
         for bi, bj in sc_pairs:
             base_i = details[bi][0]
             base_j = details[bj][0]
@@ -6324,6 +6948,14 @@ async def smiles_to_cabiln_endpoint(req: _SmilesToCabilnReq):
 
 class _ToCabilnReq(BaseModel):
     input: str
+    notation: str = 'percent'  # 'percent' (%) or 'bracket' ([])
+
+
+def _apply_notation(cabiln: str, notation: str) -> str:
+    if notation == 'bracket':
+        from pyPept.sequence import cabiln_to_bracket
+        return _renumber_xlinks(cabiln_to_bracket(cabiln))
+    return cabiln
 
 
 @app.post("/to_cabiln")
@@ -6337,6 +6969,7 @@ async def to_cabiln_endpoint(req: _ToCabilnReq):
     if mol is not None:
         try:
             cabiln, details = smiles_to_cabiln_core(txt)
+            cabiln = _apply_notation(cabiln, req.notation)
             return {"cabiln": cabiln, "from": "SMILES",
                     "details": [{"abbr": a, "score": s, "total": t} for a, s, t in details]}
         except Exception as exc:
@@ -6355,6 +6988,7 @@ async def to_cabiln_endpoint(req: _ToCabilnReq):
             from pyPept.molecule import Molecule
             from pyPept.sequence import Sequence
             Molecule(Sequence(cabiln)).get_molecule(fmt='ROMol')
+            cabiln = _apply_notation(cabiln, req.notation)
             return {"cabiln": cabiln, "from": "HELM", "details": []}
         except Exception as exc:
             return JSONResponse({"error": f"HELM parse failed: {exc}".split('\n')[0]},
@@ -6366,6 +7000,7 @@ async def to_cabiln_endpoint(req: _ToCabilnReq):
         from pyPept.molecule import Molecule
         cabiln = biln_to_cabiln(txt)
         Molecule(Sequence(cabiln)).get_molecule(fmt='ROMol')
+        cabiln = _apply_notation(cabiln, req.notation)
         return {"cabiln": cabiln, "from": "BILN", "details": []}
     except Exception as exc:
         pass
