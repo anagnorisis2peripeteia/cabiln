@@ -3695,7 +3695,7 @@ def _s2c_get_lib():
                     try: cts[int(k)] = v.strip()
                     except ValueError: pass
             bn_r = next((r for r, t in cts.items() if t in ('backbone_n', 'backbone_o')), None)
-            bc_r = next((r for r, t in cts.items() if t in ('backbone_c', 'backbone_c_red')), None)
+            bc_r = next((r for r, t in cts.items() if t in ('backbone_c', 'backbone_c_red', 'sp3_c_anchor')), None)
             if bn_r is None or bc_r is None: continue
             bn_atom = next((a for a in mol.GetAtoms()
                             if a.GetAtomicNum() == 0 and a.GetIsotope() == bn_r), None)
@@ -4747,7 +4747,7 @@ def _s2c_build_cov_lib():
                 except ValueError:
                     pass
         bn_r = next((r for r, t in cts.items() if t in ('backbone_n', 'backbone_o')), None)
-        bc_r = next((r for r, t in cts.items() if t in ('backbone_c', 'backbone_c_red')), None)
+        bc_r = next((r for r, t in cts.items() if t in ('backbone_c', 'backbone_c_red', 'sp3_c_anchor')), None)
         if bn_r is None or bc_r is None:
             continue
         bn_dummy = next((a.GetIdx() for a in raw_mol.GetAtoms()
@@ -4913,12 +4913,15 @@ def _s2c_build_cov_lib():
                 else:
                     _repl = f'[#{_sa.GetAtomicNum()}:{_MAP_IN}]'  # permissive
             elif _si == out_co_idx:
-                # Reduced-amide C-side (backbone_c_red): the free form's terminal
-                # CH3 (H=3) becomes CH2 (H=2) once bonded, so allow either H2 or H3
-                # but not any C — avoids matching unrelated peptide CH or quaternary
-                # carbons (regression risk on Cys, Pro, etc.).
+                # Reduced-amide C-side (backbone_c_red): free terminal CH3 (H=3)
+                # becomes CH2 (H=2) once bonded — allow H2 or H3.
+                # sp3_c_anchor (e.g. ValAryl alpha-C bonded directly to aryl):
+                # free CH (H=2 because R2 capped with H) becomes H=1 once bonded
+                # to aryl — allow H1 or H2.
                 if cts.get(bc_r) == 'backbone_c_red':
                     _repl = f'[#{_sa.GetAtomicNum()};H2,H3{_cs}:{_MAP_OUT}]'
+                elif cts.get(bc_r) == 'sp3_c_anchor':
+                    _repl = f'[#{_sa.GetAtomicNum()};H1,H2{_cs}:{_MAP_OUT}]'
                 else:
                     _repl = f'[#{_sa.GetAtomicNum()}H{_nh}{_cs}:{_MAP_OUT}]'  # exact H count
             elif _si == bc_r_cap_idx:

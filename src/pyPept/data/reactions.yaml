@@ -348,6 +348,18 @@
   steps:
     - "[4*][N:1].[4*][N:2] >> [N:1][N:2]"
 
+- id: aryl_c_c_bond
+  description: >
+    Direct sp3-C to aryl-C bond. Used by CP01557-style residues whose
+    alpha-C is bonded directly to an aromatic carbon (e.g. ValAryl's
+    alpha-C to imidazole-C2), forming a non-amide chain extension.
+  reactant_pairs:
+    - [sp3_c_anchor, aryl_c_anchor]
+  slot_a: 2
+  slot_b: 4
+  steps:
+    - "[2*][C:1].[4*][c:2] >> [C:1][c:2]"
+
 - id: aryl_amide_to_backbone_n
   description: >
     Amide bond between an aryl-attached carbonyl C (R4 of a phosphine-oxide

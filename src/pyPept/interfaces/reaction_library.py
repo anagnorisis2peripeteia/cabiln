@@ -105,6 +105,11 @@ _CHEM_TYPE_REGISTRY = [
     # extension. Specific enough not to over-match (requires H=0, i.e. fully
     # substituted aryl C).
     ('aryl_c_anchor',     '[cX3;H0:1]([c])[c]',                    '[H]',  '[cX3;H0:1]',                             False),
+    # sp3_c_anchor: sp3 carbon that forms a direct C-C bond to an aryl anchor.
+    # Used by ValAryl-style residues whose alpha-C bonds directly to an
+    # imidazole-C2 (CP01557) or similar aryl junction. The chain exit at R2
+    # is this sp3 alpha-C — paired with aryl_c_anchor via aryl_c_c_bond.
+    ('sp3_c_anchor',      '[CX4;H1:1]([NX3])[c]',                  '[H]',  '[CX4;H0,H1:1]([NX3])[c]',                False),
     # backbone_c_red: sp3 C without C=O, at slot 2 of a reduced-amide residue
     # (CH2-NH style backbone, no carbonyl). Detected by element + slot in
     # infer_chem_type heuristic (SMARTS can't disambiguate from generic methyls).
