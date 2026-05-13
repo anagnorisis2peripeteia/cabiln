@@ -1430,7 +1430,11 @@ function highlightGroup(idxList) {
   });
   resChips.querySelectorAll('.branch-chip').forEach(c => {
     const cm = JSON.parse(c.dataset.members || '[]');
-    c.classList.toggle('hover', cm.some(m => idxList.includes(m)));
+    // Highlight a branch chip only when ALL its members are in the hover set,
+    // not merely "any overlap". Otherwise hovering on one !2 lights up the
+    // sibling [!1] and [!3] brackets too because they share the scaffold
+    // monomer (e.g. TBMB) — overzealous and confusing for tri-arm scaffolds.
+    c.classList.toggle('hover', cm.length > 0 && cm.every(m => idxList.includes(m)));
   });
 }
 
