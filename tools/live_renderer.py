@@ -1607,8 +1607,17 @@ function buildResidueUI(resMap, residues, chains, cabiln, bracketGroups, crossli
   }
 
   if (hasBranch) {
+    // Count how many chains will actually render a residue (not pure-branch).
+    // Pure-branch chains hold residues that already appear inside a bracket
+    // group ({}) on a host elsewhere — the chip bar would otherwise emit a
+    // trailing % separator with no residues after it.
+    const visibleChains = chainData.filter(c =>
+      c.residues.some(r => !branchSet.has(r))
+    );
     chainData.forEach((chain, ci) => {
-      if (chainData.length > 1) {
+      const chainHasVisible = chain.residues.some(r => !branchSet.has(r));
+      if (!chainHasVisible) return;
+      if (visibleChains.length > 1) {
         // % chip highlights all chain residues + their crosslink partners
         const expanded = [...chain.residues];
         chain.residues.forEach(rIdx => {
