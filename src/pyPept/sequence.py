@@ -1428,7 +1428,8 @@ class Sequence:
 
         # Fields required for the addition of the monomer
         keys_needed = ['m_name', 'm_abbr', 'm_name_in_biln', 'm_type',
-                       'm_subtype', 'm_chainID', 'm_Rgroups', 'm_romol']
+                       'm_subtype', 'm_chainID', 'm_Rgroups', 'm_romol',
+                       'm_chem_types']
 
         # check if all necessary keys are available in the monomer definition
         for key in keys_needed:
@@ -1765,6 +1766,17 @@ def get_monomer_info(path):
 
     df_group = df_group.set_index('symbol')
     df_group = df_group.rename(columns={"ROMol": "m_romol"})
+
+    # Propagate m_chem_types from SDF into each m_romol as an rdkit property
+    # so downstream infer_chem_type can opt-in to SDF-declared chem types
+    # (e.g. backbone_c_red for reduced-amide peptidomimetics) instead of
+    # relying solely on structural heuristics.
+    if 'm_chem_types' in df_group.columns:
+        for sym in df_group.index:
+            mol = df_group.at[sym, 'm_romol']
+            ct = df_group.at[sym, 'm_chem_types']
+            if mol is not None and isinstance(ct, str) and ct:
+                mol.SetProp('m_chem_types', ct)
 
     # --- Structural degeneracy detection for paired caps ---
     # Group cap monomers by their core structure (dummy atoms stripped).

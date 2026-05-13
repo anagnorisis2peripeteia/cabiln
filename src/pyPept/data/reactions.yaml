@@ -301,6 +301,94 @@
   steps:
     - "[3*][N:1].[1*][C:3] >> [N:1][C:3]"
 
+# ── ADDITIONAL SIDECHAIN / CROSSLINK BONDS ────────────────────────────────────
+
+- id: macrolactam_amide
+  description: Macrolactam amide from sidechain amine (R4) + backbone carbonyl (R2)
+  reactant_pairs:
+    - [amine_primary, backbone_c]
+  slot_a: 4
+  slot_b: 2
+  steps:
+    - "[4*][N:2].[2*][C:4](=[O:5]) >> [N:2][C:4](=[O:5])"
+
+- id: ester_sidechain_oh
+  description: Ester bond from sidechain hydroxyl (R4) + backbone carbonyl (R2)
+  reactant_pairs:
+    - [hydroxyl, backbone_c]
+  slot_a: 4
+  slot_b: 2
+  steps:
+    - "[4*][O:2].[2*][C:4](=[O:5]) >> [O:2][C:4](=[O:5])"
+
+- id: n_alkylation_halide_backbone
+  description: N-alkylation of backbone N by alkyl halide (SN2; halide departs)
+  reactant_pairs:
+    - [alkyl_halide_c, backbone_n]
+  slot_a: 4
+  slot_b: 1
+  steps:
+    - "[4*][C:1].[1*][N:2] >> [C:1][N:2]"
+
+- id: n_o_bond
+  description: N-O bond from amine + hydroxyl (N-hydroxy linkage; unusual cyclisation)
+  reactant_pairs:
+    - [amine_primary, hydroxyl]
+  slot_a: 4
+  slot_b: 4
+  steps:
+    - "[4*][N:1].[4*][O:2] >> [N:1][O:2]"
+
+- id: n_n_bond
+  description: N-N bond from two primary amines (hydrazide-type crosslink)
+  reactant_pairs:
+    - [amine_primary, amine_primary]
+  slot_a: 4
+  slot_b: 4
+  steps:
+    - "[4*][N:1].[4*][N:2] >> [N:1][N:2]"
+
+- id: aryl_amide_to_backbone_n
+  description: >
+    Amide bond between an aryl-attached carbonyl C (R4 of a phosphine-oxide
+    or other aryl scaffold) and a backbone amine N (R1 of a peptide residue).
+    Used by PhosOxScaffold (3-arm aryl-P(=O)-aryl scaffold of CP01557) where
+    each arm's terminal -C(=O)- forms an amide with the next residue's NH.
+  reactant_pairs:
+    - [aryl_amide_c, backbone_n]
+  slot_a: 4
+  slot_b: 1
+  steps:
+    - "[4*][C:1](=[O:2]).[1*][N:3] >> [C:1](=[O:2])[N:3]"
+
+- id: reduced_amide
+  description: >
+    Reduced-amide (aminomethylene, -CH2-NH-) backbone bond. Replaces the C=O
+    of a normal peptide bond with a CH2 — gives reduced-amide peptidomimetics
+    and polyamine macrocycles like CP02627 (bis-cyclam with p-xylene bridge).
+    The C-side endpoint has no carbonyl, so the parser tags it
+    'backbone_c_red' rather than 'backbone_c'.
+  reactant_pairs:
+    - [backbone_n, backbone_c_red]
+  slot_a: 1
+  slot_b: 2
+  steps:
+    - "[1*][N:1].[2*][C:2] >> [N:1][C:2]"
+
+- id: aryl_ether
+  description: >
+    Aryl-ether crosslink between a phenol oxygen (R3 of N-Me-beta-OH-Tyr type
+    residue) and a quaternary aliphatic carbon (R4 of an alpha-residue carrying
+    a tertiary C side chain). Encountered in chondramide family (CP01144,
+    CP01626, CP02049) where the macrocycle is closed by a beta-OH-Tyr aryl-O
+    bridging to a side-chain quaternary C of another residue.
+  reactant_pairs:
+    - [aryl_phenol_o, quat_c_anchor]
+  slot_a: 3
+  slot_b: 4
+  steps:
+    - "[3*][O:1].[4*][C:2] >> [O:1][C:2]"
+
 # ── UNBOUND SITE RESTORATION ─────────────────────────────────────────────────
 # Applied to terminal dummy atoms that were never consumed by a bond reaction.
 
@@ -339,3 +427,9 @@
   slot_a: 4
   steps:
     - "[4*][C:2](=[O:3]) >> O[C:2](=[O:3])"
+
+- id: restore_r4_hydroxyl
+  description: Cap R4 hydroxyl sidechain with H → free alcohol
+  slot_a: 4
+  steps:
+    - "[4*][O:2][CX4] >> [H][O:2][CX4]"

@@ -51,8 +51,8 @@ def _load_sdf():
             if mol is None:
                 continue
             mols.append(mol)
-            abbr = mol.GetPropsAsDict().get('m_abbr', '')
-            if abbr:
+            abbr = mol.GetPropsAsDict().get('m_abbr', '').strip()
+            if abbr and abbr not in by_abbr:
                 by_abbr[abbr] = mol
         _sdf_cache['mols'] = mols
         _sdf_cache['by_abbr'] = by_abbr
@@ -3122,6 +3122,38 @@ class _RegisterReq(BaseModel):
 
 import re as _re
 
+# Leaving-group SDF label (e.g. '[OH]') → SMILES token for regex substitution.
+# '[H]' is the implicit fallback and is not listed here.
+_LG_LABEL_TO_SMI = {'[OH]': 'O', '[SH]': 'S', '[Cl]': 'Cl', '[Br]': 'Br', '[I]': 'I'}
+
+# Leaving-group SDF label → atomic number for RWMol.ReplaceAtom paths.
+_LG_LABEL_TO_ANUM = {'[OH]': 8, '[SH]': 16, '[Cl]': 17, '[Br]': 35, '[I]': 53}
+
+
+def _resolve_lg_smiles(rg):
+    """Return SMILES token for leaving-group label *rg*, or '[H]' as fallback."""
+    return _LG_LABEL_TO_SMI.get(rg, '[H]')
+
+
+def _resolve_dummy_rgroups(rw2, rg_list, skip_iso):
+    """Replace or remove all dummy atoms in *rw2* except the one with isotope *skip_iso*.
+
+    Iterates highest-index first so atom removal does not invalidate earlier indices.
+    Mutates *rw2* in place.
+    """
+    from rdkit.Chem import Atom as _Atom
+    dummies = [(a.GetIdx(), a.GetIsotope())
+               for a in rw2.GetAtoms()
+               if a.GetAtomicNum() == 0 and a.GetIsotope() != skip_iso]
+    for d_idx, iso in sorted(dummies, key=lambda x: -x[0]):
+        rg = rg_list[iso - 1].strip() if 0 < iso <= len(rg_list) else None
+        anum = _LG_LABEL_TO_ANUM.get(rg)
+        if anum is not None:
+            rw2.ReplaceAtom(d_idx, _Atom(anum))
+        else:
+            rw2.RemoveAtom(d_idx)
+
+
 def _s2c_normalize(mol):
     """Normalize resonance forms (e.g. guanidinium) via InChI round-trip."""
     try:
@@ -3139,12 +3171,12 @@ def _s2c_normalize(mol):
 
 
 def _s2c_cap_smiles(smi, rgroups_str):
-    """Replace [n*] dummy atoms with caps: [OH] slot → O atom; everything else → [H]."""
+    """Replace [n*] dummy atoms with leaving-group atoms; fallback to [H]."""
     rgroups = [r.strip() for r in rgroups_str.split(',')]
     def _rep(m):
         n = int(m.group(1))
         rg = rgroups[n - 1] if n - 1 < len(rgroups) else 'None'
-        return 'O' if rg == '[OH]' else '[H]'
+        return _resolve_lg_smiles(rg)
     return _re.sub(r'\[(\d+)\*\]', _rep, smi)
 
 
@@ -3626,10 +3658,6 @@ _s2c_lib_cache: list = []
 _s2c_lib_mtime: float = 0.0
 _s2c_lib_lock = threading.Lock()
 
-# Raw monomer library (R-atoms preserved, for R-group number detection)
-_s2c_raw_lib_cache: dict = {}
-_s2c_raw_lib_mtime: float = 0.0
-
 # Full capped library (includes non-backbone monomers, for branch segment matching)
 _s2c_full_lib_cache: list = []
 _s2c_full_lib_mtime: float = 0.0
@@ -3650,11 +3678,10 @@ def _s2c_get_lib():
     with _s2c_lib_lock:
         if _s2c_lib_cache and _s2c_lib_mtime == mtime:
             return _s2c_lib_cache
-        suppl = _C.SDMolSupplier(str(_SDF_PATH), removeHs=False)
+        raw_mols, _ = _load_sdf()
         lib = []
         seen = set()
-        for mol in suppl:
-            if mol is None: continue
+        for mol in raw_mols:
             props = mol.GetPropsAsDict()
             abbr = props.get('m_abbr', '').strip()
             if not abbr or abbr in seen: continue
@@ -3668,7 +3695,7 @@ def _s2c_get_lib():
                     try: cts[int(k)] = v.strip()
                     except ValueError: pass
             bn_r = next((r for r, t in cts.items() if t in ('backbone_n', 'backbone_o')), None)
-            bc_r = next((r for r, t in cts.items() if t == 'backbone_c'), None)
+            bc_r = next((r for r, t in cts.items() if t in ('backbone_c', 'backbone_c_red')), None)
             if bn_r is None or bc_r is None: continue
             bn_atom = next((a for a in mol.GetAtoms()
                             if a.GetAtomicNum() == 0 and a.GetIsotope() == bn_r), None)
@@ -3697,7 +3724,12 @@ def _s2c_get_lib():
                 for b in orig_cm.GetBonds()
                 if b.GetBondTypeAsDouble() == 2.0
             )
-            lib.append((abbr, orig_cm, norm_cm, norm_cm.GetNumAtoms(), n_rings, has_ez, bb_dist))
+            # Count R-group slots beyond backbone (R3, R4, ...) — used by
+            # _s2c_match as a tiebreaker so monomers with crosslink slots win
+            # over plain aliases when both match the same atoms (e.g. XlQuat
+            # over Ile for chondramide's quat-C residue).
+            n_rgroups_extra = max(0, len(cts) - 2)
+            lib.append((abbr, orig_cm, norm_cm, norm_cm.GetNumAtoms(), n_rings, has_ez, bb_dist, n_rgroups_extra))
             seen.add(abbr)
         lib.sort(key=lambda x: x[3], reverse=True)
         _s2c_lib_cache = lib
@@ -3707,24 +3739,8 @@ def _s2c_get_lib():
 
 def _s2c_get_raw_lib():
     """Return {abbr: raw_mol} with R-atom dummy atoms (isotope labels) preserved."""
-    from rdkit import Chem as _C
-    global _s2c_raw_lib_cache, _s2c_raw_lib_mtime
-    mtime = _SDF_PATH.stat().st_mtime
-    with _s2c_lib_lock:
-        if _s2c_raw_lib_cache and _s2c_raw_lib_mtime == mtime:
-            return _s2c_raw_lib_cache
-        suppl = _C.SDMolSupplier(str(_SDF_PATH), removeHs=False)
-        raw = {}
-        for mol in suppl:
-            if mol is None:
-                continue
-            props = mol.GetPropsAsDict()
-            abbr = props.get('m_abbr', '').strip()
-            if abbr and abbr not in raw:
-                raw[abbr] = mol
-        _s2c_raw_lib_cache = raw
-        _s2c_raw_lib_mtime = mtime
-        return raw
+    _, by_abbr = _load_sdf()
+    return by_abbr
 
 
 def _s2c_crosslink_r(abbr, raw_lib):
@@ -3759,12 +3775,10 @@ def _s2c_get_full_lib():
     with _s2c_lib_lock:
         if _s2c_full_lib_cache and _s2c_full_lib_mtime == mtime:
             return _s2c_full_lib_cache
-        suppl = _C.SDMolSupplier(str(_SDF_PATH), removeHs=False)
+        raw_mols, _ = _load_sdf()
         lib = []
         seen = set()
-        for mol in suppl:
-            if mol is None:
-                continue
+        for mol in raw_mols:
             props = mol.GetPropsAsDict()
             abbr = props.get('m_abbr', '').strip()
             if not abbr or abbr in seen:
@@ -4468,7 +4482,13 @@ def _s2c_walk_branch(mol, glu_atoms, glu_outgoing_n, orphan_atoms, full_lib, raw
         rw3 = _RW()
         s2n = {}
         for ai in sorted(seg):
-            s2n[ai] = rw3.AddAtom(_C.Atom(mol.GetAtomWithIdx(ai).GetAtomicNum()))
+            _src = mol.GetAtomWithIdx(ai)
+            _dst = _C.Atom(_src.GetAtomicNum())
+            _dst.SetIsAromatic(_src.GetIsAromatic())
+            _dst.SetFormalCharge(_src.GetFormalCharge())
+            _dst.SetNumExplicitHs(_src.GetNumExplicitHs())
+            _dst.SetNoImplicit(_src.GetNoImplicit())
+            s2n[ai] = rw3.AddAtom(_dst)
         for bond in mol.GetBonds():
             bi, ei = bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()
             if bi in s2n and ei in s2n:
@@ -4598,8 +4618,9 @@ def _s2c_match(aa_mol, lib):
     best_ring_match = False
     best_ez = -2
     best_is_d = True   # so the first L-form candidate always beats the initial state
+    best_n_rgroups = -1
 
-    for abbr, ref_orig, ref_norm, n_ref, n_rings_ref, ref_has_ez, *_ in lib:
+    for abbr, ref_orig, ref_norm, n_ref, n_rings_ref, ref_has_ez, _bb_dist, n_rgroups_extra, *_ in lib:
         if n_ref > n_q: continue
         match = aa_mol.GetSubstructMatches(ref_orig, useChirality=False)
         if match:
@@ -4636,18 +4657,30 @@ def _s2c_match(aa_mol, lib):
             ez_sc = 0
 
         is_d = _is_d_form(abbr)
+        # Tiebreaker: when all stereo+ring+L/D criteria are equal, prefer the
+        # monomer with more declared R-group slots (e.g. XlQuat over Ile when
+        # both match the chondramide quat-C residue — XlQuat declares R4 for
+        # the aryl-ether crosslink, Ile doesn't, so XlQuat's CABILN can
+        # actually round-trip).
+        prior_eq = (
+            n_m == best_atom_n and rings_match == best_ring_match and
+            sc == best_stereo and n_rs == best_n_ref_stereo and
+            ez_sc == best_ez and is_d == best_is_d
+        )
         better = (
             n_m > best_atom_n or
             (n_m == best_atom_n and rings_match and not best_ring_match) or
             (n_m == best_atom_n and rings_match == best_ring_match and sc > best_stereo) or
             (n_m == best_atom_n and rings_match == best_ring_match and sc == best_stereo and n_rs > best_n_ref_stereo) or
             (n_m == best_atom_n and rings_match == best_ring_match and sc == best_stereo and n_rs == best_n_ref_stereo and ez_sc > best_ez) or
-            (n_m == best_atom_n and rings_match == best_ring_match and sc == best_stereo and n_rs == best_n_ref_stereo and ez_sc == best_ez and not is_d and best_is_d)
+            (n_m == best_atom_n and rings_match == best_ring_match and sc == best_stereo and n_rs == best_n_ref_stereo and ez_sc == best_ez and not is_d and best_is_d) or
+            (prior_eq and n_rgroups_extra > best_n_rgroups)
         )
         if better:
             best_atom_n = n_m; best_abbr = abbr; best_stereo = sc
             best_n_ref_stereo = n_rs
             best_ring_match = rings_match; best_ez = ez_sc; best_is_d = is_d
+            best_n_rgroups = n_rgroups_extra
             if n_m == n_q and rings_match:
                 if sc == n_rs and (not query_has_ez or ez_sc > 0):
                     break
@@ -4693,12 +4726,10 @@ def _s2c_build_cov_lib():
     from rdkit import Chem as _C
     from rdkit.Chem import RWMol as _RW, rdMolDescriptors as _RDM, rdchem as _RC
     _MAP_IN, _MAP_OUT = 9901, 9902
-    suppl = _C.SDMolSupplier(str(_SDF_PATH), removeHs=False)
+    raw_mols, _ = _load_sdf()
     lib = []
     seen: set = set()
-    for raw_mol in suppl:
-        if raw_mol is None:
-            continue
+    for raw_mol in raw_mols:
         props = raw_mol.GetPropsAsDict()
         abbr = props.get('m_abbr', '').strip()
         if not abbr or abbr in seen:
@@ -4716,7 +4747,7 @@ def _s2c_build_cov_lib():
                 except ValueError:
                     pass
         bn_r = next((r for r, t in cts.items() if t in ('backbone_n', 'backbone_o')), None)
-        bc_r = next((r for r, t in cts.items() if t == 'backbone_c'), None)
+        bc_r = next((r for r, t in cts.items() if t in ('backbone_c', 'backbone_c_red')), None)
         if bn_r is None or bc_r is None:
             continue
         bn_dummy = next((a.GetIdx() for a in raw_mol.GetAtoms()
@@ -4737,7 +4768,17 @@ def _s2c_build_cov_lib():
         # like formamide_c/amide_nh must keep their exact H count or they absorb
         # neighbouring residue fragments (e.g. Lys_For absorbing E_g gamma-CO).
         _MAP_XL = 9904
-        _XL_ACTIVE_TYPES = frozenset({'terminal_alkene', 'crosslink_alkene'})
+        # Chem-types whose adjacent host carbon undergoes H-count change on
+        # crosslink formation. Listed atoms get [#6] (no H pin) in SMARTS so
+        # the unbonded monomer and the bonded peptide both match.
+        #   terminal_alkene / crosslink_alkene: =CH2 → =CH-
+        #   quat_c_anchor:   sp3 CHn → sp3 C-X  (chondramide aryl-ether bridge)
+        _XL_ACTIVE_TYPES = frozenset({
+            'terminal_alkene', 'crosslink_alkene', 'quat_c_anchor',
+            # Reduced-amide C-side: cap H becomes the next residue's N-bond,
+            # so the host CH3-cap → CH2-bonded transition needs no H pin.
+            'backbone_c_red',
+        })
         xl_raw_attach: set = set()
         for _rl_r, _rl_t in cts.items():
             if _rl_t not in _XL_ACTIVE_TYPES:
@@ -4863,9 +4904,23 @@ def _s2c_build_cov_lib():
             _ch = _sa.GetFormalCharge()
             _cs = (f'+{_ch}' if _ch > 0 else (str(_ch) if _ch < 0 else ''))
             if _si == in_n_idx:
-                _repl = f'[#{_sa.GetAtomicNum()}:{_MAP_IN}]'  # permissive; #7 for amide N, #8 for ester O
+                # Reduced-amide N-side: the N must be a sp3 secondary amine
+                # (NX3 with at least 1 H in the free monomer, or 0 H when bonded
+                # to next residue). Exclude amide N (NX3 bonded to C=O), aromatic
+                # n, and iminol/sp2 =N — those belong to other residue types.
+                if cts.get(bc_r) == 'backbone_c_red':
+                    _repl = f'[NX3;!$(N-C=O);!$(N=*):{_MAP_IN}]'
+                else:
+                    _repl = f'[#{_sa.GetAtomicNum()}:{_MAP_IN}]'  # permissive
             elif _si == out_co_idx:
-                _repl = f'[#{_sa.GetAtomicNum()}H{_nh}{_cs}:{_MAP_OUT}]'  # exact H count
+                # Reduced-amide C-side (backbone_c_red): the free form's terminal
+                # CH3 (H=3) becomes CH2 (H=2) once bonded, so allow either H2 or H3
+                # but not any C — avoids matching unrelated peptide CH or quaternary
+                # carbons (regression risk on Cys, Pro, etc.).
+                if cts.get(bc_r) == 'backbone_c_red':
+                    _repl = f'[#{_sa.GetAtomicNum()};H2,H3{_cs}:{_MAP_OUT}]'
+                else:
+                    _repl = f'[#{_sa.GetAtomicNum()}H{_nh}{_cs}:{_MAP_OUT}]'  # exact H count
             elif _si == bc_r_cap_idx:
                 _repl = f'[*:{_MAP_CAP}]'  # temporary; will be removed below
             elif _si in cap_remove_cap_set:
@@ -5012,7 +5067,41 @@ def _s2c_build_backbone(mol, placements):
     # survive deduplication so the chain DAG can select whichever one's R2 is the
     # actual amide-bond exit — that is the (1,2) backbone connection.
     # Dedup key: (mol_atoms, out_co) keeps one entry per distinct backbone exit.
-    placements.sort(key=lambda p: (p.m_type != 'aa', -p.entry.n_atoms, p.abbr))
+    # Sort priority: aa type, carbonyl-backbone (prefer standard amide over reduced-
+    # amide/no-carbonyl monomers), larger residue, more R-group slots, abbr.
+    def _extra_rgroups(entry):
+        # Count dummies with isotope >= 3 (R3, R4, ...) — proxies for "this monomer
+        # supports crosslink/side-chain bonds beyond plain backbone amide".
+        return sum(
+            1 for a in entry.orig_mol.GetAtoms()
+            if a.GetAtomicNum() == 0 and a.GetIsotope() >= 3
+        )
+    def _has_carbonyl_backbone(entry):
+        # The out_co atom of a standard amide-backbone monomer has a =O neighbour.
+        # Reduced-amide (backbone_c_red) monomers don't — they shouldn't outrank
+        # standard amino acids whose backbone atoms happen to overlap.
+        a = entry.orig_mol.GetAtomWithIdx(entry.out_co_idx)
+        for nb in a.GetNeighbors():
+            if nb.GetAtomicNum() == 8:
+                b = entry.orig_mol.GetBondBetweenAtoms(entry.out_co_idx, nb.GetIdx())
+                if b and b.GetBondTypeAsDouble() == 2.0:
+                    return True
+        return False
+    # If any placement has a carbonyl backbone, drop reduced-amide (no-carbonyl)
+    # placements globally — reduced-amide monomers (redG2/redG3) are only
+    # meaningful for pure-polyamine molecules. Otherwise they'd hijack lipid
+    # side-chain N-CH2-CH2 segments (e.g. K's epsilon-amino lipidation linker)
+    # and produce wrong-output linear chains.
+    _any_carbonyl = any(_has_carbonyl_backbone(p.entry) for p in placements)
+    if _any_carbonyl:
+        placements = [p for p in placements if _has_carbonyl_backbone(p.entry)]
+    placements.sort(key=lambda p: (
+        p.m_type != 'aa',
+        not _has_carbonyl_backbone(p.entry),  # carbonyl backbone preferred
+        -p.entry.n_atoms,
+        -_extra_rgroups(p.entry),
+        p.abbr,
+    ))
     seen_mol_out: set = set()
     deduped: list = []
     for p in placements:
@@ -5024,6 +5113,30 @@ def _s2c_build_backbone(mol, placements):
     in_n_map = _dd3(list)
     for p in deduped:
         in_n_map[p.in_n].append(p)
+
+    # ── Scaffold-portal pre-pass ──────────────────────────────────────────────
+    # Detect multi-arm scaffold instances in the molecule (TBMB-style linkers,
+    # PhosOxScaffold, ImzScaffold). Build atom_to_scaffold_anchors so the chain
+    # walker can "tunnel through" a scaffold from one anchor to another when no
+    # direct out_co→in_n bond exists. Anchor atom = the molecule atom that maps
+    # to a scaffold's [*:n] attachment-point slot; other_anchor_atoms = list of
+    # the other anchors of the SAME scaffold instance.
+    atom_to_scaffold_anchors: dict = {}  # atom_idx → list[(other_anchor_atom_set, scaffold_abbr)]
+    try:
+        _sc_patterns = _s2c_get_scaffold_patterns()
+    except Exception:
+        _sc_patterns = []
+    for _sc_entry in _sc_patterns:
+        _sc_abbr = _sc_entry[0]
+        _sc_smarts = _sc_entry[1]
+        _sc_r_pos = _sc_entry[2]   # smarts_atom_idx → r_group_num
+        for _sc_match in mol.GetSubstructMatches(_sc_smarts, useChirality=False):
+            _anchor_atoms = {_sc_match[_si] for _si in _sc_r_pos}
+            for _ai in _anchor_atoms:
+                _others = frozenset(_anchor_atoms - {_ai})
+                atom_to_scaffold_anchors.setdefault(_ai, []).append(
+                    (_others, _sc_abbr)
+                )
 
     # out_cos from placements that don't share atoms with a given node — these
     # are genuine predecessor exits from OTHER residues.  Excludes the node's own
@@ -5037,17 +5150,42 @@ def _s2c_build_backbone(mol, placements):
         for nb in mol.GetAtomWithIdx(node.in_n).GetNeighbors():
             if nb.GetIdx() in ext:
                 return True
+        # Scaffold-portal predecessor: in_n is reachable through a scaffold's
+        # anchors from some external out_co.
+        for nb in mol.GetAtomWithIdx(node.in_n).GetNeighbors():
+            for other_anchors, _ in atom_to_scaffold_anchors.get(nb.GetIdx(), ()):
+                for _far_anchor in other_anchors:
+                    for _far_nb in mol.GetAtomWithIdx(_far_anchor).GetNeighbors():
+                        if _far_nb.GetIdx() in ext:
+                            return True
         return False
 
     def successors(node, used_atoms):
         result = []
+        seen_q = set()  # dedup if same q reachable via direct + scaffold paths
+        # Rule 1: direct neighbour chain step (existing).
         for nb in mol.GetAtomWithIdx(node.out_co).GetNeighbors():
             for q in in_n_map[nb.GetIdx()]:
-                # Check only backbone anchors (in_n, out_co) for overlap — not
-                # all mol_atoms — so that RCM-stapled residues sharing the
-                # crosslink C=C atoms are not incorrectly excluded.
                 if q.in_n not in used_atoms and q.out_co not in used_atoms:
-                    result.append(q)
+                    if id(q) not in seen_q:
+                        seen_q.add(id(q))
+                        result.append(q)
+        # Rule 2: scaffold-portal chain step — out_co bonds to a scaffold anchor;
+        # check other anchors of that scaffold for downstream in_n matches.
+        for nb in mol.GetAtomWithIdx(node.out_co).GetNeighbors():
+            for other_anchors, _sc_abbr in atom_to_scaffold_anchors.get(nb.GetIdx(), ()):
+                # Don't re-use scaffold anchors already in the current chain.
+                if any(a in used_atoms for a in other_anchors):
+                    continue
+                for _far_anchor in other_anchors:
+                    for _far_nb in mol.GetAtomWithIdx(_far_anchor).GetNeighbors():
+                        for q in in_n_map[_far_nb.GetIdx()]:
+                            if q.in_n in used_atoms or q.out_co in used_atoms:
+                                continue
+                            if id(q) in seen_q:
+                                continue
+                            seen_q.add(id(q))
+                            result.append(q)
         result.sort(key=lambda q: (q.m_type != 'aa', -q.entry.n_atoms))
         return result
 
@@ -5073,16 +5211,6 @@ def _s2c_build_backbone(mol, placements):
     best_score = (-1, -1, -1, -1, 1, -1)
 
     def chain_score(c):
-        # (1) True start: residues with no predecessor in the DAG are genuine
-        #     N-termini; cyclic_cands (added for mixed-topology peptides) are
-        #     mid-chain and should only win if no true-start chain beats them.
-        # (2) Chain length: more residues = better backbone.
-        # (3) Unclaimed neighbour on in_n: signals an N-cap (ac/fmoc/boc) is
-        #     present.  Caps have only backbone_c so they're absent from the
-        #     coverage lib, but their carbonyl sits on in_n as an unclaimed atom.
-        #     Among equal-length true-start chains this prefers K→G (has ac cap)
-        #     over E_g→AEEA (free αN, no cap), which have equal monomer counts.
-        # (4/5) AA count and atom count as final tiebreakers.
         _is_true_start = c[0] in _true_starts
         _in_n_unclaimed = any(
             _nb.GetAtomicNum() > 1 and _nb.GetIdx() not in _all_placed
@@ -5110,12 +5238,86 @@ def _s2c_build_backbone(mol, placements):
     return best
 
 
-def _s2c_identify_n_cap_from_atom(mol, n_idx, cap_start_atom, excluded_atoms):
-    """Identify N-cap given backbone N atom and first cap atom.
+# ── Cap query-mol library (built once per SDF version) ───────────────────────
+_s2c_n_cap_lib_cache: list | None = None
+_s2c_c_cap_lib_cache: list | None = None
+_s2c_cap_lib_mtime: float = 0.0
+_s2c_cap_lib_lock = threading.Lock()
 
-    Extracts the cap fragment (BFS from cap_start_atom, excluding backbone atoms),
-    attaches a placeholder N, then matches against library caps.
-    Returns cap abbr or None.
+
+def _s2c_get_cap_libs():
+    """Return (n_cap_lib, c_cap_lib), building and caching on the first call per SDF version.
+
+    n_cap_lib: [(n_atoms, abbr, query_mol), ...] sorted by -n_atoms.
+               Query mol has the backbone_c dummy replaced with N, others removed.
+    c_cap_lib: [(n_atoms, abbr, query_mol), ...] sorted by (-n_atoms, abbr).
+               Query mol has the backbone_n dummy replaced with C, others removed.
+    """
+    global _s2c_n_cap_lib_cache, _s2c_c_cap_lib_cache, _s2c_cap_lib_mtime
+    mtime = _SDF_PATH.stat().st_mtime
+    with _s2c_cap_lib_lock:
+        if _s2c_n_cap_lib_cache is not None and _s2c_cap_lib_mtime == mtime:
+            return _s2c_n_cap_lib_cache, _s2c_c_cap_lib_cache
+        from rdkit import Chem as _C
+        from rdkit.Chem import RWMol, Atom
+        _, by_abbr = _load_sdf()
+        n_lib: list = []
+        c_lib: list = []
+        for abbr, cap_mol in by_abbr.items():
+            p = cap_mol.GetPropsAsDict()
+            if p.get('m_type', '') != 'cap':
+                continue
+            chem_types = p.get('m_chem_types', '')
+            has_bn = 'backbone_n' in chem_types
+            has_bc = 'backbone_c' in chem_types
+            if has_bc and not has_bn:
+                attach, placeholder, target = 'backbone_c', 'N', n_lib
+            elif has_bn and not has_bc:
+                attach, placeholder, target = 'backbone_n', 'C', c_lib
+            else:
+                continue
+            r_num = None
+            for part in chem_types.split(','):
+                part = part.strip()
+                if ':' not in part:
+                    continue
+                rn, rtype = part.split(':', 1)
+                if rtype.strip() == attach:
+                    try:
+                        r_num = int(rn.strip()); break
+                    except ValueError:
+                        pass
+            if r_num is None:
+                continue
+            dummy_idx = next((a.GetIdx() for a in cap_mol.GetAtoms()
+                              if a.GetAtomicNum() == 0 and a.GetIsotope() == r_num), None)
+            if dummy_idx is None:
+                continue
+            rw2 = RWMol(cap_mol)
+            rw2.ReplaceAtom(dummy_idx, Atom(placeholder))
+            _rg_list = [r.strip() for r in p.get('m_Rgroups', '').split(',')]
+            _resolve_dummy_rgroups(rw2, _rg_list, r_num)
+            try:
+                _C.SanitizeMol(rw2)
+            except Exception:
+                continue
+            target.append((cap_mol.GetNumAtoms(), abbr, rw2.GetMol()))
+        n_lib.sort(key=lambda x: -x[0])
+        c_lib.sort(key=lambda x: (-x[0], x[1].lstrip('_')))
+        _s2c_n_cap_lib_cache = n_lib
+        _s2c_c_cap_lib_cache = c_lib
+        _s2c_cap_lib_mtime = mtime
+        return n_lib, c_lib
+
+
+def _s2c_identify_cap_from_atom(mol, anchor_idx, cap_start_atom, excluded_atoms,
+                                placeholder_sym, cap_lib):
+    """Shared BFS + fragment-build + match kernel for both N-cap and C-cap identification.
+
+    anchor_idx:     backbone atom the cap is bonded to (N for N-caps, carbonyl C for C-caps).
+    cap_start_atom: first atom on the cap side of the anchor bond.
+    placeholder_sym: element symbol of the anchor placeholder atom ('N' or 'C').
+    cap_lib:        pre-built [(n_atoms, abbr, query_mol), ...] from _s2c_get_cap_libs().
     """
     from rdkit import Chem as _C
     from rdkit.Chem import RWMol, Atom
@@ -5123,12 +5325,12 @@ def _s2c_identify_n_cap_from_atom(mol, n_idx, cap_start_atom, excluded_atoms):
     queue = [cap_start_atom]
     while queue:
         ai = queue.pop()
-        if ai in cap_atoms or ai == n_idx or ai in excluded_atoms:
+        if ai in cap_atoms or ai == anchor_idx or ai in excluded_atoms:
             continue
         cap_atoms.add(ai)
         for nb in mol.GetAtomWithIdx(ai).GetNeighbors():
             ni = nb.GetIdx()
-            if ni not in cap_atoms and ni != n_idx and ni not in excluded_atoms:
+            if ni not in cap_atoms and ni != anchor_idx and ni not in excluded_atoms:
                 queue.append(ni)
     if not cap_atoms:
         return None
@@ -5136,182 +5338,45 @@ def _s2c_identify_n_cap_from_atom(mol, n_idx, cap_start_atom, excluded_atoms):
     amap: dict = {}
     for ai in cap_atoms:
         amap[ai] = rw.AddAtom(mol.GetAtomWithIdx(ai))
-    n_dummy = rw.AddAtom(Atom('N'))
+    anchor_placeholder = rw.AddAtom(Atom(placeholder_sym))
     for bond in mol.GetBonds():
         bi, ei = bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()
         if bi in cap_atoms and ei in cap_atoms:
             rw.AddBond(amap[bi], amap[ei], bond.GetBondType())
-        elif bi in cap_atoms and ei == n_idx:
-            rw.AddBond(amap[bi], n_dummy, bond.GetBondType())
-        elif ei in cap_atoms and bi == n_idx:
-            rw.AddBond(amap[ei], n_dummy, bond.GetBondType())
+        elif bi in cap_atoms and ei == anchor_idx:
+            rw.AddBond(amap[bi], anchor_placeholder, bond.GetBondType())
+        elif ei in cap_atoms and bi == anchor_idx:
+            rw.AddBond(amap[ei], anchor_placeholder, bond.GetBondType())
     try:
         _C.SanitizeMol(rw)
     except Exception:
         return None
     cap_frag = rw.GetMol()
-    _, by_abbr = _load_sdf()
-    candidates: list = []
-    for abbr, cap_mol in by_abbr.items():
-        p = cap_mol.GetPropsAsDict()
-        if p.get('m_type', '') != 'cap':
-            continue
-        chem_types = p.get('m_chem_types', '')
-        if 'backbone_c' not in chem_types or 'backbone_n' in chem_types:
-            continue
-        r_num = None
-        for part in chem_types.split(','):
-            part = part.strip()
-            if ':' not in part:
-                continue
-            rn, rtype = part.split(':', 1)
-            if rtype.strip() == 'backbone_c':
-                try:
-                    r_num = int(rn.strip()); break
-                except ValueError:
-                    pass
-        if r_num is None:
-            continue
-        dummy_idx = next((a.GetIdx() for a in cap_mol.GetAtoms()
-                          if a.GetAtomicNum() == 0 and a.GetIsotope() == r_num), None)
-        if dummy_idx is None:
-            continue
-        rw2 = RWMol(cap_mol)
-        rw2.ReplaceAtom(dummy_idx, Atom('N'))
-        _rg_str = p.get('m_Rgroups', '')
-        _rg_list = [r.strip() for r in _rg_str.split(',')] if _rg_str else []
-        _dummies = [(a.GetIdx(), a.GetIsotope())
-                    for a in rw2.GetAtoms()
-                    if a.GetAtomicNum() == 0 and a.GetIsotope() != r_num]
-        for _d_idx, _iso in sorted(_dummies, key=lambda x: -x[0]):
-            _rg = _rg_list[_iso - 1].strip() if 0 < _iso <= len(_rg_list) else None
-            if _rg == '[OH]':   rw2.ReplaceAtom(_d_idx, Atom('O'))
-            elif _rg == '[Cl]': rw2.ReplaceAtom(_d_idx, Atom('Cl'))
-            elif _rg == '[Br]': rw2.ReplaceAtom(_d_idx, Atom('Br'))
-            elif _rg == '[I]':  rw2.ReplaceAtom(_d_idx, Atom('I'))
-            else:               rw2.RemoveAtom(_d_idx)
-        try:
-            _C.SanitizeMol(rw2)
-        except Exception:
-            continue
-        candidates.append((cap_mol.GetNumAtoms(), abbr, rw2.GetMol()))
-    candidates.sort(key=lambda x: -x[0])
-    for _, abbr, qmol in candidates:
+    for _, abbr, qmol in cap_lib:
         if cap_frag.HasSubstructMatch(qmol, useChirality=False):
             return abbr
     return None
+
+
+def _s2c_identify_n_cap_from_atom(mol, n_idx, cap_start_atom, excluded_atoms):
+    """Identify N-cap; returns abbreviation string or None."""
+    n_lib, _ = _s2c_get_cap_libs()
+    return _s2c_identify_cap_from_atom(mol, n_idx, cap_start_atom, excluded_atoms, 'N', n_lib)
 
 
 def _s2c_identify_c_cap_from_atom(mol, co_idx, cap_start_atom, excluded_atoms):
-    """Identify C-cap given backbone carbonyl C atom and first cap atom.
-
-    Extracts the cap fragment (BFS from cap_start_atom, excluding backbone atoms),
-    attaches a placeholder C at the attachment point, then matches against library
-    C-caps (backbone_n connection type).
-    Returns cap abbr or None.
-    """
-    from rdkit import Chem as _C
-    from rdkit.Chem import RWMol, Atom
-    cap_atoms: set = set()
-    queue = [cap_start_atom]
-    while queue:
-        ai = queue.pop()
-        if ai in cap_atoms or ai == co_idx or ai in excluded_atoms:
-            continue
-        cap_atoms.add(ai)
-        for nb in mol.GetAtomWithIdx(ai).GetNeighbors():
-            ni = nb.GetIdx()
-            if ni not in cap_atoms and ni != co_idx and ni not in excluded_atoms:
-                queue.append(ni)
-    if not cap_atoms:
-        return None
-    rw = RWMol()
-    amap: dict = {}
-    for ai in cap_atoms:
-        amap[ai] = rw.AddAtom(mol.GetAtomWithIdx(ai))
-    c_dummy = rw.AddAtom(Atom('C'))
-    for bond in mol.GetBonds():
-        bi, ei = bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()
-        if bi in cap_atoms and ei in cap_atoms:
-            rw.AddBond(amap[bi], amap[ei], bond.GetBondType())
-        elif bi in cap_atoms and ei == co_idx:
-            rw.AddBond(amap[bi], c_dummy, bond.GetBondType())
-        elif ei in cap_atoms and bi == co_idx:
-            rw.AddBond(amap[ei], c_dummy, bond.GetBondType())
-    try:
-        _C.SanitizeMol(rw)
-    except Exception:
-        return None
-    cap_frag = rw.GetMol()
-    _, by_abbr = _load_sdf()
-    candidates: list = []
-    for abbr, cap_mol in by_abbr.items():
-        p = cap_mol.GetPropsAsDict()
-        if p.get('m_type', '') != 'cap':
-            continue
-        chem_types = p.get('m_chem_types', '')
-        if 'backbone_n' not in chem_types or 'backbone_c' in chem_types:
-            continue
-        r_num = None
-        for part in chem_types.split(','):
-            part = part.strip()
-            if ':' not in part:
-                continue
-            rn, rtype = part.split(':', 1)
-            if rtype.strip() == 'backbone_n':
-                try:
-                    r_num = int(rn.strip()); break
-                except ValueError:
-                    pass
-        if r_num is None:
-            continue
-        dummy_idx = next((a.GetIdx() for a in cap_mol.GetAtoms()
-                          if a.GetAtomicNum() == 0 and a.GetIsotope() == r_num), None)
-        if dummy_idx is None:
-            continue
-        rw2 = RWMol(cap_mol)
-        rw2.ReplaceAtom(dummy_idx, Atom('C'))
-        _rg_str = p.get('m_Rgroups', '')
-        _rg_list = [r.strip() for r in _rg_str.split(',')] if _rg_str else []
-        _dummies = [(a.GetIdx(), a.GetIsotope())
-                    for a in rw2.GetAtoms()
-                    if a.GetAtomicNum() == 0 and a.GetIsotope() != r_num]
-        for _d_idx, _iso in sorted(_dummies, key=lambda x: -x[0]):
-            _rg = _rg_list[_iso - 1].strip() if 0 < _iso <= len(_rg_list) else None
-            if _rg == '[OH]':   rw2.ReplaceAtom(_d_idx, Atom('O'))
-            elif _rg == '[Cl]': rw2.ReplaceAtom(_d_idx, Atom('Cl'))
-            elif _rg == '[Br]': rw2.ReplaceAtom(_d_idx, Atom('Br'))
-            elif _rg == '[I]':  rw2.ReplaceAtom(_d_idx, Atom('I'))
-            else:               rw2.RemoveAtom(_d_idx)
-        try:
-            _C.SanitizeMol(rw2)
-        except Exception:
-            continue
-        candidates.append((cap_mol.GetNumAtoms(), abbr, rw2.GetMol()))
-    candidates.sort(key=lambda x: (-x[0], x[1].lstrip('_')))
-    for _, abbr, qmol in candidates:
-        if cap_frag.HasSubstructMatch(qmol, useChirality=False):
-            return abbr
-    return None
+    """Identify C-cap; returns abbreviation string or None."""
+    _, c_lib = _s2c_get_cap_libs()
+    return _s2c_identify_cap_from_atom(mol, co_idx, cap_start_atom, excluded_atoms, 'C', c_lib)
 
 
 def _s2c_cap_standalone(smi, rgroups_str):
     """Replace [n*] dummies with their leaving-group atom for standalone matching.
 
-    Extends _s2c_cap_smiles: [OH]→O, [H]→[H], [Br]→Br, [Cl]→Cl, [I]→I, None→[H].
-    This reconstructs the actual assembled mol when a monomer stands alone (e.g.
-    TBMB with no Cys reacted → BrCc1cc(CBr)cc(CBr)c1, not mesitylene).
+    Delegates to _s2c_cap_smiles, which now handles the full leaving-group table
+    ([OH]→O, [Br]→Br, [Cl]→Cl, [I]→I, [SH]→S, else→[H]).
     """
-    rgroups = [r.strip() for r in rgroups_str.split(',')]
-    def _rep(m):
-        n = int(m.group(1))
-        rg = rgroups[n - 1] if n - 1 < len(rgroups) else 'None'
-        if rg == '[OH]':  return 'O'
-        if rg == '[Br]':  return 'Br'
-        if rg == '[Cl]':  return 'Cl'
-        if rg == '[I]':   return 'I'
-        return '[H]'
-    return _re.sub(r'\[(\d+)\*\]', _rep, smi)
+    return _s2c_cap_smiles(smi, rgroups_str)
 
 
 def _s2c_find_amide_bonds(mol):
@@ -5460,6 +5525,44 @@ def _s2c_multi_amide_chain(mol, amide_pairs):
     return '-'.join(all_abbrs), [(a, 1.0, 0) for a in all_abbrs]
 
 
+def _s2c_normalize_iminol(mol):
+    """Return a copy of mol with any iminol tautomers flipped to the amide form.
+
+    Iminol: N=C(OH)  →  amide: NH-C(=O)
+    This is a bond-order surgery (same connectivity, different bond orders) that
+    sometimes appears in database SMILES for peptide backbones.  Applied only as
+    a rescue pass — never mutates the original mol.
+
+    Returns the modified molecule if any iminol bonds were found, otherwise
+    returns the original mol object unchanged (caller can test ``is mol``).
+    """
+    from rdkit import Chem as _Chem
+    from rdkit.Chem import RWMol as _RWMol
+    _IMINOL_SMARTS = _Chem.MolFromSmarts('[N:1]=[C:2][OH:3]')
+    matches = mol.GetSubstructMatches(_IMINOL_SMARTS, useChirality=False)
+    if not matches:
+        return mol
+    rw = _RWMol(mol)
+    for n_idx, c_idx, o_idx in matches:
+        n_atom = rw.GetAtomWithIdx(n_idx)
+        o_atom = rw.GetAtomWithIdx(o_idx)
+        nc_bond = rw.GetBondBetweenAtoms(n_idx, c_idx)
+        co_bond = rw.GetBondBetweenAtoms(c_idx, o_idx)
+        if nc_bond is None or co_bond is None:
+            continue
+        nc_bond.SetBondType(_Chem.BondType.SINGLE)
+        co_bond.SetBondType(_Chem.BondType.DOUBLE)
+        n_atom.SetNumExplicitHs(0)
+        n_atom.SetNoImplicit(False)
+        o_atom.SetNumExplicitHs(0)
+        o_atom.SetNoImplicit(False)
+    try:
+        _Chem.SanitizeMol(rw)
+    except Exception:
+        return mol
+    return rw.GetMol()
+
+
 def _s2c_backbone_less_fallback(mol):
     """Identify backbone-less molecules: single entities, two-cap, or multi-amide chains.
 
@@ -5574,6 +5677,23 @@ def smiles_to_cabiln_core(smiles: str):
         _fb_cabiln, _fb_details = _s2c_backbone_less_fallback(mol)
         if _fb_cabiln is not None:
             return _fb_cabiln, _fb_details
+        # Rescue pass: some databases encode backbones in iminol tautomer form
+        # (N=C(OH) instead of NH-C(=O)).  Normalize and retry once.
+        _inorm = _s2c_normalize_iminol(mol)
+        if _inorm is not mol:
+            try:
+                from rdkit import Chem as _Chem2
+                _norm_smiles = _Chem2.MolToSmiles(_inorm)
+                _nc, _nd = smiles_to_cabiln_core(_norm_smiles)
+                import warnings
+                warnings.warn(
+                    'Input required iminol->amide normalisation before backbone detection',
+                    UserWarning,
+                    stacklevel=3,
+                )
+                return _nc, _nd
+            except Exception:
+                pass
         raise ValueError('Cannot detect peptide backbone (no library monomers matched)')
 
     n = len(backbone)
@@ -6003,7 +6123,7 @@ def smiles_to_cabiln_core(smiles: str):
         for jinfo in jl:
             branch_node_atoms.update(jinfo['glu_node'].mol_atoms)
 
-    sc_pairs: list = []
+    sc_pairs: list = []  # (bi, bj, atom_in_bi, atom_in_bj)
     backbone_amide_pairs = {
         frozenset((backbone[i].out_co, backbone[i + 1].in_n))
         for i in range(n - 1)
@@ -6019,10 +6139,14 @@ def smiles_to_cabiln_core(smiles: str):
             nj_atoms = backbone[bj].mol_atoms
             for bond in mol.GetBonds():
                 ba, ea = bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()
-                if (ba in ni_atoms and ea in nj_atoms) or (ba in nj_atoms and ea in ni_atoms):
+                if ba in ni_atoms and ea in nj_atoms:
                     if frozenset((ba, ea)) not in backbone_amide_pairs:
-                        sc_pairs.append((bi, bj))
-                    break
+                        sc_pairs.append((bi, bj, ba, ea))
+                        break
+                elif ba in nj_atoms and ea in ni_atoms:
+                    if frozenset((ba, ea)) not in backbone_amide_pairs:
+                        sc_pairs.append((bi, bj, ea, ba))
+                        break
 
     if sc_pairs or _ring_xlinks:
         if not branch_junctions:
@@ -6038,11 +6162,25 @@ def smiles_to_cabiln_core(smiles: str):
             abbrs[bi] += f'.{tag}({slot_i},{slot_j})'
             abbrs[bj] += f'.{tag}({slot_j},{slot_i})'
 
-        for bi, bj in sc_pairs:
+        for bi, bj, atom_i, atom_j in sc_pairs:
             base_i = details[bi][0]
             base_j = details[bj][0]
-            r_i = _s2c_crosslink_r(base_i, raw_lib)
-            r_j = _s2c_crosslink_r(base_j, raw_lib)
+            # Use backbone slot numbers when the crosslink touches a backbone atom:
+            # slot 2 = backbone_c (out_co), slot 1 = backbone_n (in_n).
+            # This distinguishes macrolactam amide bonds (sidechain-N to backbone-C=O,
+            # giving (4,2)) from sidechain-to-sidechain crosslinks (4,4).
+            if atom_i == backbone[bi].out_co:
+                r_i = 2
+            elif atom_i == backbone[bi].in_n:
+                r_i = 1
+            else:
+                r_i = _s2c_crosslink_r(base_i, raw_lib)
+            if atom_j == backbone[bj].out_co:
+                r_j = 2
+            elif atom_j == backbone[bj].in_n:
+                r_j = 1
+            else:
+                r_j = _s2c_crosslink_r(base_j, raw_lib)
             tag = f'!{xlink_ctr}'
             xlink_ctr += 1
             abbrs[bi] += f'.{tag}({r_i},{r_j})'

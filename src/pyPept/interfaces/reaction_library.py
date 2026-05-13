@@ -83,9 +83,32 @@ _CHEM_TYPE_REGISTRY = [
     # LG=[OH] removes the hydroxyl.  infer_smarts is intentionally None —
     # carboxyl vs aldehyde C atoms are structurally identical in CHUCKLES,
     # so we disambiguate via leaving-group metadata in infer_chem_type.
+    # aryl_amide_c: C(=O) bonded to aryl (and OH leaving group in free form) —
+    # used by aryl-scaffold arms (PhosOxScaffold) where the amide forms with
+    # adjacent residue's αN. Must precede `carboxyl` so aryl-attached amide-C
+    # routes through aryl_amide_to_backbone_n reaction, not isopeptide.
+    ('aryl_amide_c',      '[CX3:1](=O)([OX2H1])[c]',              '[OH]',  '[CX3:1](=O)[c]',                         False),
     ('carboxyl',          '[CX3:1](=O)[OX2H1]',                   '[OH]',  None,                                    False),
+    # aryl_phenol_o: aryl-OH (phenol) where the O forms a covalent (ether/amide)
+    # bond to adjacent residue. Distinct from `hydroxyl_phenolic` (label_only;
+    # used for residue identification but no bond reaction).
+    ('aryl_phenol_o',     '[OX2H1:1][c]',                           '[H]',  '[OX2;H0,H1:1][c]',                       False),
     ('hydroxyl_phenolic', '[OX2H1:1][c]',                           '[H]',  '[OX2H1:1][c]',                           True),
     ('hydroxyl',          '[OX2H1:1][CX4]',                        '[H]',  '[OX2H1:1][CX4]',                         False),
+    # quat_c_anchor: sp3 carbon with 3 C neighbours and 0 explicit H (quaternary
+    # in the bonded form). Used by chondramide-family bridge-anchor monomers
+    # (XlQuat). Precedes generic `carbon` so quaternary C with 3 C neighbours is
+    # detected as the bridge anchor.
+    ('quat_c_anchor',     '[CX4;H1:1]([CX4])([CX4])[CX4]',        '[H]',  '[CX4;H0,H1:1]([C])([C])([C])',           False),
+    # aryl_c_anchor: substituted aromatic ring carbon (H=0) — used by hetero-
+    # cycle scaffolds (ImzScaffold) where the aryl C is the anchor for chain
+    # extension. Specific enough not to over-match (requires H=0, i.e. fully
+    # substituted aryl C).
+    ('aryl_c_anchor',     '[cX3;H0:1]([c])[c]',                    '[H]',  '[cX3;H0:1]',                             False),
+    # backbone_c_red: sp3 C without C=O, at slot 2 of a reduced-amide residue
+    # (CH2-NH style backbone, no carbonyl). Detected by element + slot in
+    # infer_chem_type heuristic (SMARTS can't disambiguate from generic methyls).
+    ('backbone_c_red',    '[CX4;H2,H3:1][NX3;!$(N-C=O)]',         '[H]',  '[CX4;H1,H2,H3:1][NX3;!$(N-C=O)]',        False),
     # ── Aromatic / amide N-H (label-only) ────────────────────────────────────
     ('aromatic_nh',       '[nH:1]',                                 '[H]',  '[nH:1]',                                 True),
     ('amide_nh',          '[NX3;H1:1][CX3]=O',                     '[H]',  '[NX3;H1:1][CX3]=O',                     True),
@@ -128,6 +151,24 @@ _HEURISTIC_TYPES = frozenset({
     'carbon',           # plain sp3 C without carbonyl; heuristic fallback at end of infer_chem_type
     'carboxyl',         # C-attachment COOH; infer_smarts=None, disambiguated via LG in heuristic
     'element_16',       # sulfonyl/sulfonate S; detected by element number heuristic (element_{sym})
+    # Chondramide aryl-ether bridge endpoints — trust monomer declaration; reverse-parser
+    # needs no new SMARTS pattern because each side is identifiable from element + slot
+    # (R3=O / R4=C) plus the residue context (β-OH-Tyr / α-quat-C anchor).
+    'aryl_phenol_o',
+    'quat_c_anchor',
+    # Reduced-amide (CH2-NH) backbone — C-side endpoint that has no carbonyl.
+    # Used in polyamine peptidomimetics (CP02627 bis-cyclam-p-xylene).
+    'backbone_c_red',
+    # Phosphine-oxide scaffold arm: aryl-C(=O) attaching to backbone N via
+    # amide. Slot-4 carbonyl C with [OH] leaving group (carboxylic acid in
+    # free form); element-heuristic detection in infer_chem_type.
+    'aryl_amide_c',
+    # Aryl-C anchor: an aromatic C atom on a ring carbon (e.g. imidazole C2/
+    # C4/C5 of the CP01557 ImzScaffold) that bonds to a non-amide partner
+    # via a direct C-C bond. Three reactions consume this type, paired with
+    # backbone_c (aryl→sp3 αC), backbone_c_red (aryl→sp3 CH2), and
+    # aryl_amide_c (aryl→aryl-amide-C).
+    'aryl_c_anchor',
 })
 _registry_types = {ct for ct, *_, lo in _CHEM_TYPE_REGISTRY if not lo}
 _bond_types = {ct for e in REACTIONS.values() for pair in e.get('reactant_pairs', []) for ct in pair}
@@ -168,12 +209,25 @@ def infer_chem_type(mol, attach_idx: int, slot: int = None,
         if sym == 6:
             # Only classify as backbone_c (carbonyl) if the carbon has a =O neighbor.
             # Non-carbonyl carbons at slot 2 (e.g. benzyl caps) fall through to
-            # the 'carbon' heuristic and use generic bond SMIRKS.
+            # 'carbon' — UNLESS the SDF explicitly tags the slot as
+            # 'backbone_c_red' (reduced-amide peptidomimetic, no C=O).
+            # SMARTS can't reliably distinguish reduced-amide CH2 from benzyl
+            # caps without knowing the residue context, so we trust the SDF.
             for nb in atom.GetNeighbors():
                 if nb.GetAtomicNum() == 8:
                     bond = mol.GetBondBetweenAtoms(attach_idx, nb.GetIdx())
                     if bond and bond.GetBondTypeAsDouble() == 2.0:
                         return 'backbone_c'
+            try:
+                ct_str = mol.GetProp('m_chem_types')
+                for item in ct_str.split(','):
+                    item = item.strip()
+                    if ':' in item:
+                        k, v = item.split(':', 1)
+                        if k.strip() == '2' and v.strip() == 'backbone_c_red':
+                            return 'backbone_c_red'
+            except (KeyError, AttributeError):
+                pass
 
     # ── Early carboxyl guard — must precede SMARTS loop ─────────────────────
     # Carboxyl C ([4*]C(=O)...) and aldehyde C ([4*]C(=O)...) are
