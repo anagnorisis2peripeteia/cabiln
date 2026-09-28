@@ -174,6 +174,9 @@ _HEURISTIC_TYPES = frozenset({
     # backbone_c (aryl→sp3 αC), backbone_c_red (aryl→sp3 CH2), and
     # aryl_amide_c (aryl→aryl-amide-C).
     'aryl_c_anchor',
+    # Reduced-N scaffold anchor: N atom on a scaffold (XylBridge) connecting
+    # to a polyamine chain via benzylamine C-N bond.
+    'reduced_n',
 })
 _registry_types = {ct for ct, *_, lo in _CHEM_TYPE_REGISTRY if not lo}
 _bond_types = {ct for e in REACTIONS.values() for pair in e.get('reactant_pairs', []) for ct in pair}

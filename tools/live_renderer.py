@@ -5049,10 +5049,17 @@ def _s2c_build_cov_lib():
 
 
 def _s2c_place_monomers(mol, cov_lib):
-    """Return all placements of backbone monomers in mol as _PlacedNode objects."""
+    """Return all placements of backbone monomers in mol as _PlacedNode objects.
+
+    Match phase uses useChirality=True so stereo-specific library entries only
+    match Cα atoms with the corresponding chirality (when the source HAS
+    stereo).  Source atoms with unspecified chirality match BOTH L and D
+    library SMARTS; the L-preference in the dedup sort below picks L by
+    default (per project policy: no-stereo source → default L).
+    """
     placements: list = []
     for entry in cov_lib:
-        matches = mol.GetSubstructMatches(entry.smarts_mol, useChirality=False)
+        matches = mol.GetSubstructMatches(entry.smarts_mol, useChirality=True)
         for match in matches:
             placements.append(_PlacedNode(
                 abbr=entry.abbr, m_type=entry.m_type,
@@ -5116,6 +5123,7 @@ def _s2c_build_backbone(mol, placements):
         not _has_carbonyl_backbone(p.entry),  # carbonyl backbone preferred
         -p.entry.n_atoms,
         -_extra_rgroups(p.entry),
+        p.abbr.startswith('D_'),  # prefer L_* over D_* (no-stereo source → L)
         p.abbr,
     ))
     seen_mol_out: set = set()
@@ -5167,10 +5175,16 @@ def _s2c_build_backbone(mol, placements):
             if nb.GetIdx() in ext:
                 return True
         # Scaffold-portal predecessor: in_n is reachable through a scaffold's
-        # anchors from some external out_co.
-        for nb in mol.GetAtomWithIdx(node.in_n).GetNeighbors():
-            for other_anchors, _ in atom_to_scaffold_anchors.get(nb.GetIdx(), ()):
+        # anchors from some external out_co.  Check in_n itself AND its
+        # neighbors as potential scaffold anchors (in_n can overlap with a
+        # scaffold attachment point, e.g. CP01557 where ValAryl.in_n is also
+        # an ImzScaffold anchor).
+        _pred_check = [node.in_n] + [nb.GetIdx() for nb in mol.GetAtomWithIdx(node.in_n).GetNeighbors()]
+        for _pc in _pred_check:
+            for other_anchors, _ in atom_to_scaffold_anchors.get(_pc, ()):
                 for _far_anchor in other_anchors:
+                    if _far_anchor in ext:
+                        return True
                     for _far_nb in mol.GetAtomWithIdx(_far_anchor).GetNeighbors():
                         if _far_nb.GetIdx() in ext:
                             return True
@@ -5186,14 +5200,23 @@ def _s2c_build_backbone(mol, placements):
                     if id(q) not in seen_q:
                         seen_q.add(id(q))
                         result.append(q)
-        # Rule 2: scaffold-portal chain step — out_co bonds to a scaffold anchor;
-        # check other anchors of that scaffold for downstream in_n matches.
-        for nb in mol.GetAtomWithIdx(node.out_co).GetNeighbors():
-            for other_anchors, _sc_abbr in atom_to_scaffold_anchors.get(nb.GetIdx(), ()):
-                # Don't re-use scaffold anchors already in the current chain.
+        # Rule 2: scaffold-portal chain step — out_co itself or a neighbor
+        # bonds to a scaffold anchor; check other anchors of that scaffold
+        # for downstream in_n matches.  Include out_co itself because it can
+        # overlap with a scaffold attachment point (e.g. CP01557 where
+        # ValAryl.out_co is also an ImzScaffold anchor).
+        _succ_check = [node.out_co] + [nb.GetIdx() for nb in mol.GetAtomWithIdx(node.out_co).GetNeighbors()]
+        for _sc in _succ_check:
+            for other_anchors, _sc_abbr in atom_to_scaffold_anchors.get(_sc, ()):
                 if any(a in used_atoms for a in other_anchors):
                     continue
                 for _far_anchor in other_anchors:
+                    for q in in_n_map.get(_far_anchor, []):
+                        if q.in_n in used_atoms or q.out_co in used_atoms:
+                            continue
+                        if id(q) not in seen_q:
+                            seen_q.add(id(q))
+                            result.append(q)
                     for _far_nb in mol.GetAtomWithIdx(_far_anchor).GetNeighbors():
                         for q in in_n_map[_far_nb.GetIdx()]:
                             if q.in_n in used_atoms or q.out_co in used_atoms:
@@ -5368,8 +5391,17 @@ def _s2c_identify_cap_from_atom(mol, anchor_idx, cap_start_atom, excluded_atoms,
     except Exception:
         return None
     cap_frag = rw.GetMol()
+    # Require EXACT coverage: the cap query must cover every heavy atom of
+    # cap_frag.  HasSubstructMatch alone is a substructure test, so e.g.
+    # NHEt (4 atoms) would falsely match the first 4 atoms of a 24-atom
+    # macrocyclic linker that wraps back to the N-terminus — the dominant
+    # rt-mismatch bug in cyclicpepedia (CP00011 etc., 155/383 mismatches
+    # as of 2026-05-16).  Insisting on full coverage rejects those false
+    # positives while leaving true linear caps unaffected.
+    cap_frag_size = cap_frag.GetNumAtoms()
     for _, abbr, qmol in cap_lib:
-        if cap_frag.HasSubstructMatch(qmol, useChirality=False):
+        m = cap_frag.GetSubstructMatch(qmol, useChirality=False)
+        if m and len(m) == cap_frag_size:
             return abbr
     return None
 
@@ -5541,6 +5573,43 @@ def _s2c_multi_amide_chain(mol, amide_pairs):
     return '-'.join(all_abbrs), [(a, 1.0, 0) for a in all_abbrs]
 
 
+def _s2c_canonicalize_guanidinium(mol):
+    """Flip Cδ-N=C(N)N guanidinium tautomers to the Cδ-N-C(=N)N form.
+
+    Arg's library SMARTS bakes in the Cδ-Nε single-bond / Cζ=Nη double-bond
+    tautomer (the form stored in monomers.sdf).  PubChem-derived SMILES
+    frequently encode the alternate Cδ-N=Cζ(N)N tautomer, which has the same
+    heavy-atom connectivity but different bond orders.  RDKit's substructure
+    matcher is bond-order sensitive, so Arg's SMARTS misses the alternate
+    tautomer; the Cδ-N then matches Orn's relaxed sidechain-N, and the walker
+    silently mis-types Arg as Orn (dropping the 3 guanidinium atoms).  Run
+    this once on input, before placement, to keep the library SMARTS valid.
+    """
+    from rdkit import Chem as _Chem
+    from rdkit.Chem import RWMol as _RWMol
+    pat = _Chem.MolFromSmarts('[CX4][NX2;!R]=[CX3]([NX3])[NX3]')
+    matches = mol.GetSubstructMatches(pat)
+    if not matches:
+        return mol
+    rw = _RWMol(mol)
+    for _cd, ne, cz, nh1, _nh2 in matches:
+        b_ne_cz = rw.GetBondBetweenAtoms(ne, cz)
+        b_cz_nh1 = rw.GetBondBetweenAtoms(cz, nh1)
+        if b_ne_cz is None or b_cz_nh1 is None:
+            continue
+        b_ne_cz.SetBondType(_Chem.BondType.SINGLE)
+        b_cz_nh1.SetBondType(_Chem.BondType.DOUBLE)
+        for _ai in (ne, nh1):
+            _a = rw.GetAtomWithIdx(_ai)
+            _a.SetNumExplicitHs(0)
+            _a.SetNoImplicit(False)
+    try:
+        _Chem.SanitizeMol(rw)
+    except Exception:
+        return mol
+    return rw.GetMol()
+
+
 def _s2c_normalize_iminol(mol):
     """Return a copy of mol with any iminol tautomers flipped to the amide form.
 
@@ -5554,7 +5623,10 @@ def _s2c_normalize_iminol(mol):
     """
     from rdkit import Chem as _Chem
     from rdkit.Chem import RWMol as _RWMol
-    _IMINOL_SMARTS = _Chem.MolFromSmarts('[N:1]=[C:2][OH:3]')
+    # strict: sp2 N=sp2 C bearing a hydroxyl — the genuine amide-iminol tautomer.
+    # Excludes aromatic n (won't carry an explicit '=') and amidoximes/oximes
+    # (OH on N, not C), so it is a safe no-op on ordinary amide-form peptides.
+    _IMINOL_SMARTS = _Chem.MolFromSmarts('[NX2:1]=[CX3:2][OX2H1:3]')
     matches = mol.GetSubstructMatches(_IMINOL_SMARTS, useChirality=False)
     if not matches:
         return mol
@@ -5651,6 +5723,12 @@ def smiles_to_cabiln_core(smiles: str):
     mol = _C.MolFromSmiles(smiles)
     if mol is None:
         raise ValueError(f'Invalid SMILES: {smiles[:80]}')
+    mol = _s2c_canonicalize_guanidinium(mol)
+    # Normalize iminol (N=C-OH) backbones to amide (NH-C=O) up front, not just as
+    # a no-backbone fallback: an iminol backbone yields a PARTIAL match that emits
+    # garbage rather than failing, so the late rescue never fires. Same compound,
+    # standard tautomer — lets backbone detection see the real amide chain.
+    mol = _s2c_normalize_iminol(mol)
 
     # ── 0. Pre-detect ring crosslinks; build de-reacted mol for backbone detection
     # Ring-forming reactions (e.g. CuAAC triazole) consume reactive sidechains
@@ -5734,10 +5812,20 @@ def smiles_to_cabiln_core(smiles: str):
                     for x in nb.GetNeighbors()
                 )
                 if has_co:
-                    n_cap = _s2c_identify_n_cap_from_atom(
+                    # Identify the N-cap explicitly; do NOT fall back to 'ac'.
+                    # The old `or 'ac'` fallback was masking macrocyclic
+                    # ring-closures (where the in_n's external carbonyl is the
+                    # NEXT residue around the ring, not a real cap), producing
+                    # 246+ spurious 'ac' rt-mismatches in cyclicpepedia.  If the
+                    # cap can't be identified, leave n_cap unset.
+                    identified = _s2c_identify_n_cap_from_atom(
                         mol, backbone[0].in_n, nbi, backbone_atoms_all
-                    ) or 'ac'
-                    break
+                    )
+                    if identified:
+                        n_cap = identified
+                        break
+                    # else: keep looking at other neighbours of in_n.
+                    continue
         # C-cap: any non-backbone substituent on out_co (am, NHEt, OEt, OtBu, …)
         for nb in mol.GetAtomWithIdx(backbone[-1].out_co).GetNeighbors():
             nbi = nb.GetIdx()
@@ -5967,7 +6055,7 @@ def smiles_to_cabiln_core(smiles: str):
                     _cap_s2n: dict = {}
                     for _cai in sorted(_cluster):
                         _cap_s2n[_cai] = _rw_cap.AddAtom(
-                            _C.Atom(mol.GetAtomWithIdx(_cai).GetAtomicNum()))
+                            mol.GetAtomWithIdx(_cai))
                     for _bond in mol.GetBonds():
                         _bai, _eai = _bond.GetBeginAtomIdx(), _bond.GetEndAtomIdx()
                         if _bai in _cap_s2n and _eai in _cap_s2n:
@@ -6202,6 +6290,164 @@ def smiles_to_cabiln_core(smiles: str):
             abbrs[bi] += f'.{tag}({r_i},{r_j})'
             abbrs[bj] += f'.{tag}({r_j},{r_i})'
 
+    # ── 6.5 Secondary-chain detection (macrocycles bridged via sidechain) ─────
+    # Many natural-product peptides (NRPS lipopeptides, polymyxin/colistin
+    # family, dual-chain disulfide knots) contain MULTIPLE backbone chains not
+    # captured by _s2c_build_backbone's primary pick.  After the primary chain
+    # is built, iteratively re-run chain detection on placements outside the
+    # already-claimed atoms — each pass claims one more chain until no more
+    # eligible candidates remain.  Bridges are then detected pairwise across
+    # all chains and emitted as .!N(r_a, r_b) crosslinks.
+    extra_chains: list = []        # list of chain lists (each = list of nodes)
+    extra_chain_abbrs: list = []   # parallel list of abbrev lists
+    # Skip multi-chain detection entirely when the primary chain already has
+    # branch annotations (lipid arms via bracket notation), scaffold crosslinks,
+    # or ring crosslinks — the branch-arm atoms would otherwise be misread as
+    # a phantom second chain (e.g. K's gGlu-AEEA-C20FA arm), regressing 5+
+    # GLP-1 drug round-trip tests.
+    _skip_multichain = bool(branch_junctions) or bool(_ring_xlinks) or _scaffold_xlinks > 0
+    _all_atom_set = set(range(mol.GetNumAtoms())) if not _skip_multichain else set()
+    _claimed_atoms = set(backbone_atoms_all)
+    _remaining = _all_atom_set - _claimed_atoms
+    while len(_remaining) >= 5:
+        _candidates = [p for p in placements if p.mol_atoms.issubset(_remaining)]
+        if not _candidates:
+            break
+        try:
+            _new_chain = _s2c_build_backbone(_derx_mol, _candidates)
+        except Exception:
+            _new_chain = []
+        if not _new_chain:
+            break
+        _new_abbrs = []
+        for _node in _new_chain:
+            _atom_list = list(_node.mol_atoms)
+            try:
+                _aas, _ = _s2c_isolate_residues(_match_mol, [_atom_list])
+                _aa_mol = _aas[0] if _aas else None
+            except Exception:
+                _aa_mol = None
+            if _aa_mol is None:
+                _new_abbrs.append(_node.abbr)
+                continue
+            _bbd = _node.entry.bb_dist
+            _lf = [e for e in lib if e[6] == _bbd]
+            try:
+                _ab, _ = _s2c_match(_aa_mol, _lf or lib)
+            except Exception:
+                _ab = None
+            _new_abbrs.append(_ab or _node.abbr)
+        extra_chains.append(_new_chain)
+        extra_chain_abbrs.append(_new_abbrs)
+        for _node in _new_chain:
+            _claimed_atoms.update(_node.mol_atoms)
+        _remaining = _all_atom_set - _claimed_atoms
+
+    if extra_chains:
+        # Build index maps for ALL chains (primary at index 0, extras 1..N)
+        _all_chains = [backbone] + extra_chains
+        _all_abbrs = [abbrs] + extra_chain_abbrs  # mutated in-place
+        _chain_idx = []   # per-chain {atom_idx: residue_pos}
+        _chain_sets = []  # per-chain set of atom indices
+        _chain_anchors = []  # per-chain {in_n, out_co} backbone-anchor atoms
+        for _ch in _all_chains:
+            _idx = {ai: pos for pos, nd in enumerate(_ch) for ai in nd.mol_atoms}
+            _chain_idx.append(_idx)
+            _chain_sets.append(set(_idx.keys()))
+            _chain_anchors.append({n.in_n for n in _ch} | {n.out_co for n in _ch})
+        _all_chain_atoms = set().union(*_chain_sets)
+
+        # ── Detect cross-chain bridges (direct + through-linker) ──────────────
+        # Same two flavours as the single-secondary-chain case, but iterated
+        # across all chain pairs.  Only sidechain atoms qualify as anchors
+        # (in_n/out_co would yield invalid .!N(1,2) annotations).
+        _bridge_records: list = []  # (i, j, pos_i, pos_j, atom_i, atom_j)
+        _seen_global: set = set()
+
+        def _record(i, j, ai, aj):
+            ci, cj = (i, j) if i < j else (j, i)
+            xi, xj = (ai, aj) if i < j else (aj, ai)
+            pi, pj = _chain_idx[ci][xi], _chain_idx[cj][xj]
+            k = (ci, cj, pi, pj)
+            if k in _seen_global:
+                return False
+            _seen_global.add(k)
+            _bridge_records.append((ci, cj, pi, pj, xi, xj))
+            return True
+
+        # Direct-bond bridges: any inter-chain bond
+        for _bd in mol.GetBonds():
+            _ba, _ea = _bd.GetBeginAtomIdx(), _bd.GetEndAtomIdx()
+            _ci = next((i for i, s in enumerate(_chain_sets) if _ba in s), None)
+            _cj = next((i for i, s in enumerate(_chain_sets) if _ea in s), None)
+            if _ci is None or _cj is None or _ci == _cj:
+                continue
+            _record(_ci, _cj, _ba, _ea)
+
+        # Through-linker bridges: BFS each chain's sidechain atoms through
+        # unplaced atoms (atoms NOT in any chain), recording the first
+        # other-chain sidechain reached.  Hop cap 4 covers disulfide (S-S),
+        # thioether (S-CH2), and short aliphatic linkers.
+        from collections import deque as _dq_b
+        _MAX_LINKER_HOPS = 4
+        for i in range(len(_all_chains)):
+            for _start in sorted(_chain_sets[i] - _chain_anchors[i]):
+                if not any(nb.GetIdx() not in _all_chain_atoms
+                           for nb in mol.GetAtomWithIdx(_start).GetNeighbors()):
+                    continue
+                _q = _dq_b([(_start, 0)])
+                _bfs_seen = {_start}
+                _found = False
+                while _q and not _found:
+                    _cur, _hops = _q.popleft()
+                    if _hops > _MAX_LINKER_HOPS:
+                        continue
+                    for _nb in mol.GetAtomWithIdx(_cur).GetNeighbors():
+                        _ni = _nb.GetIdx()
+                        if _ni in _bfs_seen:
+                            continue
+                        _target = next((k for k, s in enumerate(_chain_sets)
+                                        if k != i and _ni in s), None)
+                        if _target is not None:
+                            if _ni in _chain_anchors[_target]:
+                                continue
+                            if _record(i, _target, _start, _ni):
+                                _found = True
+                            break
+                        if _ni in _all_chain_atoms:
+                            continue
+                        _bfs_seen.add(_ni)
+                        _q.append((_ni, _hops + 1))
+
+        if _bridge_records:
+            try:
+                raw_lib
+            except NameError:
+                raw_lib = _s2c_get_raw_lib()
+            try:
+                xlink_ctr
+            except NameError:
+                xlink_ctr = max(1 if cyclic else 0, _scaffold_xlinks) + 1
+            for _i, _j, _pi, _pj, _ai, _aj in _bridge_records:
+                _ch_i, _ch_j = _all_chains[_i], _all_chains[_j]
+                _ab_i, _ab_j = _all_abbrs[_i], _all_abbrs[_j]
+                if _ai == _ch_i[_pi].out_co:
+                    _r1 = 2
+                elif _ai == _ch_i[_pi].in_n:
+                    _r1 = 1
+                else:
+                    _r1 = _s2c_crosslink_r(_ab_i[_pi].split('.')[0], raw_lib) or 4
+                if _aj == _ch_j[_pj].out_co:
+                    _r2 = 2
+                elif _aj == _ch_j[_pj].in_n:
+                    _r2 = 1
+                else:
+                    _r2 = _s2c_crosslink_r(_ab_j[_pj].split('.')[0], raw_lib) or 4
+                _tag = f'!{xlink_ctr}'
+                xlink_ctr += 1
+                _ab_i[_pi] += f'.{_tag}({_r1},{_r2})'
+                _ab_j[_pj] += f'.{_tag}({_r2},{_r1})'
+
     # ── 7. Build CABILN string ────────────────────────────────────────────────
     if cyclic:
         cabiln = '!1-' + '-'.join(abbrs) + '-!1'
@@ -6213,7 +6459,288 @@ def smiles_to_cabiln_core(smiles: str):
         cabiln += scaffold_suffix
     if n_cap:
         cabiln = n_cap + '-' + cabiln
+    for _ec_abbrs in extra_chain_abbrs:
+        if _ec_abbrs:
+            cabiln += '%' + '-'.join(_ec_abbrs)
+
+    # ── Graph-walker fallback ─────────────────────────────────────────────────
+    # If the existing CABILN round-trips to a molecule whose heavy-atom count
+    # is much smaller than the source, the walker dropped residues it could not
+    # match.  Re-run via the graph-first walker (which walks amide bonds and
+    # emits `<sidechain>` synthetic tokens for unmatched alpha-AAs) and use its
+    # output if the RT atom count is closer to source.
+    cabiln, details = _s2c_graph_fallback(smiles, cabiln, details, mol)
     return cabiln, details
+
+
+def _s2c_one_fragment_candidates(frag, ring_tag, max_breaks=16):
+    """Yield candidate single-residue CABILN tokens for ONE connected fragment.
+
+    A cyclic fragment can be opened at any of its ring amides; which break point
+    reforms exactly depends on the surrounding chemistry (e.g. a chromophore-
+    internal lactam reforms to a different aromaticity than the backbone amide).
+    Rather than guess, emit every breakable ring amide as a separate candidate
+    and let the caller verify which one round-trips against the source.
+
+    Returns a list of (token_str, used_ring_tag_bool); empty if none buildable."""
+    from rdkit import Chem as _C
+    from rdkit.Chem import RWMol as _RW
+
+    def _carbonyl(mol, c):
+        return any(o.GetAtomicNum() == 8 and
+                   mol.GetBondBetweenAtoms(c.GetIdx(), o.GetIdx()).GetBondTypeAsDouble() == 2.0
+                   for o in c.GetNeighbors())
+
+    cands = []
+    # cyclic: try opening EACH ring amide -> !<ring_tag> macrocycle closure
+    n_tried = 0
+    for b in frag.GetBonds():
+        if n_tried >= max_breaks:
+            break
+        if b.GetBondTypeAsDouble() != 1.0 or not b.IsInRing():
+            continue
+        a1, a2 = b.GetBeginAtom(), b.GetEndAtom()
+        if a1.GetAtomicNum() == 7 and a2.GetAtomicNum() == 6 and _carbonyl(frag, a2):
+            n, c = a1, a2
+        elif a2.GetAtomicNum() == 7 and a1.GetAtomicNum() == 6 and _carbonyl(frag, a1):
+            n, c = a2, a1
+        else:
+            continue
+        n_tried += 1
+        rw = _RW(frag)
+        rw.RemoveBond(n.GetIdx(), c.GetIdx())
+        d1 = rw.AddAtom(_C.Atom(0)); rw.GetAtomWithIdx(d1).SetIsotope(1)
+        rw.AddBond(d1, n.GetIdx(), _C.BondType.SINGLE)
+        d2 = rw.AddAtom(_C.Atom(0)); rw.GetAtomWithIdx(d2).SetIsotope(2)
+        rw.AddBond(d2, c.GetIdx(), _C.BondType.SINGLE)
+        try:
+            mm = rw.GetMol(); _C.SanitizeMol(mm); t = _C.MolToSmiles(mm)
+            if _C.MolFromSmiles(t) is not None:
+                cands.append((f'!{ring_tag}-<{t}>-!{ring_tag}', True))
+        except Exception:
+            pass
+    # acyclic: free-amine N -> [1*], C-terminus -> [2*] (acid) or [2*:99] (aldehyde).
+    # Aldehyde terminus is opted in via atom-map 99 on the [2*] dummy — pyPept's
+    # _infer_synth_chem_type honours it as R2-cap=[H] instead of the default [OH],
+    # so peptide-aldehyde warheads (CHO C-terminus) round-trip losslessly.
+    nterm = cterm_acid = cterm_ald = None
+    for a in frag.GetAtoms():
+        if a.GetAtomicNum() == 7 and a.GetTotalNumHs() >= 1 and not any(
+                _carbonyl(frag, nb) for nb in a.GetNeighbors() if nb.GetAtomicNum() == 6):
+            nterm = a.GetIdx()
+        if a.GetAtomicNum() == 6 and _carbonyl(frag, a):
+            if any(o.GetAtomicNum() == 8 and o.GetTotalNumHs() >= 1
+                   for o in a.GetNeighbors()):
+                cterm_acid = a.GetIdx()
+            elif a.GetTotalNumHs() == 1 and a.GetDegree() == 2:
+                # carbonyl C with one H and one heavy neighbour besides =O → CHO
+                cterm_ald = a.GetIdx()
+    for cterm, ald in ((cterm_acid, False), (cterm_ald, True)):
+        if nterm is None or cterm is None:
+            continue
+        rw = _RW(frag)
+        if ald:
+            rw.GetAtomWithIdx(cterm).SetNumExplicitHs(0)
+            rw.GetAtomWithIdx(cterm).SetNoImplicit(True)
+        d1 = rw.AddAtom(_C.Atom(0)); rw.GetAtomWithIdx(d1).SetIsotope(1)
+        rw.AddBond(d1, nterm, _C.BondType.SINGLE)
+        d2 = rw.AddAtom(_C.Atom(0)); rw.GetAtomWithIdx(d2).SetIsotope(2)
+        if ald:
+            rw.GetAtomWithIdx(d2).SetAtomMapNum(99)
+        rw.AddBond(d2, cterm, _C.BondType.SINGLE)
+        try:
+            mm = rw.GetMol(); _C.SanitizeMol(mm); t = _C.MolToSmiles(mm)
+            if _C.MolFromSmiles(t) is not None:
+                cands.append((f'<{t}>', False))
+        except Exception:
+            pass
+    return cands
+
+
+def _s2c_one_fragment_token(frag, ring_tag):
+    """Back-compat: first buildable candidate (or None, False)."""
+    cands = _s2c_one_fragment_candidates(frag, ring_tag)
+    return cands[0] if cands else (None, False)
+
+
+def _s2c_whole_molecule_candidates(src_mol, max_cands=16):
+    """Last-resort lossless fallback: emit each connected fragment as one
+    synthetic <smi> residue (lossless by construction), joined by '%'.
+
+    A cyclic single fragment yields one candidate per break point (the caller
+    verifies which round-trips exactly) — this recovers exotic macrocycles
+    (chromophores, fused lactams) whose first-found amide reforms wrongly.
+    Multi-fragment molecules keep the deterministic first-valid token per
+    fragment (these already round-trip). Returns a list of CABILN strings."""
+    from rdkit import Chem as _C
+    if src_mol is None:
+        return []
+    frags = _C.GetMolFrags(src_mol, asMols=True, sanitizeFrags=False)
+    # skip tiny inorganic counterions (carbon-free) — pyPept won't model them
+    frags = [f for f in frags if any(a.GetAtomicNum() == 6 for a in f.GetAtoms())]
+    if not frags:
+        return []
+    if len(frags) == 1:
+        out = []
+        for tok, _used in _s2c_one_fragment_candidates(frags[0], 1):
+            out.append(tok)
+            if len(out) >= max_cands:
+                break
+        return out
+    # multi-fragment: one token per fragment, first buildable candidate each
+    parts = []
+    ring_tag = 1
+    for f in frags:
+        cands = _s2c_one_fragment_candidates(f, ring_tag)
+        if not cands:
+            return []  # can't represent a fragment -> abandon fallback
+        tok, used_ring = cands[0]
+        if used_ring:
+            ring_tag += 1
+        parts.append(tok)
+    return ['%'.join(parts)]
+
+
+def _s2c_whole_molecule_token(src_mol):
+    """Back-compat: first whole-molecule candidate CABILN, or None."""
+    cands = _s2c_whole_molecule_candidates(src_mol)
+    return cands[0] if cands else None
+
+
+def _s2c_graph_fallback(smiles, cab_old, details_old, src_mol):
+    """Run BOTH the existing walker and the graph walker, then pick the
+    CABILN whose round-trip is closer to the source.
+
+    Selection priority:
+      1. RT canonical SMILES exactly equals source canonical SMILES → pick that one
+      2. Stereo-stripped RT canonical equals stereo-stripped source → pick that one
+      3. RT heavy-atom count closer to source → pick that one
+      4. Default to existing walker (preserve baseline behaviour)
+
+    Catches BaseException incl. SystemExit because pyPept.sequence calls
+    sys.exit(3) on monomer-not-found rather than raising."""
+    try:
+        if src_mol is None:
+            return cab_old, details_old
+        from pyPept.sequence import Sequence as _Seq
+        from pyPept.molecule import Molecule as _Mol
+        from rdkit import Chem as _C
+        # Reduce to the parent (largest organic fragment) before scoring/fallback:
+        # the peptide we model is one connected component; dot-separated salts and
+        # solvents are distinct molecules.  Critically this makes the whole-molecule
+        # fallback see a SINGLE fragment, so its per-break-point candidate search
+        # runs (the multi-fragment branch only tries one break point) — which is
+        # what lets disulfide macrocycles round-trip losslessly.
+        _frags = _C.GetMolFrags(src_mol, asMols=True, sanitizeFrags=False)
+        if len(_frags) > 1:
+            _organic = [f for f in _frags
+                        if any(a.GetAtomicNum() == 6 for a in f.GetAtoms())] or list(_frags)
+            src_mol = max(_organic, key=lambda f: f.GetNumHeavyAtoms())
+        src_atoms = src_mol.GetNumHeavyAtoms()
+        if src_atoms < 5:
+            return cab_old, details_old
+        src_canon = _C.MolToSmiles(src_mol)
+        src_mol_ns = _C.MolFromSmiles(src_canon)
+        if src_mol_ns is not None:
+            _C.RemoveStereochemistry(src_mol_ns)
+            src_canon_ns = _C.MolToSmiles(src_mol_ns)
+        else:
+            src_canon_ns = None
+
+        def _eval(cab):
+            """Return (rt_canon, rt_canon_ns, rt_atoms) for a CABILN, or None on failure."""
+            if not cab:
+                return None
+            try:
+                seq = _Seq(cab)
+                rt = _Mol(seq).get_molecule(fmt='ROMol')
+                if rt is None:
+                    return None
+                rt_canon = _C.MolToSmiles(rt)
+                rt_mol_ns = _C.MolFromSmiles(rt_canon)
+                if rt_mol_ns is not None:
+                    _C.RemoveStereochemistry(rt_mol_ns)
+                    rt_canon_ns = _C.MolToSmiles(rt_mol_ns)
+                else:
+                    rt_canon_ns = None
+                return (rt_canon, rt_canon_ns, rt.GetNumHeavyAtoms())
+            except BaseException:
+                return None
+
+        old_eval = _eval(cab_old)
+        # If old walker is already perfect, no need to run graph walker
+        if old_eval and old_eval[0] == src_canon:
+            return cab_old, details_old
+
+        try:
+            import sys as _sys, os as _os
+            _here = _os.path.dirname(_os.path.abspath(__file__))
+            if _here not in _sys.path:
+                _sys.path.insert(0, _here)
+            import graph_walker_prototype as _gw
+            cab_new = _gw.cabiln_from_mol(src_mol)
+        except BaseException:
+            return cab_old, details_old
+        new_eval = _eval(cab_new)
+
+        # Score: lower is better
+        def _score(ev):
+            if ev is None:
+                return (3, float('inf'))  # worst
+            rt_canon, rt_canon_ns, rt_atoms = ev
+            if rt_canon == src_canon:
+                return (0, 0)  # exact
+            if src_canon_ns and rt_canon_ns == src_canon_ns:
+                return (1, abs(src_atoms - rt_atoms))  # no-stereo match
+            return (2, abs(src_atoms - rt_atoms))
+
+        score_old = _score(old_eval)
+        score_new = _score(new_eval)
+
+        # Candidate 3: cover/recognition engine (additive — only wins if its RT
+        # is strictly closer). Gated on GW_USE_COVER for safe A/B benching.
+        cab_cover = None
+        if not _os.environ.get('GW_DISABLE_COVER'):
+            try:
+                import cover_walker as _cwk
+                global _COVER_CORES
+                try:
+                    _COVER_CORES
+                except NameError:
+                    _COVER_CORES = _cwk.load_monomer_cores()
+                cab_cover = _cwk.cover_emit_cabiln(src_mol, _COVER_CORES)
+            except BaseException:
+                cab_cover = None
+        cover_eval = _eval(cab_cover) if cab_cover else None
+        score_cover = _score(cover_eval)
+
+        best_score = min(score_old, score_new, score_cover)
+        best = min(((score_old, 'old'), (score_new, 'new'), (score_cover, 'cover')),
+                   key=lambda x: x[0])[1]
+        # Last-resort whole-molecule token: ONLY when no real decomposition is
+        # exact (best_score[0] > 0). A coarse-but-exact CABILN beats a
+        # fine-but-wrong one; it never displaces a meaningful exact decomposition.
+        if best_score[0] > 0:
+            best_whole = None
+            best_whole_score = best_score
+            for cab_whole in _s2c_whole_molecule_candidates(src_mol):
+                whole_eval = _eval(cab_whole)
+                if whole_eval:
+                    ws = _score(whole_eval)
+                    if ws < best_whole_score:
+                        best_whole_score = ws
+                        best_whole = cab_whole
+                        if ws[0] == 0:
+                            break  # exact round-trip — can't do better
+            if best_whole is not None:
+                return best_whole, []
+        if best == 'cover':
+            return cab_cover, []
+        if best == 'new' and score_new < score_old:
+            return cab_new, []
+        return cab_old, details_old
+    except BaseException:
+        return cab_old, details_old
 
 
 # ── routes ────────────────────────────────────────────────────────────────────

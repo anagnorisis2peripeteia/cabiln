@@ -225,7 +225,9 @@ _BB_LACTONE_PAT  = Chem.MolFromSmarts('[CX3:1](=O)[OX2;R]')
 # Uses pre_smarts column (H≥1 required — there must be an H to replace with dummy).
 # All entries including label_only are included to reserve slots in pre_activate.
 from pyPept.interfaces.reaction_library import _CHEM_TYPE_REGISTRY
-_SIDECHAIN_RULES = [(pre_smarts, lg, ct, lo) for ct, pre_smarts, lg, _infer, lo in _CHEM_TYPE_REGISTRY]
+_BACKBONE_ONLY_TYPES = frozenset({'backbone_c_red', 'quat_c_anchor'})
+_SIDECHAIN_RULES = [(pre_smarts, lg, ct, lo) for ct, pre_smarts, lg, _infer, lo in _CHEM_TYPE_REGISTRY
+                     if ct not in _BACKBONE_ONLY_TYPES]
 
 _SC_PATTERNS  = [(Chem.MolFromSmarts(s), lg, ct, lo) for s, lg, ct, lo in _SIDECHAIN_RULES]
 _SECOND_H_PAT = Chem.MolFromSmarts('[NX3;H2:1]')
@@ -248,6 +250,30 @@ def find_backbone_slots(mol):
     """
     n_idxs = [m[0] for m in mol.GetSubstructMatches(_BB_N_PAT)]
     c_idxs = [m[0] for m in mol.GetSubstructMatches(_BB_COOH_PAT)]
+
+    # Depsipeptide / hydroxy acid: no amine but has COOH and a separate OH.
+    # Must check BEFORE the C-terminal fallback (which would put an alcohol
+    # in c_idxs and collide with the depsipeptide O search).
+    if not n_idxs and c_idxs:
+        cooh_o_idxs = set()
+        for c_idx in c_idxs:
+            for nb in mol.GetAtomWithIdx(c_idx).GetNeighbors():
+                if nb.GetAtomicNum() == 8:
+                    bond = mol.GetBondBetweenAtoms(c_idx, nb.GetIdx())
+                    if bond and bond.GetBondTypeAsDouble() == 1.0:
+                        cooh_o_idxs.add(nb.GetIdx())
+        o_idxs = [m[0] for m in mol.GetSubstructMatches(_BB_ALCOHOL_PAT)
+                  if m[0] not in cooh_o_idxs]
+        if o_idxs:
+            best_o, best_c, best_dist = None, None, float('inf')
+            for o_idx in o_idxs:
+                for c_idx in c_idxs:
+                    path = Chem.GetShortestPath(mol, o_idx, c_idx)
+                    if path and 2 <= len(path) - 1 < best_dist:
+                        best_dist = len(path) - 1
+                        best_o, best_c = o_idx, c_idx
+            if best_o is not None:
+                return {1: best_o, 2: best_c}
 
     # Fallback: if no COOH, try aldehyde → alcohol → lactone as C-terminal analogue
     if not c_idxs:
@@ -385,10 +411,14 @@ def find_sidechain_slots(mol, assigned_atoms, start_slot=4):
     protected = set()  # non-attachment atoms in multi-atom SMARTS — off-limits
     first_ct = {}      # atom_idx -> first assigned chem_type
 
+    _AROMATIC_SLOT_TYPES = frozenset({'aromatic_nh'})
     for patt, leaving, chem_type, label_only in _SC_PATTERNS:
         matches = sorted(mol.GetSubstructMatches(patt), key=lambda m: m[0])
         for match in matches:
             idx = match[0]
+            if (mol.GetAtomWithIdx(idx).GetIsAromatic()
+                    and chem_type not in _AROMATIC_SLOT_TYPES):
+                continue
             if idx not in seen and idx not in protected:
                 lg = leaving if leaving is not None else infer_leaving_group(mol, idx)
                 slots[next_slot] = (idx, lg, chem_type)
@@ -583,20 +613,27 @@ def pre_activate(smiles, slot_overrides=None, leaving_overrides=None,
             r2_ct = 'lactone_c'
         else:
             r2_ct = 'backbone_c'
-        backbone_chem_types = {1: 'backbone_n', 2: r2_ct}
+        r1_atom = mol.GetAtomWithIdx(backbone[1])
+        r1_ct = 'backbone_o' if r1_atom.GetAtomicNum() == 8 else 'backbone_n'
+        backbone_chem_types = {1: r1_ct, 2: r2_ct}
         # backbone_n_mod: second H on backbone N (N-methylation slot).
         # Pro's ring N has only 1 H and is skipped naturally.
+        # Depsipeptide O atoms don't get backbone_n_mod.
         n_atom = mol.GetAtomWithIdx(backbone[1])
-        h_count = sum(1 for nb in n_atom.GetNeighbors() if nb.GetAtomicNum() == 1)
-        if h_count >= 2:
+        if n_atom.GetAtomicNum() == 7 and sum(1 for nb in n_atom.GetNeighbors() if nb.GetAtomicNum() == 1) >= 2:
             slot = max(backbone.keys()) + 1  # 3 for standard AA
             backbone[slot] = backbone[1]
             backbone_chem_types[slot] = 'backbone_n_mod'
 
-    # Exclude backbone atoms from the sidechain scan. The backbone COOH's
-    # hydroxyl O is also excluded so downstream patterns (hydroxyl, etc.)
-    # don't spuriously fire on it.
+    # Exclude backbone atoms AND all atoms on the backbone path from the
+    # sidechain scan.  Without path exclusion, patterns like backbone_c_red
+    # fire on the alpha-C (Gly) or ring-CH2 (Pro) which sit between the
+    # backbone endpoints.
     _bb_excluded = set(backbone.values())
+    if 1 in backbone and 2 in backbone:
+        _bb_path = Chem.GetShortestPath(mol, backbone[1], backbone[2])
+        if _bb_path:
+            _bb_excluded.update(_bb_path)
     if 2 in backbone:
         _c = mol.GetAtomWithIdx(backbone[2])
         for _nb in _c.GetNeighbors():
@@ -673,7 +710,12 @@ def pre_activate(smiles, slot_overrides=None, leaving_overrides=None,
     for idx in sorted(set(atoms_to_remove), reverse=True):
         emol.RemoveAtom(idx)
 
-    mol_final = Chem.RemoveHs(emol.GetMol())
+    _raw = emol.GetMol()
+    try:
+        Chem.SanitizeMol(_raw)
+    except Exception:
+        pass
+    mol_final = Chem.RemoveHs(_raw)
     try:
         Chem.SanitizeMol(mol_final)
     except Exception as e:

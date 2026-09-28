@@ -387,6 +387,24 @@
   steps:
     - "[1*][N:1].[2*][C:2] >> [N:1][C:2]"
 
+- id: benzylamine_xlink
+  description: >
+    Benzylamine crosslink — benzylic CH2 of a scaffold (XylBridge R4/R5)
+    bonded to a polyamine nitrogen. Same C-N single bond as reduced_amide
+    but between a scaffold carbon attachment point and a reduced backbone C.
+    Covers both reduced_n and carbon chem_type labels on the scaffold side.
+  reactant_pairs:
+    - [backbone_c_red, reduced_n]
+    - [backbone_c_red, carbon]
+    - [backbone_c_red, amine_primary]
+    - [reduced_n, backbone_c_red]
+    - [carbon, backbone_c_red]
+    - [amine_primary, backbone_c_red]
+  slot_a: 2
+  slot_b: 4
+  steps:
+    - "[2*][C:1].[4*][N:2] >> [C:1][N:2]"
+
 - id: aryl_ether
   description: >
     Aryl-ether crosslink between a phenol oxygen (R3 of N-Me-beta-OH-Tyr type
@@ -400,6 +418,47 @@
   slot_b: 4
   steps:
     - "[3*][O:1].[4*][C:2] >> [O:1][C:2]"
+
+- id: aryl_o_alkylation
+  description: >
+    Williamson ether synthesis — phenolic O (Tyr-OH style) + alkyl halide C →
+    aryl alkyl ether (e.g. Tyr O-methylation in fusaricidin/thiocoraline-like
+    natural products: Tyr(OMe) appears as `hTyr._Me(4,2)` linkage in CABILN).
+    SMIRKS uses Rule 1: dummy directly on the reactive O and reactive C
+    (alkyl halide leaves implicitly via leaving-group metadata).
+  reactant_pairs:
+    - [aryl_phenol_o, alkyl_halide_c]
+  slot_a: 4
+  slot_b: 4
+  steps:
+    - "[4*][O:1].[4*][C:2] >> [O:1][C:2]"
+
+- id: aryl_ester
+  description: >
+    Aryl ester from phenolic O (Tyr-style) + backbone carbonyl C — phenol
+    O-acylation, the analogue of `backbone_ester` but with an aryl O instead
+    of an aliphatic O (depsi). Closes macrolactone rings where Tyr's hydroxyl
+    serves as the ester O.
+  reactant_pairs:
+    - [aryl_phenol_o, backbone_c]
+  slot_a: 4
+  slot_b: 2
+  steps:
+    - "[4*][O:2].[2*][C:4](=[O:5]) >> [O:2][C:4](=[O:5])"
+
+- id: diaryl_ether
+  description: >
+    Diaryl ether bridge (vancomycin/teicoplanin-class biaryl ether): phenolic O
+    (Tyr-style aryl_phenol_o) joined to the aromatic C of another residue's
+    ring, forming the C-O-c ether that bridges two aryl-bearing residues. Same
+    bond-formation as aryl_o_alkylation but the electrophilic partner is an
+    aromatic carbon anchor rather than an alkyl halide.
+  reactant_pairs:
+    - [aryl_phenol_o, aryl_c_anchor]
+  slot_a: 4
+  slot_b: 4
+  steps:
+    - "[4*][O:1].[4*][c:2] >> [O:1][c:2]"
 
 # ── UNBOUND SITE RESTORATION ─────────────────────────────────────────────────
 # Applied to terminal dummy atoms that were never consumed by a bond reaction.

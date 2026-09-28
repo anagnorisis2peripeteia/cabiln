@@ -31,6 +31,7 @@ from dataclasses import dataclass, field
 from importlib.resources import files
 
 # Third-party libraries
+import hashlib
 import numpy as np
 from rdkit import Chem
 from rdkit.Chem import PandasTools
@@ -39,6 +40,155 @@ from rdkit.Chem import PandasTools
 ##########################################################################
 # Functions and classes
 ##########################################################################
+
+# Regex for inline synthetic tokens:
+#   `<sidechain>`       — alpha-AA template (sidechain only or full [1*]/[2*] form)
+#   `<smi>_`            — N-cap (single R2 slot connecting to next residue's R1 via amide)
+#   `_<smi>`            — C-cap (single R1 slot connecting to previous residue's R2)
+# Order matters in the regex pre-replacer: caps must be tried BEFORE plain
+# alpha-AA tokens so the trailing/leading `_` is consumed with the bracket.
+_SYN_NCAP_RE = re.compile(r'<([^<>]*)>_')
+_SYN_CCAP_RE = re.compile(r'_<([^<>]*)>')
+_SYN_AA_RE   = re.compile(r'<([^<>]*)>')
+
+
+def _build_synthetic_aa(sidechain_smi):
+    """Build an alpha-AA ROMol template from a sidechain SMILES (or a full
+    residue template).
+
+    Two input forms accepted:
+      1. Sidechain-only (no `[1*]` / `[2*]`): wrapped as
+         `[1*]NC(<sc>)C(=O)[2*]`.  Cα stereo is unset.
+      2. Full template (contains both `[1*]` and `[2*]`): used as-is.
+         This lets the walker preserve Cα stereo by emitting e.g.
+         `<[1*]N[C@@H](C)C([2*])=O>` for L-alanine-like residues.
+
+    Layout convention: R1 (isotope 1) on backbone N, R2 (isotope 2) on
+    carbonyl C, matching the SDF library.  Returns None on parse error.
+    Empty / whitespace `sidechain_smi` produces a glycine equivalent.
+    """
+    import re as _re
+    if sidechain_smi is None:
+        sidechain_smi = ''
+    sc = sidechain_smi.strip()
+    if not sc:
+        smi = '[1*]NCC(=O)[2*]'
+    elif _re.search(r'\[1\*[:\]]', sc) and _re.search(r'\[2\*[:\]]', sc):
+        # Full template form: accept [1*], [1*:n], [2*], [2*:n]. Atom-map digits
+        # after the isotope are in-band flags (e.g. [2*:99] = aldehyde terminus).
+        smi = sc
+    else:
+        smi = f'[1*]NC({sc})C(=O)[2*]'
+    try:
+        return Chem.MolFromSmiles(smi)
+    except Exception:
+        return None
+
+
+def _build_synthetic_cap(cap_smi, side):
+    """Build a synthetic cap ROMol from a SMILES.
+
+    side='n':  N-cap — the cap's C(=O) bonds to the next residue's R1
+               via standard backbone_amide.  Output has R2 only.
+    side='c':  C-cap — the cap's N bonds to the previous residue's R2.
+               Output has R1 only.
+
+    Two input forms accepted (same as _build_synthetic_aa):
+      - Bare SMILES (no `[1*]` / `[2*]`): walker is responsible for
+        placing the dummy atom; we wrap minimally.  For N-cap, append
+        `[2*]` to the LAST atom; for C-cap, prepend `[1*]` to the first.
+      - Full template containing the appropriate `[N*]`: used as-is.
+    """
+    if cap_smi is None:
+        cap_smi = ''
+    s = cap_smi.strip()
+    if not s:
+        return None
+    if side == 'n':
+        if '[2*]' in s:
+            smi = s
+        else:
+            smi = f'{s}[2*]'
+    elif side == 'c':
+        if '[1*]' in s:
+            smi = s
+        else:
+            smi = f'[1*]{s}'
+    else:
+        return None
+    try:
+        return Chem.MolFromSmiles(smi)
+    except Exception:
+        return None
+
+
+def _synthetic_aa_symbol(sidechain_smi):
+    """Stable synthetic-AA monomer symbol from sidechain SMILES."""
+    h = hashlib.md5((sidechain_smi or '').encode()).hexdigest()[:10]
+    return f'__SYN_{h}'
+
+
+def _synthetic_cap_symbol(cap_smi, side):
+    """Stable synthetic cap monomer symbol from cap SMILES + side ('n' / 'c')."""
+    h = hashlib.md5(f'{side}:{cap_smi or ""}'.encode()).hexdigest()[:10]
+    return f'__SYN{side.upper()}CAP_{h}'
+
+
+def _infer_synth_chem_type(mol, slot):
+    """Return (chem_type, leaving_group) for an R-group dummy in a synthetic
+    monomer template.  Slot 1 → backbone_n, slot 2 → backbone_c, slot 3+ →
+    inferred from the dummy's neighbour atom (sidechain anchor).
+
+    The default backbone-C leaving group is [OH] (carboxylic acid terminus).
+    To emit a peptide-aldehyde terminus instead (C(=O)H), the caller writes the
+    slot-2 dummy as [2*:99] in SMILES — atom-map 99 is an in-band marker that
+    overrides _lg to [H] without changing the CABILN grammar."""
+    if slot == 1:
+        return ('backbone_n', '[H]')
+    if slot == 2:
+        for atom in mol.GetAtoms():
+            if (atom.GetAtomicNum() == 0 and atom.GetIsotope() == 2
+                    and atom.GetAtomMapNum() == 99):
+                return ('backbone_c', '[H]')
+        return ('backbone_c', '[OH]')
+    # Find the dummy atom and its neighbour
+    for atom in mol.GetAtoms():
+        if atom.GetAtomicNum() == 0 and atom.GetIsotope() == slot:
+            nbs = atom.GetNeighbors()
+            if not nbs:
+                return (None, None)
+            anchor = nbs[0]
+            sym = anchor.GetSymbol()
+            # Quick chem_type inference by neighbour atom type and context
+            if sym == 'S':
+                return ('thiol', '[H]')
+            if sym == 'Se':
+                return ('selenol', '[H]')
+            if sym == 'N':
+                # Could be amine or guanidinium etc. Default to amine_primary.
+                return ('amine_primary', '[H]')
+            if sym == 'O':
+                # Phenolic O if anchor is bonded to aromatic C; else aliphatic OH
+                for nb2 in anchor.GetNeighbors():
+                    if nb2.GetIsAromatic():
+                        return ('aryl_phenol_o', '[H]')
+                return ('hydroxyl', '[H]')
+            if sym == 'C':
+                # carbonyl C → carboxyl; alkyl halide neighbour; alkene; etc.
+                # Look for =O neighbour → carboxyl
+                for nb2 in anchor.GetNeighbors():
+                    if nb2.GetAtomicNum() == 8:
+                        b = mol.GetBondBetweenAtoms(anchor.GetIdx(), nb2.GetIdx())
+                        if b and b.GetBondTypeAsDouble() == 2.0:
+                            return ('carboxyl', '[OH]')
+                # Alkyl halide
+                for nb2 in anchor.GetNeighbors():
+                    if nb2.GetSymbol() in ('Cl', 'Br', 'I'):
+                        return ('alkyl_halide_c', None)
+                # Default carbon anchor
+                return ('carbon', '[H]')
+            return (None, None)
+    return (None, None)
 
 def _attachment_idx(mol, slot):
     """Return attachment atom index for R-group slot (1-based), or None.
@@ -76,8 +226,14 @@ def _slot_for_attachment(mol, atom_idx):
 # Parens required on first occurrence; may be omitted on second (inverse inferred).
 _INLINE_BOND_RE = re.compile(r'\.(!\w+)(?:\((\d+),(\d+)\))?')
 
-# Matches .CapToken(host_r,cap_r) — named cap attachment; token starts with a letter.
-_INLINE_CAP_RE  = re.compile(r'\.([A-Za-z]\w*)\((\d+),(\d+)\)')
+# Matches .CapToken(host_r,cap_r) — named cap attachment.  The token may start
+# with a letter OR underscore: the monomer library uses `_OMe`, `_Bn`, `_NHBn`,
+# etc. for sidechain fragments whose token deliberately begins with `_` to
+# signal "non-canonical residue".  Without the underscore in the leading-char
+# class, ._OMe(4,1) falls through to the crosslink-branch handler in
+# Sequence._read_bonds and trips the odd-bond parity check (28+ rt_fail cases
+# in cyclicpepedia, 2026-05-16).
+_INLINE_CAP_RE  = re.compile(r'\.([A-Za-z_]\w*)\((\d+),(\d+)\)')
 
 # Detects old BILN bare-integer crosslink annotations: Token(bid,rg) not preceded by '.'.
 _OLD_BILN_RE = re.compile(r'(?<![.\w\[{])([A-Za-z]\w*)\((\d+),(\d+)\)')
@@ -1280,6 +1436,33 @@ class Sequence:
         # branch_rgroup maps each !x bond → partner rgroup z (reserved for Phase 2).
         expanded, _branch_rgroup = _expand_inline_caps(input_biln)
 
+        # Pre-expand synthetic tokens.  N-caps (`<smi>_`) and C-caps (`_<smi>`)
+        # are matched BEFORE bare alpha-AA `<smi>` to ensure the trailing or
+        # leading underscore is consumed with the bracket.  Each token is
+        # replaced by a deterministic synthetic monomer symbol; the SMILES is
+        # remembered so the synthetic monomer rows are appended to monomer_df
+        # below.
+        self._synthetic_aa_smiles = {}   # symbol -> sidechain SMILES (alpha-AA)
+        self._synthetic_caps = {}        # symbol -> (cap_smi, side)
+        def _ncap_repl(_m):
+            cs = _m.group(1)
+            sym = _synthetic_cap_symbol(cs, 'n') + '_'  # trailing _ matches Ac_ / Bz_ naming
+            self._synthetic_caps[sym] = (cs, 'n')
+            return sym
+        def _ccap_repl(_m):
+            cs = _m.group(1)
+            sym = '_' + _synthetic_cap_symbol(cs, 'c')  # leading _ matches _NH2 / _OBn naming
+            self._synthetic_caps[sym] = (cs, 'c')
+            return sym
+        def _syn_repl(_m):
+            sc = _m.group(1)
+            sym = _synthetic_aa_symbol(sc)
+            self._synthetic_aa_smiles[sym] = sc
+            return sym
+        expanded = _SYN_NCAP_RE.sub(_ncap_repl, expanded)
+        expanded = _SYN_CCAP_RE.sub(_ccap_repl, expanded)
+        expanded = _SYN_AA_RE.sub(_syn_repl, expanded)
+
         seq = split_outside(expanded,
                             by_element=SequenceConstants.monomer_join,
                             outside='[]')
@@ -1296,6 +1479,86 @@ class Sequence:
             monomer_df_filepath = default_monomer_df_filepath
 
         self.monomer_df = get_monomer_info(str(monomer_df_filepath))
+
+        # Register synthetic alpha-AA monomers built from `<sidechain>` tokens.
+        # If the sidechain SMILES is malformed, fall back to a glycine-equivalent
+        # so the parser doesn't sys.exit. This trades a silent under-construction
+        # (RT graph mismatch) for a fatal parser crash.
+        for _sym, _sc in self._synthetic_aa_smiles.items():
+            if _sym in self.monomer_df.index:
+                continue
+            _romol = _build_synthetic_aa(_sc)
+            _name = f'synthetic_aa<{_sc}>'
+            if _romol is None:
+                warnings.warn(
+                    f"Synthetic AA token '<{_sc}>' could not be parsed; "
+                    f"falling back to glycine. Source SMILES probably needs walker fix.")
+                _romol = _build_synthetic_aa('')
+                _name = f'synthetic_aa<INVALID:{_sc}>'
+                if _romol is None:
+                    continue  # truly catastrophic, skip
+            # Scan the synthetic mol for ALL R-group dummies (not just R1/R2).
+            # Build m_Rgroups and m_chem_types dynamically: R1 = backbone_n,
+            # R2 = backbone_c, R3+ = inferred from the atom the dummy bonds to.
+            _r_slots = []
+            for _a in _romol.GetAtoms():
+                if _a.GetAtomicNum() == 0 and _a.GetIsotope() >= 1:
+                    _r_slots.append(_a.GetIsotope())
+            _r_slots = sorted(set(_r_slots))
+            _max_slot = max(_r_slots) if _r_slots else 2
+            _rgroups_list = [None] * _max_slot
+            _cts_parts = []
+            for _slot in _r_slots:
+                # Determine chem_type & leaving group
+                _ct, _lg = _infer_synth_chem_type(_romol, _slot)
+                if _ct is None:
+                    continue
+                _rgroups_list[_slot - 1] = _lg
+                _cts_parts.append(f'{_slot}:{_ct}')
+            # Fill any missing slots with None
+            _rgroups_list = [r if r is not None else '' for r in _rgroups_list]
+            _cts = ','.join(_cts_parts)
+            _romol.SetProp('m_chem_types', _cts)
+            self.monomer_df.loc[_sym] = {
+                'm_Rgroups':    _rgroups_list,
+                'm_abbr':       _sym,
+                'm_name':       _name,
+                'm_type':       'aa',
+                'm_subtype':    'synthetic',
+                'm_chem_types': _cts,
+                'ID':           _sym,
+                'm_romol':      _romol,
+            }
+
+        # Register synthetic N-cap / C-cap monomers.
+        # N-cap: R2 only (carbonyl C bonds to next residue's R1 via backbone_amide)
+        # C-cap: R1 only (N bonds to previous residue's R2)
+        for _sym, (_cs, _side) in self._synthetic_caps.items():
+            if _sym in self.monomer_df.index:
+                continue
+            _romol = _build_synthetic_cap(_cs, _side)
+            if _romol is None:
+                warnings.warn(
+                    f"Synthetic {_side}-cap token could not be parsed: {_cs!r}; "
+                    f"skipping.")
+                continue
+            if _side == 'n':
+                _rgroups = ['', '[OH]']
+                _cts = '2:backbone_c'
+            else:
+                _rgroups = ['[H]', '']
+                _cts = '1:backbone_n'
+            _romol.SetProp('m_chem_types', _cts)
+            self.monomer_df.loc[_sym] = {
+                'm_Rgroups':    _rgroups,
+                'm_abbr':       _sym,
+                'm_name':       f'synthetic_{_side}cap<{_cs}>',
+                'm_type':       'cap',
+                'm_subtype':    'synthetic',
+                'm_chem_types': _cts,
+                'ID':           _sym,
+                'm_romol':      _romol,
+            }
 
         try:
             # Parse the BILN sequence
