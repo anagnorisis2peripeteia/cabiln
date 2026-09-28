@@ -98,6 +98,11 @@ but cannot identify individual residues inside it; the result reports this.
 It also reports when search limits prevent checking further interpretations.
 Recognition uses the current monomer library, including newly registered records.
 See [the decomposition contract](docs/decomposition.md) for the algorithm and limits.
+Pass `notation="bracket"` to `convert_smiles` for bracket output; its source atom
+assignments refer directly to occurrences in that output. Editing, formatting
+and highlighting share explicit occurrence identities and numbered connections.
+The [independent benchmark](docs/decomposition-benchmark.md) checks molecular
+identity, residue boundaries and attachment sites against external references.
 
 Unspecified input stereochemistry can be filled from library monomers.
 The converter warns when this happens; the web app displays that warning.
@@ -155,7 +160,8 @@ Python 3.9, 3.11, and 3.13. Historical repair scripts under `tools/` are not tes
 entry points; some modify library files when run.
 
 The code layout and review findings are in [docs/architecture.md](docs/architecture.md)
-and [docs/cleanup-review.md](docs/cleanup-review.md).
+and [docs/cleanup-review.md](docs/cleanup-review.md). The current test results and
+browser acceptance are in [docs/rework-validation.md](docs/rework-validation.md).
 
 ## Attribution
 

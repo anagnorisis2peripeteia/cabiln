@@ -80,6 +80,74 @@ def test_render_exports_same_molecule_and_residue_map(client, notation):
     assert set(data["residue_map"]) == {str(r["idx"]) for r in data["residues"]}
 
 
+@pytest.mark.parametrize(
+    "source,roots,groups",
+    [
+        ("A%K.{G(4,2)}-A", [[0], [1, 2]], [(1, [3], "{", None)]),
+        (
+            "ac-K.[G(4,2)]-K.{A(4,2)}-am",
+            [[0, 1, 2, 3]],
+            [(1, [4], "[", None), (2, [5], "{", None)],
+        ),
+        (
+            "ac-K.{G(4,2)[.A(1,2)]}-D-am",
+            [[0, 1, 2, 3]],
+            [(1, [4], "{", None), (4, [5], "[", 0)],
+        ),
+    ],
+)
+def test_render_layout_retains_each_source_group(client, source, roots, groups):
+    response = client.post("/render", json={"cabiln": source})
+    assert response.status_code == 200, response.text
+    data = response.json()
+    layout = data["layout"]
+    assert [s["roots"] for s in layout["segments"]] == roots
+    assert [
+        (g["host"], g["roots"], g["opening"], g["parent"]) for g in layout["groups"]
+    ] == groups
+    displayed = [r for segment in roots for r in segment]
+    displayed.extend(r for group in layout["groups"] for r in group["roots"])
+    assert sorted(displayed) == list(range(len(data["residues"])))
+    assert len(displayed) == len(set(displayed))
+
+
+@pytest.mark.parametrize(
+    "source,expected",
+    [
+        (
+            "!r-C-A-C-!r",
+            [(0, "!r", [0, 2], None, True), (2, "!r", [0, 2], None, False)],
+        ),
+        (
+            "C.!r(1,2).!s(4,4)-A-C.{!s(4,4).!r(2,1)}",
+            [
+                (0, "!r", [0, 2], None, False),
+                (0, "!s", [0, 2], None, False),
+                (2, "!s", [0, 2], 0, False),
+                (2, "!r", [0, 2], 0, False),
+            ],
+        ),
+        (
+            "ac-K.{G(4,2)[.A(1,2).!1(1,4)]}-D.!1(4,1)-am",
+            [(5, "!1", [2, 5], 1, False), (2, "!1", [2, 5], None, False)],
+        ),
+        (
+            "ac-K.[G(4,2)[.!1(1,4)]]-D.!1(4,1)-am",
+            [(4, "!1", [2, 4], 1, False), (2, "!1", [2, 4], None, False)],
+        ),
+    ],
+)
+def test_render_markers_refer_to_their_source_owner_and_connection(
+    client, source, expected
+):
+    response = client.post("/render", json={"cabiln": source})
+    assert response.status_code == 200, response.text
+    assert [
+        (m["residue"], m["tag"], m["members"], m["group"], m["before"])
+        for m in response.json()["layout"]["markers"]
+    ] == expected
+
+
 def test_legacy_render_returns_the_source_that_its_residue_ids_describe(client):
     raw = "D.(4,1)-G-am%G-A-am%K-A"
     response = client.post("/render", json={"cabiln": raw})
@@ -155,7 +223,14 @@ def test_crosslink_renumbering_preserves_ten_and_one(client):
 def test_notation_conversion_refuses_an_assemblable_but_different_product(
     client, monkeypatch
 ):
-    monkeypatch.setattr("pyPept.sequence.cabiln_to_bracket", lambda source: "A-A")
+    from dataclasses import replace
+
+    from pyPept.peptide import serialize
+
+    def incorrect(peptide, notation):
+        return replace(serialize(peptide, notation), text="A-A")
+
+    monkeypatch.setattr("pyPept.peptide.serialize", incorrect)
     response = client.post(
         "/convert_notation", json={"cabiln": "A-G", "target": "bracket"}
     )

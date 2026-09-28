@@ -40,7 +40,6 @@ from importlib.resources import files
 import hashlib
 import numpy as np
 from rdkit import Chem
-from rdkit.Chem import PandasTools
 
 
 ##########################################################################
@@ -601,7 +600,7 @@ def _expand_inline_caps(biln, peptide_branch_threshold=2, warning_sink=None):
                     _source_record(tok, _source_group(step), 'bracket', _source_group(m), _source_group(t), step_position == len(sub_steps) - 1)
                     if tok.startswith('!'):
                         _source_bond_marker(_source_group(step), int(prev_r),
-                                            owner=frag_tokens[sub_ptr], bracket=_source_group(m))
+                                            owner=frag_tokens[sub_ptr], bracket=_source_group(m), arm=_source_group(t))
                         frag_bond_parts[sub_ptr] += f'({tok},{prev_r})'
                         if tok not in _seen:
                             _seen[tok] = (prev_r, cur_r)
@@ -2039,116 +2038,10 @@ class Sequence:
 ##########################################################################
 
 def get_monomer_info(path):
-    """
-    Convert a monomer SDF file to a Pandas dataframe object.
+    """Return a detached monomer table from the shared, versioned library."""
+    from pyPept.monomer_store import monomer_table
 
-    :param path: os path of the monomers.sdf file
-    :type path: os path
-
-    :return: monomer dictionary as a dataframe
-    """
-    sdf_file = path
-    df_group = PandasTools.LoadSDF(sdf_file)
-    from pyPept.monomer_store import _index_monomer_names
-    symbols = list(df_group['symbol'])
-    abbreviations = list(df_group.get('m_abbr', [None] * len(symbols)))
-    name_index = _index_monomer_names(zip(symbols, abbreviations))
-    df_group['m_abbr'] = [
-        abbr.strip() if isinstance(abbr, str) and abbr.strip() else symbol
-        for symbol, abbr in zip(symbols, abbreviations)
-    ]
-
-    rg_col = 'm_Rgroups'
-    df_group[rg_col] = df_group[rg_col].astype(object)
-    for idx in df_group.index:
-        change = df_group[rg_col][idx].split(SequenceConstants.csv_separator)
-        df_group.at[idx, rg_col] = [None if v.strip() in ('None', '') else v.strip() for v in change]
-
-    df_group = df_group.set_index('symbol')
-    df_group = df_group.rename(columns={"ROMol": "m_romol"})
-
-    # Propagate m_chem_types from SDF into each m_romol as an rdkit property
-    # so downstream infer_chem_type can opt-in to SDF-declared chem types
-    # (e.g. backbone_c_red for reduced-amide peptidomimetics) instead of
-    # relying solely on structural heuristics.
-    if 'm_chem_types' in df_group.columns:
-        for sym in df_group.index:
-            mol = df_group.at[sym, 'm_romol']
-            ct = df_group.at[sym, 'm_chem_types']
-            if mol is not None and isinstance(ct, str) and ct:
-                mol.SetProp('m_chem_types', ct)
-
-    # --- Structural degeneracy detection for paired caps ---
-    # Group cap monomers by their core structure (dummy atoms stripped).
-    # Paired caps like Bn_/_Bn are structurally identical minus dummies;
-    # we derive the base name and store it as a degenerate alias.
-    import pandas as pd
-    caps = df_group[df_group['m_type'] == 'cap']
-    core_map = {}  # canonical SMILES -> list of symbol names
-    for sym in caps.index:
-        mol = caps.at[sym, 'm_romol']
-        if mol is None:
-            continue
-        # Strip dummy atoms (atomic num == 0) to get core
-        emol = Chem.RWMol(mol)
-        dummies = [a.GetIdx() for a in emol.GetAtoms() if a.GetAtomicNum() == 0]
-        for idx in sorted(dummies, reverse=True):
-            emol.RemoveAtom(idx)
-        try:
-            core_smi = Chem.MolToSmiles(emol.GetMol())
-        except Exception:
-            continue
-        if core_smi not in core_map:
-            core_map[core_smi] = []
-        core_map[core_smi].append(sym)
-
-    # For each group with >1 member, derive the base name and add alias
-    degen_aliases = {}  # base_name -> list of variant symbols
-    for smi, variants in core_map.items():
-        if len(variants) < 2:
-            continue
-        # Derive base name: strip leading/trailing '_' from each variant
-        bases = set()
-        for v in variants:
-            base = v.strip('_')
-            bases.add(base)
-        if len(bases) == 1:
-            base_name = bases.pop()
-            # Only create alias if base_name is not already an entry
-            if base_name not in name_index:
-                degen_aliases[base_name] = variants
-
-    # Store aliases as a module-level accessible dict on the DataFrame
-    df_group.attrs['_degen_aliases'] = degen_aliases
-
-    # Stored symbols and abbreviations take precedence over CSV aliases.
-    synonyms = {name: symbols[index] for name, index in name_index.items()
-                if name != symbols[index]}
-    csv_aliases = defaultdict(set)
-    csv_path = os.path.join(os.path.dirname(path), 'monomers.csv')
-    if os.path.isfile(csv_path):
-        import csv as _csv
-        with open(csv_path, newline='', encoding='utf-8') as _f:
-            for row in _csv.DictReader(_f):
-                tok = row.get('token', '').strip()
-                syns = row.get('synonyms', '')
-                if tok and syns and tok in df_group.index:
-                    for alias in syns.split(','):
-                        alias = alias.strip()
-                        if alias and alias not in name_index:
-                            csv_aliases[alias].add(tok)
-    ambiguous = {}
-    for alias, targets in csv_aliases.items():
-        if alias in degen_aliases:
-            targets.update(degen_aliases[alias])
-        if len(targets) == 1:
-            synonyms[alias] = next(iter(targets))
-        else:
-            ambiguous[alias] = tuple(sorted(targets))
-    df_group.attrs['_synonyms'] = synonyms
-    df_group.attrs['_ambiguous_aliases'] = ambiguous
-
-    return df_group
+    return monomer_table(path)
 
 
 ########################################################################

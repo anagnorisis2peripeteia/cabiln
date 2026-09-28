@@ -24,9 +24,12 @@ def render(req: _CabilnReq):
         from rdkit.Chem.Descriptors import ExactMolWt
 
         from pyPept.molecule import Molecule
+        from pyPept.peptide import Peptide
 
         messages = []
-        seq, parsed_source = parse_source(req.cabiln, warning_sink=messages.append)
+        seq, parsed_source = parse_source(
+            req.cabiln, warning_sink=messages.append, track_source=True
+        )
         mol = Molecule(seq)
         romol = mol.get_molecule(fmt="ROMol")
         if romol is None:
@@ -46,10 +49,7 @@ def render(req: _CabilnReq):
         chain_ids = seq.s_chains.get("s_monomerIDs", [])
         chains = [{"idx": ci, "residues": ids} for ci, ids in enumerate(chain_ids)]
 
-        crosslink_groups = _build_crosslink_groups(seq)
-        bracket_groups = _build_bracket_groups(
-            seq, chain_ids, parsed_source, crosslink_groups
-        )
+        layout, crosslink_groups = _renderer_layout(Peptide.from_sequence(seq))
 
         result = {
             "svg": svg,
@@ -58,7 +58,8 @@ def render(req: _CabilnReq):
             "residue_map": {str(k): v for k, v in res_map.items()},
             "residues": residues,
             "chains": chains,
-            "bracket_groups": bracket_groups,
+            "layout": layout,
+            "bracket_groups": layout["groups"],
             "crosslink_groups": crosslink_groups,
             "warnings": messages,
             "cabiln_echo": parsed_source,
@@ -228,108 +229,70 @@ def verify(req: _VerifyReq):
         return JSONResponse({"error": str(exc).split("\n")[0]}, status_code=400)
 
 
-def _build_bracket_groups(seq, chain_ids, cabiln="", crosslink_groups=None):
-    """Identify bracket branch groups and their host monomers.
+def _renderer_layout(peptide):
+    """Project the recorded source layout onto selectable residue IDs.
 
-    Each separate attachment (``.[A.B.C]``, ``.[D]``, ``.cap(r,r)``) on a
-    host residue becomes its own group.  Groups are split by connected
-    components among the branch residues — branch residues that bond to
-    each other stay together; those that only bond to the host get their
-    own group.
-
-    Returns list of ``{host, members}``.
+    Assembly chains describe chemical connectivity. Source segments and groups
+    describe where occurrences appear, including nested and protected branches.
     """
-    if not chain_ids or len(chain_ids) < 2:
-        return []
-    main_set = set(chain_ids[0])
-    branch_set = set()
-    for ci in range(1, len(chain_ids)):
-        branch_set.update(chain_ids[ci])
-    if not branch_set:
-        return []
-
-    xlink_pairs = set()
-    for g in crosslink_groups or []:
-        if len(g["members"]) == 2:
-            a, b = g["members"]
-            xlink_pairs.add((a, b))
-            xlink_pairs.add((b, a))
-
-    host_of = {}
-    branch_adj: dict[int, set] = {idx: set() for idx in branch_set}
-    for bond in seq.s_bonds:
-        m1, m2 = bond[0], bond[2]
-        if (m1, m2) in xlink_pairs:
-            continue
-        if m1 in main_set and m2 in branch_set:
-            host_of[m2] = m1
-        elif m2 in main_set and m1 in branch_set:
-            host_of[m1] = m2
-        elif m1 in branch_set and m2 in branch_set:
-            branch_adj[m1].add(m2)
-            branch_adj[m2].add(m1)
-
-    # Propagate host through inter-branch bonds
-    changed = True
-    while changed:
-        changed = False
-        for idx in branch_set:
-            if idx in host_of:
-                continue
-            for peer in branch_adj.get(idx, set()):
-                if peer in host_of:
-                    host_of[idx] = host_of[peer]
-                    changed = True
-                    break
-
-    # Connected components among branch residues (union-find)
-    parent = {idx: idx for idx in branch_set}
-
-    def find(x):
-        while parent[x] != x:
-            parent[x] = parent[parent[x]]
-            x = parent[x]
-        return x
-
-    def union(a, b):
-        ra, rb = find(a), find(b)
-        if ra != rb:
-            parent[ra] = rb
-
-    for idx, peers in branch_adj.items():
-        for p in peers:
-            union(idx, p)
-
-    from collections import defaultdict
-
-    components = defaultdict(list)
-    for idx in branch_set:
-        if idx in host_of:
-            components[(host_of[idx], find(idx))].append(idx)
-
-    return [
-        {"host": key[0], "members": sorted(members)}
-        for key, members in components.items()
+    layout = peptide.layout
+    crosslinks = [
+        {
+            "tag": edge.label,
+            "members": list(dict.fromkeys(e.occurrence_id for e in edge.endpoints)),
+        }
+        for edge in peptide.connections
+        if edge.label is not None
+    ]
+    links_by_tag = {item["tag"]: item["members"] for item in crosslinks}
+    markers = [
+        {
+            "residue": marker.endpoint.occurrence_id,
+            "tag": marker.label,
+            "members": links_by_tag[marker.label],
+            "group": marker.group,
+            "before": marker.span.end
+            <= peptide.occurrence(marker.endpoint.occurrence_id).source.token.start,
+        }
+        for marker in sorted(layout.markers, key=lambda marker: marker.span.start)
     ]
 
+    def source_order(identities):
+        return sorted(
+            identities,
+            key=lambda identity: peptide.occurrence(identity).source.token.start,
+        )
 
-def _build_crosslink_groups(seq):
-    """Extract crosslink !n pairs from the parsed BILN."""
-    import re
-
-    biln = seq.s_biln
-    chains = biln.split(".")
-    m_idx = 0
-    tag_to_monomers = {}
-    for chain in chains:
-        residues = chain.split("-")
-        for res in residues:
-            for m in re.finditer(r"\((!\w+),\d+\)", res):
-                tag = m.group(1)
-                tag_to_monomers.setdefault(tag, []).append(m_idx)
-            m_idx += 1
-    return [
-        {"tag": tag, "members": mems}
-        for tag, mems in tag_to_monomers.items()
-        if len(mems) == 2
-    ]
+    groups = []
+    for group in layout.groups:
+        nested_members = {
+            member
+            for child in layout.groups
+            if child.parent == group.id
+            for member in child.members
+        }
+        groups.append(
+            {
+                "id": group.id,
+                "host": group.host,
+                "members": list(group.members),
+                "roots": source_order(set(group.members) - nested_members),
+                "parent": group.parent,
+                "kind": group.kind,
+                "opening": group.opening,
+                "closing": group.closing,
+                "protected": group.protected,
+            }
+        )
+    return {
+        "segments": [
+            {
+                "id": segment.id,
+                "roots": source_order(segment.roots),
+                "members": list(segment.members),
+            }
+            for segment in layout.segments
+        ],
+        "groups": groups,
+        "markers": markers,
+    }, crosslinks

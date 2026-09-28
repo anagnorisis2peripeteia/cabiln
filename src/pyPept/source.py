@@ -37,6 +37,7 @@ class BondMarker:
     owner: Span
     kind: Literal["inline", "terminal", "bracket"]
     bracket: Span | None = None
+    arm: Span | None = None
 
 
 class Tracker:
@@ -189,7 +190,7 @@ def record(token, entry, kind, bracket=None, arm=None, terminal=True):
         token.tracker.entry(token, entry, kind, bracket, arm, terminal)
 
 
-def bond_marker(value, slot, *, owner=None, bracket=None, terminal=False):
+def bond_marker(value, slot, *, owner=None, bracket=None, arm=None, terminal=False):
     """Record an endpoint where the existing lowering resolves its owner/slot."""
     if not isinstance(value, SourceText):
         return
@@ -208,5 +209,5 @@ def bond_marker(value, slot, *, owner=None, bracket=None, terminal=False):
         raise ValueError("Crosslink endpoint has no original source owner")
     kind = "terminal" if terminal else "bracket" if bracket is not None else "inline"
     value.tracker.markers.append(
-        BondMarker(span, slot, owner_span, kind, origin_span(bracket))
+        BondMarker(span, slot, owner_span, kind, origin_span(bracket), origin_span(arm))
     )

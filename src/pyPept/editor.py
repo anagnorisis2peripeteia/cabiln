@@ -13,11 +13,11 @@ from hashlib import sha256
 from rdkit import Chem
 
 from pyPept.molecule import Molecule
+from pyPept.peptide import Connection, Endpoint, Peptide
 from pyPept.sequence import (
     _BRACKET_ENTRY_RE,
     Sequence,
     _flatten_nested_brackets,
-    _rgroup_atom_idx,
 )
 from pyPept.source import SourceText, Span, join, origin_span
 
@@ -38,18 +38,6 @@ class EditError(ValueError):
     """An edit cannot preserve the requested source or assembly topology."""
 
 
-def _edge(a, slot_a, b, slot_b):
-    return tuple(sorted(((a, slot_a), (b, slot_b))))
-
-
-def _edges(sequence, identities=None):
-    if identities is None:
-        identities = {i: i for i in range(len(sequence.s_monomers))}
-    return {
-        _edge(identities[b[0]], b[4], identities[b[2]], b[5]) for b in sequence.s_bonds
-    }
-
-
 def _template(monomer):
     return (
         monomer["m_abbr"],
@@ -65,6 +53,7 @@ class PeptideDocument:
         self.source = source
         self.revision = sha256(source.encode()).hexdigest()
         self.sequence = Sequence(source, track_source=True)
+        self.peptide = Peptide.from_sequence(self.sequence)
         self._text = SourceText.original(source)
 
     def select(self, index: int) -> Selection:
@@ -103,7 +92,7 @@ class PeptideDocument:
         updated = PeptideDocument(source)
         if (
             updated.sequence.s_biln != self.sequence.s_biln
-            or updated.sequence.s_bonds != self.sequence.s_bonds
+            or updated.peptide.connections != self.peptide.connections
             or [_template(m) for m in updated.sequence.s_monomers]
             != [_template(m) for m in self.sequence.s_monomers]
         ):
@@ -111,10 +100,12 @@ class PeptideDocument:
         return updated
 
     def _free_slot(self, index: int, slot: int):
-        monomer = self.sequence.s_monomers[index]
-        if _rgroup_atom_idx(monomer["m_romol"], slot) is None:
-            raise ValueError(f"Residue {index} has no R{slot} attachment")
-        if any((index, slot) in edge for edge in _edges(self.sequence)):
+        endpoint = Endpoint(index, slot)
+        try:
+            self.peptide.site(endpoint)
+        except ValueError as error:
+            raise ValueError(f"Residue {index} has no R{slot} attachment") from error
+        if self.peptide.connection_at(endpoint) is not None:
             raise ValueError(f"Residue {index} R{slot} is already bonded")
 
     @staticmethod
@@ -123,9 +114,14 @@ class PeptideDocument:
         if len(sequence.s_monomers) != 1:
             raise ValueError("Choose a single monomer to insert")
         monomer = sequence.s_monomers[0]
+        peptide = Peptide.from_sequence(sequence)
         for slot in slots:
-            if _rgroup_atom_idx(monomer["m_romol"], slot) is None:
-                raise ValueError(f"Monomer {symbol!r} has no R{slot} attachment")
+            try:
+                peptide.site(Endpoint(0, slot))
+            except ValueError as error:
+                raise ValueError(
+                    f"Monomer {symbol!r} has no R{slot} attachment"
+                ) from error
         return monomer
 
     def _tag(self):
@@ -147,10 +143,18 @@ class PeptideDocument:
             # inline or explicit tokens but cannot occur in a bracket. Move
             # only this occurrence into an explicit segment, preserving its
             # original characters and existing attachment.
-            bond = next(b for b in self.sequence.s_bonds if index in (b[0], b[2]))
-            own_slot, host_slot = (
-                (bond[4], bond[5]) if bond[0] == index else (bond[5], bond[4])
+            bond = next(
+                edge
+                for edge in self.peptide.connections
+                if any(endpoint.occurrence_id == index for endpoint in edge.endpoints)
             )
+            own = next(
+                endpoint
+                for endpoint in bond.endpoints
+                if endpoint.occurrence_id == index
+            )
+            host = next(endpoint for endpoint in bond.endpoints if endpoint != own)
+            own_slot, host_slot = own.slot, host.slot
             tag = f"!source{index}"
             while tag in self.sequence.s_biln.tracker.labels:
                 tag += "_"
@@ -182,7 +186,9 @@ class PeptideDocument:
         edits = self._append_to_occurrence(
             a, f".{tag}({host_slot},{target_slot})"
         ) + self._append_to_occurrence(b, f".{tag}({target_slot},{host_slot})")
-        expected = _edges(self.sequence) | {_edge(a, host_slot, b, target_slot)}
+        expected = set(self.peptide.connections) | {
+            Connection(Endpoint(a, host_slot), Endpoint(b, target_slot))
+        }
         return self._apply(edits, expected)
 
     def attach(
@@ -231,8 +237,8 @@ class PeptideDocument:
                 )
             )
         new_index = len(self.sequence.s_monomers)
-        expected = _edges(self.sequence) | {
-            _edge(index, host_slot, new_index, new_slot)
+        expected = set(self.peptide.connections) | {
+            Connection(Endpoint(index, host_slot), Endpoint(new_index, new_slot))
         }
         return self._apply(edits, expected, monomer)
 
@@ -243,19 +249,19 @@ class PeptideDocument:
             raise EditError(
                 "Backbone insertion requires a residue in an explicit chain"
             )
-        expected = _edges(self.sequence)
-        outgoing = next((edge for edge in expected if (index, 2) in edge), None)
+        expected = set(self.peptide.connections)
+        endpoint = Endpoint(index, 2)
+        try:
+            outgoing = self.peptide.connection_at(endpoint)
+        except ValueError as error:
+            raise ValueError(f"Residue {index} has no R2 attachment") from error
         monomer = self._new_monomer(symbol, 1, *([2] if outgoing else []))
-        if _rgroup_atom_idx(self.sequence.s_monomers[index]["m_romol"], 2) is None:
-            raise ValueError(f"Residue {index} has no R2 attachment")
         new_index = len(self.sequence.s_monomers)
         if outgoing is not None:
-            other, other_slot = next(
-                endpoint for endpoint in outgoing if endpoint != (index, 2)
-            )
+            other = next(site for site in outgoing.endpoints if site != endpoint)
             expected.remove(outgoing)
-            expected.add(_edge(new_index, 2, other, other_slot))
-        expected.add(_edge(index, 2, new_index, 1))
+            expected.add(Connection(Endpoint(new_index, 2), other))
+        expected.add(Connection(endpoint, Endpoint(new_index, 1)))
         end = occurrence.entry.end
         suffix = "-" + symbol
         edits = []
@@ -346,7 +352,10 @@ class PeptideDocument:
         expected_count = len(self.sequence.s_monomers) + (new_monomer is not None)
         if seen != set(range(expected_count)):
             raise EditError("Edit removed an existing monomer")
-        if _edges(updated, identities) != expected_edges:
+        updated_peptide = Peptide.from_sequence(
+            updated, tuple(identities[i] for i in range(len(identities)))
+        )
+        if set(updated_peptide.connections) != expected_edges:
             raise EditError(
                 "Edit would change connections beyond the selected attachment"
             )

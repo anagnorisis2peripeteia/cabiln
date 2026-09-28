@@ -161,21 +161,10 @@ def _candidate_key(candidate):
 
 
 def _snapshot():
-    # An external atomic replacement may occur between stat and the loader.
-    # Retry rather than cache molecules under a stamp from another file version.
-    for _ in range(3):
-        path = monomer_store.library_path()
-        before = path.stat()
-        molecules, _ = monomer_store._load_sdf()
-        after = path.stat()
-        stamp = (str(path), after.st_mtime_ns, after.st_size)
-        if (
-            before.st_mtime_ns == after.st_mtime_ns
-            and before.st_size == after.st_size
-            and path == monomer_store.library_path()
-        ):
-            return stamp, tuple(molecules)
-    raise ValueError("Monomer library changed repeatedly during recognition")
+    # The store verifies this stamp against the data it read. Re-statting here
+    # could associate an older snapshot with a newer external replacement.
+    stamp, molecules, _ = monomer_store._load_sdf_snapshot()
+    return stamp, tuple(molecules)
 
 
 def _compile_patterns(molecules, limit):
@@ -445,12 +434,23 @@ def _enumerate_candidates(molecule, patterns, budgets):
 
 
 def _cover_key(cover):
+    """Prefer known atoms, then connections between complete backbone monomers.
+
+    A cap can expose R1 or R2 without having a backbone. Counting its attachment
+    as another backbone bond would reward splitting an intact monomer into caps.
+    """
     owners = {atom: candidate for candidate in cover for atom in candidate.atoms}
     backbone_edges = 0
     for candidate in cover:
         for inside, outside, slot in candidate.ports:
             other = owners.get(outside)
-            if slot == 2 and other is not None and (outside, inside, 1) in other.ports:
+            if (
+                candidate.has_backbone
+                and slot == 2
+                and other is not None
+                and other.has_backbone
+                and (outside, inside, 1) in other.ports
+            ):
                 backbone_edges += 1
     return -len(owners), -backbone_edges, tuple(_candidate_key(item) for item in cover)
 
@@ -477,13 +477,17 @@ def _search(molecule, candidates, budgets, accept_cover=None):
     )
     backbone_out = tuple(
         frozenset(
-            (inside, outside) for inside, outside, slot in candidate.ports if slot == 2
+            (inside, outside)
+            for inside, outside, slot in candidate.ports
+            if candidate.has_backbone and slot == 2
         )
         for candidate in candidates
     )
     backbone_in = tuple(
         frozenset(
-            (outside, inside) for inside, outside, slot in candidate.ports if slot == 1
+            (outside, inside)
+            for inside, outside, slot in candidate.ports
+            if candidate.has_backbone and slot == 1
         )
         for candidate in candidates
     )
@@ -657,14 +661,14 @@ def _assignments(groups, limit):
         for group in groups
         for choice in group.choices
         for a, b, slot in choice.ports
-        if slot == 2
+        if choice.has_backbone and slot == 2
     }
     possible_in = {
         (b, a)
         for group in groups
         for choice in group.choices
         for a, b, slot in choice.ports
-        if slot == 1
+        if choice.has_backbone and slot == 1
     }
     possible_edges = possible_out & possible_in
 
@@ -672,7 +676,7 @@ def _assignments(groups, limit):
         edges = {
             (a, b) if slot == 2 else (b, a)
             for a, b, slot in choice.ports
-            if slot in (1, 2)
+            if choice.has_backbone and slot in (1, 2)
         }
         return -len(edges & possible_edges), _candidate_key(choice)
 

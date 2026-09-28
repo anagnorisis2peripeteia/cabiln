@@ -77,7 +77,7 @@ def test_disconnected_cycles_do_not_share_crosslink_ids():
 def test_conversion_does_not_swallow_interrupts_or_programming_errors(
     monkeypatch, failure
 ):
-    def fail(_self, _sequence):
+    def fail(_self, _sequence, **_options):
         raise failure("conversion interrupted")
 
     monkeypatch.setattr(Molecule, "__init__", fail)

@@ -53,28 +53,7 @@ def _to_bracket(cabiln: str) -> str:
     return cabiln_to_bracket(cabiln)
 
 
-def _renumber_xlinks(cabiln: str) -> str:
-    """Renumber !X tags so they appear as !1, !2, … in left-to-right reading order."""
-    seen: dict[int, int] = {}
-
-    def replace(match):
-        old = int(match.group(1))
-        if old not in seen:
-            seen[old] = len(seen) + 1
-        return f"!{seen[old]}"
-
-    return re.sub(r"!(\d+)(?![A-Za-z0-9_])", replace, cabiln)
-
-
-def _apply_notation(cabiln: str, notation: str) -> str:
-    if notation == "bracket":
-        from pyPept.sequence import cabiln_to_bracket
-
-        return _verified_notation(cabiln, _renumber_xlinks(cabiln_to_bracket(cabiln)))
-    return cabiln
-
-
-def parse_source(cabiln: str, warning_sink=None):
+def parse_source(cabiln: str, warning_sink=None, *, track_source=False):
     """Return the parsed source explicitly, including legacy positional input.
 
     Callers exposing residue selections must use the returned source for edits;
@@ -85,13 +64,17 @@ def parse_source(cabiln: str, warning_sink=None):
     messages = []
     parsed_source = cabiln
     try:
-        sequence = Sequence(cabiln, warning_sink=messages.append)
+        sequence = Sequence(
+            cabiln, warning_sink=messages.append, track_source=track_source
+        )
     except ValueError:
         parsed_source = _to_bracket(cabiln)
         if parsed_source == cabiln:
             raise
         messages.clear()
-        sequence = Sequence(parsed_source, warning_sink=messages.append)
+        sequence = Sequence(
+            parsed_source, warning_sink=messages.append, track_source=track_source
+        )
         messages.insert(0, "Converted legacy positional notation to bracket form.")
     if warning_sink is not None:
         for message in messages:
@@ -99,18 +82,34 @@ def parse_source(cabiln: str, warning_sink=None):
     return sequence, parsed_source
 
 
-def _verified_notation(source: str, result: str) -> str:
-    """A notation conversion must retain the exact assembled structure."""
+def format_source(source: str, notation: str) -> str:
+    """Format resolved occurrences and verify their identity and chemistry."""
+    from rdkit import Chem
+
     from pyPept.molecule import Molecule
+    from pyPept.peptide import Peptide, serialize
     from pyPept.sequence import Sequence
     from pyPept.structure import compare_structures
 
-    sequence, _ = parse_source(source)
-    original = Molecule(sequence).get_molecule(fmt="ROMol")
-    if source != result:
-        converted = Molecule(
-            Sequence(result, warning_sink=lambda message: None)
-        ).get_molecule(fmt="ROMol")
-        if not compare_structures(original, converted).exact:
-            raise ValueError("Notation conversion would change the molecular structure")
-    return result
+    sequence, _ = parse_source(source, track_source=True)
+    peptide = Peptide.from_sequence(sequence)
+    emission = serialize(peptide, notation=notation)
+    converted = Sequence(emission.text, warning_sink=lambda message: None)
+    remapped = Peptide.from_sequence(converted, emission.occurrence_order)
+    if set(peptide.connections) != set(remapped.connections):
+        raise ValueError("Notation conversion would change monomer connections")
+    for index, identity in enumerate(emission.occurrence_order):
+        before = sequence.s_monomers[identity]
+        after = converted.s_monomers[index]
+        if (
+            Chem.MolToSmiles(before["m_romol"]) != Chem.MolToSmiles(after["m_romol"])
+            or before["m_Rgroups"] != after["m_Rgroups"]
+        ):
+            raise ValueError(
+                "Notation conversion would change the molecular structure of a monomer"
+            )
+    original = Molecule(sequence, depiction=None).get_molecule(fmt="ROMol")
+    product = Molecule(converted, depiction=None).get_molecule(fmt="ROMol")
+    if not compare_structures(original, product).exact:
+        raise ValueError("Notation conversion would change the molecular structure")
+    return emission.text

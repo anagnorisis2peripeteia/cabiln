@@ -511,10 +511,11 @@ function highlightGroup(idxList) {
   });
 }
 
-function buildResidueUI(resMap, residues, chains, cabiln, bracketGroups, crosslinkGroups) {
+function buildResidueUI(resMap, residues, layout, crosslinkGroups) {
   residueMap = resMap || {};
   residueList = residues || [];
-  chainData = chains || [];
+  const segments = layout?.segments || [];
+  chainData = segments.map(segment => ({ residues: segment.roots }));
   atomToRes = {};
   for (const [rIdx, atoms] of Object.entries(residueMap)) {
     for (const aidx of atoms) atomToRes[aidx] = parseInt(rIdx);
@@ -601,183 +602,71 @@ function buildResidueUI(resMap, residues, chains, cabiln, bracketGroups, crossli
     return el;
   }
 
-  const nTermXlinkTags = new Set();
-  if (cabiln) {
-    for (const seg of cabiln.split(/[%\n]/)) {
-      const m = seg.trim().match(/^(!\d+)-/);
-      if (m) nTermXlinkTags.add(m[1]);
-    }
+  const groups = layout?.groups || [];
+  const markers = layout?.markers || [];
+  const groupsByHost = new Map();
+  for (const group of groups) {
+    if (!groupsByHost.has(group.host)) groupsByHost.set(group.host, []);
+    groupsByHost.get(group.host).push(group);
   }
+  currentBranchSet = new Set(groups.flatMap(group => group.members));
 
-  function prependXlinks(rIdx) {
-    const xlinks = xlinkByMember[rIdx];
-    if (!xlinks) return;
-    xlinks.forEach(g => {
-      if (nTermXlinkTags.has(g.tag) && g.members[0] === rIdx)
-        resChips.appendChild(makeXlinkChip(g.tag, g.members));
-    });
-  }
-
-  function appendXlinks(rIdx) {
-    const xlinks = xlinkByMember[rIdx];
-    if (!xlinks) return;
-    xlinks.forEach(g => {
-      if (!nTermXlinkTags.has(g.tag) || g.members[0] !== rIdx)
-        resChips.appendChild(makeXlinkChip(g.tag, g.members));
-    });
-  }
-
-  const hasBranch = cabiln && cabiln.includes('%');
-  const groups = bracketGroups || [];
-  const groupsByHost = {};
-  groups.forEach(g => {
-    if (!groupsByHost[g.host]) groupsByHost[g.host] = [];
-    groupsByHost[g.host].push(g.members);
-  });
-  const branchSet = new Set();
-  groups.forEach(g => g.members.forEach(m => branchSet.add(m)));
-  currentBranchSet = new Set(branchSet);
-
-  function expandWithXlinks(idxList) {
-    const out = new Set(idxList);
-    for (const m of idxList) {
-      const xls = xlinkByMember[m];
-      if (xls) xls.forEach(g => g.members.forEach(x => out.add(x)));
-    }
-    return [...out];
-  }
-
-  function appendResidueWithBrackets(rIdx) {
-    if (branchSet.has(rIdx)) return;
-    prependXlinks(rIdx);
-    const chip = makeChip(rIdx);
-    if (chip) resChips.appendChild(chip);
-    const hostGroups = groupsByHost[rIdx];
-    if (hostGroups) {
-      // $ chip: host + bracket members + their xlink partners
-      const allMembers = expandWithXlinks([rIdx, ...hostGroups.flat()]);
-      const el = document.createElement('span');
-      el.className = 'res-chip branch-chip xlink-chip';
-      el.style.background = '#3a5050';
-      el.style.fontWeight = '700';
-      el.style.fontSize = '0.8em';
-      el.textContent = '$';
-      el.dataset.members = JSON.stringify(allMembers);
-      el.addEventListener('mouseenter', () => highlightGroup(allMembers));
-      el.addEventListener('mouseleave', clearHighlight);
-      resChips.appendChild(el);
-      const brk = cabiln && cabiln.includes('{') ? ['{', '}'] : ['[', ']'];
-      hostGroups.forEach(members => {
-        // bracket [ ] highlight: members + their xlink partners
-        const brkMembers = expandWithXlinks(members);
-        resChips.appendChild(makeSeparator(brk[0], brkMembers));
-        members.forEach(mIdx => {
-          // bracket member chip: simple hover (self only)
-          const mc = makeChip(mIdx, true);
-          if (mc) resChips.appendChild(mc);
-          appendXlinks(mIdx);
-        });
-        resChips.appendChild(makeSeparator(brk[1], brkMembers));
-      });
-    }
-    appendXlinks(rIdx);
-  }
-
-  if (hasBranch) {
-    // Count how many chains will actually render a residue (not pure-branch).
-    // Pure-branch chains hold residues that already appear inside a bracket
-    // group ({}) on a host elsewhere — the chip bar would otherwise emit a
-    // trailing % separator with no residues after it.
-    const visibleChains = chainData.filter(c =>
-      c.residues.some(r => !branchSet.has(r))
-    );
-    chainData.forEach((chain, ci) => {
-      const chainHasVisible = chain.residues.some(r => !branchSet.has(r));
-      if (!chainHasVisible) return;
-      if (visibleChains.length > 1) {
-        // % chip highlights all chain residues + their crosslink partners
-        const expanded = [...chain.residues];
-        chain.residues.forEach(rIdx => {
-          const xlinks = xlinkByMember[rIdx];
-          if (xlinks) xlinks.forEach(g => g.members.forEach(m => expanded.push(m)));
-        });
-        resChips.appendChild(makeSeparator('%', [...new Set(expanded)]));
+  function expandWithXlinks(ids) {
+    const members = new Set(ids);
+    for (const id of ids) {
+      for (const link of xlinkByMember[id] || []) {
+        link.members.forEach(member => members.add(member));
       }
-      chain.residues.forEach(rIdx => {
-        if (branchSet.has(rIdx)) return;
-        prependXlinks(rIdx);
+    }
+    return [...members];
+  }
 
-        // Crosslink brackets shown explicitly? Use simple hover on the chip itself
-        const xlinks = xlinkByMember[rIdx];
-        const hasXlinkBrackets = xlinks && xlinks.length > 1;
-        const chip = makeChip(rIdx, hasXlinkBrackets);
-        if (chip) resChips.appendChild(chip);
+  function groupMembers(group) {
+    return expandWithXlinks([
+      ...group.members,
+      ...markers.filter(marker => marker.group === group.id).flatMap(marker => marker.members),
+    ]);
+  }
 
-        // Bracket groups on this host (from bracket notation)
-        const hostGroups = groupsByHost[rIdx];
-        if (hostGroups) {
-          // $ selects host + bracket members + their xlink partners
-          const bracketMembers = expandWithXlinks([rIdx, ...hostGroups.flat()]);
-          const el = document.createElement('span');
-          el.className = 'res-chip branch-chip xlink-chip';
-          el.style.background = '#3a5050';
-          el.style.fontWeight = '700';
-          el.style.fontSize = '0.8em';
-          el.textContent = '$';
-          el.dataset.members = JSON.stringify(bracketMembers);
-          el.addEventListener('mouseenter', () => highlightGroup(bracketMembers));
-          el.addEventListener('mouseleave', clearHighlight);
-          resChips.appendChild(el);
-          const brk = cabiln && cabiln.includes('{') ? ['{', '}'] : ['[', ']'];
-          hostGroups.forEach(members => {
-            const brkMembers = expandWithXlinks(members);
-            resChips.appendChild(makeSeparator(brk[0], brkMembers));
-            members.forEach(mIdx => {
-              const mc = makeChip(mIdx, true);
-              if (mc) resChips.appendChild(mc);
-              appendXlinks(mIdx);
-            });
-            resChips.appendChild(makeSeparator(brk[1], brkMembers));
-          });
-        }
-
-        // Crosslink chips: if multiple on one residue, add $ then wrap each in brackets
-        if (hasXlinkBrackets) {
-          const xlinkMembers = [rIdx, ...xlinks.flatMap(g => g.members)];
-          const el = document.createElement('span');
-          el.className = 'res-chip branch-chip xlink-chip';
-          el.style.background = '#3a5050';
-          el.style.fontWeight = '700';
-          el.style.fontSize = '0.8em';
-          el.textContent = '$';
-          el.dataset.members = JSON.stringify(xlinkMembers);
-          el.addEventListener('mouseenter', () => highlightGroup(xlinkMembers));
-          el.addEventListener('mouseleave', clearHighlight);
-          resChips.appendChild(el);
-          xlinks.forEach(g => {
-            const isNterm = nTermXlinkTags.has(g.tag);
-            if (!isNterm) {
-              resChips.appendChild(makeSeparator('[', g.members));
-              resChips.appendChild(makeXlinkChip(g.tag, g.members));
-              resChips.appendChild(makeSeparator(']', g.members));
-            }
-          });
-        } else {
-          appendXlinks(rIdx);
-        }
+  function appendGroup(group) {
+    const members = groupMembers(group);
+    if (group.opening) resChips.appendChild(makeSeparator(group.opening, members));
+    // A marker-only bracket belongs to its host but contains no monomer.
+    if (!group.roots.length) {
+      markers.filter(marker => marker.group === group.id).forEach(marker => {
+        resChips.appendChild(makeXlinkChip(marker.tag, marker.members));
       });
+    }
+    group.roots.forEach(id => appendOccurrence(id, group.id));
+    if (group.closing) resChips.appendChild(makeSeparator(group.closing, members));
+  }
+
+  function appendOccurrence(id, context = null) {
+    const ownMarkers = markers.filter(marker => marker.residue === id && marker.group === context);
+    ownMarkers.filter(marker => marker.before).forEach(marker => {
+      resChips.appendChild(makeXlinkChip(marker.tag, marker.members));
     });
-  } else if (groups.length) {
-    const mainChain = chainData.length ? chainData[0].residues : [];
-    mainChain.forEach(rIdx => appendResidueWithBrackets(rIdx));
-  } else {
-    const allIds = chainData.flatMap(c => c.residues);
-    allIds.forEach(rIdx => {
-      prependXlinks(rIdx);
-      const chip = makeChip(rIdx);
-      if (chip) resChips.appendChild(chip);
-      appendXlinks(rIdx);
+    const links = xlinkByMember[id] || [];
+    const chip = makeChip(id, context !== null || links.length > 1);
+    if (chip) resChips.appendChild(chip);
+    const children = (groupsByHost.get(id) || []).filter(group => group.parent === context);
+    if (children.length || links.length > 1) {
+      const members = expandWithXlinks([id, ...children.flatMap(groupMembers)]);
+      const whole = makeSeparator('$', members);
+      whole.style.background = '#3a5050';
+      resChips.appendChild(whole);
+    }
+    children.forEach(appendGroup);
+    ownMarkers.filter(marker => !marker.before).forEach(marker => {
+      resChips.appendChild(makeXlinkChip(marker.tag, marker.members));
     });
+  }
+
+  for (const segment of segments) {
+    if (segments.length > 1) {
+      resChips.appendChild(makeSeparator('%', expandWithXlinks(segment.members)));
+    }
+    segment.roots.forEach(id => appendOccurrence(id));
   }
 
   wireUpSvgHover();
@@ -996,11 +885,17 @@ function clearBuild() {
 btnBuild.addEventListener('click', () => buildMode ? closeBuild() : openBuild());
 buildClose.addEventListener('click', closeBuild);
 
-function checkAdjacentMainChain() {
+function selectedBackbone() {
+  return chainData.find(chain =>
+    chain.residues.includes(buildLeftRIdx) && chain.residues.includes(buildRightRIdx)
+  )?.residues;
+}
+
+function checkAdjacentBackbone() {
   if (buildLeftRIdx == null || buildRightRIdx == null) return false;
   if (buildLeftRIdx === buildRightRIdx) return false;
-  const main = chainData.length ? chainData[0].residues : [];
-  if (!main.includes(buildLeftRIdx) || !main.includes(buildRightRIdx)) return false;
+  const main = selectedBackbone();
+  if (!main) return false;
   if (currentBranchSet.has(buildLeftRIdx) || currentBranchSet.has(buildRightRIdx)) return false;
   const posL = main.indexOf(buildLeftRIdx);
   const posR = main.indexOf(buildRightRIdx);
@@ -1008,7 +903,7 @@ function checkAdjacentMainChain() {
 }
 
 function updateInsertBetweenUI() {
-  if (buildMode && checkAdjacentMainChain()) {
+  if (buildMode && checkAdjacentBackbone()) {
     const la = (residueList.find(r => r.idx === buildLeftRIdx) || {}).abbr || '?';
     const ra = (residueList.find(r => r.idx === buildRightRIdx) || {}).abbr || '?';
     buildInsertInfo.textContent = `${la} and ${ra} are adjacent on the backbone`;
@@ -1032,7 +927,7 @@ buildInsertBtn.addEventListener('click', () => {
     if (libLoaded) renderLibList(libSearch.value.trim().toLowerCase());
     return;
   }
-  if (!checkAdjacentMainChain()) return;
+  if (!checkAdjacentBackbone()) return;
   insertBetweenActive = true;
   buildInsertBtn.textContent = '✕ Cancel';
   buildHint.textContent = 'Click a backbone monomer in the library to insert between the selected residues';
@@ -1041,7 +936,8 @@ buildInsertBtn.addEventListener('click', () => {
 });
 
 async function doInsertBetween(abbr) {
-  const main = chainData.length ? chainData[0].residues : [];
+  const main = selectedBackbone();
+  if (!main) return;
   const posL = main.indexOf(buildLeftRIdx);
   const posR = main.indexOf(buildRightRIdx);
   const after_idx = posL < posR ? buildLeftRIdx : buildRightRIdx;
@@ -1614,7 +1510,7 @@ async function doRenderCabiln(seq) {
       cabilnInput.className = 'ok';
       btnReroll.disabled = false;
       setExportReady(data.svg, data.mol_block);
-      buildResidueUI(data.residue_map, data.residues, data.chains, data.cabiln_echo, data.bracket_groups, data.crosslink_groups);
+      buildResidueUI(data.residue_map, data.residues, data.layout, data.crosslink_groups);
       if (verifyMode && lastSmiles) triggerVerify();
     }
   } catch (e) {

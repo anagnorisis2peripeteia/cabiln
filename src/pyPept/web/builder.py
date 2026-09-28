@@ -9,6 +9,7 @@ from pyPept.attachments import attachment_sites
 from pyPept.editor import PeptideDocument
 from pyPept.molecule import Molecule
 from pyPept.monomer_store import _load_sdf
+from pyPept.peptide import Endpoint, Peptide
 from pyPept.sequence import Sequence
 
 from .drawing import _draw_mol
@@ -108,14 +109,15 @@ def monomer_rgroups(
             if not 0 <= residue_idx < len(sequence.s_monomers):
                 raise ValueError(f"Residue {residue_idx} does not exist")
             monomer = sequence.s_monomers[residue_idx]
+            peptide = Peptide.from_sequence(sequence)
             target_mol = Chem.Mol(monomer["m_romol"])
             leaving_groups = monomer["m_Rgroups"]
             abbr = monomer["m_abbr"]
-            for bond in sequence.s_bonds:
-                if bond[0] == residue_idx:
-                    used_slots.add(bond[4])
-                if bond[2] == residue_idx:
-                    used_slots.add(bond[5])
+            used_slots = {
+                site.slot
+                for site in peptide.occurrence(residue_idx).sites
+                if peptide.connection_at(Endpoint(residue_idx, site.slot)) is not None
+            }
         else:
             if residue_idx >= 0:
                 raise ValueError("A selected residue requires its sequence")

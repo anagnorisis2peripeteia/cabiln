@@ -1,0 +1,1307 @@
+{
+  "version": 1,
+  "atom_indices": "zero-based RDKit MolFromSmiles indices of each literal smiles",
+  "cases": [
+    {
+      "id": "glutathione",
+      "smiles": "C(CC(=O)N[C@@H](CS)C(=O)NCC(=O)O)[C@@H](C(=O)O)N",
+      "source": {
+        "kind": "PubChem",
+        "cid": 124886,
+        "url": "https://pubchem.ncbi.nlm.nih.gov/compound/124886",
+        "helm": "PEPTIDE1{[Ggu].C.G}$$$$"
+      },
+      "expected": {
+        "alternatives": [
+          {
+            "residues": [
+              {
+                "label": "gamma-Glu",
+                "atoms": [
+                  0,
+                  1,
+                  2,
+                  3,
+                  15,
+                  16,
+                  17,
+                  18,
+                  19
+                ],
+                "recognized": true,
+                "required_slots": {
+                  "1": 19
+                }
+              },
+              {
+                "label": "Cys",
+                "atoms": [
+                  4,
+                  5,
+                  6,
+                  7,
+                  8,
+                  9
+                ],
+                "recognized": true,
+                "required_slots": {
+                  "1": 4,
+                  "2": 8
+                }
+              },
+              {
+                "label": "Gly",
+                "atoms": [
+                  10,
+                  11,
+                  12,
+                  13,
+                  14
+                ],
+                "recognized": true,
+                "required_slots": {
+                  "1": 10,
+                  "2": 12
+                }
+              }
+            ],
+            "connections": [
+              [
+                2,
+                4
+              ],
+              [
+                8,
+                10
+              ]
+            ]
+          }
+        ],
+        "allow_stereo_inference": false
+      },
+      "notes": "Published gamma-glutamyl bond. Both gamma-Glu-as-backbone and Glu-sidechain presentations are acceptable; the source carbonyl endpoint must be correct.",
+      "limits": {
+        "wall_seconds": 20,
+        "cpu_seconds": 15,
+        "output_bytes": 2097152
+      }
+    },
+    {
+      "id": "oxytocin",
+      "smiles": "CC[C@H](C)[C@H]1C(=O)N[C@H](C(=O)N[C@H](C(=O)N[C@@H](CSSC[C@@H](C(=O)N[C@H](C(=O)N1)CC2=CC=C(C=C2)O)N)C(=O)N3CCC[C@H]3C(=O)N[C@@H](CC(C)C)C(=O)NCC(=O)N)CC(=O)N)CCC(=O)N",
+      "source": {
+        "kind": "PubChem",
+        "cid": 439302,
+        "url": "https://pubchem.ncbi.nlm.nih.gov/compound/439302",
+        "helm": "PEPTIDE1{C.Y.I.Q.N.C.P.L.G.[am]}$PEPTIDE1,PEPTIDE1,1:R3-6:R3$$$"
+      },
+      "expected": {
+        "alternatives": [
+          {
+            "residues": [
+              {
+                "label": "Ile",
+                "atoms": [
+                  0,
+                  1,
+                  2,
+                  3,
+                  4,
+                  5,
+                  6,
+                  28
+                ],
+                "recognized": true,
+                "required_slots": {
+                  "1": 28,
+                  "2": 5
+                }
+              },
+              {
+                "label": "Gln",
+                "atoms": [
+                  7,
+                  8,
+                  9,
+                  10,
+                  64,
+                  65,
+                  66,
+                  67,
+                  68
+                ],
+                "recognized": true,
+                "required_slots": {
+                  "1": 7,
+                  "2": 9
+                }
+              },
+              {
+                "label": "Asn",
+                "atoms": [
+                  11,
+                  12,
+                  13,
+                  14,
+                  60,
+                  61,
+                  62,
+                  63
+                ],
+                "recognized": true,
+                "required_slots": {
+                  "1": 11,
+                  "2": 13
+                }
+              },
+              {
+                "label": "Cys6",
+                "atoms": [
+                  15,
+                  16,
+                  17,
+                  18,
+                  38,
+                  39
+                ],
+                "recognized": true,
+                "required_slots": {
+                  "1": 15,
+                  "2": 38
+                }
+              },
+              {
+                "label": "Cys1",
+                "atoms": [
+                  19,
+                  20,
+                  21,
+                  22,
+                  23,
+                  37
+                ],
+                "recognized": true,
+                "required_slots": {
+                  "1": 37,
+                  "2": 22
+                }
+              },
+              {
+                "label": "Tyr",
+                "atoms": [
+                  24,
+                  25,
+                  26,
+                  27,
+                  29,
+                  30,
+                  31,
+                  32,
+                  33,
+                  34,
+                  35,
+                  36
+                ],
+                "recognized": true,
+                "required_slots": {
+                  "1": 24,
+                  "2": 26
+                }
+              },
+              {
+                "label": "Pro",
+                "atoms": [
+                  40,
+                  41,
+                  42,
+                  43,
+                  44,
+                  45,
+                  46
+                ],
+                "recognized": true,
+                "required_slots": {
+                  "1": 40,
+                  "2": 45
+                }
+              },
+              {
+                "label": "Leu",
+                "atoms": [
+                  47,
+                  48,
+                  49,
+                  50,
+                  51,
+                  52,
+                  53,
+                  54
+                ],
+                "recognized": true,
+                "required_slots": {
+                  "1": 47,
+                  "2": 53
+                }
+              },
+              {
+                "label": "Gly",
+                "atoms": [
+                  55,
+                  56,
+                  57,
+                  58
+                ],
+                "recognized": true,
+                "required_slots": {
+                  "1": 55,
+                  "2": 57
+                }
+              },
+              {
+                "label": "amide",
+                "atoms": [
+                  59
+                ],
+                "recognized": true,
+                "required_slots": {
+                  "1": 59
+                }
+              }
+            ],
+            "connections": [
+              [
+                5,
+                7
+              ],
+              [
+                9,
+                11
+              ],
+              [
+                13,
+                15
+              ],
+              [
+                22,
+                24
+              ],
+              [
+                26,
+                28
+              ],
+              [
+                38,
+                40
+              ],
+              [
+                45,
+                47
+              ],
+              [
+                53,
+                55
+              ],
+              [
+                57,
+                59
+              ],
+              [
+                18,
+                19
+              ]
+            ]
+          }
+        ],
+        "allow_stereo_inference": false
+      },
+      "notes": "",
+      "limits": {
+        "wall_seconds": 20,
+        "cpu_seconds": 15,
+        "output_bytes": 2097152
+      }
+    },
+    {
+      "id": "gssg",
+      "smiles": "C(CC(=O)N[C@@H](CSSC[C@@H](C(=O)NCC(=O)O)NC(=O)CC[C@@H](C(=O)O)N)C(=O)NCC(=O)O)[C@@H](C(=O)O)N",
+      "source": {
+        "kind": "PubChem",
+        "cid": 65359,
+        "url": "https://pubchem.ncbi.nlm.nih.gov/compound/65359",
+        "helm": "PEPTIDE1{[Ggu].C.G}|PEPTIDE2{[Ggu].C.G}$PEPTIDE1,PEPTIDE2,2:R3-2:R3$$$"
+      },
+      "expected": {
+        "alternatives": [
+          {
+            "residues": [
+              {
+                "label": "gamma-Glu1",
+                "atoms": [
+                  0,
+                  1,
+                  2,
+                  3,
+                  35,
+                  36,
+                  37,
+                  38,
+                  39
+                ],
+                "recognized": true,
+                "required_slots": {
+                  "1": 39
+                }
+              },
+              {
+                "label": "Cys1",
+                "atoms": [
+                  4,
+                  5,
+                  6,
+                  7,
+                  28,
+                  29
+                ],
+                "recognized": true,
+                "required_slots": {
+                  "1": 4,
+                  "2": 28
+                }
+              },
+              {
+                "label": "Cys2",
+                "atoms": [
+                  8,
+                  9,
+                  10,
+                  11,
+                  12,
+                  18
+                ],
+                "recognized": true,
+                "required_slots": {
+                  "1": 18,
+                  "2": 11
+                }
+              },
+              {
+                "label": "Gly2",
+                "atoms": [
+                  13,
+                  14,
+                  15,
+                  16,
+                  17
+                ],
+                "recognized": true,
+                "required_slots": {
+                  "1": 13,
+                  "2": 15
+                }
+              },
+              {
+                "label": "gamma-Glu2",
+                "atoms": [
+                  19,
+                  20,
+                  21,
+                  22,
+                  23,
+                  24,
+                  25,
+                  26,
+                  27
+                ],
+                "recognized": true,
+                "required_slots": {
+                  "1": 27
+                }
+              },
+              {
+                "label": "Gly1",
+                "atoms": [
+                  30,
+                  31,
+                  32,
+                  33,
+                  34
+                ],
+                "recognized": true,
+                "required_slots": {
+                  "1": 30,
+                  "2": 32
+                }
+              }
+            ],
+            "connections": [
+              [
+                2,
+                4
+              ],
+              [
+                7,
+                8
+              ],
+              [
+                11,
+                13
+              ],
+              [
+                18,
+                19
+              ],
+              [
+                28,
+                30
+              ]
+            ]
+          }
+        ],
+        "allow_stereo_inference": false
+      },
+      "notes": "",
+      "limits": {
+        "wall_seconds": 20,
+        "cpu_seconds": 15,
+        "output_bytes": 2097152
+      }
+    },
+    {
+      "id": "carnosine",
+      "smiles": "C1=C(NC=N1)C[C@@H](C(=O)O)NC(=O)CCN",
+      "source": {
+        "kind": "PubChem",
+        "cid": 439224,
+        "url": "https://pubchem.ncbi.nlm.nih.gov/compound/439224",
+        "helm": "PEPTIDE1{[Bal].H}$$$$"
+      },
+      "expected": {
+        "alternatives": [
+          {
+            "residues": [
+              {
+                "label": "His",
+                "atoms": [
+                  0,
+                  1,
+                  2,
+                  3,
+                  4,
+                  5,
+                  6,
+                  7,
+                  8,
+                  9,
+                  10
+                ],
+                "recognized": null,
+                "required_slots": {
+                  "1": 10,
+                  "2": 7
+                }
+              },
+              {
+                "label": "beta-Ala",
+                "atoms": [
+                  11,
+                  12,
+                  13,
+                  14,
+                  15
+                ],
+                "recognized": true,
+                "required_slots": {
+                  "1": 15,
+                  "2": 11
+                }
+              }
+            ],
+            "connections": [
+              [
+                10,
+                11
+              ]
+            ]
+          }
+        ],
+        "allow_stereo_inference": false
+      },
+      "notes": "Retain the published imidazole tautomer exactly. Histidine may remain one local unknown if its exact tautomer is absent from the selected library.",
+      "limits": {
+        "wall_seconds": 20,
+        "cpu_seconds": 15,
+        "output_bytes": 2097152
+      }
+    },
+    {
+      "id": "acetylglycine",
+      "smiles": "CC(=O)NCC(=O)O",
+      "source": {
+        "kind": "PubChem",
+        "cid": 10972,
+        "url": "https://pubchem.ncbi.nlm.nih.gov/compound/10972",
+        "helm": "PEPTIDE1{[ac].G}$$$$"
+      },
+      "expected": {
+        "alternatives": [
+          {
+            "residues": [
+              {
+                "label": "acetyl",
+                "atoms": [
+                  0,
+                  1,
+                  2
+                ],
+                "recognized": true,
+                "required_slots": {
+                  "2": 1
+                }
+              },
+              {
+                "label": "Gly",
+                "atoms": [
+                  3,
+                  4,
+                  5,
+                  6,
+                  7
+                ],
+                "recognized": true,
+                "required_slots": {
+                  "1": 3,
+                  "2": 5
+                }
+              }
+            ],
+            "connections": [
+              [
+                1,
+                3
+              ]
+            ]
+          }
+        ],
+        "allow_stereo_inference": false
+      },
+      "notes": "",
+      "limits": {
+        "wall_seconds": 20,
+        "cpu_seconds": 15,
+        "output_bytes": 2097152
+      }
+    },
+    {
+      "id": "leu_enkephalin",
+      "smiles": "CC(C)C[C@@H](C(=O)O)NC(=O)[C@H](CC1=CC=CC=C1)NC(=O)CNC(=O)CNC(=O)[C@H](CC2=CC=C(C=C2)O)N",
+      "source": {
+        "kind": "PubChem",
+        "cid": 461776,
+        "url": "https://pubchem.ncbi.nlm.nih.gov/compound/461776",
+        "helm": "PEPTIDE1{Y.G.G.F.L}$$$$"
+      },
+      "expected": {
+        "alternatives": [
+          {
+            "residues": [
+              {
+                "label": "Leu",
+                "atoms": [
+                  0,
+                  1,
+                  2,
+                  3,
+                  4,
+                  5,
+                  6,
+                  7,
+                  8
+                ],
+                "recognized": true,
+                "required_slots": {
+                  "1": 8,
+                  "2": 5
+                }
+              },
+              {
+                "label": "Phe",
+                "atoms": [
+                  9,
+                  10,
+                  11,
+                  12,
+                  13,
+                  14,
+                  15,
+                  16,
+                  17,
+                  18,
+                  19
+                ],
+                "recognized": true,
+                "required_slots": {
+                  "1": 19,
+                  "2": 9
+                }
+              },
+              {
+                "label": "Gly3",
+                "atoms": [
+                  20,
+                  21,
+                  22,
+                  23
+                ],
+                "recognized": true,
+                "required_slots": {
+                  "1": 23,
+                  "2": 20
+                }
+              },
+              {
+                "label": "Gly2",
+                "atoms": [
+                  24,
+                  25,
+                  26,
+                  27
+                ],
+                "recognized": true,
+                "required_slots": {
+                  "1": 27,
+                  "2": 24
+                }
+              },
+              {
+                "label": "Tyr",
+                "atoms": [
+                  28,
+                  29,
+                  30,
+                  31,
+                  32,
+                  33,
+                  34,
+                  35,
+                  36,
+                  37,
+                  38,
+                  39
+                ],
+                "recognized": true,
+                "required_slots": {
+                  "1": 39,
+                  "2": 28
+                }
+              }
+            ],
+            "connections": [
+              [
+                8,
+                9
+              ],
+              [
+                19,
+                20
+              ],
+              [
+                23,
+                24
+              ],
+              [
+                27,
+                28
+              ]
+            ]
+          }
+        ],
+        "allow_stereo_inference": false
+      },
+      "notes": "",
+      "limits": {
+        "wall_seconds": 20,
+        "cpu_seconds": 15,
+        "output_bytes": 2097152
+      }
+    },
+    {
+      "id": "ala_gly",
+      "smiles": "N[C@@H](C)C(=O)NCC(=O)O",
+      "source": {
+        "kind": "independently-specified",
+        "description": "Explicit conventional peptide structure, authored as SMILES without using CABILN assembly or conversion output."
+      },
+      "expected": {
+        "alternatives": [
+          {
+            "residues": [
+              {
+                "label": "Ala",
+                "atoms": [
+                  0,
+                  1,
+                  2,
+                  3,
+                  4
+                ],
+                "recognized": true,
+                "required_slots": {
+                  "1": 0,
+                  "2": 3
+                }
+              },
+              {
+                "label": "Gly",
+                "atoms": [
+                  5,
+                  6,
+                  7,
+                  8,
+                  9
+                ],
+                "recognized": true,
+                "required_slots": {
+                  "1": 5,
+                  "2": 7
+                }
+              }
+            ],
+            "connections": [
+              [
+                3,
+                5
+              ]
+            ]
+          }
+        ],
+        "allow_stereo_inference": false
+      },
+      "notes": "",
+      "limits": {
+        "wall_seconds": 20,
+        "cpu_seconds": 15,
+        "output_bytes": 2097152
+      }
+    },
+    {
+      "id": "cyclo_ala_gly",
+      "smiles": "C[C@@H]1NC(=O)CNC1=O",
+      "source": {
+        "kind": "independently-specified",
+        "description": "Explicit conventional peptide structure, authored as SMILES without using CABILN assembly or conversion output."
+      },
+      "expected": {
+        "alternatives": [
+          {
+            "residues": [
+              {
+                "label": "Ala",
+                "atoms": [
+                  0,
+                  1,
+                  2,
+                  7,
+                  8
+                ],
+                "recognized": true,
+                "required_slots": {
+                  "1": 2,
+                  "2": 7
+                }
+              },
+              {
+                "label": "Gly",
+                "atoms": [
+                  3,
+                  4,
+                  5,
+                  6
+                ],
+                "recognized": true,
+                "required_slots": {
+                  "1": 6,
+                  "2": 3
+                }
+              }
+            ],
+            "connections": [
+              [
+                2,
+                3
+              ],
+              [
+                6,
+                7
+              ]
+            ]
+          }
+        ],
+        "allow_stereo_inference": false
+      },
+      "notes": "",
+      "limits": {
+        "wall_seconds": 20,
+        "cpu_seconds": 15,
+        "output_bytes": 2097152
+      }
+    },
+    {
+      "id": "sar_gly",
+      "smiles": "CNCC(=O)NCC(=O)O",
+      "source": {
+        "kind": "independently-specified",
+        "description": "Explicit conventional peptide structure, authored as SMILES without using CABILN assembly or conversion output."
+      },
+      "expected": {
+        "alternatives": [
+          {
+            "residues": [
+              {
+                "label": "Sar",
+                "atoms": [
+                  0,
+                  1,
+                  2,
+                  3,
+                  4
+                ],
+                "recognized": true,
+                "required_slots": {
+                  "1": 1,
+                  "2": 3
+                }
+              },
+              {
+                "label": "Gly",
+                "atoms": [
+                  5,
+                  6,
+                  7,
+                  8,
+                  9
+                ],
+                "recognized": true,
+                "required_slots": {
+                  "1": 5,
+                  "2": 7
+                }
+              }
+            ],
+            "connections": [
+              [
+                3,
+                5
+              ]
+            ]
+          }
+        ],
+        "allow_stereo_inference": false
+      },
+      "notes": "",
+      "limits": {
+        "wall_seconds": 20,
+        "cpu_seconds": 15,
+        "output_bytes": 2097152
+      }
+    },
+    {
+      "id": "unknown_isotope",
+      "smiles": "NCC(=O)N[C@@H](CO[13CH3])C(=O)NCC(=O)O",
+      "source": {
+        "kind": "independently-specified",
+        "description": "Hand-specified G-(O-13C-methyl-L-Ser)-G. Preserve the isotope and two known glycines; do not flatten all three residues into one synthetic token."
+      },
+      "expected": {
+        "alternatives": [
+          {
+            "residues": [
+              {
+                "label": "Gly1",
+                "atoms": [
+                  0,
+                  1,
+                  2,
+                  3
+                ],
+                "recognized": true,
+                "required_slots": {
+                  "1": 0,
+                  "2": 2
+                }
+              },
+              {
+                "label": "isotopic-O-methylSer",
+                "atoms": [
+                  4,
+                  5,
+                  6,
+                  7,
+                  8,
+                  9,
+                  10
+                ],
+                "recognized": false,
+                "required_slots": {
+                  "1": 4,
+                  "2": 9
+                }
+              },
+              {
+                "label": "Gly2",
+                "atoms": [
+                  11,
+                  12,
+                  13,
+                  14,
+                  15
+                ],
+                "recognized": true,
+                "required_slots": {
+                  "1": 11,
+                  "2": 13
+                }
+              }
+            ],
+            "connections": [
+              [
+                2,
+                4
+              ],
+              [
+                9,
+                11
+              ]
+            ]
+          }
+        ],
+        "allow_stereo_inference": false
+      },
+      "notes": "Hand-specified G-(O-13C-methyl-L-Ser)-G. Preserve the isotope and two known glycines; do not flatten all three residues into one synthetic token.",
+      "limits": {
+        "wall_seconds": 20,
+        "cpu_seconds": 15,
+        "output_bytes": 2097152
+      }
+    },
+    {
+      "id": "diglycyl_lysine",
+      "smiles": "NCC(=O)N[C@@H](CCCCNC(=O)CN)C(=O)O",
+      "source": {
+        "kind": "independently-specified",
+        "description": "Hand-specified N-alpha,N-epsilon-diglycyl-L-lysine; two glycines attach to different lysine nitrogens."
+      },
+      "expected": {
+        "alternatives": [
+          {
+            "residues": [
+              {
+                "label": "alpha-Gly",
+                "atoms": [
+                  0,
+                  1,
+                  2,
+                  3
+                ],
+                "recognized": true,
+                "required_slots": {
+                  "1": 0,
+                  "2": 2
+                }
+              },
+              {
+                "label": "Lys",
+                "atoms": [
+                  4,
+                  5,
+                  6,
+                  7,
+                  8,
+                  9,
+                  10,
+                  15,
+                  16,
+                  17
+                ],
+                "recognized": true,
+                "required_slots": {
+                  "1": 4,
+                  "2": 15,
+                  "4": 10
+                }
+              },
+              {
+                "label": "epsilon-Gly",
+                "atoms": [
+                  11,
+                  12,
+                  13,
+                  14
+                ],
+                "recognized": true,
+                "required_slots": {
+                  "1": 14,
+                  "2": 11
+                }
+              }
+            ],
+            "connections": [
+              [
+                2,
+                4
+              ],
+              [
+                10,
+                11
+              ]
+            ]
+          }
+        ],
+        "allow_stereo_inference": false
+      },
+      "notes": "Hand-specified N-alpha,N-epsilon-diglycyl-L-lysine; two glycines attach to different lysine nitrogens.",
+      "limits": {
+        "wall_seconds": 20,
+        "cpu_seconds": 15,
+        "output_bytes": 2097152
+      }
+    },
+    {
+      "id": "unspecified_ala_gly",
+      "smiles": "NC(C)C(=O)NCC(=O)O",
+      "source": {
+        "kind": "independently-specified",
+        "description": "Source deliberately omits alanine stereo. Exact preservation and disclosed library stereo inference are scored separately; either is structurally acceptable."
+      },
+      "expected": {
+        "alternatives": [
+          {
+            "residues": [
+              {
+                "label": "Ala-unspecified",
+                "atoms": [
+                  0,
+                  1,
+                  2,
+                  3,
+                  4
+                ],
+                "recognized": true,
+                "required_slots": {
+                  "1": 0,
+                  "2": 3
+                }
+              },
+              {
+                "label": "Gly",
+                "atoms": [
+                  5,
+                  6,
+                  7,
+                  8,
+                  9
+                ],
+                "recognized": true,
+                "required_slots": {
+                  "1": 5,
+                  "2": 7
+                }
+              }
+            ],
+            "connections": [
+              [
+                3,
+                5
+              ]
+            ]
+          }
+        ],
+        "allow_stereo_inference": true
+      },
+      "notes": "Source deliberately omits alanine stereo. Exact preservation and disclosed library stereo inference are scored separately; either is structurally acceptable.",
+      "limits": {
+        "wall_seconds": 20,
+        "cpu_seconds": 15,
+        "output_bytes": 2097152
+      }
+    },
+    {
+      "id": "disconnected_diglycine",
+      "smiles": "NCC(=O)NCC(=O)O.NCC(=O)NCC(=O)O",
+      "source": {
+        "kind": "independently-specified",
+        "description": "Two independent dipeptide components must remain four glycine occurrences; component fragmentation is not residue recognition."
+      },
+      "expected": {
+        "alternatives": [
+          {
+            "residues": [
+              {
+                "label": "Gly1",
+                "atoms": [
+                  0,
+                  1,
+                  2,
+                  3
+                ],
+                "recognized": true,
+                "required_slots": {
+                  "1": 0,
+                  "2": 2
+                }
+              },
+              {
+                "label": "Gly2",
+                "atoms": [
+                  4,
+                  5,
+                  6,
+                  7,
+                  8
+                ],
+                "recognized": true,
+                "required_slots": {
+                  "1": 4,
+                  "2": 6
+                }
+              },
+              {
+                "label": "Gly3",
+                "atoms": [
+                  9,
+                  10,
+                  11,
+                  12
+                ],
+                "recognized": true,
+                "required_slots": {
+                  "1": 9,
+                  "2": 11
+                }
+              },
+              {
+                "label": "Gly4",
+                "atoms": [
+                  13,
+                  14,
+                  15,
+                  16,
+                  17
+                ],
+                "recognized": true,
+                "required_slots": {
+                  "1": 13,
+                  "2": 15
+                }
+              }
+            ],
+            "connections": [
+              [
+                2,
+                4
+              ],
+              [
+                11,
+                13
+              ]
+            ]
+          }
+        ],
+        "allow_stereo_inference": false
+      },
+      "notes": "Two independent dipeptide components must remain four glycine occurrences; component fragmentation is not residue recognition.",
+      "limits": {
+        "wall_seconds": 20,
+        "cpu_seconds": 15,
+        "output_bytes": 2097152
+      }
+    },
+    {
+      "id": "ambiguous_diglycine",
+      "smiles": "NCC(=O)NCC(=O)O",
+      "source": {
+        "kind": "independently-specified",
+        "description": "Temporary library adds the supplied diglycine as one available building block. Either one registered diglycine or two registered glycine occurrences is legitimate; structure alone cannot choose a synthesis history."
+      },
+      "expected": {
+        "alternatives": [
+          {
+            "residues": [
+              {
+                "label": "Gly1",
+                "atoms": [
+                  0,
+                  1,
+                  2,
+                  3
+                ],
+                "recognized": true,
+                "required_slots": {
+                  "1": 0,
+                  "2": 2
+                }
+              },
+              {
+                "label": "Gly2",
+                "atoms": [
+                  4,
+                  5,
+                  6,
+                  7,
+                  8
+                ],
+                "recognized": true,
+                "required_slots": {
+                  "1": 4,
+                  "2": 6
+                }
+              }
+            ],
+            "connections": [
+              [
+                2,
+                4
+              ]
+            ]
+          },
+          {
+            "residues": [
+              {
+                "label": "registered-diglycine",
+                "atoms": [
+                  0,
+                  1,
+                  2,
+                  3,
+                  4,
+                  5,
+                  6,
+                  7,
+                  8
+                ],
+                "recognized": true,
+                "required_slots": {
+                  "1": 0,
+                  "2": 6
+                }
+              }
+            ],
+            "connections": []
+          }
+        ],
+        "allow_stereo_inference": false
+      },
+      "notes": "Temporary library adds the supplied diglycine as one available building block. Either one registered diglycine or two registered glycine occurrences is legitimate; structure alone cannot choose a synthesis history.",
+      "limits": {
+        "wall_seconds": 20,
+        "cpu_seconds": 15,
+        "output_bytes": 2097152
+      },
+      "library_overlay": [
+        {
+          "symbol": "BenchmarkDiglycine",
+          "smiles": "NCC(=O)NCC(=O)O"
+        }
+      ]
+    }
+  ]
+}

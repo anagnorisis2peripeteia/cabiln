@@ -3,6 +3,21 @@
 from importlib import import_module
 
 
+def _renumber_xlinks(cabiln):
+    """Legacy text helper; the application now formats resolved connections."""
+    import re
+
+    seen = {}
+
+    def replace(match):
+        old = int(match.group(1))
+        if old not in seen:
+            seen[old] = len(seen) + 1
+        return f"!{seen[old]}"
+
+    return re.sub(r"!(\d+)(?![A-Za-z0-9_])", replace, cabiln)
+
+
 def __getattr__(name):
     # Old scripts imported conversion helpers from this development launcher.
     # Keep those imports working without making the chemistry library import FastAPI.

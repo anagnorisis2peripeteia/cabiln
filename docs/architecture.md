@@ -10,9 +10,13 @@ flowchart LR
   L --> T[Discover tiles and slots]
   T --> E[Select and connect residues]
   E --> N[CABILN source]
-  N --> Q[Sequence instances and slot edges]
+  N --> Q[Sequence parser]
   L --> Q
   Q --> M[Molecule assembly]
+  Q --> P[Resolved occurrences and numbered connections]
+  P --> E
+  P --> S2[Shared serializer and occurrence order]
+  S2 --> N
   R[Reaction definitions] --> A
   R --> T
   R --> M
@@ -22,8 +26,8 @@ flowchart LR
   R --> V[Reaction proposals]
   I --> V
   V --> C
-  C --> P[Compatible atom ownership and slots]
-  P --> N
+  C --> P
+  P --> D
   M --> F[Compare with input structure]
   I --> F
 ```
@@ -31,6 +35,7 @@ flowchart LR
 | Module | Responsibility |
 | --- | --- |
 | `pyPept.sequence` | Parse notation, resolve monomers, validate attachment slots and bonds |
+| `pyPept.peptide` | Hold immutable occurrence identities, attachment sites, connections and source layout; serialize with explicit output order |
 | `pyPept.source` | Carry source locations through the existing notation lowering |
 | `pyPept.editor` | Edit selected occurrences and verify the requested slot-edge change |
 | `pyPept.molecule` | Assemble monomers using reaction definitions |
@@ -39,9 +44,9 @@ flowchart LR
 | `pyPept.structure` | Distinguish exact graph equality from incomplete stereo compatibility |
 | `pyPept.recognition` | Compile library states and search for compatible atom ownership with explicit budgets |
 | `pyPept.recognition_reactions` | Propose supported reverse reaction states with source atom provenance |
-| `pyPept.recognition_notation` | Preserve chosen ownership and local unknown regions while laying out notation |
+| `pyPept.recognition_notation` | Turn chosen ownership and local unknown regions into resolved occurrences and source atom assignments |
 | `pyPept.smiles` | Admit only verified decompositions, preserve components, and report recognition quality |
-| `pyPept.monomer_store` | Select the shared library, cache records, and perform atomic CLI/web registration |
+| `pyPept.monomer_store` | Load versioned monomer definitions and aliases, give parsers detached copies, and perform atomic CLI/web registration |
 | `pyPept.interfaces` | Monomer activation, reaction routing, and command-line tools |
 | `pyPept.web.app` | Configure routes, static assets, validation responses, and server startup |
 | `pyPept.web.schemas` | Validate request sizes, dimensions, slots, and notation choices |
@@ -51,13 +56,14 @@ flowchart LR
 | `pyPept.web.monomers` | Browse, preview, and register monomers |
 | `pyPept.web.drawing` | Generate molecular depictions |
 | `pyPept.web.monomer_display` | Restore leaving groups for library previews |
-| `pyPept.web.notation` | Split notation and rename crosslinks without changing connections |
+| `pyPept.web.notation` | Normalize legacy input and verify formatting preserves occurrences, connections and exact chemistry |
 | `pyPept.web.static` | HTML, CSS, JavaScript, and example sequences |
 
 `tools/live_renderer.py` is a compatibility launcher. Old conversion imports
 continue to resolve, but new library callers should import `pyPept.smiles`.
 
-The [decomposition contract and implementation](decomposition.md) describe the
+The [design decision](architecture-rework-design.md) compares a syntax-tree rewrite
+with the selected shared model. The [decomposition contract](decomposition.md) describes the
 recognition path. The recognizer uses the library's actual attachment slots and
 the same leaving-group restoration and effective chemistry as assembly. It
 does not select one backbone before accounting for the rest of the molecule.
@@ -72,13 +78,32 @@ The CLI, palette, converter, parser and assembly use that same selection.
 File changes invalidate cached discovery and conversion data. New monomer names
 do not require new tile components, switch statements, or editor cases.
 
-`Sequence` remains the derived assembly model. Optional source tracking records
-which original occurrence produced each monomer, including generated pendant
-chains and synthetic tokens. `PeptideDocument` edits those locations, reparses,
-and checks retained monomer identity and the exact requested slot-edge change.
-The source remains authoritative for protected brackets, nesting, and order.
+`Peptide` identifies each occurrence independently of its symbol or display order.
+Parsed notation and imported molecular structures both produce this model.
+Its serializer returns the output occurrence order directly. Formatting never
+needs to search molecular isomorphisms to rediscover which occurrence moved.
+
+`Sequence` remains the accepted parser and input to `Molecule`. Source tracking
+records original occurrences, including generated pendant chains and synthetic
+tokens. `PeptideDocument` edits those locations, reparses, and checks retained
+identity and the exact requested change using the shared numbered connections.
+An occurrence's atom index, its attachment number, and its identity are different
+things, even when two attachment slots share one anchor atom.
+
+The source layout records every explicit segment, bracket delimiter, nested arm
+and crosslink marker. The renderer consumes those records. It does not recover
+branches from connected components or guess all brackets from one character in
+the input. Each chip selects an occurrence or an explicit group; assembly's
+residue atom map determines which drawing atoms light up.
 Legacy positional notation is explicitly converted in the browser before its
 residue IDs become selectable.
+
+Normalized library tables are cached by SDF and optional CSV version. Each parser
+receives its own molecules, leaving-group lists and alias metadata. Raw recognition
+templates keep explicit hydrogens and use the same SDF version stamp; alias-only
+updates need not recompile structural patterns. Reads retry if external file
+replacement changes the version during loading. Import verification assembles
+without producing drawing coordinates.
 
 Browser requests have lifetimes tied to the current input or selection. Results
 from earlier edits must not replace the current drawing, comparison, or builder

@@ -94,17 +94,18 @@ class Molecule:
         :type sequence: pyPept.Sequence object.
         :param depiction: method to generate a 2D image
                           The local method is used by default.
-                          The other value is 'rdkit'
-        :type depiction: str , choose from 'rdkit' and 'local'
+                          Use 'rdkit' for RDKit depiction, or None to assemble
+                          chemistry without generating coordinates.
+        :type depiction: str or None
         """
 
         self.mol = []
         self.offset = []
         self.bondlist = []
         self.monomers = []
-        if depiction not in ('rdkit', 'local'):
+        if depiction not in ('rdkit', 'local', None):
             raise ValueError(
-                f"Depiction was {depiction}, expected 'rdkit' or 'local'.")
+                f"Depiction was {depiction}, expected 'rdkit', 'local', or None.")
         self.depiction = depiction
 
         # Main function, will modify data members defined above.

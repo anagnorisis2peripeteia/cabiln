@@ -109,6 +109,116 @@ const preview = {
   leaving: { 1: '[H]', 2: '[OH]' },
 };
 
+function tabs(ui, symbols, layout, crosslinks = []) {
+  const residues = symbols.map((abbr, idx) => ({ abbr, idx }));
+  const atoms = Object.fromEntries(symbols.map((_, idx) => [idx, [idx * 2, idx * 2 + 1]]));
+  ui.run(`buildResidueUI(${JSON.stringify(atoms)}, ${JSON.stringify(residues)}, ${JSON.stringify(layout)}, ${JSON.stringify(crosslinks)})`);
+  return ui.element('residue-chips').children;
+}
+
+function branch(id, host, roots, opening, parent = null, members = roots) {
+  return { id, host, roots, members, parent, opening, closing: opening === '{' ? '}' : ']' };
+}
+
+test('each branch keeps its own delimiters and occurrence IDs', () => {
+  const ui = page('builder.js');
+  const chips = tabs(ui, ['ac', 'K', 'K', 'am', 'G', 'A'], {
+    segments: [{ roots: [0, 1, 2, 3], members: [0, 1, 2, 3, 4, 5] }],
+    groups: [branch(0, 1, [4], '['), branch(1, 2, [5], '{')], markers: [],
+  });
+  assert.deepEqual(chips.map(chip => chip.textContent), ['ac', 'K', '$', '[', 'G', ']', 'K', '$', '{', 'A', '}', 'am']);
+  assert.deepEqual(chips.filter(chip => chip.dataset.residue !== undefined).map(chip => chip.dataset.residue), [0, 1, 4, 2, 5, 3]);
+});
+
+test('nested group tabs appear once and highlight their own members', async () => {
+  const ui = page('builder.js');
+  const chips = tabs(ui, ['ac', 'K', 'D', 'am', 'G', 'A'], {
+    segments: [{ roots: [0, 1, 2, 3], members: [0, 1, 2, 3, 4, 5] }],
+    groups: [branch(0, 1, [4], '{', null, [4, 5]), branch(1, 4, [5], '[', 0)], markers: [],
+  });
+  assert.deepEqual(chips.map(chip => chip.textContent), ['ac', 'K', '$', '{', 'G', '$', '[', 'A', ']', '}', 'D', 'am']);
+  ui.run('let hovered; highlightGroup = ids => { hovered = ids; }');
+  await chips.find(chip => chip.textContent === '{').dispatchEvent({ type: 'mouseenter' });
+  assert.equal(ui.run('JSON.stringify(hovered)'), '[4,5]');
+  await chips.find(chip => chip.textContent === '[').dispatchEvent({ type: 'mouseenter' });
+  assert.equal(ui.run('JSON.stringify(hovered)'), '[5]');
+});
+
+test('branches and backbone insertion work on the second explicit segment', () => {
+  const ui = page('builder.js');
+  const chips = tabs(ui, ['A', 'K', 'A', 'G'], {
+    segments: [{ roots: [0], members: [0] }, { roots: [1, 2], members: [1, 2, 3] }],
+    groups: [branch(0, 1, [3], '{')], markers: [],
+  });
+  assert.deepEqual(chips.map(chip => chip.textContent), ['%', 'A', '%', 'K', '$', '{', 'G', '}', 'A']);
+  assert.equal(ui.run('buildLeftRIdx = 1; buildRightRIdx = 2; checkAdjacentBackbone()'), true);
+  assert.equal(ui.run('buildLeftRIdx = 0; checkAdjacentBackbone()'), false);
+  assert.equal(ui.run('buildLeftRIdx = 3; checkAdjacentBackbone()'), false);
+});
+
+test('terminal link tabs use recorded placement and highlight both ends', async () => {
+  const ui = page('builder.js');
+  const members = [0, 2];
+  const chips = tabs(ui, ['C', 'A', 'C'], {
+    segments: [{ roots: [0, 1, 2], members: [0, 1, 2] }], groups: [],
+    markers: [
+      { residue: 0, tag: '!ring', members, group: null, before: true },
+      { residue: 2, tag: '!ring', members, group: null, before: false },
+    ],
+  }, [{ tag: '!ring', members }]);
+  assert.deepEqual(chips.map(chip => chip.textContent), ['!ring', 'C', 'A', 'C', '!ring']);
+  ui.run('let hovered; highlightGroup = ids => { hovered = ids; }');
+  for (const chip of chips.filter(chip => chip.textContent === '!ring')) {
+    await chip.dispatchEvent({ type: 'mouseenter' });
+    assert.equal(ui.run('JSON.stringify(hovered)'), '[0,2]');
+  }
+});
+
+test('a marker-only protected group keeps its links and their atom owners', () => {
+  const ui = page('builder.js');
+  const members = [0, 2];
+  const chips = tabs(ui, ['C', 'A', 'C'], {
+    segments: [{ roots: [0, 1, 2], members: [0, 1, 2] }],
+    groups: [branch(0, 2, [], '{')],
+    markers: [
+      { residue: 0, tag: '!r', members, group: null, before: false },
+      { residue: 0, tag: '!s', members, group: null, before: false },
+      { residue: 2, tag: '!s', members, group: 0, before: false },
+      { residue: 2, tag: '!r', members, group: 0, before: false },
+    ],
+  }, [{ tag: '!r', members }, { tag: '!s', members }]);
+  assert.deepEqual(chips.map(chip => chip.textContent), ['C', '$', '!r', '!s', 'A', 'C', '$', '{', '!s', '!r', '}']);
+  assert.deepEqual(JSON.parse(chips.find(chip => chip.textContent === '{').dataset.members), members);
+});
+
+test('a crosslink inside a nested arm renders both endpoints', () => {
+  const ui = page('builder.js');
+  const members = [2, 5];
+  const chips = tabs(ui, ['ac', 'K', 'D', 'am', 'G', 'A'], {
+    segments: [{ roots: [0, 1, 2, 3], members: [0, 1, 2, 3, 4, 5] }],
+    groups: [branch(0, 1, [4], '{', null, [4, 5]), branch(1, 4, [5], '[', 0)],
+    markers: [
+      { residue: 5, tag: '!1', members, group: 1, before: false },
+      { residue: 2, tag: '!1', members, group: null, before: false },
+    ],
+  }, [{ tag: '!1', members }]);
+  assert.deepEqual(chips.map(chip => chip.textContent), ['ac', 'K', '$', '{', 'G', '$', '[', 'A', '!1', ']', '}', 'D', '!1', 'am']);
+});
+
+test('an arm containing only a marker keeps its brackets', () => {
+  const ui = page('builder.js');
+  const members = [2, 4];
+  const chips = tabs(ui, ['ac', 'K', 'D', 'am', 'G'], {
+    segments: [{ roots: [0, 1, 2, 3], members: [0, 1, 2, 3, 4] }],
+    groups: [branch(0, 1, [4], '[', null, [4]), branch(1, 4, [], '[', 0)],
+    markers: [
+      { residue: 4, tag: '!1', members, group: 1, before: false },
+      { residue: 2, tag: '!1', members, group: null, before: false },
+    ],
+  }, [{ tag: '!1', members }]);
+  assert.deepEqual(chips.map(chip => chip.textContent), ['ac', 'K', '$', '[', 'G', '$', '[', '!1', ']', ']', 'D', '!1', 'am']);
+});
+
 test('reopening the palette discovers new monomers and preserves its search', async () => {
   const ui = page('builder.js');
   const gly = { abbr: 'G', name: 'Glycine', type: 'aa', subtype: 'natural', chem_types: '' };

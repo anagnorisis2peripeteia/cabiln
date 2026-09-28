@@ -13,7 +13,7 @@ from dataclasses import dataclass, replace
 
 from rdkit import Chem
 
-from pyPept.monomer_store import library_path
+from pyPept.monomer_store import library_version
 from pyPept.recognition import RecognitionBudgets, RejectedRegion, recognize
 from pyPept.recognition_notation import (
     Interpretation,
@@ -59,9 +59,7 @@ _STEREO_INFERENCE_MESSAGE = (
 
 
 def _library_stamp():
-    path = library_path()
-    stat = path.stat()
-    return str(path), stat.st_mtime_ns, stat.st_size
+    return library_version()
 
 
 def _assemble(cabiln, diagnostics=None):
@@ -70,7 +68,9 @@ def _assemble(cabiln, diagnostics=None):
 
     sink = diagnostics.append if diagnostics is not None else lambda _message: None
     try:
-        return Molecule(Sequence(cabiln, warning_sink=sink)).get_molecule(fmt="ROMol")
+        return Molecule(
+            Sequence(cabiln, warning_sink=sink), depiction=None
+        ).get_molecule(fmt="ROMol")
     except (ValueError, RuntimeError):
         return None
 
@@ -114,7 +114,7 @@ def _reaction_edges(variant, cover):
     yield from itertools.product(*options)
 
 
-def _recognize_component(source, origins, budgets):
+def _recognize_component(source, origins, budgets, output_notation):
     proposals = recognition_variants(source)
     limitations = list(proposals.warnings)
     search_complete = not proposals.truncated
@@ -144,6 +144,7 @@ def _recognize_component(source, origins, budgets):
                             cover,
                             extra_edges=extra_edges,
                             atom_origins=variant_origins,
+                            notation=output_notation,
                         )
                     except UnknownRegionError as error:
                         return RejectedRegion(
@@ -198,7 +199,10 @@ def _recognize_component(source, origins, budgets):
             if not variant.junctions and best is None:
                 try:
                     interpretation = emit_interpretation(
-                        variant.molecule, (), atom_origins=variant_origins
+                        variant.molecule,
+                        (),
+                        atom_origins=variant_origins,
+                        notation=output_notation,
                     )
                 except (ValueError, RuntimeError):
                     continue
@@ -232,7 +236,10 @@ def _recognize_component(source, origins, budgets):
 
 
 def convert_smiles(
-    smiles: str, *, budgets: RecognitionBudgets | None = None
+    smiles: str,
+    *,
+    notation: str = "percent",
+    budgets: RecognitionBudgets | None = None,
 ) -> ConversionResult:
     """Return a verified, library-driven interpretation of every input component.
 
@@ -244,6 +251,8 @@ def convert_smiles(
     """
     if not isinstance(smiles, str) or not smiles.strip():
         raise ValueError("SMILES must be a non-empty string")
+    if notation not in ("percent", "bracket"):
+        raise ValueError("Notation must be 'percent' or 'bracket'")
     molecule = Chem.MolFromSmiles(smiles)
     if molecule is None or not molecule.GetNumAtoms():
         raise ValueError(f"Invalid SMILES: {smiles[:80]}")
@@ -264,7 +273,7 @@ def convert_smiles(
         canonical = Chem.RenumberAtoms(fragment, order)
         origins = tuple(input_indices[index] for index in order)
         (interpretation, rebuilt, messages), complete, limits = _recognize_component(
-            canonical, origins, budgets
+            canonical, origins, budgets, notation
         )
         search_complete &= complete
         messages = list(messages) + list(limits)

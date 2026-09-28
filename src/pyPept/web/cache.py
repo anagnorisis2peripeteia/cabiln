@@ -13,9 +13,7 @@ _cache_lock = RLock()
 
 
 def library_version():
-    path = monomer_store.library_path()
-    stamp = path.stat()
-    return (str(path), stamp.st_mtime_ns, stamp.st_size)
+    return monomer_store.library_version()
 
 
 def _rc_get(key):

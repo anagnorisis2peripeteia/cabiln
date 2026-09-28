@@ -23,15 +23,20 @@ its structure but does not recover editable residues. Tests check both.
    names is needed to ingest a new monomer.
 3. Search for disjoint, compatible candidate occurrences across the entire
    component. Known neighbors must agree on their shared boundary. Search
-   prioritizes known atom coverage and supported R2-to-R1 connections, with
-   stable ordering for equivalent alternatives.
+   prioritizes known atom coverage and R2-to-R1 connections between occurrences
+   with supported backbone chemistry, with stable ordering for equivalent
+   alternatives. A methyl cap's R2 alkylation is not a peptide backbone bond.
+   Counting it that way split sarcosine into methyl plus glycine despite an exact
+   registered sarcosine template; the independent benchmark exposed this error.
 4. Preserve unmatched connected regions with source attachment boundaries.
    Free termini require an unambiguous amine/carboxyl pair under the same
    topology convention used by ingestion. Unsupported boundaries reject the
    interpretation. They do not justify an invented residue or attachment.
-5. Lay out chains, branches, cycles, and scaffolds from the chosen occurrences
-   and slot edges. Independently assemble the notation and compare it with the
-   input. Only an accepted interpretation can set the search's best coverage.
+5. Construct the shared occurrence/site/connection model. Its serializer lays out
+   chains, branches, cycles and scaffolds, returning the output occurrence order.
+   Independently assemble the notation and compare it with the input. Only an
+   accepted interpretation can set the search's best coverage. This verification
+   reuses versioned library definitions and does not generate drawing coordinates.
 6. For supported reactions that change a monomer core, consider explicit
    precursor proposals with atom provenance, then use the same search and
    forward verification. Current adapters cover CuAAC, SPAAC, and ring-closing
@@ -88,6 +93,8 @@ The renderer derives tab ownership from the assembled occurrences. Reaction
 atom maps preserve ownership through transformed junctions. Conversion source
 assignments and renderer maps are checked against one another, including click
 reactions and notation that reorders branch occurrences.
+`convert_smiles(..., notation="bracket")` selects the layout inside serialization,
+so assignment indices do not require a later molecular-isomorphism search.
 
 ## Limits
 
@@ -125,10 +132,16 @@ unknown regions, and explicit budget exhaustion. The existing drug fixtures
 also require editable residue counts and exact chemistry; preserving only the
 whole molecule cannot satisfy those checks.
 
-The [final integration run](cleanup-review.md#decomposition-validation) passed
+The [initial recognizer integration](cleanup-review.md#decomposition-validation),
+at `f6c0423`, passed
 all 1,100 Python checks and 27 frontend checks. It includes all six large-peptide
 fixtures. The slowest conversion, exenatide, took 29.32 seconds on this machine;
-the current implementation does not provide uniformly interactive latency.
+that baseline precedes the shared-definition cache and depiction-free verification.
+The [independent benchmark](decomposition-benchmark.md) records external reference
+structures, expected monomer ownership, attachment checks, and measured comparisons.
+The [tool review](decomposition-tools.md) records why the tested external importers
+could not replace this application's exact-chemistry contract. The current
+[rework validation](rework-validation.md) records the full suite and browser checks.
 
 The necessary-core filter was checked against unfiltered compilation for
 mixed backbones, cycles, branches, unknown residues, CuAAC and metathesis

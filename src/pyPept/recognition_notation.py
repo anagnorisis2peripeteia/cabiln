@@ -12,6 +12,16 @@ from typing import TYPE_CHECKING
 
 from rdkit import Chem
 
+from pyPept.peptide import (
+    AtomProvenance,
+    AttachmentSite,
+    Connection,
+    Endpoint,
+    MonomerOccurrence,
+    Peptide,
+    serialize,
+)
+
 if TYPE_CHECKING:
     from pyPept.recognition import Candidate
 
@@ -240,7 +250,6 @@ def _connect(nodes, extra_edges):
         (i, a, b): slot for i, node in enumerate(nodes) for a, b, slot in node.ports
     }
     edges = set()
-    occupied = set()
     for (i, a, b), slot in ports.items():
         j = owner[b]
         partner = ports.get((j, b, a))
@@ -250,55 +259,18 @@ def _connect(nodes, extra_edges):
         edges.add(edge)
     for a, slot_a, b, slot_b in extra_edges:
         edges.add(tuple(sorted(((owner[a], slot_a), (owner[b], slot_b)))))
-    for edge in edges:
-        for endpoint in edge:
-            if endpoint in occupied:
-                raise ValueError("A decomposition uses an attachment slot twice")
-            occupied.add(endpoint)
-    return tuple(sorted(edges))
-
-
-def _layout(nodes, edges):
-    """Choose chains only after all occurrences and connections are fixed."""
-    forward, previous = {}, {}
-    for (i, left), (j, right) in edges:
-        if (left, right) == (2, 1):
-            forward[i], previous[j] = j, i
-        elif (left, right) == (1, 2):
-            forward[j], previous[i] = i, j
-
-    def key(index):
-        node = nodes[index]
-        return (
-            -len(node.atoms),
-            len(node.symbol),
-            node.symbol,
-            tuple(sorted(node.atoms)),
-        )
-
-    remaining = set(range(len(nodes)))
-    chains = []
-    while remaining:
-        starts = [i for i in remaining if i not in previous]
-        start = min(starts or remaining, key=key)
-        chain, at = [], start
-        while at in remaining:
-            chain.append(at)
-            remaining.remove(at)
-            at = forward.get(at)
-        chains.append((tuple(chain), at == start))
-    chains.sort(
-        key=lambda item: (
-            -sum(nodes[i].has_backbone for i in item[0]),
-            -len(item[0]),
-            tuple(key(i) for i in item[0]),
-        )
+    return tuple(
+        Connection(Endpoint(*left), Endpoint(*right)) for left, right in sorted(edges)
     )
-    return chains
 
 
 def emit_interpretation(
-    molecule, candidates: tuple[Candidate, ...], *, extra_edges=(), atom_origins=None
+    molecule,
+    candidates: tuple[Candidate, ...],
+    *,
+    extra_edges=(),
+    atom_origins=None,
+    notation="percent",
 ):
     """Preserve a candidate cover, including unknown regions, in readable notation."""
     nodes = list(candidates)
@@ -310,62 +282,52 @@ def emit_interpretation(
     for atoms in _regions(molecule, all_atoms - owned):
         nodes.append(_unknown_candidate(molecule, atoms, known_ports))
     edges = _connect(nodes, extra_edges)
-    chains = _layout(nodes, edges)
-    emitted_order = [i for chain, _ in chains for i in chain]
-    linear_edges = {
-        tuple(sorted(((a, 2), (b, 1))))
-        for chain, _ in chains
-        for a, b in zip(chain, chain[1:])
-    }
-    tokens = [node.symbol for node in nodes]
-    bond_id = 1
-    cyclic_tags = {}
-    for chain, cyclic in chains:
-        if cyclic:
-            edge = tuple(sorted(((chain[-1], 2), (chain[0], 1))))
-            linear_edges.add(edge)
-            cyclic_tags[chain] = bond_id
-            bond_id += 1
-    order_index = {node: i for i, node in enumerate(emitted_order)}
-    others = sorted(
-        set(edges) - linear_edges,
-        key=lambda edge: tuple(sorted((order_index[i], slot) for i, slot in edge)),
-    )
-    for (i, left), (j, right) in others:
-        tokens[i] += f".!{bond_id}({left},{right})"
-        tokens[j] += f".!{bond_id}({right},{left})"
-        bond_id += 1
-    texts = []
-    for chain, cyclic in chains:
-        text = "-".join(tokens[i] for i in chain)
-        if cyclic:
-            tag = cyclic_tags[chain]
-            text = f"!{tag}-{text}-!{tag}"
-        texts.append(text)
     origins = (
         tuple(range(molecule.GetNumAtoms())) if atom_origins is None else atom_origins
     )
+    occurrences = tuple(
+        MonomerOccurrence(
+            id=i,
+            symbol=node.symbol,
+            sites=tuple(
+                AttachmentSite(slot, dict(node.attachment_types).get(slot, ""))
+                for slot in sorted({slot for _, slot in node.anchors})
+            ),
+            has_backbone=node.has_backbone,
+            kind=node.kind,
+            size=len(node.atoms),
+            order_key=tuple(sorted(node.atoms)),
+            provenance=AtomProvenance(
+                source_atoms=tuple(
+                    sorted(origins[a] for a in node.atoms if origins[a] is not None)
+                ),
+                attachments=tuple(
+                    sorted(
+                        (slot, origins[a])
+                        for a, slot in node.anchors
+                        if origins[a] is not None
+                    )
+                ),
+                recognized=node.kind != "unknown",
+            ),
+        )
+        for i, node in enumerate(nodes)
+    )
+    peptide = Peptide(occurrences, edges)
+    emitted = serialize(peptide, notation=notation)
     assignments = tuple(
         MonomerAssignment(
             symbol=nodes[i].symbol,
-            source_atoms=tuple(
-                sorted(origins[a] for a in nodes[i].atoms if origins[a] is not None)
-            ),
-            attachments=tuple(
-                sorted(
-                    (slot, origins[a])
-                    for a, slot in nodes[i].anchors
-                    if origins[a] is not None
-                )
-            ),
-            recognized=nodes[i].kind != "unknown",
+            source_atoms=occurrences[i].provenance.source_atoms,
+            attachments=occurrences[i].provenance.attachments,
+            recognized=occurrences[i].provenance.recognized,
             residue_index=residue_index,
         )
-        for residue_index, i in enumerate(emitted_order)
+        for residue_index, i in enumerate(emitted.occurrence_order)
     )
     # Keep the legacy residue-details view on the primary backbone. The complete
     # partition, including branches and caps, is recorded in assignments.
-    primary = chains[0][0]
+    primary = emitted.layout.segments[0].roots
     residue_indices = [i for i in primary if nodes[i].has_backbone]
     if not residue_indices:
         residue_indices = list(primary)
@@ -378,12 +340,17 @@ def emit_interpretation(
         for i in residue_indices
     )
     return Interpretation(
-        cabiln="%".join(texts),
+        cabiln=emitted.text,
         assignments=assignments,
         details=details,
         unknown_pieces=sum(node.kind == "unknown" for node in nodes),
         recognized_atoms=sum(len(a.source_atoms) for a in assignments if a.recognized),
-        backbone_connections=len(linear_edges),
+        backbone_connections=sum(
+            {edge.left.slot, edge.right.slot} == {1, 2}
+            and nodes[edge.left.occurrence_id].has_backbone
+            and nodes[edge.right.occurrence_id].has_backbone
+            for edge in edges
+        ),
     )
 
 
