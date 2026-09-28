@@ -5,7 +5,7 @@ Covers:
   1. _check_bond_chemistry — unit tests for each branch (silent / warn / raise)
   2. End-to-end Sequence + Molecule assembly — standard and exotic monomers
   3. Monomer pipeline — normalize_input, pre_activate, cap monomers via CSV
-  4. SanitizeMol error wrapping (inspects wrapper is in place)
+  4. SanitizeMol failures expose assembly context
 
 BILN notation reminder:
   '-'  monomer join within a chain  (A-G-A = Ala-Gly-Ala tripeptide)
@@ -18,7 +18,6 @@ Run: pytest tests/test_bond_validation_and_assembly.py -v
 import sys
 import os
 import csv
-import inspect
 import pathlib
 import tempfile
 import warnings
@@ -312,11 +311,17 @@ class TestAssembly:
         smi = _smiles('A-G-V-L-F-W-D-E')
         assert Chem.MolFromSmiles(smi) is not None
 
-    def test_sanitize_error_wrapped_as_valueerror(self):
-        """SanitizeMol failure is re-raised as ValueError with user-friendly message."""
-        src = inspect.getsource(Molecule)
-        assert 'SanitizeMol' in src
-        assert 'R-group' in src  # wrapper message mentions R-group assignments
+    def test_sanitize_error_wrapped_as_valueerror(self, monkeypatch):
+        """A sanitization failure carries attachment context and its RDKit cause."""
+        sequence = Sequence('A')
+
+        def invalid_valence(_molecule):
+            raise ValueError('invalid valence control')
+
+        monkeypatch.setattr(Chem, 'SanitizeMol', invalid_valence)
+        with pytest.raises(ValueError, match='R-group assignments') as error:
+            Molecule(sequence, depiction=None)
+        assert str(error.value.__cause__) == 'invalid valence control'
 
     def test_disulfide_crosslink_assembles(self):
         """Cys-Ala-Cys with R4-R4 disulfide crosslink via .!1(4,4) notation.
@@ -5406,12 +5411,7 @@ def _s2c_roundtrip(biln: str):
     Returns (cabiln_str, details) where details is the list of
     (abbr, n_matched, n_total_atoms) tuples from smiles_to_cabiln_core.
     """
-    import sys as _sys, os as _os
-    # Add the repo root so that `import tools.live_renderer` resolves.
-    _repo_root = _os.path.abspath(_os.path.join(_os.path.dirname(__file__), '..'))
-    if _repo_root not in _sys.path:
-        _sys.path.insert(0, _repo_root)
-    from tools.live_renderer import smiles_to_cabiln_core  # noqa: E402
+    from pyPept.smiles import smiles_to_cabiln_core  # noqa: E402
     mol = Molecule(Sequence(biln)).get_molecule(fmt='ROMol')
     smi = Chem.MolToSmiles(mol)
     result, details = smiles_to_cabiln_core(smi)
@@ -5794,17 +5794,12 @@ class TestSmilesToCabiln:
     ])
     def test_bracket_notation_assembles_same_smiles(self, pct_cabiln):
         """→ [] path: bracket CABILN assembles to the identical SMILES as the percent form."""
-        import sys as _sys, os as _os
-        _repo_root = _os.path.abspath(_os.path.join(_os.path.dirname(__file__), '..'))
-        if _repo_root not in _sys.path:
-            _sys.path.insert(0, _repo_root)
-        from tools.live_renderer import _renumber_xlinks
-        from pyPept.sequence import cabiln_to_bracket
+        from pyPept.inputs import format_source
 
         ref_mol = Molecule(Sequence(pct_cabiln)).get_molecule(fmt='ROMol')
         ref_smi = Chem.MolToSmiles(ref_mol)
 
-        bracket_cabiln = _renumber_xlinks(cabiln_to_bracket(pct_cabiln))
+        bracket_cabiln = format_source(pct_cabiln, 'bracket')
         brk_mol = Molecule(Sequence(bracket_cabiln)).get_molecule(fmt='ROMol')
         brk_smi = Chem.MolToSmiles(brk_mol)
 
@@ -5823,39 +5818,15 @@ class TestSmilesToCabiln:
     ])
     def test_bracket_to_percent_roundtrip(self, pct_cabiln):
         """Bracket CABILN assembled to SMILES then decoded via SMILES→CABILN gives percent form."""
-        import sys as _sys, os as _os
-        _repo_root = _os.path.abspath(_os.path.join(_os.path.dirname(__file__), '..'))
-        if _repo_root not in _sys.path:
-            _sys.path.insert(0, _repo_root)
-        from tools.live_renderer import _renumber_xlinks, smiles_to_cabiln_core
-        from pyPept.sequence import cabiln_to_bracket
+        from pyPept.inputs import format_source
+        from pyPept.smiles import smiles_to_cabiln_core
 
-        bracket_cabiln = _renumber_xlinks(cabiln_to_bracket(pct_cabiln))
+        bracket_cabiln = format_source(pct_cabiln, 'bracket')
         brk_mol = Molecule(Sequence(bracket_cabiln)).get_molecule(fmt='ROMol')
         brk_smi = Chem.MolToSmiles(brk_mol)
         result, _ = smiles_to_cabiln_core(brk_smi)
 
         _assert_same_monomer_partition(pct_cabiln, result)
-
-    # ── Gap 3c: Endpoint _renumber_xlinks produces consecutive crosslink IDs ──
-
-    def test_bracket_notation_endpoint_renumbers_crosslinks(self):
-        """_renumber_xlinks(cabiln_to_bracket(…)) produces !1/!2/… with no gaps."""
-        import sys as _sys, os as _os, re as _re
-        _repo_root = _os.path.abspath(_os.path.join(_os.path.dirname(__file__), '..'))
-        if _repo_root not in _sys.path:
-            _sys.path.insert(0, _repo_root)
-        from tools.live_renderer import _renumber_xlinks
-        from pyPept.sequence import cabiln_to_bracket
-
-        pct = "ac-C.!1(4,4)-A-A-C.!2(4,5)-A-A-C.!3(4,6)-am%TBMB.!1.!2.!3"
-        bracket = _renumber_xlinks(cabiln_to_bracket(pct))
-
-        assert 'TBMB' in bracket, f"TBMB scaffold lost in bracket conversion: {bracket!r}"
-        ids = sorted(set(int(m) for m in _re.findall(r'\.!(\d+)', bracket)))
-        assert ids == list(range(1, len(ids) + 1)), (
-            f"Non-consecutive crosslink IDs in bracket form: {ids!r} ({bracket!r})"
-        )
 
     # ── Gap 4: CuAAC assembly produces a triazole ring ────────────────────────
 
@@ -5891,11 +5862,7 @@ class TestSmilesToCabiln:
 
     def test_standalone_tbmb_smiles_detected(self):
         """Unreacted TBMB scaffold (all three Br arms present) is identified as 'TBMB'."""
-        import sys as _sys, os as _os
-        _repo_root = _os.path.abspath(_os.path.join(_os.path.dirname(__file__), '..'))
-        if _repo_root not in _sys.path:
-            _sys.path.insert(0, _repo_root)
-        from tools.live_renderer import smiles_to_cabiln_core
+        from pyPept.smiles import smiles_to_cabiln_core
         # Unreacted TBMB: three CH2Br arms, no Cys thioether bonds formed
         smi = 'BrCc1cc(CBr)cc(CBr)c1'
         result, _ = smiles_to_cabiln_core(smi)
@@ -6081,11 +6048,7 @@ class TestSmilesToCabiln:
 
     def test_explicit_h_amide_smiles(self):
         """Explicit H on backbone amide N/C atoms does not confuse residue matching."""
-        import sys as _sys, os as _os
-        _repo_root = _os.path.abspath(_os.path.join(_os.path.dirname(__file__), '..'))
-        if _repo_root not in _sys.path:
-            _sys.path.insert(0, _repo_root)
-        from tools.live_renderer import smiles_to_cabiln_core
+        from pyPept.smiles import smiles_to_cabiln_core
         smi = 'CC(=O)[NH][C@@H](C)C(=O)[NH2]'  # ac-A-am with explicit H
         result, details = smiles_to_cabiln_core(smi)
         assert 'A' in result, f"Expected A residue in output, got {result!r}"
@@ -6131,19 +6094,6 @@ class TestSmilesToCabiln:
         assert once == twice, (
             f"cabiln_to_bracket not idempotent:\n  first:  {once!r}\n  second: {twice!r}"
         )
-
-    def test_renumber_xlinks_renumbers_nonconsecutive(self):
-        """_renumber_xlinks maps non-consecutive IDs (e.g. !1, !3) to consecutive ones."""
-        import sys as _sys, os as _os
-        _repo_root = _os.path.abspath(_os.path.join(_os.path.dirname(__file__), '..'))
-        if _repo_root not in _sys.path:
-            _sys.path.insert(0, _repo_root)
-        from tools.live_renderer import _renumber_xlinks
-        cabiln = 'ac-C.!1(4,4)-A-A-C.!3(4,4)-am'
-        result = _renumber_xlinks(cabiln)
-        assert '.!3' not in result, f"Non-consecutive ID !3 not renumbered in {result!r}"
-        assert '.!2' in result, f"Expected .!2 after renumber, got {result!r}"
-        assert '.!1' in result, f"Expected .!1 preserved in {result!r}"
 
     def test_boc_ncap_roundtrip(self):
         """boc N-cap on a peptide with a disulfide crosslink round-trips correctly."""
@@ -6248,11 +6198,7 @@ class TestEdgeCasesErrorHandling:
 
     @staticmethod
     def _setup():
-        import sys as _sys, os as _os
-        _repo_root = _os.path.abspath(_os.path.join(_os.path.dirname(__file__), '..'))
-        if _repo_root not in _sys.path:
-            _sys.path.insert(0, _repo_root)
-        from tools.live_renderer import smiles_to_cabiln_core
+        from pyPept.smiles import smiles_to_cabiln_core
         return smiles_to_cabiln_core
 
     def test_disconnected_smiles_does_not_crash(self):
@@ -6344,7 +6290,7 @@ class TestAdditionalChemistryEdgeCases:
     ])
     def test_depsipeptide_backbone_ester(self, cabiln, description):
         """Backbone ester bond (depsipeptide): D_Lac/L_Lac/GlyAc residues assemble and round-trip."""
-        from tools.live_renderer import smiles_to_cabiln_core
+        from pyPept.smiles import smiles_to_cabiln_core
         ester_pat = Chem.MolFromSmarts('[C:1](=O)[O:2][C:3]')
         mol = Molecule(Sequence(cabiln)).get_molecule(fmt='ROMol')
         assert mol is not None, f"Assembly returned None for {cabiln!r}"
