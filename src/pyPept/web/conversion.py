@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
@@ -13,13 +15,62 @@ from .schemas import _ConvertReq, _SmilesToCabilnReq, _ToCabilnReq
 router = APIRouter()
 
 
+def _assignments_for_notation(result, cabiln):
+    """Carry occurrence identity through branch/bracket reordering."""
+    if result.cabiln == cabiln or not result.assignments:
+        return result.assignments
+    from pyPept.molecule import Molecule
+    from pyPept.sequence import Sequence
+
+    original = Molecule(Sequence(result.cabiln, warning_sink=lambda _message: None))
+    converted = Molecule(Sequence(cabiln, warning_sink=lambda _message: None))
+    before = original.get_residue_atom_map()
+    after = {
+        frozenset(atoms): index
+        for index, atoms in converted.get_residue_atom_map().items()
+    }
+    if len(before) == len(after):
+        matches = converted.mol.GetSubstructMatches(
+            original.mol, useChirality=True, uniquify=False, maxMatches=4096
+        )
+        for match in matches:
+            translated = {
+                index: after.get(frozenset(match[atom] for atom in atoms))
+                for index, atoms in before.items()
+            }
+            if all(index is not None for index in translated.values()):
+                return tuple(
+                    sorted(
+                        (
+                            replace(item, residue_index=translated[item.residue_index])
+                            for item in result.assignments
+                        ),
+                        key=lambda item: item.residue_index,
+                    )
+                )
+    raise ValueError("Notation conversion could not preserve monomer atom assignments")
+
+
 def _conversion_response(result, notation):
+    cabiln = _apply_notation(result.cabiln, notation)
     response = {
-        "cabiln": _apply_notation(result.cabiln, notation),
+        "cabiln": cabiln,
         "details": [{"abbr": a, "score": s, "total": t} for a, s, t in result.details],
         "inferred_stereo": result.inferred_stereo,
         "synthetic_components": list(result.synthetic_components),
         "warnings": list(result.warnings),
+        "recognition_status": result.recognition_status,
+        "search_complete": result.search_complete,
+        "assignments": [
+            {
+                "symbol": assignment.symbol,
+                "source_atoms": list(assignment.source_atoms),
+                "attachments": list(assignment.attachments),
+                "recognized": assignment.recognized,
+                "residue_index": assignment.residue_index,
+            }
+            for assignment in _assignments_for_notation(result, cabiln)
+        ],
     }
     if result.warnings:
         response["warning"] = " ".join(result.warnings)

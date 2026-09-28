@@ -204,11 +204,11 @@
   slot_a: 4
   slot_b: 4
   notes: >
-    Azide N atoms intentionally unmapped in both reactant and product patterns
-    (Gillingham-Lab approach) to avoid formal-charge carry-over that causes
-    kekulization failures in RDKit.
+    Azide N atoms retain their reactant atom maps for residue provenance.
+    Explicit neutral product charges prevent formal-charge carry-over and
+    the associated RDKit kekulization failures.
   steps:
-    - "[4*][C:1][C:2]#[CH:3].[4*][C:5][N]=[N+]=[N-] >> [C:5][n]1[n][n][c:2]([C:1])[c:3]1"
+    - "[4*][C:1][C:2]#[CH:3].[4*][C:5][N:6]=[N+:7]=[N-:8] >> [C:5][n+0:6]1[n+0:7][n+0:8][c:2]([C:1])[c:3]1"
 
 - id: spaac_triazole
   description: SPAAC; strained cyclooctyne + organic azide → 1,2,3-triazole (copper-free bioorthogonal)
@@ -217,13 +217,13 @@
   slot_a: 4
   slot_b: 4
   notes: >
-    Azide N atoms intentionally unmapped (same approach as CuAAC) to avoid
-    formal-charge carry-over. C:3 has no H constraint so the SMIRKS matches
-    internal cyclic alkynes (cyclooctynes) as well as any other internal alkyne.
+    Azide N atoms retain their reactant atom maps; explicit neutral product
+    charges prevent formal-charge carry-over. C:3 has no H constraint, so the
+    SMIRKS matches internal cyclic alkynes and other internal alkynes.
     Produces one regioisomer; ring atoms bonded to C:2/C:3 via unmapped bonds
     are preserved, giving the fused bicyclic triazole for DBCO/BCN substrates.
   steps:
-    - "[4*][C:1][C:2]#[C:3].[4*][C:5][N]=[N+]=[N-] >> [C:5][n]1[n][n][c:2]([C:1])[c:3]1"
+    - "[4*][C:1][C:2]#[C:3].[4*][C:5][N:6]=[N+:7]=[N-:8] >> [C:5][n+0:6]1[n+0:7][n+0:8][c:2]([C:1])[c:3]1"
 
 - id: iedda_tetrazine_tco
   description: >

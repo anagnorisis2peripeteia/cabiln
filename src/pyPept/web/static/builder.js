@@ -1401,7 +1401,8 @@ async function doS2c(notation) {
         smilesStatus.textContent = `⚠ ${data.warning}`;
         smilesStatus.className = 'statusbar warn';
       } else {
-        smilesStatus.textContent = `Converted (${notation}): ${data.details.length} residue(s)`;
+        const count = data.assignments?.length ?? data.details.length;
+        smilesStatus.textContent = `Converted (${notation}): ${count} monomer(s)`;
         smilesStatus.className = 'statusbar ok';
       }
     }

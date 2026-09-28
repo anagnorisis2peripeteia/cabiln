@@ -151,7 +151,10 @@ def test_accepted_assembly_diagnostics_are_returned_without_warning_side_effects
 
     monkeypatch.setattr(warnings, "warn", unexpected_warning)
     result = convert_smiles(Chem.MolToSmiles(molecule))
-    assert result.cabiln == "ac-C.acm(4,2)-G-am"
+    rebuilt = Molecule(Sequence(result.cabiln, warning_sink=lambda _message: None))
+    assert Chem.MolToSmiles(rebuilt.mol) == Chem.MolToSmiles(molecule)
+    assert [item.symbol for item in result.assignments] == ["ac", "C", "G", "am", "acm"]
+    assert result.recognition_status == "complete"
     assert any("thioether" in message for message in result.warnings)
     assert result.synthetic_components == ()
 
@@ -165,11 +168,42 @@ def test_synthetic_component_indices_refer_to_source_components():
 
 
 def test_coarse_fallback_does_not_claim_editable_residue_decomposition():
-    result = convert_smiles("CC(=O)N[C@@H](CCC(F)(F)F)C(=O)N")
+    # No editable amine/carboxyl boundaries are established for this ring.
+    source = "O=C1NCCCC(C(F)(F)F)C1"
+    result = convert_smiles(source)
     assert result.details == []
+    assert result.assignments == ()
+    assert result.recognition_status == "unresolved"
     assert result.synthetic_components == (0,)
     assert any("coarse synthetic" in message for message in result.warnings)
     assert any("residue boundaries" in message for message in result.warnings)
+    assert Chem.MolToSmiles(Molecule(Sequence(result.cabiln)).mol) == Chem.MolToSmiles(
+        Chem.MolFromSmiles(source)
+    )
+
+
+def test_unknown_capped_residue_retains_known_caps_and_own_boundaries():
+    source = "CC(=O)N[C@@H](CCC(F)(F)F)C(=O)N"
+    result = convert_smiles(source)
+    assert result.recognition_status == "partial"
+    assert [item.symbol for item in result.assignments][::2] == ["ac", "am"]
+    assert [item.recognized for item in result.assignments] == [True, False, True]
+    assert len(result.details) == 1 and result.details[0][1] == 0
+    assert Chem.MolToSmiles(Molecule(Sequence(result.cabiln)).mol) == Chem.MolToSmiles(
+        Chem.MolFromSmiles(source)
+    )
+
+
+def test_unknown_intramonomer_closure_retains_known_caps():
+    source = "CC(=O)N1C(=O)C[C@H]1C(N)=O"
+    result = convert_smiles(source)
+    assert result.recognition_status == "partial"
+    assert [item.symbol for item in result.assignments][::2] == ["ac", "am"]
+    assert [item.recognized for item in result.assignments] == [True, False, True]
+    assert len(result.details) == 1 and result.details[0][1] == 0
+    assert Chem.MolToSmiles(Molecule(Sequence(result.cabiln)).mol) == Chem.MolToSmiles(
+        Chem.MolFromSmiles(source)
+    )
 
 
 def test_conversion_follows_library_selection_and_new_registrations(

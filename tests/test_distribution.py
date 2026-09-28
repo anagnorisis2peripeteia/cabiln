@@ -69,7 +69,7 @@ def test_built_wheel_runs_core_and_web_outside_checkout(tmp_path):
             from pyPept.interfaces.reaction_library import REACTIONS
             from pyPept.molecule import Molecule
             from pyPept.sequence import Sequence
-            from pyPept.smiles import smiles_to_cabiln_core
+            from pyPept.smiles import convert_smiles, smiles_to_cabiln_core
             from rdkit import Chem
 
             assert Path(pyPept.__file__).is_relative_to(Path(sys.prefix))
@@ -88,6 +88,11 @@ def test_built_wheel_runs_core_and_web_outside_checkout(tmp_path):
             for notation in ("A-G", "Ala-Gly"):
                 molecule = Molecule(Sequence(notation)).get_molecule(fmt="ROMol")
                 assert Chem.MolToSmiles(molecule) == expected
+            conversion = convert_smiles(expected)
+            assert conversion.recognition_status == "complete"
+            assert [item.symbol for item in conversion.assignments] == ["A", "G"]
+            rebuilt = Molecule(Sequence(conversion.cabiln)).get_molecule(fmt="ROMol")
+            assert Chem.MolToSmiles(rebuilt) == expected
             """),
         cwd=tmp_path,
     )

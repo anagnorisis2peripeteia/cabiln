@@ -17,6 +17,15 @@ flowchart LR
   R --> T
   R --> M
   M --> D[Drawing and residue highlights]
+  I[Input molecular structure] --> C[Library template candidates]
+  L --> C
+  R --> V[Reaction proposals]
+  I --> V
+  V --> C
+  C --> P[Compatible atom ownership and slots]
+  P --> N
+  M --> F[Compare with input structure]
+  I --> F
 ```
 
 | Module | Responsibility |
@@ -28,7 +37,10 @@ flowchart LR
 | `pyPept.attachments` | Inspect attachment sites using assembly's chemistry detection |
 | `pyPept.leaving_groups` | Restore the same standalone structures for assembly and previews |
 | `pyPept.structure` | Distinguish exact graph equality from incomplete stereo compatibility |
-| `pyPept.smiles` | Recognize a molecule and emit verified CABILN |
+| `pyPept.recognition` | Compile library states and search for compatible atom ownership with explicit budgets |
+| `pyPept.recognition_reactions` | Propose supported reverse reaction states with source atom provenance |
+| `pyPept.recognition_notation` | Preserve chosen ownership and local unknown regions while laying out notation |
+| `pyPept.smiles` | Admit only verified decompositions, preserve components, and report recognition quality |
 | `pyPept.monomer_store` | Select the shared library, cache records, and perform atomic CLI/web registration |
 | `pyPept.interfaces` | Monomer activation, reaction routing, and command-line tools |
 | `pyPept.web.app` | Configure routes, static assets, validation responses, and server startup |
@@ -44,7 +56,11 @@ flowchart LR
 
 `tools/live_renderer.py` is a compatibility launcher. Old conversion imports
 continue to resolve, but new library callers should import `pyPept.smiles`.
-Tests that patch private conversion helpers must patch their defining module.
+
+The [decomposition contract and implementation](decomposition.md) describe the
+recognition path. The recognizer uses the library's actual attachment slots and
+the same leaving-group restoration and effective chemistry as assembly. It
+does not select one backbone before accounting for the rest of the molecule.
 
 HTTP chemistry handlers are synchronous functions. FastAPI runs them in its
 thread pool, so expensive chemistry does not occupy the event loop. Render

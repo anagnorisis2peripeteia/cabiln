@@ -24,6 +24,50 @@ def canonical(notation):
     return Chem.MolToSmiles(Molecule(Sequence(notation)).get_molecule(fmt="ROMol"))
 
 
+@pytest.mark.parametrize("notation", ["percent", "bracket"])
+def test_conversion_assignments_follow_rendered_occurrences(client, notation):
+    source = canonical("ac-K.!1(4,2)-A-am%ac-G-G.!1(2,4)")
+    response = client.post(
+        "/smiles_to_cabiln", json={"smiles": source, "notation": notation}
+    )
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["recognition_status"] == "complete"
+    rendered = client.post("/render", json={"cabiln": data["cabiln"]}).json()
+    expected_names = {r["idx"]: r["abbr"] for r in rendered["residues"]}
+    assert {
+        a["residue_index"]: a["symbol"] for a in data["assignments"]
+    } == expected_names
+    molecule = Chem.MolFromMolBlock(rendered["mol_block"])
+    original = Chem.MolFromSmiles(source)
+    assert Chem.MolToSmiles(molecule) == Chem.MolToSmiles(original)
+    matches = molecule.GetSubstructMatches(original, useChirality=True, uniquify=False)
+    assert any(
+        all(
+            {match[index] for index in assignment["source_atoms"]}
+            == set(rendered["residue_map"][str(assignment["residue_index"])])
+            for assignment in data["assignments"]
+        )
+        for match in matches
+    )
+
+
+def test_unresolved_component_does_not_shift_known_assignment_index(client):
+    source = "O=C1NCCCC(C(F)(F)F)C1.NCC(=O)O"
+    response = client.post("/smiles_to_cabiln", json={"smiles": source})
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["recognition_status"] == "unresolved"
+    assert len(data["assignments"]) == 1
+    assignment = data["assignments"][0]
+    assert assignment["symbol"] == "G"
+    assert assignment["residue_index"] == 1
+    assert (
+        Sequence(data["cabiln"]).s_monomers[assignment["residue_index"]]["m_abbr"]
+        == "G"
+    )
+
+
 @pytest.mark.parametrize("notation", ["A-G", "!1-A-G-A-!1", "K.{G(4,2).ac(1,2)}-A"])
 def test_render_exports_same_molecule_and_residue_map(client, notation):
     response = client.post("/render", json={"cabiln": notation})

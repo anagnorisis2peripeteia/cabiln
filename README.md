@@ -93,6 +93,12 @@ Local synthetic residues retain the surrounding recognized residues when a
 verified decomposition is possible. A coarse fallback preserves the component
 but cannot identify individual residues inside it; the result reports this.
 
+`pyPept.smiles.convert_smiles` exposes recognition as `complete`, `partial`, or
+`unresolved`, with source atom assignments for the identified occurrences.
+It also reports when search limits prevent checking further interpretations.
+Recognition uses the current monomer library, including newly registered records.
+See [the decomposition contract](docs/decomposition.md) for the algorithm and limits.
+
 Unspecified input stereochemistry can be filled from library monomers.
 The converter warns when this happens; the web app displays that warning.
 Defined stereochemistry and disconnected molecular components must be preserved.
