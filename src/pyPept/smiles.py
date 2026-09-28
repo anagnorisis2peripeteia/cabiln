@@ -14,7 +14,7 @@ from dataclasses import dataclass, replace
 from rdkit import Chem
 
 from pyPept.monomer_store import library_version
-from pyPept.recognition import RecognitionBudgets, RejectedRegion, recognize
+from pyPept.recognition import RecognitionBudgets, RejectedRegion, _prepare_recognition
 from pyPept.recognition_notation import (
     Interpretation,
     MonomerAssignment,
@@ -120,16 +120,23 @@ def _recognize_component(source, origins, budgets, output_notation):
     search_complete = not proposals.truncated
     best = None
     best_score = (-1, -1, -1)
+    active_variant, problem, checked = None, None, {}
     # Try all reaction proposals before expensive partial-cover exploration.
     # A missing core transformation must not spend the entire budget on direct
     # matches before its supported precursor proposal can be considered.
     for admissible_search in (False, True):
-        for variant in proposals.variants:
+        for variant_index, variant in enumerate(proposals.variants):
             variant_origins = tuple(
                 origins[index] if index is not None else None
                 for index in variant.atom_origins
             )
-            checked = {}
+            # Retain one proposal's candidates and verification decisions. The
+            # usual single-proposal import reuses both phases; switching proposals
+            # drops the old state so memory cannot multiply by proposal count.
+            if active_variant != variant_index:
+                problem = _prepare_recognition(variant.molecule, budgets)
+                checked = {}
+                active_variant = variant_index
 
             def accept_cover(cover):
                 # Invalid interpretations must not establish the search's coverage
@@ -176,14 +183,12 @@ def _recognize_component(source, origins, budgets, output_notation):
                 return accepted
 
             if admissible_search:
-                search = recognize(
-                    variant.molecule, budgets=budgets, accept_cover=accept_cover
-                )
+                search = problem.search(accept_cover)
             else:
                 # Fast proposals handle fully known structures and reaction products
                 # without rebuilding every equivalent template interpretation. This
                 # phase cannot rule out an admissible lower-coverage partition.
-                search = recognize(variant.molecule, budgets=budgets)
+                search = problem.search()
                 for cover in search.covers:
                     accept_cover(cover)
                     if best is not None and not best[0].unknown_pieces:

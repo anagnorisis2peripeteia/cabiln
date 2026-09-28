@@ -455,6 +455,44 @@ def _cover_key(cover):
     return -len(owners), -backbone_edges, tuple(_candidate_key(item) for item in cover)
 
 
+def _compatible_boundary(index, chosen, owner, atoms, boundaries):
+    """A connection crossing owners must have reciprocal ports on both sides."""
+    for inside, outside in boundaries[index]:
+        other = owner.get(outside)
+        if other is not None and (outside, inside) not in boundaries[other]:
+            return False
+    return all(
+        (outside, inside) in boundaries[index]
+        for other in chosen
+        for inside, outside in boundaries[other]
+        if outside in atoms[index]
+    )
+
+
+def _unclaimed_options(remaining, by_atom, available):
+    """Find the same branching choices and forced unknown atoms for either search."""
+    options, unknown = [], 0
+    while remaining:
+        bit = remaining & -remaining
+        remaining ^= bit
+        atom = bit.bit_length() - 1
+        choices = [index for index in by_atom[atom] if index in available]
+        if choices:
+            options.append((len(choices), atom, choices))
+        else:
+            unknown |= bit
+    return options, unknown
+
+
+def _trim_covers(results, limit):
+    """Retain the same preferred covers and report an alternative cutoff."""
+    if len(results) <= limit:
+        return False
+    worst = max(results, key=lambda key: _cover_key(results[key]))
+    del results[worst]
+    return True
+
+
 def _search(molecule, candidates, budgets, accept_cover=None):
     # Fast proposals avoid chemistry callbacks while retaining source ownership.
     # If none assembles acceptably, admitted search must explore different atom
@@ -475,6 +513,7 @@ def _search(molecule, candidates, budgets, accept_cover=None):
         frozenset((inside, outside) for inside, outside, _ in candidate.ports)
         for candidate in candidates
     )
+    atoms = tuple(candidate.atoms for candidate in candidates)
     backbone_out = tuple(
         frozenset(
             (inside, outside)
@@ -494,20 +533,6 @@ def _search(molecule, candidates, budgets, accept_cover=None):
     for index, candidate in enumerate(candidates):
         for atom in candidate.atoms:
             by_atom[atom].append(index)
-
-    def compatible(index, chosen, owner):
-        for inside, outside in port_pairs[index]:
-            other = owner.get(outside)
-            if other is not None and (outside, inside) not in port_pairs[other]:
-                return False
-        for other in chosen:
-            for inside, outside in port_pairs[other]:
-                if (
-                    outside in candidates[index].atoms
-                    and (outside, inside) not in port_pairs[index]
-                ):
-                    return False
-        return True
 
     # Explicit stack avoids recursion limits for large or mostly unknown input.
     stack = [((), 0, 0)]
@@ -531,10 +556,7 @@ def _search(molecule, candidates, budgets, accept_cover=None):
             alternatives_truncated = False
             solutions.clear()
         results[key] = cover
-        if len(results) > budgets.max_covers:
-            worst = max(results, key=lambda value: _cover_key(results[value]))
-            del results[worst]
-            alternatives_truncated = True
+        alternatives_truncated |= _trim_covers(results, budgets.max_covers)
         return True
 
     while stack and states < budgets.max_states:
@@ -549,20 +571,13 @@ def _search(molecule, candidates, budgets, accept_cover=None):
         available = {
             index
             for index, mask in enumerate(masks)
-            if not mask & (used | excluded) and compatible(index, chosen, owner)
+            if not mask & (used | excluded)
+            and _compatible_boundary(index, chosen, owner, atoms, port_pairs)
         }
         remaining = all_atoms & ~(used | excluded)
-        options_by_atom = []
-        forced_unknown = 0
-        while remaining:
-            bit = remaining & -remaining
-            atom = bit.bit_length() - 1
-            remaining ^= bit
-            options = [index for index in by_atom[atom] if index in available]
-            if options:
-                options_by_atom.append((len(options), atom, options))
-            else:
-                forced_unknown |= bit
+        options_by_atom, forced_unknown = _unclaimed_options(
+            remaining, by_atom, available
+        )
         excluded |= forced_unknown
         if atom_count - _bit_count(excluded) < best_coverage:
             continue
@@ -713,6 +728,8 @@ def _assignments(groups, limit):
 def _search_admissible(molecule, candidates, budgets, accept_cover):
     """Search ownership before interpreting each partition's slots and names."""
     groups = _ownership_groups(candidates)
+    atoms = tuple(group.atoms for group in groups)
+    boundaries = tuple(group.boundary for group in groups)
     all_atoms = (1 << molecule.GetNumAtoms()) - 1
     by_atom = [[] for _ in range(molecule.GetNumAtoms())]
     for index, group in enumerate(groups):
@@ -785,24 +802,12 @@ def _search_admissible(molecule, candidates, budgets, accept_cover):
             return
         owner = {atom: index for index in chosen for atom in groups[index].atoms}
 
-        def compatible(index):
-            for a, b in groups[index].boundary:
-                other = owner.get(b)
-                if other is not None and (b, a) not in groups[other].boundary:
-                    return False
-            return all(
-                (b, a) in groups[index].boundary
-                for other in chosen
-                for a, b in groups[other].boundary
-                if b in groups[index].atoms
-            )
-
         available = tuple(
             index
             for index, group in enumerate(groups)
             if not group.mask & (used | excluded)
             and not violates_conflict(chosen + (index,))
-            and compatible(index)
+            and _compatible_boundary(index, chosen, owner, atoms, boundaries)
         )
         possible = used
         available_mask = 0
@@ -858,15 +863,11 @@ def _search_admissible(molecule, candidates, budgets, accept_cover):
             continue
         remaining = all_atoms & ~(used | excluded)
         if remaining:
-            options = []
-            while remaining:
-                bit = remaining & -remaining
-                remaining ^= bit
-                atom = bit.bit_length() - 1
-                values = tuple(
-                    index for index in by_atom[atom] if available_mask & (1 << index)
-                )
-                options.append((len(values), atom, values))
+            available = {
+                index for index in range(len(groups)) if available_mask & (1 << index)
+            }
+            options, forced_unknown = _unclaimed_options(remaining, by_atom, available)
+            excluded |= forced_unknown
             _, atom, values = min(options)
             for index in values:
                 push(chosen + (index,), used | groups[index].mask, excluded)
@@ -909,10 +910,7 @@ def _search_admissible(molecule, candidates, budgets, accept_cover):
                 alternatives_truncated = False
             results[cover] = cover
             admitted_solutions.add(cover)
-            if len(results) > budgets.max_covers:
-                worst = max(results, key=_cover_key)
-                del results[worst]
-                alternatives_truncated = True
+            alternatives_truncated |= _trim_covers(results, budgets.max_covers)
         assignments_truncated |= truncated and not partition_rejected
         if (
             len(admitted_solutions) >= budgets.max_solutions
@@ -953,6 +951,43 @@ def _search_admissible(molecule, candidates, budgets, accept_cover):
     )
 
 
+@dataclass(frozen=True)
+class _RecognitionProblem:
+    """Candidate facts reused only within one input/proposal/library operation."""
+
+    molecule: Chem.Mol
+    budgets: RecognitionBudgets
+    candidates: tuple[Candidate, ...]
+    match_truncated: bool
+    warnings: tuple[str, ...]
+
+    def search(self, accept_cover=None):
+        covers, exhausted, states, warnings = _search(
+            self.molecule, self.candidates, self.budgets, accept_cover
+        )
+        return RecognitionSearchResult(
+            covers, exhausted, self.match_truncated, states, self.warnings + warnings
+        )
+
+
+def _prepare_recognition(molecule, budgets=None):
+    if molecule is None or molecule.GetNumAtoms() == 0:
+        raise ValueError("Recognition requires a non-empty molecule")
+    require_supported_stereo(molecule)
+    budgets = budgets or RecognitionBudgets()
+    patterns, compile_truncated, compile_warnings = _patterns(budgets, molecule)
+    candidates, match_truncated, match_warnings = _enumerate_candidates(
+        molecule, patterns, budgets
+    )
+    return _RecognitionProblem(
+        molecule,
+        budgets,
+        candidates,
+        compile_truncated or match_truncated,
+        compile_warnings + match_warnings,
+    )
+
+
 def recognize(
     molecule: Chem.Mol,
     *,
@@ -977,21 +1012,4 @@ def recognize(
     the region and exclude every candidate that might recognize any of its atoms,
     or leave an atom unrecognizable under a hereditary local-failure certificate.
     """
-    if molecule is None or molecule.GetNumAtoms() == 0:
-        raise ValueError("Recognition requires a non-empty molecule")
-    require_supported_stereo(molecule)
-    budgets = budgets or RecognitionBudgets()
-    patterns, compile_truncated, compile_warnings = _patterns(budgets, molecule)
-    candidates, match_truncated, match_warnings = _enumerate_candidates(
-        molecule, patterns, budgets
-    )
-    covers, exhausted, states, search_warnings = _search(
-        molecule, candidates, budgets, accept_cover
-    )
-    return RecognitionSearchResult(
-        covers,
-        exhausted,
-        compile_truncated or match_truncated,
-        states,
-        compile_warnings + match_warnings + search_warnings,
-    )
+    return _prepare_recognition(molecule, budgets).search(accept_cover)
