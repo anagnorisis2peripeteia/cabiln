@@ -12,6 +12,7 @@ import re
 from dataclasses import dataclass, field, replace
 
 from pyPept.attachments import attachment_sites
+from pyPept.notation import bracket_chain, supports_bracket_token
 from pyPept.source import Occurrence as SourceOccurrence
 from pyPept.source import Span
 
@@ -65,6 +66,37 @@ class Connection:
     @property
     def endpoints(self):
         return self.left, self.right
+
+
+def _connection_occupancy(connections, sites):
+    """Validate the same numbered endpoints for both producers and inspection."""
+    used, labels = set(), set()
+    for connection in connections:
+        if connection.label is not None:
+            if (
+                not re.fullmatch(r"!\w+", connection.label)
+                or connection.label in labels
+            ):
+                raise ValueError(
+                    "Crosslink labels must be valid and unique per connection"
+                )
+            labels.add(connection.label)
+        for endpoint in connection.endpoints:
+            if endpoint not in sites:
+                raise ValueError(
+                    f"Connection refers to a missing attachment: {endpoint}"
+                )
+            if endpoint in used:
+                raise ValueError(f"Attachment site is used more than once: {endpoint}")
+            used.add(endpoint)
+    return frozenset(used)
+
+
+def _sequence_connections(sequence, ids):
+    return tuple(
+        Connection(Endpoint(ids[b[0]], b[4]), Endpoint(ids[b[2]], b[5]))
+        for b in sequence.s_bonds
+    )
 
 
 @dataclass(frozen=True)
@@ -144,28 +176,7 @@ class Peptide:
                     raise ValueError(
                         "Source attachment must name an owned atom and an existing slot"
                     )
-        used = set()
-        labels = set()
-        for connection in self.connections:
-            if connection.label is not None:
-                if (
-                    not re.fullmatch(r"!\w+", connection.label)
-                    or connection.label in labels
-                ):
-                    raise ValueError(
-                        "Crosslink labels must be valid and unique per connection"
-                    )
-                labels.add(connection.label)
-            for endpoint in connection.endpoints:
-                if endpoint not in sites:
-                    raise ValueError(
-                        f"Connection refers to a missing attachment: {endpoint}"
-                    )
-                if endpoint in used:
-                    raise ValueError(
-                        f"Attachment site is used more than once: {endpoint}"
-                    )
-                used.add(endpoint)
+        _connection_occupancy(self.connections, sites)
         if self.layout is not None:
             group_ids = {group.id for group in self.layout.groups}
             if len(group_ids) != len(self.layout.groups):
@@ -202,6 +213,32 @@ class Peptide:
             (edge for edge in self.connections if endpoint in edge.endpoints), None
         )
 
+    @staticmethod
+    def occupied_sites_from_sequence(sequence):
+        """Inspect current numbered slots without creating an incomplete peptide.
+
+        Read detached Sequence data on every call, including caller mutations.
+        Chemistry, source layout, and serialization preferences are not needed
+        for occupancy. Full Peptide producers still validate all their facts.
+        """
+        ids = tuple(range(len(sequence.s_monomers)))
+        sites = set()
+        for identity, monomer in zip(ids, sequence.s_monomers):
+            for atom in monomer["m_romol"].GetAtoms():
+                if atom.GetAtomicNum() != 0:
+                    continue
+                endpoint = Endpoint(identity, atom.GetIsotope())
+                if endpoint.slot < 1 or endpoint in sites:
+                    raise ValueError(
+                        "Attachment sites need unique positive slot numbers"
+                    )
+                if atom.GetDegree() != 1:
+                    raise ValueError(
+                        "Attachment dummies need a positive slot and one neighbour"
+                    )
+                sites.add(endpoint)
+        return _connection_occupancy(_sequence_connections(sequence, ids), sites)
+
     @classmethod
     def from_sequence(cls, sequence, occurrence_ids=None):
         """Adapt a parsed Sequence; source layout requires ``track_source=True``.
@@ -219,29 +256,42 @@ class Peptide:
         tracked = len(sequence.s_sources) == len(ids)
         source = str(sequence.s_inputbiln) if tracked else None
         occurrences = []
+        # Repeated occurrences can use the same detached definition. Reuse only
+        # within this projection, so later caller changes are always observed.
+        definitions = {}
         for index, monomer in enumerate(sequence.s_monomers):
             mol = monomer["m_romol"]
-            anchors = {
-                atom.GetIsotope(): atom.GetNeighbors()[0].GetIdx()
-                for atom in mol.GetAtoms()
-                if atom.GetAtomicNum() == 0
-            }
-            sites = tuple(
-                AttachmentSite(site["slot"], site["chem_type"], anchors[site["slot"]])
-                for site in attachment_sites(mol, monomer["m_Rgroups"])
-            )
-            types = {site.slot: site.chem_type for site in sites}
+            definition = (id(mol), tuple(monomer["m_Rgroups"]))
+            if definition not in definitions:
+                anchors = {
+                    atom.GetIsotope(): atom.GetNeighbors()[0].GetIdx()
+                    for atom in mol.GetAtoms()
+                    if atom.GetAtomicNum() == 0
+                }
+                sites = tuple(
+                    AttachmentSite(
+                        site["slot"], site["chem_type"], anchors[site["slot"]]
+                    )
+                    for site in attachment_sites(mol, monomer["m_Rgroups"])
+                )
+                types = {site.slot: site.chem_type for site in sites}
+                definitions[definition] = (
+                    sites,
+                    types.get(1) in ("backbone_n", "backbone_o")
+                    and types.get(2)
+                    in ("backbone_c", "backbone_c_red", "sp3_c_anchor"),
+                    mol.GetNumHeavyAtoms(),
+                )
+            sites, has_backbone, size = definitions[definition]
             location = sequence.s_sources[index] if tracked else None
             occurrences.append(
                 MonomerOccurrence(
                     ids[index],
                     monomer["m_abbr"],
                     sites,
-                    types.get(1) in ("backbone_n", "backbone_o")
-                    and types.get(2)
-                    in ("backbone_c", "backbone_c_red", "sp3_c_anchor"),
+                    has_backbone,
                     monomer["m_type"],
-                    mol.GetNumHeavyAtoms(),
+                    size,
                     (
                         source[location.token.start : location.token.end]
                         if tracked
@@ -250,10 +300,7 @@ class Peptide:
                     location,
                 )
             )
-        connections = tuple(
-            Connection(Endpoint(ids[b[0]], b[4]), Endpoint(ids[b[2]], b[5]))
-            for b in sequence.s_bonds
-        )
+        connections = _sequence_connections(sequence, ids)
         if not tracked:
             return cls(tuple(occurrences), connections)
         layout = _source_layout(
@@ -503,8 +550,6 @@ def serialize(peptide: Peptide, notation="percent") -> Serialization:
             peptide.layout,
         )
 
-    from pyPept.sequence import _BRACKET_ENTRY_RE
-
     nodes = {item.id: item for item in peptide.occurrences}
     fixed = _fixed_source_groups(peptide, notation)
     fixed_members = {member for group in fixed for member in group.members}
@@ -552,10 +597,7 @@ def serialize(peptide: Peptide, notation="percent") -> Serialization:
             if cyclic or any(identity in fixed_at for identity in chain):
                 continue
             if not all(
-                _BRACKET_ENTRY_RE.fullmatch(
-                    f".{nodes[i].token or nodes[i].symbol}(1,1)"
-                )
-                for i in chain
+                supports_bracket_token(nodes[i].token or nodes[i].symbol) for i in chain
             ):
                 continue
             options = []
@@ -658,32 +700,30 @@ def serialize(peptide: Peptide, notation="percent") -> Serialization:
         branches_at.setdefault(host.occurrence_id, []).append((ci, host, own))
     explicit_order, pendant_order = [], []
 
-    def entry(identity, previous_slot, own_slot):
-        return (
-            f"{nodes[identity].token or nodes[identity].symbol}({previous_slot},{own_slot})"
-            + "".join(suffixes[identity])
-        )
-
     def branch_text(ci, host, own):
         nonlocal next_group
         chain = chains[ci][0]
         at = chain.index(own.occurrence_id)
-        after, before = chain[at + 1 :], tuple(reversed(chain[:at]))
-        order = (own.occurrence_id,) + after + before
+        emitted = bracket_chain(
+            [(nodes[i].token or nodes[i].symbol, None, None) for i in chain],
+            at,
+            host.slot,
+            own.slot,
+            {index: "".join(suffixes[i]) for index, i in enumerate(chain)},
+        )
+        order = tuple(chain[index] for index in emitted.order)
         pendant_order.extend(order)
         identity = next_group
         next_group += 1
         groups.append(
             LayoutGroup(identity, host.occurrence_id, order, "bracket", "[", "]", False)
         )
-        text = entry(own.occurrence_id, host.slot, own.slot)
-        if after and before:
-            text += "[." + ".".join(entry(i, 2, 1) for i in after) + "]"
+        if emitted.arm:
             groups.append(
                 LayoutGroup(
                     next_group,
                     own.occurrence_id,
-                    after,
+                    tuple(chain[index] for index in emitted.arm),
                     "arm",
                     "[",
                     "]",
@@ -692,11 +732,7 @@ def serialize(peptide: Peptide, notation="percent") -> Serialization:
                 )
             )
             next_group += 1
-        elif after:
-            text += "." + ".".join(entry(i, 2, 1) for i in after)
-        if before:
-            text += "." + ".".join(entry(i, 1, 2) for i in before)
-        return ".[" + text + "]"
+        return emitted.text
 
     def token(identity):
         explicit_order.append(identity)

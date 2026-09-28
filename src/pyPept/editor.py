@@ -13,12 +13,9 @@ from hashlib import sha256
 from rdkit import Chem
 
 from pyPept.molecule import Molecule
+from pyPept.notation import normalize_legacy_brackets, supports_bracket_token
 from pyPept.peptide import Connection, Endpoint, Peptide
-from pyPept.sequence import (
-    _BRACKET_ENTRY_RE,
-    Sequence,
-    _flatten_nested_brackets,
-)
+from pyPept.sequence import Sequence
 from pyPept.source import SourceText, Span, join, origin_span
 
 
@@ -76,9 +73,7 @@ class PeptideDocument:
         brackets = set()
         for index in indices:
             occurrence = self.sequence.s_sources[index]
-            if occurrence.arm is not None and not self.source[
-                occurrence.arm.start : occurrence.arm.end
-            ].startswith("["):
+            if occurrence.legacy_arm:
                 brackets.add(occurrence.bracket)
         if not brackets:
             return self
@@ -86,7 +81,7 @@ class PeptideDocument:
         for span in sorted(brackets, reverse=True):
             source = (
                 source[: span.start]
-                + _flatten_nested_brackets(source[span.start : span.end])
+                + normalize_legacy_brackets(source[span.start : span.end])
                 + source[span.end :]
             )
         updated = PeptideDocument(source)
@@ -125,7 +120,7 @@ class PeptideDocument:
         return monomer
 
     def _tag(self):
-        used = self.sequence.s_biln.tracker.labels
+        used = {edge.label for edge in self.peptide.connections}
         number = 1
         while f"!{number}" in used:
             number += 1
@@ -137,7 +132,7 @@ class PeptideDocument:
             # Give this attachment its own continuation without changing the
             # backbone host's pointer. Copy its original token and slot text.
             body = self._text[occurrence.entry.start + 1 : occurrence.entry.end]
-            if _BRACKET_ENTRY_RE.fullmatch("." + body):
+            if occurrence.bracketable:
                 return [_Edit(occurrence.entry, ".[" + body + suffix + "]")]
             # Some library symbols (for example leading underscores) are legal
             # inline or explicit tokens but cannot occur in a bracket. Move
@@ -156,7 +151,7 @@ class PeptideDocument:
             host = next(endpoint for endpoint in bond.endpoints if endpoint != own)
             own_slot, host_slot = own.slot, host.slot
             tag = f"!source{index}"
-            while tag in self.sequence.s_biln.tracker.labels:
+            while tag in {edge.label for edge in self.peptide.connections}:
                 tag += "_"
             token = self._text[occurrence.token.start : occurrence.token.end]
             insertion = len(self.source.rstrip())
@@ -206,9 +201,7 @@ class PeptideDocument:
         ]
         start, end = occurrence.entry.start, occurrence.entry.end
 
-        bracket_token = bool(
-            _BRACKET_ENTRY_RE.fullmatch(f".{symbol}({host_slot},{new_slot})")
-        )
+        bracket_token = supports_bracket_token(symbol)
         if occurrence.kind == "explicit" and (
             bracket_token or (host_slot, new_slot) in ((2, 1), (1, 2))
         ):
@@ -269,10 +262,8 @@ class PeptideDocument:
             marker = next(
                 (
                     m
-                    for m in self.sequence.s_biln.tracker.markers
-                    if m.slot == 2
-                    and m.owner == occurrence.entry
-                    and m.kind != "terminal"
+                    for m in self.peptide.layout.markers
+                    if m.endpoint == endpoint and m.kind != "terminal"
                 ),
                 None,
             )
@@ -285,17 +276,16 @@ class PeptideDocument:
 
     def _move_marker(self, marker):
         """Extract one endpoint, retaining the spelling of any surrounding bracket."""
-        if marker.bracket is None:
+        if marker.group is None:
             return marker.span, self._text[marker.span.start : marker.span.end]
+        group = next(
+            group for group in self.peptide.layout.groups if group.id == marker.group
+        )
         siblings = sorted(
-            (
-                m
-                for m in self.sequence.s_biln.tracker.markers
-                if m.bracket == marker.bracket
-            ),
+            (m for m in self.peptide.layout.markers if m.group == marker.group),
             key=lambda m: m.span.start,
         )
-        bracket = marker.bracket
+        bracket = group.span
         if len(siblings) == 1:
             return bracket, self._text[bracket.start : bracket.end]
         body = self._text[marker.span.start : marker.span.end]

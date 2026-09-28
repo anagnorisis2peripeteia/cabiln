@@ -31,6 +31,13 @@ from pyPept.source import (
     synthetic as _source_synthetic,
 )
 
+from pyPept.notation import (
+    BRACKET_ENTRY_RE as _BRACKET_ENTRY_RE, MIXED_ENTRY_RE as _MIXED_ENTRY_RE,
+    bracket_chain, legacy_attachment_slot,
+    normalize_legacy_brackets as _flatten_nested_brackets,
+    _flatten_one_nested, _ENTRY_ANY,
+)
+
 import string
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -255,92 +262,6 @@ _BRACKET_RE = re.compile(
 )
 
 
-def _flatten_nested_brackets(seg):
-    """Convert old ``[[A.B].C]`` nested notation to new ``[A[.B][.C]]`` form.
-
-    Old notation used nesting to express multi-arm hubs: ``[[TBMB.C].!3]``
-    meant both C and !3 bond to TBMB.  New notation uses explicit sub-bracket
-    arms: ``[TBMB[.C][.!3]]``.  This function converts the old form on the way
-    into the parser so both notations assemble identically.
-    """
-    out = []
-    i = 0
-    while i < len(seg):
-        if seg[i:i + 2] == '.[' and i + 2 < len(seg) and seg[i + 2] == '[':
-            depth = 0
-            j = i + 1
-            while j < len(seg):
-                if seg[j] == '[':
-                    depth += 1
-                elif seg[j] == ']':
-                    depth -= 1
-                    if depth == 0:
-                        break
-                j += 1
-            whole = seg[i + 1:j + 1]
-            flat = _flatten_one_nested(whole)
-            out.append(seg[i:i+1] + flat)
-            i = j + 1
-        else:
-            out.append(seg[i])
-            i += 1
-    return _source_join('', out)
-
-
-_ENTRY_ANY = re.compile(r'((?:[A-Za-z]\w*|!\w+)\(\d+,\d+\))')
-
-
-def _flatten_one_nested(s):
-    """Convert a single nested bracket to new sub-bracket arm notation.
-
-    Input ``s`` is the bracket expression starting at the outer ``[``.
-    Returns ``[anchor[.inner_rest...][.outer...]]`` — every arm from the
-    anchor is an explicit ``[.Entry(r,r)]`` sub-bracket so the parser's
-    pointer semantics are unambiguous.
-    """
-    inner_start = s.index('[', 1)
-    depth = 0
-    inner_end = inner_start
-    while inner_end < len(s):
-        if s[inner_end] == '[':
-            depth += 1
-        elif s[inner_end] == ']':
-            depth -= 1
-            if depth == 0:
-                break
-        inner_end += 1
-
-    inner_bracket = s[inner_start:inner_end + 1]
-    inner_content = inner_bracket[1:-1]
-    outer_part = s[inner_end + 1:-1]
-    outer_entries = [_source_group(m, 1) for m in _ENTRY_ANY.finditer(outer_part)]
-
-    # If inner content already uses sub-bracket notation, preserve it and just
-    # append outer entries as additional arms.
-    if '[' in inner_content:
-        outer_arms = _source_join('', ('[.' + e + ']' for e in outer_entries))
-        return s[:1] + inner_content + outer_arms + s[-1:]
-
-    # Legacy flat inner content: split anchor from remaining chain entries.
-    inner_entries = [_source_group(m, 1) for m in _ENTRY_ANY.finditer(inner_content)]
-    anchor = inner_entries[0] if inner_entries else ''
-    inner_rest = inner_entries[1:]
-
-    inner_arms = _source_join('', ('[.' + e + ']' for e in inner_rest))
-    outer_arms = _source_join('', ('[.' + e + ']' for e in outer_entries))
-    return s[:1] + anchor + inner_arms + outer_arms + s[-1:]
-
-# Matches entries inside brackets: both monomer .Token(r,r) and crosslink .!n(r,r).
-_BRACKET_ENTRY_RE = re.compile(r'\.((?:[A-Za-z]\w*|!\w+))\((\d+),(\d+)\)')
-
-# Mixed tokeniser for bracket content: matches either a sub-bracket arm [.sub] or a
-# flat entry .Entry(r,r).  Used by _sub_bracket to process new-grammar notation.
-#   group(1) set  → sub-bracket arm content (without surrounding [. and ])
-#   group(2,3,4)  → flat entry tok, prev_r, cur_r
-_MIXED_ENTRY_RE = re.compile(
-    r'\[\.([^\[\]]*)\]'
-    r'|\.((?:[A-Za-z]\w*|!\w+))\((\d+),(\d+)\)'
-)
 
 
 def biln_to_cabiln(biln):
@@ -360,10 +281,6 @@ def biln_to_cabiln(biln):
     :param biln: BILN string, possibly containing old crosslink annotations.
     :returns: equivalent CABILN string.
     """
-    def _remap_slot(rg_str):
-        """HELM/BILN R3 (sidechain) → pyPept slot 4 (backbone_n_mod occupies slot 3)."""
-        return '4' if rg_str == '3' else rg_str
-
     matches = list(_OLD_BILN_RE.finditer(biln))
     if not matches:
         return biln
@@ -378,8 +295,12 @@ def biln_to_cabiln(biln):
         if len(endpoints) != 2:
             continue
         m1, m2 = endpoints
-        tok1, rg1 = m1.group(1), _remap_slot(m1.group(3))
-        tok2, rg2 = m2.group(1), _remap_slot(m2.group(3))
+        tok1, tok2 = m1.group(1), m2.group(1)
+        # This text adapter historically preserves noncanonical numeric spelling.
+        rg1, rg2 = (
+            str(legacy_attachment_slot(3)) if value == "3" else value
+            for value in (m1.group(3), m2.group(3))
+        )
         replacements[m1.start()] = (m1, f'{tok1}.!{bid}({rg1},{rg2})')
         replacements[m2.start()] = (m2, f'{tok2}.!{bid}')
 
@@ -1179,29 +1100,7 @@ def cabiln_to_bracket(cabiln):
             unconverted_crosslink.append(branch_seg)
             continue
 
-        # Build bracket: anchor first, then C-terminal side, then N-terminal
-        bracket_items = [f'{parsed[anchor_idx][0]}({r_host},{r_branch})']
-
-        # After anchor (C-terminal side in N→C branch) — keep R-groups
-        for j in range(anchor_idx + 1, len(parsed)):
-            abbr, rp, rt = parsed[j]
-            bracket_items.append(
-                f'{abbr}({rp},{rt})' if rp and rt else f'{abbr}(2,1)')
-
-        if 0 < anchor_idx < len(parsed) - 1:
-            after_arm = '.'.join(bracket_items[1:])
-            bracket_items = [bracket_items[0] + f'[.{after_arm}]']
-
-        # Before anchor (N-terminal side) — reverse order.
-        # Branch items use swapped (rt,rp) perspective; swap back to get bracket (rp,rt).
-        for j in range(anchor_idx - 1, -1, -1):
-            abbr, cur_rp, cur_rt = parsed[j]
-            if cur_rp and cur_rt:
-                bracket_items.append(f'{abbr}({cur_rt},{cur_rp})')
-            else:
-                bracket_items.append(f'{abbr}(1,2)')
-
-        bracket_str = '.[' + '.'.join(bracket_items) + ']'
+        bracket_str = bracket_chain(parsed, anchor_idx, r_host, r_branch).text
         main_seg = (main_seg[:host_m.start()] + bracket_str
                     + main_seg[host_m.end():])
 
@@ -1238,22 +1137,11 @@ def cabiln_to_bracket(cabiln):
     return main_seg
 
 
-def _check_bond_chemistry(mol1, at1, mol2, at2, bond_label='', warning_sink=None):
-    """
-    Validate the proposed inter-monomer bond.
+def _bond_chemistry_diagnostic(mol1, at1, mol2, at2, bond_label='', warning_sink=None):
+    """Emit established exotic-bond warnings and return a legacy rejection.
 
-    Standard peptide chemistry bonds pass silently:
-      N–C(=O)  amide / isopeptide
-      S–S      disulfide
-      O–C(=O)  ester
-      Se–Se    diselenide
-
-    Bonds that are exotic but have documented peptide chemistry uses emit a
-    UserWarning but are not blocked (thioester, sulfenamide, N–N hydrazide,
-    non-carbonyl N–C, non-carbonyl O–C ether).
-
-    Bonds with no plausible inter-monomer chemistry (e.g. C–C) raise
-    ValueError — these almost always indicate wrong R-group numbers.
+    Atom pairs describe these diagnostics, not numbered-site eligibility. The
+    latter is determined by effective attachment types and the reaction index.
     """
     def _is_carbonyl_carbon(mol, atom):
         return (atom.GetAtomicNum() == 6
@@ -1368,16 +1256,44 @@ def _check_bond_chemistry(mol1, at1, mol2, at2, bond_label='', warning_sink=None
         )
         return
 
-    # Anything else — no plausible inter-monomer chemistry; raise so the caller
-    # gets a clear message rather than a silent bad molecule or a raw RDKit crash.
+    # Retained for callers of the bare-molecule compatibility helper. A
+    # registered numbered-site reaction can support additional element pairs.
     sym_names = {6: 'C', 7: 'N', 8: 'O', 16: 'S', 34: 'Se'}
     s1 = sym_names.get(sym1, str(sym1))
     s2 = sym_names.get(sym2, str(sym2))
-    raise ValueError(
+    return (
         f"Bond {bond_label}: {s1}–{s2} inter-monomer bond has no recognised "
         "peptide chemistry context. Check that the correct R-group numbers "
         "were specified for both monomers."
     )
+
+
+def _check_bond_chemistry(mol1, at1, mol2, at2, bond_label='', warning_sink=None):
+    """Compatibility diagnostics for bare molecules without numbered sites."""
+    diagnostic = _bond_chemistry_diagnostic(
+        mol1, at1, mol2, at2, bond_label, warning_sink)
+    if diagnostic:
+        raise ValueError(diagnostic)
+
+
+def _check_parsed_connection(mol1, at1, slot1, mol2, at2, slot2, *,
+                                leaving_groups1, leaving_groups2,
+                                bond_label='', warning_sink=None):
+    """Keep parse diagnostics without vetoing a supported numbered reaction.
+
+    Sequence historically also accepts some graphs without an assembly reaction.
+    The legacy diagnostic preserves that parse-only contract; reaction support
+    belongs to resolve_connection, as used by assembly and the builder.
+    """
+    from pyPept.attachments import resolve_connection
+
+    connection = resolve_connection(
+        mol1, slot1, mol2, slot2,
+        leaving_groups1=leaving_groups1, leaving_groups2=leaving_groups2)
+    diagnostic = _bond_chemistry_diagnostic(
+        mol1, at1, mol2, at2, bond_label, warning_sink)
+    if connection.reaction is None and diagnostic:
+        raise ValueError(diagnostic)
 
 
 class SequenceConstants:
@@ -1768,8 +1684,10 @@ class Sequence:
                             f"terminal-only monomers (e.g. ac, am, fmoc) are "
                             f"not placed mid-chain.")
                     else:
-                        _check_bond_chemistry(
-                            mol1, r1_attach, mol2, r2_attach,
+                        _check_parsed_connection(
+                            mol1, r1_attach, 2, mol2, r2_attach, 1,
+                            leaving_groups1=self.__get_monomer_prop('m_Rgroups', num_res),
+                            leaving_groups2=self.__get_monomer_prop('m_Rgroups', num_res + 1),
                             bond_label=f'backbone {num_res}→{num_res+1}',
                             warning_sink=self._warning_sink)
                         self.__add_bond(
@@ -1841,8 +1759,10 @@ class Sequence:
                 slot2 = bondx[1][2]  # 1-based slot for m2's attachment
                 mol1 = self.__get_monomer_prop('m_romol', m1)
                 mol2 = self.__get_monomer_prop('m_romol', m2)
-                _check_bond_chemistry(
-                    mol1, at1, mol2, at2,
+                _check_parsed_connection(
+                    mol1, at1, slot1, mol2, at2, slot2,
+                    leaving_groups1=self.__get_monomer_prop('m_Rgroups', m1),
+                    leaving_groups2=self.__get_monomer_prop('m_Rgroups', m2),
                     bond_label=f'crosslink bond-id {bondx[0][0]!r} '
                                f'(R{bondx[0][2]} of residue {m1} <-> '
                                f'R{bondx[1][2]} of residue {m2})',

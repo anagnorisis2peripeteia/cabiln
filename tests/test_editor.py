@@ -11,6 +11,36 @@ from pyPept.web.app import app
 
 CHARGED = "<[1*]N[C@@H](C[O-])C([2*])=O>"
 RING = "<[1*]N[C@@H](CC%10CCCCC%10)C([2*])=O>"
+
+
+def test_selected_occupancy_discovers_only_the_selected_definition(monkeypatch):
+    import pyPept.peptide as model
+    import pyPept.web.builder as builder
+
+    def unnecessary_projection(*args, **kwargs):
+        raise AssertionError("A selected residue must not enrich every occurrence")
+
+    discover = builder.attachment_sites
+    calls = []
+
+    def counted(molecule, leaving_groups):
+        calls.append(molecule)
+        return discover(molecule, leaving_groups)
+
+    monkeypatch.setattr(model, "attachment_sites", unnecessary_projection)
+    monkeypatch.setattr(builder, "attachment_sites", counted)
+    response = TestClient(app).get(
+        "/monomer_rgroups",
+        params={"abbr": "G", "residue_idx": 10, "cabiln": "-".join(["G"] * 20)},
+    )
+    assert response.status_code == 200, response.text
+    assert len(calls) == 1
+    assert {site["slot"] for site in response.json()["rgroups"] if site["used"]} == {
+        1,
+        2,
+    }
+
+
 TRACES = [
     ("ac-A-G-am", ("backbone", 1, "K"), "ac-A-K-G-am"),
     (

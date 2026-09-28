@@ -5,11 +5,11 @@ from __future__ import annotations
 from fastapi import APIRouter, Query
 from fastapi.responses import JSONResponse
 
-from pyPept.attachments import attachment_sites
+from pyPept.attachments import attachment_sites, reaction_for_types
 from pyPept.editor import PeptideDocument
 from pyPept.molecule import Molecule
 from pyPept.monomer_store import _load_sdf
-from pyPept.peptide import Endpoint, Peptide
+from pyPept.peptide import Peptide
 from pyPept.sequence import Sequence
 
 from .drawing import _draw_mol
@@ -60,11 +60,7 @@ def insert_backbone(req: _InsertBackboneReq):
 def validate_bond(req: _ValidateBondReq):
     """Check if a bond between two R-group chemistry types is valid."""
     try:
-        from pyPept.interfaces.reaction_library import REACTION_INDEX
-
-        entry = REACTION_INDEX.get((req.chem_type_a, req.chem_type_b))
-        if entry is None:
-            entry = REACTION_INDEX.get((req.chem_type_b, req.chem_type_a))
+        entry = reaction_for_types(req.chem_type_a, req.chem_type_b)
         if entry:
             return {
                 "valid": True,
@@ -109,14 +105,13 @@ def monomer_rgroups(
             if not 0 <= residue_idx < len(sequence.s_monomers):
                 raise ValueError(f"Residue {residue_idx} does not exist")
             monomer = sequence.s_monomers[residue_idx]
-            peptide = Peptide.from_sequence(sequence)
             target_mol = Chem.Mol(monomer["m_romol"])
             leaving_groups = monomer["m_Rgroups"]
             abbr = monomer["m_abbr"]
             used_slots = {
-                site.slot
-                for site in peptide.occurrence(residue_idx).sites
-                if peptide.connection_at(Endpoint(residue_idx, site.slot)) is not None
+                endpoint.slot
+                for endpoint in Peptide.occupied_sites_from_sequence(sequence)
+                if endpoint.occurrence_id == residue_idx
             }
         else:
             if residue_idx >= 0:

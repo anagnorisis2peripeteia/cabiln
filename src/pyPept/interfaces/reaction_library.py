@@ -297,14 +297,6 @@ def infer_chem_type(mol, attach_idx: int, slot: int = None,
     return f'element_{sym}'
 
 
-def _generic_bond_smirks(iso1: int, sym1: int, iso2: int, sym2: int) -> str:
-    """Fallback single-bond SMIRKS using globally unique dummy isotopes."""
-    pt = Chem.GetPeriodicTable()
-    e1 = pt.GetElementSymbol(sym1)
-    e2 = pt.GetElementSymbol(sym2)
-    return f'[{iso1}*][{e1}:1].[{iso2}*][{e2}:2] >> [{e1}:1][{e2}:2]'
-
-
 def _group_smirks_for_intramol(smirks: str) -> str:
     """
     Convert a bimolecular SMIRKS to the grouped (intramolecular) form by
@@ -319,107 +311,98 @@ def _group_smirks_for_intramol(smirks: str) -> str:
     return f'({reactants.strip()}) >> {products.strip()}'
 
 
+def _target_smirks(smirks, slot_a, slot_b, iso1, iso2):
+    """Substitute each placeholder once, even when slot labels coincide."""
+    import re
+
+    replacements = {}
+    for slot, isotope in ((slot_a, iso1), (slot_b, iso2)):
+        replacements.setdefault(str(slot), []).append(isotope)
+
+    def replace(match):
+        values = replacements.get(match.group(1))
+        return f'[{values.pop(0)}*]' if values else match.group()
+
+    return re.sub(r'\[(\d+)\*\]', replace, smirks)
+
+
+def _inherit_residue_ownership(product, reactants):
+    """Carry lineage from the actual reactant order after every reaction step.
+
+    Mapped product atoms lose custom properties in RDKit. Its reactant indices
+    refer to this step's inputs, not necessarily the original monomer pair.
+    Restore ownership before those inputs are replaced by the next product.
+    """
+    for atom in product.GetAtoms():
+        if atom.HasProp('react_idx') and atom.HasProp('react_atom_idx'):
+            source = reactants[atom.GetIntProp('react_idx')].GetAtomWithIdx(
+                atom.GetIntProp('react_atom_idx'))
+            if source.HasProp('_residue_idx'):
+                atom.SetIntProp('_residue_idx', source.GetIntProp('_residue_idx'))
+
+
 def run_bond_smirks(frag1, frag2,
                     iso1: int, iso2: int,
                     entry: dict, intramolecular: bool):
+    """Execute a targeted reaction and preserve ownership through every step.
+
+    Numbered dummies identify the two sites, independently of the slot labels
+    in a reaction definition. The first successful template/fragment orientation
+    determines lineage. Alternatives remain internal for symmetric reactions.
+    Grouped reactants close a ring within one fragment; later steps consume the
+    preceding product. The public result remains a single RDKit molecule.
     """
-    Form a bond using the SMIRKS steps in *entry*, then return the product.
-
-    For intermolecular bonds the SMIRKS dummy isotopes are replaced with the
-    globally-unique iso1/iso2 so only the correct atom pair is targeted.
-
-    For intramolecular ring closure the bimolecular step-0 SMIRKS is converted
-    to the grouped form '([A].[B]) >> [P]' and called as RunReactants((mol,))
-    — RDKit's native syntax for ring-forming reactions on a single molecule.
-    Subsequent unimolecular steps (e.g. IEDDA retro-[4+2]) run unchanged.
-
-    :param frag1: first fragment (carries iso1 dummy); equals frag2 when intramolecular.
-    :param frag2: second fragment (carries iso2 dummy).
-    :param iso1: globally-unique isotope of the dummy in frag1.
-    :param iso2: globally-unique isotope of the dummy in frag2.
-    :param entry: reaction YAML entry dict.
-    :param intramolecular: True when both dummies are in the same molecule.
-    :returns: product ROMol with the bond formed.
-    """
-    steps = entry['steps']
-    take_largest = entry.get('take_largest', False)
-    slot_a_iso = entry.get('slot_a')
-    slot_b_iso = entry.get('slot_b')
-
-    current: Chem.ROMol = None
-
-    for step_i, smirks in enumerate(steps):
+    current = None
+    slot_a, slot_b = entry.get('slot_a'), entry.get('slot_b')
+    for step_i, smirks in enumerate(entry['steps']):
         if step_i == 0:
-            targeted = smirks
-            if slot_a_iso is not None and slot_b_iso is not None:
-                targeted = targeted.replace(f'[{slot_a_iso}*]', f'[{iso1}*]', 1)
-                targeted = targeted.replace(f'[{slot_b_iso}*]', f'[{iso2}*]', 1)
-
+            targets = [smirks]
+            if slot_a is not None and slot_b is not None:
+                targets = [
+                    _target_smirks(smirks, slot_a, slot_b, first, second)
+                    for first, second in ((iso1, iso2), (iso2, iso1))
+                ]
             if intramolecular:
-                grouped = _group_smirks_for_intramol(targeted)
-                rxn = AllChem.ReactionFromSmarts(grouped)
-                if rxn is None:
-                    raise ValueError(f"Bad grouped SMIRKS in '{entry['id']}' step 1: {grouped!r}")
-                products = rxn.RunReactants((frag1,))
-                if not products and slot_a_iso is not None and slot_b_iso is not None:
-                    targeted_swap = smirks.replace(f'[{slot_a_iso}*]', f'[{iso2}*]', 1)
-                    targeted_swap = targeted_swap.replace(f'[{slot_b_iso}*]', f'[{iso1}*]', 1)
-                    grouped_swap = _group_smirks_for_intramol(targeted_swap)
-                    rxn_swap = AllChem.ReactionFromSmarts(grouped_swap)
-                    if rxn_swap is not None:
-                        products = rxn_swap.RunReactants((frag1,))
+                targets = [_group_smirks_for_intramol(target) for target in targets]
+                orders = [(frag1,)]
             else:
-                rxn = AllChem.ReactionFromSmarts(targeted)
-                if rxn is None:
-                    raise ValueError(f"Bad SMIRKS in '{entry['id']}' step 1: {targeted!r}")
-
-                products = rxn.RunReactants((frag1, frag2))
-                if not products:
-                    products = rxn.RunReactants((frag2, frag1))
-
-                # Try with iso1/iso2 swapped — needed when the caller placed
-                # isotopes in the reverse of what the SMIRKS template expects.
-                if not products and slot_a_iso is not None and slot_b_iso is not None:
-                    targeted_swap = smirks.replace(f'[{slot_a_iso}*]', f'[{iso2}*]', 1)
-                    targeted_swap = targeted_swap.replace(f'[{slot_b_iso}*]', f'[{iso1}*]', 1)
-                    rxn_swap = AllChem.ReactionFromSmarts(targeted_swap)
-                    if rxn_swap is not None:
-                        products = rxn_swap.RunReactants((frag1, frag2))
-                        if not products:
-                            products = rxn_swap.RunReactants((frag2, frag1))
-
+                orders = [(frag1, frag2), (frag2, frag1)]
         else:
-            rxn = AllChem.ReactionFromSmarts(smirks)
-            if rxn is None:
-                raise ValueError(f"Bad SMIRKS in '{entry['id']}' step {step_i+1}: {smirks!r}")
-            products = rxn.RunReactants((current,))
+            targets, orders = [smirks], [(current,)]
 
+        products = ()
+        for target in targets:
+            reaction = AllChem.ReactionFromSmarts(target)
+            if reaction is None:
+                raise ValueError(
+                    f"Bad SMIRKS in '{entry['id']}' step {step_i + 1}: {target!r}")
+            for reactants in orders:
+                products = reaction.RunReactants(reactants)
+                if products:
+                    break
+            if products:
+                break
         if not products:
             raise ValueError(
                 f"SMIRKS step {step_i + 1} of '{entry['id']}' produced no products. "
                 f"SMIRKS: {smirks!r}"
             )
 
-        product_mols = list(products[0])
         sanitized = []
-        for m in product_mols:
+        for product in products[0]:
+            _inherit_residue_ownership(product, reactants)
             try:
-                Chem.SanitizeMol(m)
-                sanitized.append(m)
+                Chem.SanitizeMol(product)
             except Exception as exc:
                 raise ValueError(
-                    f"Sanitization failed on step {step_i+1} product of "
+                    f"Sanitization failed on step {step_i + 1} product of "
                     f"'{entry['id']}': {exc}"
                 ) from exc
-
-        if take_largest and len(sanitized) > 1:
-            current = max(sanitized, key=lambda m: m.GetNumHeavyAtoms())
-        elif len(sanitized) == 1:
-            current = sanitized[0]
+            sanitized.append(product)
+        if entry.get('take_largest', False) and len(sanitized) > 1:
+            current = max(sanitized, key=lambda molecule: molecule.GetNumHeavyAtoms())
         else:
-            combined = sanitized[0]
-            for frag in sanitized[1:]:
-                combined = Chem.CombineMols(combined, frag)
-            current = combined
-
+            current = sanitized[0]
+            for fragment in sanitized[1:]:
+                current = Chem.CombineMols(current, fragment)
     return current

@@ -28,6 +28,8 @@ class Occurrence:
     arm: Span | None = None
     terminal: bool = True
     protected: bool = False
+    bracketable: bool = False
+    legacy_arm: bool = False
 
 
 @dataclass(frozen=True)
@@ -55,20 +57,28 @@ class Tracker:
             self.roots.append((span, segment))
 
     def entry(self, token, entry, kind, bracket=None, arm=None, terminal=True):
+        from pyPept.notation import supports_bracket_token
+
         span = origin_span(token)
         if span is not None:
+            arm_span = origin_span(arm)
             self.entries[span] = Occurrence(
                 span,
                 origin_span(entry),
                 kind,
                 self.segment,
                 origin_span(bracket),
-                origin_span(arm),
+                arm_span,
                 terminal,
                 bool(bracket is not None and str(bracket).startswith(".{")),
+                supports_bracket_token(self.source[span.start : span.end]),
+                arm_span is not None
+                and not self.source[arm_span.start : arm_span.end].startswith("["),
             )
 
     def occurrence(self, token):
+        from pyPept.notation import supports_bracket_token
+
         span = origin_span(token)
         if span is None:
             raise ValueError("Lowered monomer lost its source")
@@ -85,7 +95,13 @@ class Tracker:
         if region is None:
             raise ValueError("Lowered monomer has no original source region")
         root, segment = region
-        return Occurrence(span, root, "explicit", segment)
+        return Occurrence(
+            span,
+            root,
+            "explicit",
+            segment,
+            bracketable=supports_bracket_token(self.source[span.start : span.end]),
+        )
 
 
 class SourceText(str):

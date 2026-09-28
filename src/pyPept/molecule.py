@@ -38,48 +38,6 @@ RDLogger.DisableLog('rdApp.warning')
 # Functions and classes
 ##########################################################################
 
-def _retag_residue_idx(product, snap_a, snap_b, intramol):
-    """Re-apply _residue_idx to product atoms that lost it through SMIRKS.
-
-    RDKit reactions strip custom IntProps from mapped atoms but leave
-    ``react_idx`` / ``react_atom_idx`` breadcrumbs that trace each product
-    atom back to its reactant origin.
-    """
-    if intramol:
-        snap_for = {0: snap_a}
-    else:
-        snap_for = {}
-        for atom in product.GetAtoms():
-            if (atom.HasProp('_residue_idx') and atom.HasProp('react_idx')
-                    and atom.HasProp('react_atom_idx')):
-                ri = atom.GetIntProp('react_idx')
-                if ri in snap_for:
-                    continue
-                rai = atom.GetIntProp('react_atom_idx')
-                res = atom.GetIntProp('_residue_idx')
-                if snap_a.get(rai) == res:
-                    snap_for[ri] = snap_a
-                elif snap_b.get(rai) == res:
-                    snap_for[ri] = snap_b
-                if len(snap_for) == 2:
-                    break
-        if len(snap_for) == 1:
-            known_ri = next(iter(snap_for))
-            snap_for[1 - known_ri] = (
-                snap_b if snap_for[known_ri] is snap_a else snap_a
-            )
-
-    for atom in product.GetAtoms():
-        if (not atom.HasProp('_residue_idx')
-                and atom.HasProp('react_idx')
-                and atom.HasProp('react_atom_idx')):
-            ri = atom.GetIntProp('react_idx')
-            rai = atom.GetIntProp('react_atom_idx')
-            snap = snap_for.get(ri)
-            if snap and rai in snap:
-                atom.SetIntProp('_residue_idx', snap[rai])
-
-
 class Molecule:
     """
     Wrapper class around a rdkit ROMol object, with customization for
@@ -116,41 +74,6 @@ class Molecule:
                 'problem initializing rdkit.ROMol')
 
     ############################################################################
-    def __generate_offset_list(self):
-        """
-        Generate an offset list - each list entry contains the number of atoms
-        in all of the preceding monomers
-        """
-        mons = self.monomers
-
-        offset = [0]
-        for i,val in enumerate(mons):
-            mol = val['m_romol']
-            n_ats = mol.GetNumAtoms()
-            offset.append(n_ats + offset[i])
-
-        self.offset = offset
-
-    ############################################################################
-    def __combine_all_monomers(self):
-        """
-        Combine all monomers in a single molecule object.
-
-        Completes internal initialization to prepare an editable molecule.
-        """
-        mons = self.monomers
-
-        mol = [0]
-        for i,val in enumerate(mons):
-            monomer = val['m_romol']
-            if i == 0:
-                mol = monomer
-            else:
-                mol = Chem.CombineMols(mol, monomer)
-
-        self.mol = Chem.RWMol(mol)
-
-    ############################################################################
     def __add_bonds_to_mol(self, sequence):
         """
         Form inter-monomer bonds using SMIRKS reactions from reactions.yaml.
@@ -161,31 +84,15 @@ class Molecule:
         (e.g. two Cys) are present, each dummy is uniquely addressable and
         the targeted SMIRKS can match exactly the right pair.
 
-        For bonds not covered by the SMIRKS library a generic single-bond
-        SMIRKS is generated on the fly (equivalent to the legacy AddBond).
+        Supported connections are defined by the reaction library.
         """
-        from pyPept.interfaces.reaction_library import (
-            REACTION_INDEX, infer_chem_type, run_bond_smirks, _generic_bond_smirks
-        )
+        from pyPept.attachments import resolve_connection
+        from pyPept.interfaces.reaction_library import run_bond_smirks
         from pyPept.sequence import _slot_for_attachment
-        from rdkit.Chem import AllChem
 
         monomers_orig = [mon['m_romol'] for mon in sequence.s_monomers]
         for monomer in monomers_orig:
             require_supported_stereo(monomer)
-
-        def _leaving_for_slot(m_idx, slot):
-            rg = sequence.s_monomers[m_idx].get('m_Rgroups', '')
-            if isinstance(rg, str):
-                parts = [v.strip() for v in rg.split(',')]
-            else:
-                parts = [v.strip() if isinstance(v, str) else v for v in rg]
-            if 0 < slot <= len(parts):
-                val = parts[slot - 1]
-                val_s = str(val).strip() if val is not None else 'None'
-                if val_s not in ('None', ''):
-                    return val_s
-            return None
 
         # ── Step 1: relabel all dummies to globally unique isotopes ──────────
         # unique_iso(m_idx, slot) = (m_idx + 1) * 100 + slot  (slot is 1-based)
@@ -224,11 +131,11 @@ class Molecule:
             iso2 = (m2 + 1) * 100 + slot2
 
             # Look up SMIRKS reaction
-            ct1 = infer_chem_type(monomers_orig[m1], at1, slot=slot1,
-                                  leaving=_leaving_for_slot(m1, slot1))
-            ct2 = infer_chem_type(monomers_orig[m2], at2, slot=slot2,
-                                  leaving=_leaving_for_slot(m2, slot2))
-            entry = REACTION_INDEX.get((ct1, ct2))
+            ct1, ct2, entry = resolve_connection(
+                monomers_orig[m1], slot1, monomers_orig[m2], slot2,
+                leaving_groups1=sequence.s_monomers[m1].get('m_Rgroups'),
+                leaving_groups2=sequence.s_monomers[m2].get('m_Rgroups'),
+            )
 
             if entry is None:
                 raise ValueError(
@@ -237,22 +144,7 @@ class Molecule:
                     f"(slot {slot2}). Check the slot indices in your CABILN — "
                     f"this is most likely a wrong R-group index."
                 )
-            else:
-                # For YAML reactions, orient so frag1/iso1 correspond to the
-                # SMIRKS slot_a (first reactant template).  If m1 is the slot_b
-                # side, swap before passing to run_bond_smirks.
-                slot_a_iso = entry.get('slot_a')
-                if slot_a_iso is not None and slot1 != slot_a_iso:
-                    frag1, frag2 = frag2, frag1
-                    iso1, iso2 = iso2, iso1
-
             intramol = (root1 == root2)
-
-            snap_a = {a.GetIdx(): a.GetIntProp('_residue_idx')
-                      for a in frag1.GetAtoms() if a.HasProp('_residue_idx')}
-            snap_b = snap_a if intramol else {
-                a.GetIdx(): a.GetIntProp('_residue_idx')
-                for a in frag2.GetAtoms() if a.HasProp('_residue_idx')}
 
             try:
                 product = run_bond_smirks(frag1, frag2, iso1, iso2, entry, intramol)
@@ -261,8 +153,6 @@ class Molecule:
                     f"Bond formation failed between monomer {m1} (slot {slot1}, "
                     f"{ct1}) and monomer {m2} (slot {slot2}, {ct2}): {exc}"
                 ) from exc
-
-            _retag_residue_idx(product, snap_a, snap_b, intramol)
 
             pool[root1] = product
             if not intramol:
@@ -508,41 +398,16 @@ class Molecule:
         """
         Return {residue_idx: [atom_indices]} for the assembled molecule.
 
-        Uses the _residue_idx int property set during assembly.  Atoms that
-        lost the property (e.g. bond-junction atoms after SMIRKS) are assigned
-        to the residue of their first tagged neighbour.
+        Each atom inherits its original monomer's property at every reaction
+        step. Leaving-group replacement preserves it as well. Unmapped atoms
+        are omitted rather than guessed from a neighboring occurrence.
         """
         if self.mol is None:
             return {}
         mapping = {}
-        assigned = {}
-        orphans = []
         for atom in self.mol.GetAtoms():
-            try:
-                res_idx = atom.GetIntProp('_residue_idx')
-                mapping.setdefault(res_idx, []).append(atom.GetIdx())
-                assigned[atom.GetIdx()] = res_idx
-            except KeyError:
-                orphans.append(atom.GetIdx())
-        changed = True
-        while changed and orphans:
-            changed = False
-            new_assign = {}
-            still_orphaned = []
-            for aidx in orphans:
-                atom = self.mol.GetAtomWithIdx(aidx)
-                for nb in atom.GetNeighbors():
-                    nb_res = assigned.get(nb.GetIdx())
-                    if nb_res is not None:
-                        new_assign[aidx] = nb_res
-                        changed = True
-                        break
-                else:
-                    still_orphaned.append(aidx)
-            for aidx, res_idx in new_assign.items():
-                assigned[aidx] = res_idx
-                mapping.setdefault(res_idx, []).append(aidx)
-            orphans = still_orphaned
+            if atom.HasProp('_residue_idx'):
+                mapping.setdefault(atom.GetIntProp('_residue_idx'), []).append(atom.GetIdx())
         return mapping
 
     # End of the Molecule class declaration.

@@ -173,6 +173,71 @@ def test_slot_identity_does_not_collapse_shared_anchor_atoms():
         )
 
 
+def test_occupancy_reads_current_slots_and_connections_without_chemistry(monkeypatch):
+    import pyPept.peptide as model
+
+    sequence = Sequence("G-G")
+
+    def unnecessary_enrichment(*args, **kwargs):
+        raise AssertionError("Occupancy must not require chemical enrichment")
+
+    monkeypatch.setattr(model, "attachment_sites", unnecessary_enrichment)
+    assert Peptide.occupied_sites_from_sequence(sequence) == {
+        Endpoint(0, 2),
+        Endpoint(1, 1),
+    }
+    # R1 and R3 share an atom but have separate occupancy. Detached parser data
+    # remains mutable, and inspection must validate its current contents.
+    sequence.s_bonds[0][5] = 3
+    assert Peptide.occupied_sites_from_sequence(sequence) == {
+        Endpoint(0, 2),
+        Endpoint(1, 3),
+    }
+    sequence.s_bonds.append(sequence.s_bonds[0][:])
+    with pytest.raises(ValueError, match="more than once"):
+        Peptide.occupied_sites_from_sequence(sequence)
+    sequence.s_bonds.pop()
+    sequence.s_bonds[0][5] = 99
+    with pytest.raises(ValueError, match="missing attachment"):
+        Peptide.occupied_sites_from_sequence(sequence)
+
+
+def test_definition_reuse_is_local_to_each_projection(monkeypatch):
+    import pyPept.peptide as model
+
+    sequence = Sequence("G-G-G")
+    discover = model.attachment_sites
+    calls = []
+
+    def counted(molecule, leaving_groups):
+        calls.append((molecule, tuple(leaving_groups)))
+        return discover(molecule, leaving_groups)
+
+    monkeypatch.setattr(model, "attachment_sites", counted)
+    first = Peptide.from_sequence(sequence)
+    assert len(calls) == 1
+    assert all(item.has_backbone for item in first.occurrences)
+    assert all(
+        {site.slot for site in item.sites} == {1, 2, 3} for item in first.occurrences
+    )
+
+    # The next projection must observe mutation of the same detached molecule.
+    dummy = next(
+        atom
+        for atom in sequence.s_monomers[0]["m_romol"].GetAtoms()
+        if atom.GetAtomicNum() == 0 and atom.GetIsotope() == 3
+    )
+    dummy.SetIsotope(7)
+    second = Peptide.from_sequence(sequence)
+    assert len(calls) == 2
+    assert all(
+        {site.slot for site in item.sites} == {1, 2, 7} for item in second.occurrences
+    )
+    assert all(
+        {site.slot for site in item.sites} == {1, 2, 3} for item in first.occurrences
+    )
+
+
 def test_repeated_monomers_retain_occurrence_ids_and_input_atom_provenance():
     sequence = _sequence("A%G-G.!1(2,4)%K.!1(4,2)-A")
     peptide = Peptide.from_sequence(sequence)
