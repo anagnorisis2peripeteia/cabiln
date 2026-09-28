@@ -48,6 +48,14 @@ inside an unknown histidine tautomer can match a tiny amide template. Maximizing
 the number of matched atoms before checking the remaining region would favor
 that misleading cut and discard the useful whole-residue interpretation.
 
+Cheap proposal search and admitted ownership search retain distinct traversal
+and budget semantics. Both use the same reciprocal-port, unknown-atom and
+cover-retention rules. Candidates and verified notation decisions can be reused
+for one active proposal within a conversion; switching proposals releases that
+state. There is no cache across input molecules or library revisions. The
+streamlining experiment with one grouped search lost observed partial progress
+at a tight state limit, so it was not adopted.
+
 Some local failures also provide a safe search constraint. Current synthetic
 residues require a carbonyl attachment site. A sealed unmatched region without
 one cannot be emitted this way. The search checks whether other library
