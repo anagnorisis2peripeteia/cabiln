@@ -25,7 +25,6 @@ __license__ = "MIT"
 
 import argparse
 import sys
-from importlib.resources import files
 from pathlib import Path
 
 from rdkit import Chem
@@ -33,16 +32,13 @@ from rdkit.Chem import rdDepictor
 
 from pyPept.sequence import Sequence
 from pyPept.molecule import Molecule
-from pyPept.interfaces.monomer_pipeline import pre_activate, ActivationError, _LG_COLS
-
-
-_DEFAULT_SDF_PKG = "pyPept.data"
-_DEFAULT_SDF_NAME = "monomers.sdf"
+from pyPept.monomer_store import library_path, register_molecule
+from pyPept.interfaces.monomer_pipeline import pre_activate, ActivationError
 
 
 def _default_sdf_path():
-    """Return the Path to the installed monomers.sdf."""
-    return Path(str(files(_DEFAULT_SDF_PKG).joinpath(_DEFAULT_SDF_NAME)))
+    """Return the configured default monomer library."""
+    return library_path()
 
 
 def smiles_from_cabiln(cabiln):
@@ -67,30 +63,6 @@ def smiles_from_cabiln(cabiln):
     return Chem.MolToSmiles(romol)
 
 
-def _append_mol_to_sdf(mol, sdf_path):
-    """
-    Append a single RDKit mol (with properties already set) to an SDF file.
-
-    Writes the V2000 mol block followed by SDF ``>  <prop>`` property tags and
-    the ``$$$$`` record terminator, in append mode so existing records are
-    preserved.
-
-    :param mol: RDKit Mol with all properties set.
-    :param sdf_path: path (str or Path) of the target SDF file.
-    """
-    mol_block = Chem.MolToMolBlock(mol)
-    sdf_path = Path(sdf_path)
-    try:
-        record_num = sdf_path.read_text(encoding='utf-8').count('$$$$') + 1
-    except FileNotFoundError:
-        record_num = 1
-    with open(sdf_path, 'a', encoding='utf-8') as f:
-        f.write(mol_block)
-        for prop in mol.GetPropNames():
-            f.write(f">  <{prop}>  ({record_num}) \n{mol.GetProp(prop)}\n\n")
-        f.write("$$$$\n")
-
-
 def register_monomer(smiles, symbol, name=None, m_type='aa', m_subtype='modified',
                      sdf_path=None, backbone_indices=None):
     """
@@ -108,12 +80,13 @@ def register_monomer(smiles, symbol, name=None, m_type='aa', m_subtype='modified
     :param m_subtype: subtype (``'modified'``, ``'natural'``, ``'cap'``, …).
         Default ``'modified'``.
     :param sdf_path: path to the library SDF to append to.  Defaults to the
-        installed ``monomers.sdf`` when ``None``.
+        configured default library when ``None``.
     :param backbone_indices: {1: n_idx, 2: c_idx} to force specific backbone
         atoms for β/γ orientation variants.  Passed to
         :func:`~pyPept.interfaces.monomer_pipeline.pre_activate` unchanged.
     :returns: :class:`~pyPept.interfaces.monomer_pipeline.ActivationResult`.
     :raises ActivationError: if :func:`pre_activate` cannot process the SMILES.
+    :raises ValueError: if the symbol or an alias already exists in the library.
     """
     if sdf_path is None:
         sdf_path = _default_sdf_path()
@@ -145,7 +118,7 @@ def register_monomer(smiles, symbol, name=None, m_type='aa', m_subtype='modified
         mol.SetProp('m_chem_types',
                     ','.join(f"{s}:{ct}" for s, ct in sorted(result.chem_types.items())))
 
-    _append_mol_to_sdf(mol, sdf_path)
+    register_molecule(mol, sdf_path=sdf_path)
     return result
 
 
@@ -185,7 +158,7 @@ examples:
     parser.add_argument(
         '--sdf', default=None, metavar='PATH',
         help="Path to the library SDF to append to.  "
-             "Defaults to the installed monomers.sdf.")
+             "Defaults to CABILN_MONOMER_LIBRARY or the installed monomers.sdf.")
 
     args = parser.parse_args()
 
@@ -214,6 +187,9 @@ examples:
         )
     except ActivationError as exc:
         print(f"ERROR: Pre-activation failed: {exc}", file=sys.stderr)
+        sys.exit(1)
+    except (ValueError, OSError) as exc:
+        print(f"ERROR: Registration failed: {exc}", file=sys.stderr)
         sys.exit(1)
 
     target = sdf_path if sdf_path else _default_sdf_path()

@@ -34,6 +34,7 @@ import sys
 # Project-specific modules additionally needed.
 from pyPept.biln import BILNConstants, BILNParser
 from pyPept.biln import BILNSequenceError, BILNMultiError
+from pyPept.sequence import Sequence
 
 # ----- Begin code for this module. -----
 _defColMolID = 1
@@ -49,7 +50,7 @@ def get_required_inputs_parser():
     input_type_group.add_argument(
         '--biln', type=str, metavar='text',
         required=False,
-        help="BILN string to check for validity.")
+        help="BILN or CABILN string to check for validity.")
     input_type_group.add_argument(
         '--table', type=str, metavar='filename',
         required=False,
@@ -134,7 +135,7 @@ def commonPrint(title: str, validity: bool, valid_branching: bool,
     elif isinstance(failed_reason, BILNMultiError):
         error_str = str(failed_reason)
     else:
-        err_type = str(type(failed_reason)).split(".")[-1].replace("'>", "")
+        err_type = type(failed_reason).__name__
         error_str = "%s: %s" % (err_type, str(failed_reason))
     print(out_delimiter.join([
         title, str(validity), str(valid_branching),
@@ -192,24 +193,32 @@ def run_as_standalone():
     print("\t".join(("MolTitle", "Valid?",
         "ValidBranchAnnotations?", "Non-Dict-Monomers", "Failure-Reason")))
 
+    any_invalid = False
     for mol_title, BILN in testPairs:
-
-        errors = None
-        valid = True
-        try:
-            valid = BILNParser.IsValidSequence(BILN,
-                        onlyMonoDictMonomers=args.only_dict_mono,
-                        raiseError=True)
-        except BILNSequenceError as e:
-            errors = e
-            valid = False
-
-        valBranch = BILNParser.HasValidBranchAnnotations(BILN)
-        invalMonomers = BILNParser.GetInvalidMonomers(BILN)
+        if args.only_dict_mono:
+            report = Sequence.validate(BILN, fmt='biln')
+            valid = report.ok
+            valBranch = report.ok
+            invalMonomers = ()
+            errors = ValueError('; '.join(report.errors)) if report.errors else None
+        else:
+            # Dictionary-free validation retains the legacy BILN syntax checker;
+            # current CABILN attachment validation requires monomer slot metadata.
+            errors = None
+            try:
+                valid = BILNParser.IsValidSequence(
+                    BILN, onlyMonoDictMonomers=False, raiseError=True)
+            except BILNSequenceError as exc:
+                errors = exc
+                valid = False
+            valBranch = BILNParser.HasValidBranchAnnotations(BILN)
+            invalMonomers = BILNParser.GetInvalidMonomers(BILN)
+        any_invalid |= not valid
         commonPrint(mol_title, valid, valBranch, invalMonomers, errors)
 
-    # Termination and cleanup.
-    logger.info("Successful completion of %s." % __main__.__file__)
+    logger.info("Validation completed for %i sequence(s).", len(testPairs))
+    if any_invalid:
+        raise SystemExit(1)
 
 # end of running script as standalone application.
 

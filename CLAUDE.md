@@ -4,16 +4,22 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-pyPept is a CABILN (Chemistry Aware BILN) fork of the Boehringer Ingelheim pyPept library. It converts single-string peptide notations into atomistic RDKit molecules. The fork adds: pinned R-group numbering (R1=backbone_n, R2=backbone_c, R3=backbone_n_mod, R4+=sidechain), SMIRKS-based bond assembly via reactions.yaml, inline cap/crosslink syntax, and a 1001-monomer library with SMARTS-based auto-detection.
+pyPept is a CABILN (Chemistry Aware BILN) fork of the Boehringer Ingelheim pyPept library. It converts single-string peptide notations into atomistic RDKit molecules. The fork adds: pinned R-group numbering (R1=backbone_n, R2=backbone_c, R3=backbone_n_mod, R4+=sidechain), SMIRKS-based bond assembly via reactions.yaml, inline cap/crosslink syntax, and a bundled monomer library with SMARTS-based auto-detection.
 
 ## Build & test commands
 
 ```bash
 # Install (editable)
-pip install -e ".[dev]"
+pip install -e ".[dev,web]"
 
-# Run the main test suite (572 tests, ~70s)
-pytest tests/test_bond_validation_and_assembly.py -v
+# Run chemistry and HTTP regressions
+python -m pytest -m "not distribution"
+
+# Browser request-lifetime regressions
+node --test tests/test_frontend.js
+
+# Build and install a release artifact (requires package-index access)
+python -m pytest tests/test_distribution.py
 
 # Run a single test class or test
 pytest tests/test_bond_validation_and_assembly.py::TestDisulfide -v
@@ -25,14 +31,20 @@ python tools/_test_readme_examples.py
 # Full library round-trip (1001 monomers → CABILN → Molecule → SMILES)
 python tools/full_library_roundtrip.py
 
-# Start the live renderer web app (0.0.0.0:8732)
-python tools/live_renderer.py
+# Start the live renderer web app (127.0.0.1:8732)
+cabiln
 
 # Register a new monomer from SMILES
 pyPept-monomer-add --smiles "N[C@@H](CS)C(=O)O" --symbol Cys_check
 ```
 
 ## Architecture
+
+See [docs/architecture.md](docs/architecture.md) for the web and conversion modules.
+The former renderer now lives in `src/pyPept/web/`; reverse conversion lives in
+`src/pyPept/smiles.py`. The `tools/live_renderer.py` file is a compatibility launcher.
+Web registration is disabled by default; enable only on a trusted local instance.
+
 
 ### Core pipeline: string → molecule
 
@@ -71,7 +83,7 @@ RDKit ROMol
 
 | File | Format | Purpose |
 |------|--------|---------|
-| `data/monomers.sdf` | SDF with properties | 1001-monomer library (CHUCKLES + leaving groups + chem_types) |
+| `data/monomers.sdf` | SDF with properties | Monomer library (CHUCKLES + leaving groups + chem_types) |
 | `data/monomers.csv` | CSV | Authoring source for the core 52-monomer subset |
 | `data/reactions.yaml` | YAML | 25 SMIRKS reactions (19 bond-forming + 6 terminal restoration) |
 | `data/cap_reactions.yaml` | YAML | 100 cap-specific reactions (auto-applied) |

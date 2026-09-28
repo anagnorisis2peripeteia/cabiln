@@ -89,11 +89,12 @@ _CHEM_TYPE_REGISTRY = [
     # routes through aryl_amide_to_backbone_n reaction, not isopeptide.
     ('aryl_amide_c',      '[CX3:1](=O)([OX2H1])[c]',              '[OH]',  '[CX3:1](=O)[c]',                         False),
     ('carboxyl',          '[CX3:1](=O)[OX2H1]',                   '[OH]',  None,                                    False),
+    # Default phenols retain the documented label-only type.
+    ('hydroxyl_phenolic', '[OX2H1:1][c]',                           '[H]',  '[OX2H1:1][c]',                           True),
     # aryl_phenol_o: aryl-OH (phenol) where the O forms a covalent (ether/amide)
     # bond to adjacent residue. Distinct from `hydroxyl_phenolic` (label_only;
     # used for residue identification but no bond reaction).
     ('aryl_phenol_o',     '[OX2H1:1][c]',                           '[H]',  '[OX2;H0,H1:1][c]',                       False),
-    ('hydroxyl_phenolic', '[OX2H1:1][c]',                           '[H]',  '[OX2H1:1][c]',                           True),
     ('hydroxyl',          '[OX2H1:1][CX4]',                        '[H]',  '[OX2H1:1][CX4]',                         False),
     # quat_c_anchor: sp3 carbon with 3 C neighbours and 0 explicit H (quaternary
     # in the bonded form). Used by chondramide-family bridge-anchor monomers
@@ -252,6 +253,10 @@ def infer_chem_type(mol, attach_idx: int, slot: int = None,
     # ── SMARTS-based detection (covers thiol, selenol, and all exotic types) ───
     for patt, ct in _EXOTIC_SMARTS:
         if patt is None:
+            continue
+        # An aryl aldehyde has the same activated C(=O)-aryl graph as an
+        # aryl carboxyl slot; its H leaving group identifies the aldehyde.
+        if ct == 'aryl_amide_c' and leaving == '[H]':
             continue
         for match in mol.GetSubstructMatches(patt):
             if match[0] == attach_idx:

@@ -221,19 +221,18 @@ class Converter:
         :type helm: string
         """
 
+        if not isinstance(helm, str) or not helm.strip():
+            raise ValueError("HELM must be a non-empty string.")
         # split the helm string into its individual parts
         try:
             list_of_simple_polymers, list_of_connections, groups, annotations,\
             version = self.__split_helm(helm)
 
-        except (ValueError, IndexError):
-            warnings.warn(f'problem with HELM string - not enough sections: {helm}')
-            warnings.warn(f'need 5, have {len(self.__split_helm(helm))}')
-            return None
+        except (ValueError, IndexError) as exc:
+            raise ValueError("Invalid HELM: expected five sections separated by '$'.") from exc
 
-        if len(list_of_simple_polymers) == 0:
-            warnings.warn(f'No simple polymers in HELM string {helm}')
-            return None
+        if not list_of_simple_polymers:
+            raise ValueError("HELM contains no simple polymers.")
 
         # go through the list of simple polymers (first component of HELM string),
         # parse them and put them into polymerinfo["chains"]
@@ -250,29 +249,19 @@ class Converter:
             # split each polymer into name/identifier and sequence
             match = pattern.search(chain)
             if match is None:
-                warnings.warn('No sequence information found in simple polymer - check HELM')
-                warnings.warn(f'Input: {chain}')
-                return None
+                raise ValueError(f"HELM polymer contains no sequence: {chain!r}")
 
             # split each polymer into name/identifier and sequence
             seq = match.span()
             id_chain = chain[:seq[0]]  # identifier
-            if id_chain[0:4] == 'CHEM':
-                warnings.warn('polymer contains an explicit chemical entity - \
-                missing or not recognized monomer:')
-                warnings.warn(chain)
-                return None
-            if id_chain[0:7] != 'PEPTIDE':
-                warnings.warn('non-peptide chains in HELM - probably missing monomer')
-                warnings.warn(f'found: {id_chain}')
-                return None
+            if not re.fullmatch(r'PEPTIDE[1-9]\d*', id_chain):
+                raise ValueError(f"Unsupported HELM polymer identifier: {id_chain!r}")
             id_chain = int(re.sub('PEPTIDE', '', id_chain))
 
             poly = chain[seq[0] + 1:seq[1] - 1]  # sequence
 
             if not poly:
-                warnings.warn(f'simple polymer {poly} is declared but not defined - has no length')
-                return None
+                raise ValueError(f"HELM polymer PEPTIDE{id_chain} contains no residues.")
 
             # split into individual monomers.
             poly = split_outside(poly, SequenceConstants.chain_separator, '[]')
@@ -280,10 +269,10 @@ class Converter:
             # remove brackets around monomer abbreviations with more than 1 letter
             poly = self.__remove_brackets(poly)
 
+            if id_chain in id_val:
+                raise ValueError(f"Duplicate HELM polymer identifier: PEPTIDE{id_chain}")
             id_val.append(id_chain)
             polymer.append(poly)
-
-        self.polymerinfo["chains"] = polymer
 
         # parse the bond information
 
@@ -308,13 +297,17 @@ class Converter:
                 res1 = int(res1) - 1
                 res2 = int(res2) - 1
 
+                if not (0 <= res1 < len(polymer[id1]) and
+                        0 <= res2 < len(polymer[id2])):
+                    raise ValueError("HELM connection refers to an out-of-range residue.")
+
                 # get the number of the Rgroup (keep numbering 1-3)
                 rgroup1 = int(rgroup1.replace('R', ''))
                 rgroup2 = int(rgroup2.replace('R', ''))
 
                 bonds.append([id1, res1, rgroup1, id2, res2, rgroup2])
 
-        self.polymerinfo["bonds"] = bonds
+        self.polymerinfo = {"chains": polymer, "bonds": bonds}
 
     ############################################################
     def eval_chuckles(self, chuckles):
@@ -362,9 +355,8 @@ class Converter:
         list_of_connections = []
         for key in bondinfo:
             if len(bondinfo[key]) != 6:
-                warnings.warn(
-                    f'Error in CHUCKLES bond information: bond {key} not correct')
-                return None
+                raise ValueError(
+                    f"CHUCKLES bond {key} must have exactly two endpoints.")
             c1_val, r1_val, g1_val, c2_val, r2_val, g2_val = bondinfo[key]
             list_of_connections.append(
                 [c1_val, r1_val, g1_val, c2_val, r2_val, g2_val])
@@ -409,6 +401,12 @@ class Converter:
         :return: None
         """
 
+        if not isinstance(biln, str) or not biln.strip():
+            raise ValueError("BILN must be a non-empty string.")
+        if '%' in biln or re.search(r'\.[!\[{]', biln):
+            raise ValueError(
+                "Converter(biln=...) accepts legacy BILN, not CABILN attachments. "
+                "Use Sequence for CABILN parsing.")
         # split BILN into chains
         chains = biln.split(".")
 
@@ -429,7 +427,7 @@ class Converter:
                         gidx = int(m_val[1])
                         try:
                             bondinfo[bidx].append(cidx)
-                        except:
+                        except KeyError:
                             bondinfo[bidx] = [cidx]
 
                         bondinfo[bidx].append(ridx)
@@ -444,8 +442,7 @@ class Converter:
         list_of_connections = []
         for key in bondinfo:
             if len(bondinfo[key]) != 6:
-                warnings.warn(f'Error in bond information of BILN: bond {key} not correct')
-                return None
+                raise ValueError(f"BILN bond {key} must have exactly two endpoints.")
 
             c1_val, r1_val, g1_val, c2_val, r2_val, g2_val = bondinfo[key]
 

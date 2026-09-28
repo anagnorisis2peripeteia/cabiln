@@ -51,6 +51,8 @@ from pathlib import Path
 from rdkit import Chem, RDLogger
 from rdkit.Chem import PandasTools, SDWriter, rdDepictor
 
+from pyPept.structure import require_supported_stereo
+
 class ActivationError(ValueError):
     """Raised when pre_activate cannot generate a valid CHUCKLES fragment."""
 
@@ -541,6 +543,10 @@ def pre_activate_all(smiles):
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         raise ActivationError(f"Invalid SMILES: {smiles}")
+    try:
+        require_supported_stereo(mol)
+    except ValueError as exc:
+        raise ActivationError(str(exc)) from exc
     mol_h = Chem.AddHs(mol)
     pairings = find_all_backbone_slots(mol_h)
     if not pairings:
@@ -577,6 +583,10 @@ def pre_activate(smiles, slot_overrides=None, leaving_overrides=None,
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         raise ActivationError(f"Invalid SMILES: {smiles}")
+    try:
+        require_supported_stereo(mol)
+    except ValueError as exc:
+        raise ActivationError(str(exc)) from exc
     mol = Chem.AddHs(mol)
 
     _is_cap = False
@@ -647,9 +657,8 @@ def pre_activate(smiles, slot_overrides=None, leaving_overrides=None,
         sidechain = {}
         sidechain_leaving = {s: _sc_all[s][1] for s in _sc_all}
     else:
-        _sc_start = max(backbone.keys()) + 1
-        if _is_cap:
-            _sc_start = max(_sc_start, 4)
+        # R3 is reserved even when a secondary backbone N has no second H.
+        _sc_start = max(max(backbone.keys()) + 1, 4)
         sidechain = find_sidechain_slots(
             mol,
             assigned_atoms=_bb_excluded,
@@ -926,6 +935,7 @@ def import_helm_sdf(helm_sdf_path, csv_out_path, peptide_only=True):
         for idx in r_indices:
             emol.RemoveAtom(idx)
         try:
+            require_supported_stereo(mol)
             Chem.SanitizeMol(emol)
             smiles = Chem.MolToSmiles(emol)
         except Exception:

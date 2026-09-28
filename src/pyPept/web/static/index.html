@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CABILN Live Renderer</title>
+<link rel="stylesheet" href="/static/builder.css">
+</head>
+<body>
+
+<header>
+  <span class="title">CABILN Live Renderer <span>— pyPept</span></span>
+  <button id="btn-lib"      class="hbtn green"  title="Browse monomer library">📋 Library</button>
+  <button id="btn-examples" class="hbtn green"  title="Browse example peptides">🧬 Examples</button>
+  <button id="btn-hl"     class="hbtn active" title="Toggle residue highlighting">🔗 Highlight</button>
+  <button id="btn-dark"   class="hbtn"        title="Toggle dark canvas">🌙 Dark</button>
+  <button id="btn-verify" class="hbtn"        title="SMILES vs CABILN comparison">⚖ Verify</button>
+  <button id="btn-build"  class="hbtn green" title="Visual peptide builder">🔧 Build</button>
+  <button id="btn-to-bracket" class="hbtn" title="Convert to bracket notation">→[ ]</button>
+  <button id="btn-to-branch"  class="hbtn" title="Convert to branch (%) notation">→%</button>
+  <button id="btn-reroll" class="hbtn"        title="New 2D layout seed" disabled>⟳ Reroll</button>
+  <button id="btn-png"    class="hbtn"        title="Download PNG" disabled>⬇ PNG</button>
+  <button id="btn-mol"    class="hbtn"        title="Download MOL file" disabled>⬇ MOL</button>
+  <a id="register-link" href="/register" target="_blank" rel="noopener" style="text-decoration:none;" hidden>
+    <button class="hbtn green" title="Register a new monomer">＋ Register</button>
+  </a>
+</header>
+
+<!-- input bar (always visible) -->
+<div id="input-bar">
+  <div id="input-bar-row">
+    <span class="seq-label" id="cabiln-label">Sequence</span>
+    <select id="notation-select" title="Input notation">
+      <option value="cabiln" selected>CABILN</option>
+      <option value="smiles">SMILES</option>
+      <option value="biln">BILN</option>
+      <option value="helm">HELM</option>
+    </select>
+    <textarea id="cabiln-input"
+              placeholder="e.g.  fmoc-A-G-L-am&#10;fmoc-C.trt(4,2)-A-K.boc(4,2)-am&#10;fmoc-K.!1(4,4)-G-G-E.!1-am"
+              spellcheck="false" autocomplete="off"></textarea>
+    <button id="btn-to-cabiln-pct"     class="hbtn green" style="display:none;font-size:10px;padding:2px 10px;white-space:nowrap;" title="Convert to CABILN (% branch notation)">→ %</button>
+    <button id="btn-to-cabiln-bracket" class="hbtn green" style="display:none;font-size:10px;padding:2px 10px;white-space:nowrap;" title="Convert to CABILN ([] bracket notation)">→ []</button>
+  </div>
+  <div id="cabiln-status" class="statusbar"></div>
+  <div id="conversion-status" class="statusbar warn" hidden></div>
+  <div id="residue-chips"></div>
+</div>
+
+<!-- build panel -->
+<div id="build-panel">
+  <div class="build-header">
+    <span>Build by Connection</span>
+    <span class="build-hint" id="build-hint">Select a chip on the sequence, then right-click a monomer in the library</span>
+    <button id="build-close" style="background:none;border:none;color:#4a6a9a;font-size:16px;cursor:pointer;padding:2px 4px;">✕</button>
+  </div>
+  <div class="build-boxes">
+    <div class="build-box" id="build-left">
+      <div class="box-label"><span>Current residue</span><button class="box-clear-btn" id="build-left-change" title="Clear selection">Clear</button></div>
+      <div class="box-abbr" id="build-left-abbr">—</div>
+      <div class="box-svg" id="build-left-svg">
+        <div class="box-placeholder">Click a chip above</div>
+      </div>
+      <div class="rgroup-buttons" id="build-left-rgroups"></div>
+    </div>
+    <div class="build-arrow">
+      <div class="arrow-icon">⟷</div>
+      <button class="build-connect-btn" id="build-connect" disabled>Connect</button>
+      <div class="build-status" id="build-status"></div>
+    </div>
+    <div class="build-box" id="build-right">
+      <div class="box-label"><span id="build-right-label">New monomer</span><button class="box-clear-btn" id="build-right-change" title="Clear selection">Clear</button></div>
+      <div class="box-abbr" id="build-right-abbr">—</div>
+      <div class="box-svg" id="build-right-svg">
+        <div class="box-placeholder">Right-click from library</div>
+      </div>
+      <div class="rgroup-buttons" id="build-right-rgroups"></div>
+    </div>
+  </div>
+  <div id="build-insert-row" style="display:none;align-items:center;gap:10px;padding:6px 2px 0;">
+    <span id="build-insert-info" style="font-size:10px;color:#5a8ab0;flex:1;"></span>
+    <button id="build-insert-btn" class="hbtn green" style="font-size:10px;padding:2px 10px;">⊕ Insert Between</button>
+  </div>
+</div>
+
+<!-- main area -->
+<div id="main">
+
+  <!-- library sidebar (persistent until dismissed) -->
+  <div id="lib-panel">
+    <div id="lib-header">
+      <span>Monomer Library</span>
+      <input id="lib-search" type="text" placeholder="Search abbr / name / type…" autocomplete="off">
+      <button id="btn-rxn-filter" class="hbtn" title="Filter to monomers reactive with selected residue" disabled>⚗ Filter</button>
+      <button id="lib-close" title="Close">✕</button>
+    </div>
+    <div id="lib-count"></div>
+    <div id="lib-list"><div class="placeholder">Loading…</div></div>
+  </div>
+  <div id="lib-preview"></div>
+
+  <!-- render mode -->
+  <div id="render-pane">
+    <div id="render-canvas" class="canvas-wrap">
+      <div class="canvas-inner" id="render-inner">
+        <div class="placeholder">Start typing a sequence…</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- example peptide sidebar (right, persistent) -->
+  <div id="examples-panel">
+    <div id="examples-header">
+      <span>Example Peptides</span>
+      <button id="examples-close" title="Close">✕</button>
+    </div>
+    <div id="examples-list"><div class="placeholder">Loading…</div></div>
+  </div>
+
+  <!-- verify reference pane (hidden by default, shown beside render-pane) -->
+  <div id="verify-pane" style="display:none;">
+    <div class="vpanel" style="border-right:none;">
+      <div style="display:flex;gap:6px;align-items:center;">
+        <span class="seq-label" style="flex:none;">Reference</span>
+        <label class="hbtn" style="font-size:11px;padding:2px 8px;cursor:pointer;margin:0;">
+          📂 .mol
+          <input type="file" id="mol-upload" accept=".mol,.sdf" style="display:none;">
+        </label>
+        <button id="btn-s2c" class="hbtn green" style="font-size:10px;padding:2px 10px;" title="Convert SMILES → % CABILN (branch form)">→ %</button>
+        <button id="btn-s2c-bracket" class="hbtn green" style="font-size:10px;padding:2px 10px;" title="Convert SMILES → [] CABILN (bracket form)">→ []</button>
+      </div>
+      <textarea id="smiles-input" placeholder="Paste SMILES, BILN, or HELM here…"
+                spellcheck="false" autocomplete="off"></textarea>
+      <div id="smiles-status" class="statusbar"></div>
+      <div id="smiles-canvas" class="canvas-wrap">
+        <div class="canvas-inner" id="smiles-inner">
+          <div class="placeholder">Paste SMILES or upload .mol to compare…</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- compare bar (verify mode only) -->
+<div id="compare-bar" style="display:none;"></div>
+
+<script src="/static/builder.js" defer></script>
+</body>
+</html>

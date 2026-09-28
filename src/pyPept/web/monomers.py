@@ -1,0 +1,274 @@
+"""CABILN monomers request handlers."""
+
+from __future__ import annotations
+
+from fastapi import APIRouter, Query, Request
+from fastapi.responses import JSONResponse
+
+from pyPept.attachments import attachment_sites
+from pyPept.monomer_store import _load_sdf, library_path, register_molecule
+
+from .cache import _rc_get, _rc_put, library_version
+from .drawing import _draw_mol
+from .monomer_display import _restore_leaving_groups, _restore_reagent_form
+from .schemas import _PreviewReq, _RegisterReq
+
+router = APIRouter()
+
+
+@router.get("/monomers")
+def list_monomers():
+    try:
+        key = (library_version(), "monomers")
+        cached = _rc_get(key)
+        if cached is not None:
+            return cached
+        all_mols, mol_by_abbr = _load_sdf()
+        from pyPept.sequence import get_monomer_info
+
+        aliases = get_monomer_info(str(library_path())).attrs.get("_degen_aliases", {})
+        monomers = []
+        degen_nterm = {}  # base -> entry with trailing _
+        degen_cterm = {}  # base -> entry with leading _
+        for mol in all_mols:
+            if mol is None:
+                continue
+            p = mol.GetPropsAsDict()
+            abbr = p.get("m_abbr", "") or p.get("symbol", "")
+            if not abbr:
+                continue
+            rgroups = p.get("m_Rgroups", "")
+            slots = [r.strip() for r in rgroups.split(",")]
+            lg_parts = [
+                f"R{i+1}:{slots[i]}"
+                for i in range(len(slots))
+                if slots[i] not in ("None", "", "none")
+            ]
+            sites = attachment_sites(mol)
+            entry = {
+                "abbr": abbr,
+                "name": p.get("m_name", ""),
+                "type": p.get("m_type", ""),
+                "subtype": p.get("m_subtype", ""),
+                "chem_types": ",".join(f"{s['slot']}:{s['chem_type']}" for s in sites),
+                "declared_chem_types": p.get("m_chem_types", ""),
+                "backbone_insertable": {1, 2}.issubset({s["slot"] for s in sites}),
+                "leaving": ", ".join(lg_parts),
+            }
+            # Collect degenerate cap pairs for merging
+            if abbr.endswith("_") and abbr[:-1] in aliases:
+                degen_nterm[abbr[:-1]] = entry
+                continue
+            if abbr.startswith("_") and abbr[1:] in aliases:
+                degen_cterm[abbr[1:]] = entry
+                continue
+            monomers.append(entry)
+        # Merge degenerate pairs into single entries
+        all_bases = set(degen_nterm) | set(degen_cterm)
+        for base in sorted(all_bases):
+            nt = degen_nterm.get(base)
+            ct = degen_cterm.get(base)
+            primary = nt or ct
+            merged = {
+                "abbr": base,
+                "name": primary["name"],
+                "type": primary["type"],
+                "subtype": primary["subtype"],
+                "chem_types": ",".join(
+                    entry["chem_types"] for entry in (nt, ct) if entry
+                ),
+                "backbone_insertable": False,
+                "leaving": primary["leaving"],
+                "degenerate": True,
+            }
+            if nt:
+                merged["nterm_abbr"] = nt["abbr"]
+                merged["nterm_leaving"] = nt["leaving"]
+            if ct:
+                merged["cterm_abbr"] = ct["abbr"]
+                merged["cterm_leaving"] = ct["leaving"]
+            monomers.append(merged)
+        _rc_put(key, monomers)
+        return monomers
+    except Exception as exc:
+        return JSONResponse({"error": str(exc)}, status_code=500)
+
+
+@router.get("/monomer_svg")
+def monomer_svg(
+    abbr: str = Query(max_length=100),
+    width: int = Query(default=220, ge=64, le=4096),
+    height: int = Query(default=180, ge=64, le=4096),
+):
+    _mck = (library_version(), "monomer", abbr, width, height)
+    _mhit = _rc_get(_mck)
+    if _mhit is not None:
+        return _mhit
+    try:
+        from rdkit import Chem
+
+        _all_mols, mol_by_abbr = _load_sdf()
+
+        # Direct match
+        if abbr in mol_by_abbr:
+            mol = Chem.Mol(mol_by_abbr[abbr])
+            svg = _draw_mol(mol, width, height)
+            restored = _restore_leaving_groups(mol)
+            svg_restored = _draw_mol(restored, width, height)
+            result = {"svg": svg, "svg_restored": svg_restored}
+
+            # Add reagent form if cap has reaction metadata
+            reagent_mol, reagent_meta = _restore_reagent_form(mol, abbr)
+            if reagent_mol is not None:
+                result["svg_reagent"] = _draw_mol(reagent_mol, width, height)
+                result["reagent"] = reagent_meta
+            _rc_put(_mck, result)
+            return result
+
+        # Check if this is a degenerate base name (e.g. "Bn" -> Bn_/_Bn)
+        # Detect pairs: look for abbr_ and _abbr variants
+        nterm_key = abbr + "_"
+        cterm_key = "_" + abbr
+        variants_found = []
+        if nterm_key in mol_by_abbr:
+            variants_found.append(nterm_key)
+        if cterm_key in mol_by_abbr:
+            variants_found.append(cterm_key)
+
+        if len(variants_found) >= 2:
+            # This is a degenerate base name — render all variants
+            panels = []
+            for vkey in variants_found:
+                vmol = mol_by_abbr[vkey]
+                restored_v = _restore_leaving_groups(vmol)
+                label = f"N-term ({vkey})" if vkey.endswith("_") else f"C-term ({vkey})"
+                reagent_mol, reagent_meta = _restore_reagent_form(vmol, vkey)
+                panel = {
+                    "label": label,
+                    "svg": _draw_mol(restored_v, width, height),
+                }
+                if reagent_mol is not None:
+                    panel["svg_reagent"] = _draw_mol(reagent_mol, width, height)
+                    panel["reagent"] = reagent_meta
+                panels.append(panel)
+            # R-group panel from first variant
+            rgroup_svg = _draw_mol(
+                Chem.Mol(mol_by_abbr[variants_found[0]]), width, height
+            )
+            return {
+                "degenerate": True,
+                "variants": panels,
+                "svg": rgroup_svg,
+            }
+
+        return JSONResponse({"error": f"Monomer '{abbr}' not found"}, status_code=404)
+    except Exception as exc:
+        return JSONResponse({"error": str(exc).split("\n")[0]}, status_code=500)
+
+
+@router.post("/preview_monomer")
+def preview_monomer(req: _PreviewReq):
+    try:
+
+        from pyPept.interfaces.monomer_pipeline import pre_activate
+
+        result = pre_activate(req.smiles)
+
+        from rdkit import Chem
+
+        mol = Chem.MolFromSmiles(result.chuckles)
+        if mol is None:
+            return JSONResponse(
+                {"error": "Generated CHUCKLES is invalid"}, status_code=400
+            )
+
+        svg = _draw_mol(mol, req.width, req.height)
+        return {
+            "chuckles": result.chuckles,
+            "chem_types": {str(k): v for k, v in result.chem_types.items()},
+            "leaving": {str(k): v for k, v in result.leaving.items()},
+            "svg": svg,
+        }
+
+    except Exception as exc:
+        return JSONResponse({"error": str(exc).split("\n")[0]}, status_code=400)
+
+
+@router.post("/register_monomer")
+def register_monomer(req: _RegisterReq, request: Request):
+    if not request.app.state.allow_registration:
+        return JSONResponse(
+            {"error": "This monomer library is read-only."}, status_code=403
+        )
+    try:
+        from rdkit import Chem
+        from rdkit.Chem import rdDepictor
+
+        from pyPept.interfaces.reaction_library import (
+            _CHEM_TYPE_REGISTRY,
+            REACTION_INDEX,
+        )
+
+        mol = Chem.MolFromSmiles(req.chuckles)
+        if mol is None or mol.GetNumAtoms() == 0:
+            return JSONResponse({"error": "Invalid CHUCKLES SMILES"}, status_code=400)
+
+        dummies = [a for a in mol.GetAtoms() if a.GetAtomicNum() == 0]
+        slots = {a.GetIsotope() for a in dummies}
+        if (
+            not slots
+            or 0 in slots
+            or len(slots) != len(dummies)
+            or any(a.GetDegree() != 1 for a in dummies)
+        ):
+            raise ValueError(
+                "Each attachment needs a unique numbered dummy with one neighbour"
+            )
+        if slots != set(req.chem_types) or slots != set(req.leaving):
+            raise ValueError(
+                "Attachment slots, chemistry types, and leaving groups must match"
+            )
+        known_types = {kind for pair in REACTION_INDEX for kind in pair} | {
+            entry[0] for entry in _CHEM_TYPE_REGISTRY
+        }
+        if set(req.chem_types.values()) - known_types:
+            raise ValueError("Unknown attachment chemistry type")
+        for leaving in req.leaving.values():
+            leaving_mol = Chem.MolFromSmiles(leaving)
+            if leaving_mol is None or leaving_mol.GetNumAtoms() != 1:
+                raise ValueError(f"Leaving group must be a single atom: {leaving}")
+
+        rdDepictor.SetPreferCoordGen(True)
+        rdDepictor.Compute2DCoords(mol)
+
+        rgroups_list = ["None"] * max(6, max(slots))
+        for slot_s, lg in req.leaving.items():
+            slot = int(slot_s) - 1
+            rgroups_list[slot] = lg
+        rgroups_str = ",".join(rgroups_list)
+
+        # Format m_chem_types
+        chem_types_str = ",".join(
+            f"{slot}:{ct}"
+            for slot, ct in sorted(req.chem_types.items(), key=lambda x: int(x[0]))
+        )
+
+        mol.SetProp("m_abbr", req.abbr)
+        mol.SetProp("symbol", req.abbr)
+        mol.SetProp("m_name", req.name)
+        mol.SetProp("m_type", req.type)
+        mol.SetProp("m_subtype", req.subtype)
+        mol.SetProp("m_Rgroups", rgroups_str)
+        mol.SetProp("m_chem_types", chem_types_str)
+
+        # Validate the stored template as a usable standalone monomer before
+        # committing it. A syntactically valid leaving atom can still be a dummy
+        # or produce impossible valence when bonded to this structure.
+        from pyPept.leaving_groups import restore_leaving_groups
+
+        restore_leaving_groups(mol, req.leaving)
+
+        return {"ok": True, "total": register_molecule(mol)}
+
+    except Exception as exc:
+        return JSONResponse({"error": str(exc).split("\n")[0]}, status_code=400)

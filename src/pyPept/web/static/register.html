@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Register Monomer — pyPept</title>
+<link rel="stylesheet" href="/static/register.css">
+</head>
+<body>
+<header>
+  <span class="title">Register Monomer <span style="color:#3a5580">— pyPept</span></span>
+  <a href="/">← Back to Renderer</a>
+</header>
+
+<div class="page">
+  <div class="card">
+    <h2>STEP 1 — SMILES INPUT</h2>
+    <div class="field">
+      <label>Full monomer SMILES (all atoms, including leaving groups)</label>
+      <textarea id="smiles-in" placeholder="e.g.  NCC(=O)O  (glycine)  or  O=C(O)CN1C(=O)C=CC1=O  (Mal-Gly)" spellcheck="false" autocomplete="off"></textarea>
+    </div>
+    <button class="btn btn-primary" id="btn-preview">Preview &amp; detect R-groups</button>
+  </div>
+
+  <div id="preview-section">
+    <div class="card">
+      <h2>STEP 2 — DETECTED R-GROUPS &amp; PREVIEW</h2>
+      <div id="preview-canvas"><div style="color:#b0bec5;font-size:13px">…</div></div>
+      <div id="detected-display" class="detected-types"></div>
+      <div class="field">
+        <label>CHUCKLES (generated from the previewed SMILES)</label>
+        <textarea id="chuckles-out" spellcheck="false" autocomplete="off" readonly></textarea>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>STEP 3 — METADATA</h2>
+      <div class="field-row">
+        <div class="field">
+          <label>Abbreviation (unique token)</label>
+          <input id="abbr-in" type="text" placeholder="e.g.  MalGly" autocomplete="off">
+        </div>
+        <div class="field">
+          <label>Full name</label>
+          <input id="name-in" type="text" placeholder="e.g.  Maleimidoglycine" autocomplete="off">
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Type</label>
+          <select id="type-in">
+            <option value="aa">aa</option>
+            <option value="cap">cap</option>
+            <option value="linker">linker</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Subtype</label>
+          <select id="subtype-in">
+            <option value="natural">natural</option>
+            <option value="modified">modified</option>
+            <option value="cap">cap</option>
+            <option value="protecting">protecting</option>
+            <option value="label">label</option>
+            <option value="linker">linker</option>
+          </select>
+        </div>
+      </div>
+      <button class="btn btn-success" id="btn-register" disabled>Register monomer</button>
+      <div id="status-msg"></div>
+    </div>
+  </div>
+</div>
+
+<script src="/static/register.js" defer></script>
+</body>
+</html>

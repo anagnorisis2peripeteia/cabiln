@@ -26,6 +26,9 @@ from rdkit import Chem, RDLogger
 from rdkit.Chem import AllChem
 from rdkit.Chem.Draw import rdDepictor
 
+from pyPept.leaving_groups import restore_leaving_groups
+from pyPept.structure import require_supported_stereo
+
 # SanitizeMol fires "not removing hydrogen atom without neighbors" when it
 # reconciles H-counts on atoms adjacent to removed dummy atoms.  The output
 # molecule is chemically correct; suppress the noise.
@@ -167,6 +170,8 @@ class Molecule:
         from rdkit.Chem import AllChem
 
         monomers_orig = [mon['m_romol'] for mon in sequence.s_monomers]
+        for monomer in monomers_orig:
+            require_supported_stereo(monomer)
 
         def _leaving_for_slot(m_idx, slot):
             rg = sequence.s_monomers[m_idx].get('m_Rgroups', '')
@@ -290,42 +295,7 @@ class Molecule:
                 iso = (m_idx + 1) * 100 + (slot_idx + 1)
                 leaving_for_iso[iso] = lg
 
-        emol = Chem.RWMol(self.mol)
-        try:
-            Chem.Kekulize(emol, clearAromaticFlags=True)
-        except Exception:
-            pass
-
-        to_remove = []
-
-        for atom in emol.GetAtoms():
-            if atom.GetAtomicNum() != 0:
-                continue
-            iso = atom.GetIsotope()
-            lg = leaving_for_iso.get(iso)
-
-            lg_mol = Chem.MolFromSmiles(lg) if lg else None
-            is_h = (lg is None or lg_mol is None or (
-                lg_mol.GetNumAtoms() == 1
-                and lg_mol.GetAtomWithIdx(0).GetAtomicNum() == 1))
-
-            if is_h:
-                for nb in atom.GetNeighbors():
-                    nb.SetNoImplicit(False)
-                to_remove.append(atom.GetIdx())
-            else:
-                new_atom = Chem.Atom(lg_mol.GetAtomWithIdx(0).GetAtomicNum())
-                try:
-                    new_atom.SetIntProp('_residue_idx',
-                                        atom.GetIntProp('_residue_idx'))
-                except KeyError:
-                    pass
-                emol.ReplaceAtom(atom.GetIdx(), new_atom)
-
-        for idx in sorted(set(to_remove), reverse=True):
-            emol.RemoveAtom(idx)
-
-        return emol.GetMol()
+        return restore_leaving_groups(self.mol, leaving_for_iso, sanitize=False)
 
     ########################################################################################
     def __fixDihedrals(self):

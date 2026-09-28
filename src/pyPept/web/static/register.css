@@ -1,0 +1,102 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    min-height: 100%;
+    font-family: system-ui, -apple-system, sans-serif;
+    background: #12192b;
+    color: #d0dce8;
+  }
+  header {
+    padding: 10px 20px;
+    background: #0d1422;
+    border-bottom: 1px solid #1e3050;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  header a { color: #4a7ab0; font-size: 12px; text-decoration: none; }
+  header a:hover { color: #7aaeff; }
+  header .title { flex: 1; font-size: 14px; color: #7aaeff; letter-spacing: .07em; }
+
+  .page { max-width: 860px; margin: 0 auto; padding: 24px 20px; }
+
+  .card {
+    background: #0d1422;
+    border: 1px solid #1e3050;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+  .card h2 { font-size: 13px; color: #7aaeff; letter-spacing: .08em; margin-bottom: 14px; }
+
+  .field { margin-bottom: 14px; }
+  .field label { display: block; font-size: 11px; color: #4a7ab0; margin-bottom: 5px; letter-spacing: .1em; text-transform: uppercase; }
+  .field input, .field select, .field textarea {
+    width: 100%;
+    background: #0a1018;
+    border: 1px solid #1e3050;
+    border-radius: 5px;
+    color: #c8daf0;
+    padding: 7px 11px;
+    font-family: "Cascadia Code", "Fira Mono", monospace;
+    font-size: 13px;
+    outline: none;
+    transition: border-color .15s;
+  }
+  .field input:focus, .field select:focus, .field textarea:focus { border-color: #3a6fd8; }
+  .field input.err, .field textarea.err { border-color: #d9534f; }
+  .field input.ok,  .field textarea.ok  { border-color: #28a745; }
+  .field textarea { height: 62px; resize: vertical; }
+  .field select option { background: #0d1422; }
+
+  .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+  .btn {
+    padding: 8px 20px;
+    border-radius: 6px;
+    font-size: 13px;
+    cursor: pointer;
+    border: 1px solid;
+    transition: background .15s, color .15s;
+  }
+  .btn-primary { background: #1e3a70; border-color: #3a6fd8; color: #c8daf0; }
+  .btn-primary:hover { background: #2a4e90; }
+  .btn-success { background: #1a3828; border-color: #28a745; color: #5dba7a; }
+  .btn-success:hover { background: #1f4830; }
+  .btn:disabled { opacity: .35; cursor: default; }
+
+  #preview-section { display: none; }
+
+  #preview-canvas {
+    background: #fff;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 280px;
+    margin-bottom: 14px;
+    overflow: hidden;
+  }
+  #preview-canvas svg { max-width: 100%; display: block; }
+
+  .detected-types {
+    background: #0a1018;
+    border: 1px solid #1e3050;
+    border-radius: 5px;
+    padding: 10px 14px;
+    font-family: "Cascadia Code", "Fira Mono", monospace;
+    font-size: 12px;
+    color: #7aaeff;
+    margin-bottom: 14px;
+  }
+  .detected-types .slot { color: #3dbe6c; }
+  .detected-types .lg   { color: #a0b8d0; font-size: 11px; }
+
+  #status-msg {
+    margin-top: 10px;
+    padding: 8px 14px;
+    border-radius: 5px;
+    font-size: 12px;
+    display: none;
+  }
+  #status-msg.ok  { background: #1a3828; border: 1px solid #28a745; color: #5dba7a; }
+  #status-msg.err { background: #28181a; border: 1px solid #d9534f; color: #e07080; }

@@ -25,6 +25,12 @@ import re
 import os
 import warnings
 
+from pyPept.source import (
+    SourceText, bond_marker as _source_bond_marker, group as _source_group,
+    join as _source_join, record as _source_record, sub as _source_sub,
+    synthetic as _source_synthetic,
+)
+
 import string
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -236,7 +242,7 @@ _INLINE_BOND_RE = re.compile(r'\.(!\w+)(?:\((\d+),(\d+)\))?')
 _INLINE_CAP_RE  = re.compile(r'\.([A-Za-z_]\w*)\((\d+),(\d+)\)')
 
 # Detects old BILN bare-integer crosslink annotations: Token(bid,rg) not preceded by '.'.
-_OLD_BILN_RE = re.compile(r'(?<![.\w\[{])([A-Za-z]\w*)\((\d+),(\d+)\)')
+_OLD_BILN_RE = re.compile(r'(?<![.!\w\[{])([A-Za-z]\w*)\((\d+),(\d+)\)')
 
 # Matches .[...] sequential reaction bracket on a residue: .[Cap1(x,y).Cap2(z,w)...]
 # The dot sits outside the bracket (consistent with inline .Cap(r,r) notation).
@@ -273,12 +279,12 @@ def _flatten_nested_brackets(seg):
                 j += 1
             whole = seg[i + 1:j + 1]
             flat = _flatten_one_nested(whole)
-            out.append('.' + flat)
+            out.append(seg[i:i+1] + flat)
             i = j + 1
         else:
             out.append(seg[i])
             i += 1
-    return ''.join(out)
+    return _source_join('', out)
 
 
 _ENTRY_ANY = re.compile(r'((?:[A-Za-z]\w*|!\w+)\(\d+,\d+\))')
@@ -307,22 +313,22 @@ def _flatten_one_nested(s):
     inner_bracket = s[inner_start:inner_end + 1]
     inner_content = inner_bracket[1:-1]
     outer_part = s[inner_end + 1:-1]
-    outer_entries = _ENTRY_ANY.findall(outer_part)
+    outer_entries = [_source_group(m, 1) for m in _ENTRY_ANY.finditer(outer_part)]
 
     # If inner content already uses sub-bracket notation, preserve it and just
     # append outer entries as additional arms.
     if '[' in inner_content:
-        outer_arms = ''.join(f'[.{e}]' for e in outer_entries)
-        return '[' + inner_content + outer_arms + ']'
+        outer_arms = _source_join('', ('[.' + e + ']' for e in outer_entries))
+        return s[:1] + inner_content + outer_arms + s[-1:]
 
     # Legacy flat inner content: split anchor from remaining chain entries.
-    inner_entries = _ENTRY_ANY.findall(inner_content)
+    inner_entries = [_source_group(m, 1) for m in _ENTRY_ANY.finditer(inner_content)]
     anchor = inner_entries[0] if inner_entries else ''
     inner_rest = inner_entries[1:]
 
-    inner_arms = ''.join(f'[.{e}]' for e in inner_rest)
-    outer_arms = ''.join(f'[.{e}]' for e in outer_entries)
-    return '[' + anchor + inner_arms + outer_arms + ']'
+    inner_arms = _source_join('', ('[.' + e + ']' for e in inner_rest))
+    outer_arms = _source_join('', ('[.' + e + ']' for e in outer_entries))
+    return s[:1] + anchor + inner_arms + outer_arms + s[-1:]
 
 # Matches entries inside brackets: both monomer .Token(r,r) and crosslink .!n(r,r).
 _BRACKET_ENTRY_RE = re.compile(r'\.((?:[A-Za-z]\w*|!\w+))\((\d+),(\d+)\)')
@@ -387,8 +393,8 @@ def biln_to_cabiln(biln):
 def _preprocess_cabiln(biln):
     """Normalise newline- or %-separated CABILN into a single %-delimited string."""
     biln = biln.strip()
-    biln = re.sub(r'[ \t]*[\n%][ \t]*', '%', biln)
-    biln = re.sub(r'%+', '%', biln)
+    biln = _source_sub(r'[ \t]*[\n%][ \t]*', '%', biln)
+    biln = _source_sub(r'%+', '%', biln)
     return biln.strip('%')
 
 
@@ -429,20 +435,30 @@ def _handle_terminal_bond_markers(seg, seen, count):
     if len(parts) >= 2 and _is_bare_marker(parts[0]):
         tok = parts[0]
         _register(tok, 1, 'N-terminal (R1)')
-        parts[1] = f'{parts[1]}({tok},1)'
+        _source_bond_marker(tok, 1, owner=parts[1], terminal=True)
+        parts[1] = parts[1] + f'({tok},1)'
         del parts[0]
 
     # C-terminal: last part is bare !n (checked after N-terminal, handles both ends)
     if len(parts) >= 2 and _is_bare_marker(parts[-1]):
         tok = parts[-1]
         _register(tok, 2, 'C-terminal (R2)')
-        parts[-2] = f'{parts[-2]}({tok},2)'
+        _source_bond_marker(tok, 2, owner=parts[-2], terminal=True)
+        parts[-2] = parts[-2] + f'({tok},2)'
         del parts[-1]
 
-    return '-'.join(parts)
+    return _source_join('-', parts)
 
 
-def _expand_inline_caps(biln, peptide_branch_threshold=2):
+def _emit_warning(message, category=UserWarning, stacklevel=1, *, warning_sink=None):
+    """Keep request diagnostics local while retaining the library warning API."""
+    if warning_sink is None:
+        warnings.warn(message, category, stacklevel=stacklevel + 1)
+    else:
+        warning_sink(str(message))
+
+
+def _expand_inline_caps(biln, peptide_branch_threshold=2, warning_sink=None):
     """Pre-process CABILN notation before chain/residue splitting.
 
     Supported forms:
@@ -501,12 +517,14 @@ def _expand_inline_caps(biln, peptide_branch_threshold=2):
             fhr, fcr = _seen[tok]
             hr, cr = fcr, fhr
         _count[tok] = _count.get(tok, 0) + 1
+        _source_bond_marker(_source_group(m), int(hr))
         return f'({tok},{hr})'
 
     def _sub_cap(m):
-        tok, hr, cr = m.group(1), m.group(2), m.group(3)
+        tok, hr, cr = _source_group(m, 1), m.group(2), m.group(3)
+        _source_record(tok, _source_group(m), 'inline')
         bid = _ctr[0]; _ctr[0] += 1
-        appended.append(f'{tok}({bid},{cr})')
+        appended.append(tok + f'({bid},{cr})')
         return f'({bid},{hr})'
 
     # Shared container so _sub_bracket can read surrounding segment context
@@ -515,7 +533,7 @@ def _expand_inline_caps(biln, peptide_branch_threshold=2):
 
     def _sub_bracket(m):
         # dot lives outside bracket in notation; restore for _MIXED_ENTRY_RE parsing
-        raw = m.group(1) if m.group(1) is not None else m.group(2)
+        raw = _source_group(m, 1) if m.group(1) is not None else _source_group(m, 2)
         content = '.' + raw
         tokens = list(_MIXED_ENTRY_RE.finditer(content))
         if not tokens:
@@ -534,7 +552,8 @@ def _expand_inline_caps(biln, peptide_branch_threshold=2):
                 f"Sequential bracket {m.group(0)!r}: first entry must be a flat "
                 f".Entry(r,r) or .!n(r,r), not a sub-bracket arm.")
 
-        tok1, hr1, cr1 = first.group(2), first.group(3), first.group(4)
+        tok1, hr1, cr1 = _source_group(first, 2), first.group(3), first.group(4)
+        _source_record(tok1, _source_group(first), 'bracket', _source_group(m), terminal=len(tokens) == 1)
 
         if tok1.startswith('!'):
             # Pure crosslink bracket: .[!1(4,4)] or .[!1(4,4).!2(5,3)]
@@ -554,6 +573,7 @@ def _expand_inline_caps(biln, peptide_branch_threshold=2):
                 if tok not in _seen:
                     _seen[tok] = (prev_r, cur_r)
                 _count[tok] = _count.get(tok, 0) + 1
+                _source_bond_marker(_source_group(t), int(prev_r), bracket=_source_group(m))
                 host_bonds.append(f'({tok},{prev_r})')
             return ''.join(host_bonds)
 
@@ -563,18 +583,25 @@ def _expand_inline_caps(biln, peptide_branch_threshold=2):
         _backbone_steps = []
         pointer_idx = 0  # index into frag_bond_parts of the current chain tail
 
-        for t in tokens[1:]:
+        for token_position, t in enumerate(tokens[1:], 1):
             if t.group(1) is not None:
                 # Sub-bracket arm [.sub_content]: process its entries as a chain
                 # branching FROM the current pointer.  The arm does NOT advance
                 # pointer_idx — the next sibling arm or flat entry still bonds from
                 # the same host fragment.
-                sub_content = '.' + t.group(1)
+                sub_content = '.' + _source_group(t, 1)
                 sub_steps = list(_BRACKET_ENTRY_RE.finditer(sub_content))
+                if not sub_steps or ''.join(step.group(0) for step in sub_steps) != sub_content:
+                    raise ValueError(
+                        f"Sequential sub-bracket {t.group(0)!r} has unrecognised "
+                        "content; expected only .Fragment(r,r) or .!n(r,r) entries.")
                 sub_ptr = pointer_idx
-                for step in sub_steps:
-                    tok, prev_r, cur_r = step.group(1), step.group(2), step.group(3)
+                for step_position, step in enumerate(sub_steps):
+                    tok, prev_r, cur_r = _source_group(step, 1), step.group(2), step.group(3)
+                    _source_record(tok, _source_group(step), 'bracket', _source_group(m), _source_group(t), step_position == len(sub_steps) - 1)
                     if tok.startswith('!'):
+                        _source_bond_marker(_source_group(step), int(prev_r),
+                                            owner=frag_tokens[sub_ptr], bracket=_source_group(m))
                         frag_bond_parts[sub_ptr] += f'({tok},{prev_r})'
                         if tok not in _seen:
                             _seen[tok] = (prev_r, cur_r)
@@ -588,8 +615,11 @@ def _expand_inline_caps(biln, peptide_branch_threshold=2):
                 # pointer_idx intentionally NOT updated: arm is a branch, not chain
             else:
                 # Flat entry: crosslink annotates current host; monomer advances chain.
-                tok, prev_r, cur_r = t.group(2), t.group(3), t.group(4)
+                tok, prev_r, cur_r = _source_group(t, 2), t.group(3), t.group(4)
+                _source_record(tok, _source_group(t), 'bracket', _source_group(m), terminal=token_position == len(tokens) - 1)
                 if tok.startswith('!'):
+                    _source_bond_marker(_source_group(t), int(prev_r),
+                                        owner=frag_tokens[pointer_idx], bracket=_source_group(m))
                     frag_bond_parts[pointer_idx] += f'({tok},{prev_r})'
                     if tok not in _seen:
                         _seen[tok] = (prev_r, cur_r)
@@ -617,20 +647,24 @@ def _expand_inline_caps(biln, peptide_branch_threshold=2):
                 suggestion = f"{pre}{host_name}.!n({hr1},{cr1}){rest}%%{branch_seg}"
             else:
                 suggestion = f"host.!n({hr1},{cr1})-[chain]%%{branch_seg}"
-            warnings.warn(
+            _emit_warning(
                 f"Sequential bracket {m.group(0)!r} contains {len(_backbone_steps)} "
                 f"R2->R1 connections: backbone amide pattern detected — this creates "
                 f"a peptide branch inside [...].  Did you mean:\n"
                 f"  {suggestion}",
-                UserWarning, stacklevel=6)
+                UserWarning, stacklevel=6, warning_sink=warning_sink)
 
         for tok, bonds in zip(frag_tokens, frag_bond_parts):
-            appended.append(f'{tok}{bonds}')
+            appended.append(tok + bonds)
 
         return f'({bid1},{hr1})'
 
     processed_segments = []
-    for seg in segments:
+    for segment_number, seg in enumerate(segments):
+        if isinstance(seg, SourceText):
+            seg.tracker.segment = segment_number
+            for root in split_outside(seg, '-', '[]'):
+                seg.tracker.root(root, segment_number)
         seg = _handle_terminal_bond_markers(seg, _seen, _count)
         seg = _flatten_nested_brackets(seg)
         # Brackets first: they may contain .!n(r,r) crosslink entries that
@@ -650,9 +684,9 @@ def _expand_inline_caps(biln, peptide_branch_threshold=2):
             parts.append(_sub_bracket(bm))
             last_end = bm.end()
         parts.append(seg[last_end:])
-        seg = ''.join(parts)
-        seg = _INLINE_BOND_RE.sub(_sub_bond, seg)
-        seg = _INLINE_CAP_RE.sub(_sub_cap, seg)
+        seg = _source_join('', parts)
+        seg = _source_sub(_INLINE_BOND_RE, _sub_bond, seg)
+        seg = _source_sub(_INLINE_CAP_RE, _sub_cap, seg)
         processed_segments.append(seg)
 
     all_bond_ids = set(_seen) | set(_count)
@@ -662,9 +696,11 @@ def _expand_inline_caps(biln, peptide_branch_threshold=2):
             raise ValueError(
                 f"Bond {tok!r}: {cnt} endpoint(s) declared; expected exactly 2.")
 
-    result = '.'.join(processed_segments)
+    result = _source_join('.', processed_segments)
     if appended:
-        result += '.' + '.'.join(appended)
+        result += '.' + _source_join('.', appended)
+    if isinstance(result, SourceText):
+        result.tracker.labels = set(_seen) | set(_count)
     branch_rgroup = {tok: int(cr) for tok, (hr, cr) in _seen.items()}
     return result, branch_rgroup
 
@@ -719,7 +755,7 @@ def _parse_bracket_items(bracket_content):
     parts = bracket_content.split('.')
     items = []
     for p in parts:
-        pm = _re.match(r'([^(]+)\((\d+),(\d+)\)', p)
+        pm = _re.fullmatch(r'([^(]+)\((\d+),(\d+)\)', p)
         if pm:
             items.append((pm.group(1), pm.group(2), pm.group(3)))
         else:
@@ -739,10 +775,9 @@ def cabiln_to_branch(cabiln):
         K.[gGlu(4,4).AEEA(1,2).C20FA(1,2)]-G-am
         →  K.!1(4,4)-G-am%C20FA-AEEA-gGlu.!1
 
-    Mixed (has both (2,1) and (1,2) after the anchor) — anchor in middle,
-    crosslink, N-term side reversed::
-
-        K.[gGlu(4,4).L(2,1).A(1,2)]-G-am  →  K.!1(4,4)-G-am%A-gGlu.!1-L
+    A flat sequential bracket cannot reverse direction without reusing an
+    attachment slot. Such mixed continuations are preserved for validation,
+    rather than reinterpreted as independent arms from the anchor.
 
     Single-monomer brackets stay inline. ``{}`` brackets are immune.
     """
@@ -794,7 +829,7 @@ def cabiln_to_branch(cabiln):
         if '[' in bracket_content:
             flat_end = bracket_content.index('[')
             flat_part = bracket_content[:flat_end]
-            hub_m = _re.match(r'([^(]+)\((\d+),(\d+)\)', flat_part.strip())
+            hub_m = _re.fullmatch(r'([^(]+)\((\d+),(\d+)\)', flat_part.strip())
             if not hub_m:
                 search_start = m_end
                 continue
@@ -817,7 +852,8 @@ def cabiln_to_branch(cabiln):
             # Each arm must be a single pure crosslink entry .!n(r,r)
             _xlink_pat = _re.compile(r'^\.?(!\d+)\((\d+),(\d+)\)$')
             arm_info = [_xlink_pat.match(a.strip()) for a in sub_arms]
-            if not sub_arms or any(m is None for m in arm_info):
+            if (not sub_arms or any(m is None for m in arm_info)
+                    or flat_part + ''.join(f'[{arm}]' for arm in sub_arms) != bracket_content):
                 search_start = m_end
                 continue
             # Build the conversion
@@ -836,7 +872,7 @@ def cabiln_to_branch(cabiln):
                 r_partner = am.group(3)  # slot on main-chain partner
                 # Promote no-parens second endpoint in main chain to first occurrence
                 new_result = _re.sub(
-                    r'\.' + _re.escape(tag_arm) + r'(?!\()',
+                    r'\.' + _re.escape(tag_arm) + r'(?![\w(])',
                     f'.{tag_arm}({r_partner},{r_hub_arm})',
                     new_result, count=1)
                 arm_tags.append(tag_arm)
@@ -846,7 +882,8 @@ def cabiln_to_branch(cabiln):
             continue
 
         items = _parse_bracket_items(bracket_content)
-        if not items or items[0][1] is None:
+        if (not items or any(rp is None or rt is None for _, rp, rt in items)
+                or items[0][0].startswith('!')):
             search_start = m_end
             continue
         anchor_abbr, r_host, r_branch = items[0]
@@ -868,7 +905,7 @@ def cabiln_to_branch(cabiln):
             for abbr, rp, rt in items[1:]:
                 # rp = hub-side slot, rt = partner-side slot
                 new_result = _re.sub(
-                    r'\.' + _re.escape(abbr) + r'(?!\()',
+                    r'\.' + _re.escape(abbr) + r'(?![\w(])',
                     f'.{abbr}({rt},{rp})',
                     new_result, count=1)
                 arm_tags.append(abbr)
@@ -919,29 +956,6 @@ def cabiln_to_branch(cabiln):
                     branches.append(
                         f'{conts[k][0]}.{cont_tags[k]}.{cont_tags[k + 1]}({rp_k},{rt_k})')
                 branches.append(f'{conts[-1][0]}.{cont_tags[-1]}')
-        elif cont:
-            after = []
-            before = []
-            hit_12 = False
-            for abbr, rp, rt in items[1:]:
-                if rp == '2' and rt == '1' and not hit_12:
-                    after.append(abbr)
-                elif rp == '1' and rt == '2':
-                    hit_12 = True
-                    before.append(abbr)
-                else:
-                    break
-            else:
-                tag = f'!{_xlink_ctr[0]}'
-                _xlink_ctr[0] += 1
-                host_marker = f'.{tag}({r_host},{r_branch})'
-                branch_parts = before[::-1] + [f'{anchor_abbr}.{tag}'] + after
-                branch_str = '-'.join(branch_parts)
-                result = result[:m_start] + host_marker + result[m_end:]
-                branches.append(branch_str)
-                continue
-            search_start = m_end
-            continue
         else:
             search_start = m_end
             continue
@@ -977,6 +991,11 @@ def cabiln_to_bracket(cabiln):
 
     main_seg = segments[0]
     branch_segs = segments[1:]
+    deferred_branches = [
+        branch for branch in branch_segs
+        if _re.search(r'\.(?:[A-Za-z_]|\[|\{)|<', branch)
+    ]
+    branch_segs = [branch for branch in branch_segs if branch not in deferred_branches]
 
     def _normalize_terminal_marker(bs):
         """Convert standalone terminal !n tokens to inline .!n form.
@@ -1130,11 +1149,13 @@ def cabiln_to_bracket(cabiln):
             continue
         tag_m = _re.search(r'\.(!\d+)', branch_seg)
         if not tag_m:
+            unconverted_crosslink.append(branch_seg)
             continue
         tag = tag_m.group(1)
         host_pat = _re.escape(f'.{tag}') + r'\((\d+),(\d+)\)'
         host_m = _re.search(host_pat, main_seg)
         if not host_m:
+            unconverted_crosslink.append(branch_seg)
             continue
         r_host, r_branch = host_m.group(1), host_m.group(2)
 
@@ -1155,6 +1176,7 @@ def cabiln_to_bracket(cabiln):
             else:
                 parsed.append((abbr, None, None))
         if anchor_idx is None:
+            unconverted_crosslink.append(branch_seg)
             continue
 
         # Build bracket: anchor first, then C-terminal side, then N-terminal
@@ -1165,6 +1187,10 @@ def cabiln_to_bracket(cabiln):
             abbr, rp, rt = parsed[j]
             bracket_items.append(
                 f'{abbr}({rp},{rt})' if rp and rt else f'{abbr}(2,1)')
+
+        if 0 < anchor_idx < len(parsed) - 1:
+            after_arm = '.'.join(bracket_items[1:])
+            bracket_items = [bracket_items[0] + f'[.{after_arm}]']
 
         # Before anchor (N-terminal side) — reverse order.
         # Branch items use swapped (rt,rp) perspective; swap back to get bracket (rp,rt).
@@ -1180,10 +1206,12 @@ def cabiln_to_bracket(cabiln):
                     + main_seg[host_m.end():])
 
     # --- Phase 2: positional branches (.(r,r) marker) ---
+    unconverted_positional = []
     for branch_seg in positional:
         host_m = _re.search(r'\.\((\d+),(\d+)\)', main_seg)
         if not host_m:
-            break
+            unconverted_positional.append(branch_seg)
+            continue
         r_host, r_branch = host_m.group(1), host_m.group(2)
 
         branch_parts = _re.split(r'(?<!\()[-](?!\))', branch_seg)
@@ -1204,12 +1232,13 @@ def cabiln_to_bracket(cabiln):
         main_seg = (main_seg[:host_m.start()] + bracket_str
                     + main_seg[host_m.end():])
 
-    if unconverted_crosslink:
-        main_seg += '%' + '%'.join(unconverted_crosslink)
+    remaining = unconverted_crosslink + unconverted_positional + deferred_branches
+    if remaining:
+        main_seg += '%' + '%'.join(remaining)
     return main_seg
 
 
-def _check_bond_chemistry(mol1, at1, mol2, at2, bond_label=''):
+def _check_bond_chemistry(mol1, at1, mol2, at2, bond_label='', warning_sink=None):
     """
     Validate the proposed inter-monomer bond.
 
@@ -1243,11 +1272,11 @@ def _check_bond_chemistry(mol1, at1, mol2, at2, bond_label=''):
         c_mol, c_atom = (mol1, a1) if sym1 == 6 else (mol2, a2)
         if _is_carbonyl_carbon(c_mol, c_atom):
             return  # standard amide bond
-        warnings.warn(
+        _emit_warning(
             f"Bond {bond_label}: N–C join where C is not a carbonyl carbon. "
             "This forms a C–N bond without amide character (e.g. reductive amination "
             "product). Intentional?",
-            UserWarning, stacklevel=4,
+            UserWarning, stacklevel=4, warning_sink=warning_sink,
         )
         return
 
@@ -1260,10 +1289,10 @@ def _check_bond_chemistry(mol1, at1, mol2, at2, bond_label=''):
         c_mol, c_atom = (mol1, a1) if sym1 == 6 else (mol2, a2)
         if _is_carbonyl_carbon(c_mol, c_atom):
             return  # standard ester
-        warnings.warn(
+        _emit_warning(
             f"Bond {bond_label}: O–C join where C is not a carbonyl carbon. "
             "This forms an ether, not an ester. Intentional?",
-            UserWarning, stacklevel=4,
+            UserWarning, stacklevel=4, warning_sink=warning_sink,
         )
         return
 
@@ -1273,10 +1302,10 @@ def _check_bond_chemistry(mol1, at1, mol2, at2, bond_label=''):
 
     # N(7)–N(7): hydrazide / hydrazone
     if pair == frozenset([7]):
-        warnings.warn(
+        _emit_warning(
             f"Bond {bond_label}: N–N join (hydrazide/hydrazone). "
             "Unusual in peptide chemistry — check R-group assignments.",
-            UserWarning, stacklevel=4,
+            UserWarning, stacklevel=4, warning_sink=warning_sink,
         )
         return
 
@@ -1284,29 +1313,29 @@ def _check_bond_chemistry(mol1, at1, mol2, at2, bond_label=''):
     if pair == frozenset([16, 6]):
         c_mol, c_atom = (mol1, a1) if sym1 == 6 else (mol2, a2)
         if _is_carbonyl_carbon(c_mol, c_atom):
-            warnings.warn(
+            _emit_warning(
                 f"Bond {bond_label}: S–C(=O) thioester bond. "
                 "Valid for native chemical ligation but unusual for standard assembly. "
                 "Intentional?",
-                UserWarning, stacklevel=4,
+                UserWarning, stacklevel=4, warning_sink=warning_sink,
             )
         else:
-            warnings.warn(
+            _emit_warning(
                 f"Bond {bond_label}: S–C(aliphatic) thioether bond. "
                 "Valid for thioether-linked protecting groups (e.g. trt, acm) "
                 "and related ligation chemistry. Intentional?",
-                UserWarning, stacklevel=4,
+                UserWarning, stacklevel=4, warning_sink=warning_sink,
             )
         return
 
     # S–N: sulfenamide
     if pair == frozenset([16, 7]):
-        warnings.warn(
+        _emit_warning(
             f"Bond {bond_label}: S–N sulfenamide bond. "
             "Valid for Cys PTMs, oxidative macrolactamisation, bioconjugation, "
             "and NCL variant chemistry, but unusual in standard assembly. "
             "Intentional?",
-            UserWarning, stacklevel=4,
+            UserWarning, stacklevel=4, warning_sink=warning_sink,
         )
         return
 
@@ -1320,22 +1349,22 @@ def _check_bond_chemistry(mol1, at1, mol2, at2, bond_label=''):
             )
         if _is_vinyl(mol1, a1) and _is_vinyl(mol2, a2):
             return  # all-hydrocarbon alkene staple (RCM)
-        warnings.warn(
+        _emit_warning(
             f"Bond {bond_label}: C–C inter-monomer bond (non-vinyl). "
             "Unusual — check R-group assignments unless this is intentional "
             "bioconjugation chemistry.",
-            UserWarning, stacklevel=4,
+            UserWarning, stacklevel=4, warning_sink=warning_sink,
         )
         return
 
     # O(8)–N(7): hydroxamic acid / hydroxylamine / isoxazole linkage
     if pair == frozenset([8, 7]):
-        warnings.warn(
+        _emit_warning(
             f"Bond {bond_label}: O–N hydroxylamine/hydroxamic acid bond. "
             "Valid for O-amino acid caps (OBn_, OMe_) and hydroxamate "
             "bioconjugation, but unusual in standard peptide assembly. "
             "Intentional?",
-            UserWarning, stacklevel=4,
+            UserWarning, stacklevel=4, warning_sink=warning_sink,
         )
         return
 
@@ -1395,7 +1424,7 @@ class Sequence:
 
     ############################################################
     def __init__(self, input_biln, path=SequenceConstants.def_path,
-                 monomer_lib=SequenceConstants.def_lib_filename, fmt=None):
+                 monomer_lib=SequenceConstants.def_lib_filename, fmt=None, *, warning_sink=None, track_source=False):
         """
         Instantiate a pyPept.Sequence object with the input BILN/CABILN sequence.
 
@@ -1411,15 +1440,26 @@ class Sequence:
             (``Token(bondID,Rgroup)``), which is auto-converted to CABILN.
             Without this flag, old BILN notation raises ``ValueError``.
         :type fmt: str or None
+        :param track_source: retain original token locations in ``s_sources``.
         """
+        if not isinstance(input_biln, str) or not input_biln.strip():
+            raise ValueError("CABILN must be a non-empty string.")
+        if fmt not in (None, 'cabiln', 'biln'):
+            raise ValueError(f"Unknown sequence format: {fmt!r}")
+
         # Variables to store the monomers and bonds
         self.s_inputbiln = input_biln
+        self._warning_sink = warning_sink
         self.s_mid = -1
         self.s_bonds = []
-        self.s_nbonds = -1
+        self.s_nbonds = 0
+        self._used_slots = set()
         self.s_monomers = []
         self.s_nmonomers = 0
         self.__is_valid = True
+
+        if track_source and fmt == 'biln':
+            raise ValueError('Source tracking requires CABILN; convert old BILN first.')
 
         # Old BILN bare-integer crosslink notation requires explicit opt-in via fmt='biln'.
         if _OLD_BILN_RE.search(input_biln):
@@ -1432,9 +1472,9 @@ class Sequence:
                 )
             input_biln = biln_to_cabiln(input_biln)
 
-        # Expand .Token(host_r,cap_r) inline attachment notation before anything else.
-        # branch_rgroup maps each !x bond → partner rgroup z (reserved for Phase 2).
-        expanded, _branch_rgroup = _expand_inline_caps(input_biln)
+        # Protect synthetic SMILES before interpreting CABILN separators.
+        expanded = SourceText.original(input_biln) if track_source else input_biln
+        self.s_sources = []
 
         # Pre-expand synthetic tokens.  N-caps (`<smi>_`) and C-caps (`_<smi>`)
         # are matched BEFORE bare alpha-AA `<smi>` to ensure the trailing or
@@ -1448,32 +1488,40 @@ class Sequence:
             cs = _m.group(1)
             sym = _synthetic_cap_symbol(cs, 'n') + '_'  # trailing _ matches Ac_ / Bz_ naming
             self._synthetic_caps[sym] = (cs, 'n')
-            return sym
+            return _source_synthetic(_m, sym)
         def _ccap_repl(_m):
             cs = _m.group(1)
             sym = '_' + _synthetic_cap_symbol(cs, 'c')  # leading _ matches _NH2 / _OBn naming
             self._synthetic_caps[sym] = (cs, 'c')
-            return sym
+            return _source_synthetic(_m, sym)
         def _syn_repl(_m):
             sc = _m.group(1)
             sym = _synthetic_aa_symbol(sc)
             self._synthetic_aa_smiles[sym] = sc
-            return sym
-        expanded = _SYN_NCAP_RE.sub(_ncap_repl, expanded)
-        expanded = _SYN_CCAP_RE.sub(_ccap_repl, expanded)
-        expanded = _SYN_AA_RE.sub(_syn_repl, expanded)
+            return _source_synthetic(_m, sym)
+        expanded = _source_sub(_SYN_NCAP_RE, _ncap_repl, expanded)
+        expanded = _source_sub(_SYN_CCAP_RE, _ccap_repl, expanded)
+        expanded = _source_sub(_SYN_AA_RE, _syn_repl, expanded)
+        expanded, _branch_rgroup = _expand_inline_caps(expanded, warning_sink=warning_sink)
 
         seq = split_outside(expanded,
                             by_element=SequenceConstants.monomer_join,
                             outside='[]')
-        seq = SequenceConstants.monomer_join.join(list(filter(len, seq)))
+        if any(not token.strip() for token in seq):
+            raise ValueError("Empty monomer between backbone separators.")
+        seq = _source_join(SequenceConstants.monomer_join, seq)
         # Remove dangling '-' around chain breaks
-        self.s_biln = re.sub(r'[-]*\.[-]*',
+        self.s_biln = _source_sub(r'[-]*\.[-]*',
                              SequenceConstants.chain_separator, seq)
 
         # Read the monomer dictionary
         default_monomer_df_filepath = files(SequenceConstants.def_path).joinpath(SequenceConstants.def_lib_filename)
-        monomer_df_filepath = files(path).joinpath(monomer_lib)
+        if (path == SequenceConstants.def_path
+                and monomer_lib == SequenceConstants.def_lib_filename):
+            from pyPept.monomer_store import library_path
+            monomer_df_filepath = library_path()
+        else:
+            monomer_df_filepath = files(path).joinpath(monomer_lib)
 
         if monomer_df_filepath.is_file() is False:
             monomer_df_filepath = default_monomer_df_filepath
@@ -1481,22 +1529,14 @@ class Sequence:
         self.monomer_df = get_monomer_info(str(monomer_df_filepath))
 
         # Register synthetic alpha-AA monomers built from `<sidechain>` tokens.
-        # If the sidechain SMILES is malformed, fall back to a glycine-equivalent
-        # so the parser doesn't sys.exit. This trades a silent under-construction
-        # (RT graph mismatch) for a fatal parser crash.
+        # Malformed SMILES must never silently change the requested structure.
         for _sym, _sc in self._synthetic_aa_smiles.items():
             if _sym in self.monomer_df.index:
                 continue
             _romol = _build_synthetic_aa(_sc)
             _name = f'synthetic_aa<{_sc}>'
             if _romol is None:
-                warnings.warn(
-                    f"Synthetic AA token '<{_sc}>' could not be parsed; "
-                    f"falling back to glycine. Source SMILES probably needs walker fix.")
-                _romol = _build_synthetic_aa('')
-                _name = f'synthetic_aa<INVALID:{_sc}>'
-                if _romol is None:
-                    continue  # truly catastrophic, skip
+                raise ValueError(f"Synthetic AA token '<{_sc}>' contains invalid SMILES.")
             # Scan the synthetic mol for ALL R-group dummies (not just R1/R2).
             # Build m_Rgroups and m_chem_types dynamically: R1 = backbone_n,
             # R2 = backbone_c, R3+ = inferred from the atom the dummy bonds to.
@@ -1538,10 +1578,8 @@ class Sequence:
                 continue
             _romol = _build_synthetic_cap(_cs, _side)
             if _romol is None:
-                warnings.warn(
-                    f"Synthetic {_side}-cap token could not be parsed: {_cs!r}; "
-                    f"skipping.")
-                continue
+                raise ValueError(
+                    f"Synthetic {_side}-cap token contains invalid SMILES: {_cs!r}")
             if _side == 'n':
                 _rgroups = ['', '[OH]']
                 _cts = '2:backbone_c'
@@ -1560,21 +1598,8 @@ class Sequence:
                 'm_romol':      _romol,
             }
 
-        try:
-            # Parse the BILN sequence
-            self.__parse_biln()
-        except IOError:
-            warnings.warn(
-                f"Unspecified error in parsing BILN {self.s_inputbiln}")
-            sys.exit(1)
-
-        try:
-            # Parse the peptide bonds based on the BILN representation
-            self.__parse_biln_bonds()
-        except IOError:
-            warnings.warn(
-                f'Exception in parsing BILN bonds. (BILN: {self.s_biln})')
-            sys.exit(2)
+        self.__parse_biln()
+        self.__parse_biln_bonds()
 
     ########################################################################################
     def __parse_biln(self):
@@ -1604,13 +1629,19 @@ class Sequence:
             for _res_pos, res in enumerate(residues):
                 # Extract the residue information
                 # Strip bond annotations: (n,m) and (!n,m) crosslink IDs
-                resname = re.sub(r'\(!?\d+,\d+\)', '', res)
+                resname = _source_sub(r'\((?:!\w+|\d+),\d+\)', '', res)
+                if isinstance(resname, SourceText):
+                    self.s_sources.append(resname.tracker.occurrence(resname))
                 resname = re.sub(r'^[\[{](.*?)[\]}]$', '\\1', resname)
 
                 # Check if name exists in MonomerDic — with degeneracy resolution
 
                 if resname not in self.monomer_df.index:
-                    # 1) Check synonym table (CSV-defined aliases)
+                    if resname in self.monomer_df.attrs.get('_ambiguous_aliases', {}):
+                        raise ValueError(
+                            f"Ambiguous monomer alias '{resname}' names multiple library entries; "
+                            "use a canonical symbol instead.")
+                    # 1) Check stored abbreviations and unambiguous CSV aliases.
                     synonyms = self.monomer_df.attrs.get('_synonyms', {})
                     if resname in synonyms:
                         resname = synonyms[resname]
@@ -1630,24 +1661,17 @@ class Sequence:
                             if not chosen:
                                 chosen = [v for v in variants if v.startswith('_')]
                         else:
-                            warnings.warn(
+                            raise ValueError(
                                 f"Degenerate cap '{resname}' used mid-chain "
                                 f"(position {res_idx}); cannot resolve variant.")
-                            sys.exit(3)
                         if chosen:
                             resname = chosen[0]
                         else:
-                            warnings.warn(
-                                f"Monomer {resname} in BILN not found in MonomerDic")
-                            warnings.warn(
-                                "Need to check BILN or update MonomerDic before proceeding.")
-                            sys.exit(3)
+                            raise ValueError(
+                                f"Monomer {resname!r} has no terminal variant for this position.")
                     else:
-                        warnings.warn(
-                            f"Monomer {resname} in BILN not found in MonomerDic")
-                        warnings.warn(
-                            "Need to check BILN or update MonomerDic before proceeding.")
-                        sys.exit(3)
+                        raise ValueError(
+                            f"Monomer {resname!r} is not in the monomer library.")
 
                 # Add additional information of the monomers
                 mm_info = self.monomer_df.loc[resname, :].to_dict()
@@ -1699,8 +1723,7 @@ class Sequence:
             try:
                 monomer[key]
             except KeyError:
-                warnings.warn(f'Key {key} missing in monomer description')
-                sys.exit(1)
+                raise ValueError(f'Key {key} missing in monomer description')
 
         # Construct the monomer dictionary
         m_dict = {}
@@ -1736,12 +1759,10 @@ class Sequence:
                     mol1 = self.__get_monomer_prop('m_romol', num_res)
                     mol2 = self.__get_monomer_prop('m_romol', num_res + 1)
                     r1_attach = _attachment_idx(mol1, 2)  # slot 2 = R2 = C-term exit
-                    if r1_attach is None:
-                        r1_attach = _attachment_idx(mol1, 1)  # left cap: no R2, use R1
                     r2_attach = _attachment_idx(mol2, 1)  # slot 1 = R1 = N-term entry
                     if r1_attach is None or r2_attach is None:
-                        warnings.warn(
-                            f"Cannot form backbone bond between residues "
+                        raise ValueError(
+                            f"Cannot form backbone R2→R1 bond between residues "
                             f"{num_res} and {num_res + 1}: one or both monomers "
                             f"lack the required attachment point. Check that "
                             f"terminal-only monomers (e.g. ac, am, fmoc) are "
@@ -1749,12 +1770,14 @@ class Sequence:
                     else:
                         _check_bond_chemistry(
                             mol1, r1_attach, mol2, r2_attach,
-                            bond_label=f'backbone {num_res}→{num_res+1}')
-                        self.__add_bond(num_res, r1_attach, num_res + 1, r2_attach)
+                            bond_label=f'backbone {num_res}→{num_res+1}',
+                            warning_sink=self._warning_sink)
+                        self.__add_bond(
+                            num_res, r1_attach, num_res + 1, r2_attach, slot1=2, slot2=1)
 
             # Find connections with other chains.
             # Bond IDs may be plain integers ("1") or !n markers ("!1").
-            match = re.findall(r"\((!?\d+),(\d+)\)", res)
+            match = re.findall(r"\((!\w+|\d+),(\d+)\)", res)
             for i, m_value in enumerate(match):
                 b_idx, rgrp_idx = m_value[0], int(m_value[1])
                 mol = self.__get_monomer_prop('m_romol', num_res)
@@ -1767,7 +1790,7 @@ class Sequence:
                 bond_info_helm.append([b_idx, num_res, rgrp_idx])
 
             # For multiple branching (two crosslinks on the same residue)
-            match = re.findall(r"\((!?\d+),(\d+);(!?\d+),(\d+)\)", res)
+            match = re.findall(r"\((!\w+|\d+),(\d+);(!\w+|\d+),(\d+)\)", res)
             for i, m_value in enumerate(match):
                 b1_idx, rgrp1_idx = m_value[0], int(m_value[1])
                 b2_idx, rgrp2_idx = m_value[2], int(m_value[3])
@@ -1822,7 +1845,8 @@ class Sequence:
                     mol1, at1, mol2, at2,
                     bond_label=f'crosslink bond-id {bondx[0][0]!r} '
                                f'(R{bondx[0][2]} of residue {m1} <-> '
-                               f'R{bondx[1][2]} of residue {m2})')
+                               f'R{bondx[1][2]} of residue {m2})',
+                    warning_sink=self._warning_sink)
                 self.__add_bond(m1, at1, m2, at2, slot1=slot1, slot2=slot2)
 
         # Filter unique bonds
@@ -1844,6 +1868,18 @@ class Sequence:
                       which has both [1*] and [3*]).
         :param slot2: 1-based R-group slot for atom2 (optional; same rationale).
         """
+        slot1 = slot1 if slot1 is not None else _slot_for_attachment(
+            self.s_monomers[m_id1]['m_romol'], atom1)
+        slot2 = slot2 if slot2 is not None else _slot_for_attachment(
+            self.s_monomers[m_id2]['m_romol'], atom2)
+        endpoints = ((m_id1, slot1), (m_id2, slot2))
+        if endpoints[0] == endpoints[1]:
+            raise ValueError("A bond cannot join the same attachment slot to itself.")
+        for monomer_id, slot in endpoints:
+            if (monomer_id, slot) in self._used_slots:
+                raise ValueError(
+                    f"Residue {monomer_id} R{slot} is already used by another bond.")
+        self._used_slots.update(endpoints)
         self.s_nbonds += 1
         entry = [m_id1, atom1, m_id2, atom2]
         if slot1 is not None:
@@ -1956,18 +1992,11 @@ class Sequence:
         errors = []
         seq = None
 
-        with warnings.catch_warnings(record=True) as w_list:
-            warnings.simplefilter("always")
-            try:
-                seq = cls(biln, path=path, monomer_lib=monomer_lib, fmt=fmt)
-            except ValueError as exc:
-                errors.append(str(exc))
-            except SystemExit as exc:
-                errors.append(
-                    f"Parse error (exit {exc.code}): check that all tokens exist "
-                    "in the monomer library and the BILN is well-formed.")
-
-        caught_warns = [str(w.message) for w in w_list]
+        try:
+            seq = cls(biln, path=path, monomer_lib=monomer_lib, fmt=fmt,
+                      warning_sink=caught_warns.append)
+        except ValueError as exc:
+            errors.append(str(exc))
 
         bonds = []
         if seq is not None:
@@ -2020,12 +2049,20 @@ def get_monomer_info(path):
     """
     sdf_file = path
     df_group = PandasTools.LoadSDF(sdf_file)
+    from pyPept.monomer_store import _index_monomer_names
+    symbols = list(df_group['symbol'])
+    abbreviations = list(df_group.get('m_abbr', [None] * len(symbols)))
+    name_index = _index_monomer_names(zip(symbols, abbreviations))
+    df_group['m_abbr'] = [
+        abbr.strip() if isinstance(abbr, str) and abbr.strip() else symbol
+        for symbol, abbr in zip(symbols, abbreviations)
+    ]
 
     rg_col = 'm_Rgroups'
     df_group[rg_col] = df_group[rg_col].astype(object)
     for idx in df_group.index:
         change = df_group[rg_col][idx].split(SequenceConstants.csv_separator)
-        df_group.at[idx, rg_col] = [None if v == 'None' else v for v in change]
+        df_group.at[idx, rg_col] = [None if v.strip() in ('None', '') else v.strip() for v in change]
 
     df_group = df_group.set_index('symbol')
     df_group = df_group.rename(columns={"ROMol": "m_romol"})
@@ -2078,29 +2115,38 @@ def get_monomer_info(path):
         if len(bases) == 1:
             base_name = bases.pop()
             # Only create alias if base_name is not already an entry
-            if base_name not in df_group.index:
+            if base_name not in name_index:
                 degen_aliases[base_name] = variants
 
     # Store aliases as a module-level accessible dict on the DataFrame
     df_group.attrs['_degen_aliases'] = degen_aliases
 
-    # --- Synonym resolution index ---
-    # Build reverse lookup: alias_name -> canonical_symbol
-    # Sources: CSV synonyms column + SDF duplicate entries already in df_group
-    synonyms = {}  # alias -> canonical
+    # Stored symbols and abbreviations take precedence over CSV aliases.
+    synonyms = {name: symbols[index] for name, index in name_index.items()
+                if name != symbols[index]}
+    csv_aliases = defaultdict(set)
     csv_path = os.path.join(os.path.dirname(path), 'monomers.csv')
     if os.path.isfile(csv_path):
         import csv as _csv
-        with open(csv_path, newline='') as _f:
+        with open(csv_path, newline='', encoding='utf-8') as _f:
             for row in _csv.DictReader(_f):
-                tok = row.get('token', '')
+                tok = row.get('token', '').strip()
                 syns = row.get('synonyms', '')
                 if tok and syns and tok in df_group.index:
                     for alias in syns.split(','):
                         alias = alias.strip()
-                        if alias and alias not in df_group.index:
-                            synonyms[alias] = tok
+                        if alias and alias not in name_index:
+                            csv_aliases[alias].add(tok)
+    ambiguous = {}
+    for alias, targets in csv_aliases.items():
+        if alias in degen_aliases:
+            targets.update(degen_aliases[alias])
+        if len(targets) == 1:
+            synonyms[alias] = next(iter(targets))
+        else:
+            ambiguous[alias] = tuple(sorted(targets))
     df_group.attrs['_synonyms'] = synonyms
+    df_group.attrs['_ambiguous_aliases'] = ambiguous
 
     return df_group
 
@@ -2213,9 +2259,10 @@ def split_outside(string, by_element, outside, keep_marker=True):
         openers.add('{')
         closers.add('}')
 
-    out = ''
+    out = []
     inside = False
-    for i in string:
+    for char_position in range(len(string)):
+        i = string[char_position:char_position+1]
         if i in openers:
             if inside:
                 if keep_marker:
@@ -2240,10 +2287,10 @@ def split_outside(string, by_element, outside, keep_marker=True):
                 j = grpsep
             else:
                 j = i
-        out = out + j
+        out.append(j)
 
     # Do the final split
-    split_chains = out.split(grpsep)
+    split_chains = _source_join('', out).split(grpsep)
     return split_chains
 
 
@@ -2306,13 +2353,23 @@ def correct_pdb_atoms(seq, path=SequenceConstants.def_path,
 
     # Read the monomer dataframe
     default_monomer_df_filepath = files(SequenceConstants.def_path).joinpath(SequenceConstants.def_lib_filename)
-    monomer_df_filepath = files(path).joinpath(monomer_lib)
+    if (path == SequenceConstants.def_path
+            and monomer_lib == SequenceConstants.def_lib_filename):
+        from pyPept.monomer_store import library_path
+        monomer_df_filepath = library_path()
+    else:
+        monomer_df_filepath = files(path).joinpath(monomer_lib)
 
     if monomer_df_filepath.is_file() is False:
         monomer_df_filepath = default_monomer_df_filepath
 
     new_df = get_monomer_info(str(monomer_df_filepath))
-
+    if 'pdbName' not in new_df.columns:
+        raise ValueError(
+            f"Monomer library {monomer_df_filepath} lacks the 'pdbName' metadata "
+            "required for PDB atom naming. Supply a library with PDB residue "
+            "names, or use --noconf for 2D output."
+        )
 
     # Get monomer codes
     monomers = get_monomer_codes(new_df)

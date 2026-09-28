@@ -6,6 +6,11 @@ __pycache__/
 *.egg-info/
 .eggs/
 dist/
+build/
+
+# Local Python environments
+.venv/
+venv/
 
 # IDE settings Pycharm/VSCode/Visual Studio
 .idea
@@ -14,6 +19,8 @@ dist/
 
 # pytest
 .pytest_cache
+.coverage
+htmlcov/
 
 # IPython Notebook
 .ipynb_checkpoints
@@ -25,3 +32,6 @@ dist/
 # managing secrets
 .ini
 .env
+
+# macOS Finder metadata
+.DS_Store

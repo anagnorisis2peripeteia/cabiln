@@ -1,16 +1,19 @@
 [build-system]
 requires = [
-    "setuptools>=42",
+    "setuptools>=77",
 ]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "pyPept"
 version = "1.1.0b0"
+description = "Chemistry-aware peptide notation, molecule assembly, and interactive builder"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE", "LICENSE-ORIGINAL"]
 requires-python = ">=3.9"
 classifiers = [
         "Intended Audience :: Science/Research",
-        "License :: OSI Approved :: MIT License",
         "Operating System :: MacOS :: MacOS X",
         "Operating System :: Microsoft :: Windows",
         "Operating System :: OS Independent",
@@ -26,28 +29,36 @@ classifiers = [
 ]
 dynamic = [
     "dependencies",
-    "description",
     "optional-dependencies",
-    "readme",
 ]
 
 [tool.setuptools.packages.find]
 where = ["src"]
+include = ["pyPept*"]
+namespaces = false
 
 [tool.setuptools.package-data]
-"pyPept.data" = ["*.txt", "*.rst", "*.json", "*.sdf"]
+"pyPept.data" = ["*.txt", "*.csv", "*.json", "*.sdf", "*.yaml"]
+"pyPept.web" = ["static/*.html", "static/*.css", "static/*.js", "static/*.json"]
 
 [tool.setuptools.dynamic]
 dependencies = {file = "requirements.txt"}
-description = {file = "description.txt"}
-readme = {file = "README.md"}
 
 [tool.setuptools.dynamic.optional-dependencies]
 dev = {file = "requirements-dev.txt"}
+web = {file = "requirements-web.txt"}
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = ["-ra", "--strict-markers"]
+markers = ["distribution: builds and installs the wheel in a clean environment"]
+
+[tool.black]
+target-version = ["py39"]
 
 [tool.bumpver]
 current_version = "1.1.0b0"
-version_pattern = "MAJOR.MINOR.PATCH"
+version_pattern = "MAJOR.MINOR.PATCH[PYTAGNUM]"
 commit_message  = "Bump version {old_version} -> {new_version}"
 commit          = true
 tag             = true
@@ -60,4 +71,4 @@ push            = true
 run_pyPept              = "pyPept.interfaces.run_pyPept:main"
 pyPept-BILN-validate    = "pyPept.interfaces.cli_BILN_validityChecker:run_as_standalone"
 pyPept-monomer-add      = "pyPept.interfaces.cli_monomer:main"
-
+cabiln                 = "pyPept.web.app:main"

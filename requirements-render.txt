@@ -1,11 +1,3 @@
-fastapi
-uvicorn
-pydantic
-pyyaml
-rdkit
-epam.indigo
-numpy>=1.22.2
-pandas>=1.4.1
-requests>=2.27.1
-igraph>=0.9.10
-biopython>=1.79
+# Render build command: pip install -r requirements-render.txt
+# Install the project and its web extra from the checkout.
+.[web]

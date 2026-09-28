@@ -1,0 +1,212 @@
+"""Source locations carried through the existing CABILN lowering.
+
+This module has no notation grammar. ``Sequence`` records occurrences while its
+existing parser lowers synthetic tokens, branches and inline attachments. Plain
+strings retain the usual fast path; source tracking is opt-in for editing.
+"""
+
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass
+from typing import Literal
+
+
+@dataclass(frozen=True, order=True)
+class Span:
+    start: int
+    end: int
+
+
+@dataclass(frozen=True)
+class Occurrence:
+    token: Span
+    entry: Span
+    kind: Literal["explicit", "inline", "bracket"]
+    segment: int
+    bracket: Span | None = None
+    arm: Span | None = None
+    terminal: bool = True
+    protected: bool = False
+
+
+@dataclass(frozen=True)
+class BondMarker:
+    span: Span
+    slot: int
+    owner: Span
+    kind: Literal["inline", "terminal", "bracket"]
+    bracket: Span | None = None
+
+
+class Tracker:
+    def __init__(self, source):
+        self.source = source
+        self.entries = {}
+        self.roots = []
+        self.segment = 0
+        self.labels = set()
+        self.markers = []
+
+    def root(self, text, segment):
+        span = origin_span(text)
+        if span is not None:
+            self.roots.append((span, segment))
+
+    def entry(self, token, entry, kind, bracket=None, arm=None, terminal=True):
+        span = origin_span(token)
+        if span is not None:
+            self.entries[span] = Occurrence(
+                span,
+                origin_span(entry),
+                kind,
+                self.segment,
+                origin_span(bracket),
+                origin_span(arm),
+                terminal,
+                bool(bracket is not None and str(bracket).startswith(".{")),
+            )
+
+    def occurrence(self, token):
+        span = origin_span(token)
+        if span is None:
+            raise ValueError("Lowered monomer lost its source")
+        if span in self.entries:
+            return self.entries[span]
+        region = next(
+            (
+                (r, s)
+                for r, s in self.roots
+                if r.start <= span.start and span.end <= r.end
+            ),
+            None,
+        )
+        if region is None:
+            raise ValueError("Lowered monomer has no original source region")
+        root, segment = region
+        return Occurrence(span, root, "explicit", segment)
+
+
+class SourceText(str):
+    def __new__(cls, value, origins, tracker):
+        obj = str.__new__(cls, value)
+        obj.origins = tuple(origins)
+        obj.tracker = tracker
+        assert len(obj) == len(obj.origins)
+        return obj
+
+    @classmethod
+    def original(cls, value):
+        return cls(value, (Span(i, i + 1) for i in range(len(value))), Tracker(value))
+
+    def __getitem__(self, key):
+        if isinstance(key, int):
+            key = key if key >= 0 else len(self) + key
+            if key < 0 or key >= len(self):
+                raise IndexError("string index out of range")
+            key = slice(key, key + 1)
+        return SourceText(str.__getitem__(self, key), self.origins[key], self.tracker)
+
+    def __add__(self, other):
+        return join("", [self, other])
+
+    def __radd__(self, other):
+        return join("", [other, self])
+
+    def split(self, sep=None, maxsplit=-1):
+        if not sep:
+            raise ValueError("SourceText.split requires a non-empty separator")
+        result, start = [], 0
+        while maxsplit != 0:
+            pos = str.find(self, sep, start)
+            if pos < 0:
+                break
+            result.append(self[start:pos])
+            start = pos + len(sep)
+            maxsplit -= 1
+        result.append(self[start:])
+        return result
+
+    def strip(self, chars=None):
+        left = len(self) - len(str.lstrip(self, chars))
+        end = len(str.rstrip(self, chars))
+        return self[left : max(left, end)]
+
+
+def join(sep, pieces):
+    pieces = list(pieces)
+    mapped = next((p for p in pieces if isinstance(p, SourceText)), None)
+    if mapped is None:
+        return sep.join(pieces)
+    origins = []
+    for i, p in enumerate(pieces):
+        if i:
+            origins.extend([None] * len(sep))
+        if isinstance(p, SourceText) and p.tracker is not mapped.tracker:
+            raise ValueError("Cannot combine text from different source revisions")
+        origins.extend(p.origins if isinstance(p, SourceText) else [None] * len(p))
+    return SourceText(sep.join(map(str, pieces)), origins, mapped.tracker)
+
+
+def group(match, num=0):
+    return match.string[match.start(num) : match.end(num)]
+
+
+def sub(pattern, replacement, value):
+    if not isinstance(value, SourceText):
+        return re.sub(pattern, replacement, value)
+    pieces, end = [], 0
+    for match in re.finditer(pattern, value):
+        pieces.append(value[end : match.start()])
+        pieces.append(
+            replacement(match) if callable(replacement) else match.expand(replacement)
+        )
+        end = match.end()
+    pieces.append(value[end:])
+    return join("", pieces)
+
+
+def origin_span(text):
+    if not isinstance(text, SourceText):
+        return None
+    origins = [p for p in text.origins if p is not None]
+    return (
+        Span(min(p.start for p in origins), max(p.end for p in origins))
+        if origins
+        else None
+    )
+
+
+def synthetic(match, symbol):
+    value = group(match)
+    if not isinstance(value, SourceText):
+        return symbol
+    return SourceText(symbol, [origin_span(value)] * len(symbol), value.tracker)
+
+
+def record(token, entry, kind, bracket=None, arm=None, terminal=True):
+    if isinstance(token, SourceText):
+        token.tracker.entry(token, entry, kind, bracket, arm, terminal)
+
+
+def bond_marker(value, slot, *, owner=None, bracket=None, terminal=False):
+    """Record an endpoint where the existing lowering resolves its owner/slot."""
+    if not isinstance(value, SourceText):
+        return
+    span = origin_span(value)
+    owner_span = origin_span(owner)
+    if owner_span is None:
+        owner_span = next(
+            (
+                root
+                for root, _ in value.tracker.roots
+                if root.start <= span.start and span.end <= root.end
+            ),
+            None,
+        )
+    if owner_span is None:
+        raise ValueError("Crosslink endpoint has no original source owner")
+    kind = "terminal" if terminal else "bracket" if bracket is not None else "inline"
+    value.tracker.markers.append(
+        BondMarker(span, slot, owner_span, kind, origin_span(bracket))
+    )

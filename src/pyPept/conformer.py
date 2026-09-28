@@ -42,7 +42,6 @@ from Bio.PDB import PDBIO
 from pyPept.sequence import Sequence
 from pyPept.molecule import Molecule
 from pyPept.sequence import SequenceConstants
-from pyPept.sequence import get_monomer_info
 
 ##########################################################################
 # Functions and classes
@@ -114,28 +113,11 @@ class Conformer:
                   'Y': 'N[C@@]([H])(Cc1ccc(O)cc1)C(=O)O',
                   'V': 'N[C@@]([H])(C(C)C)C(=O)O'}
 
-        # Read the monomer dataframe
-        default_monomer_df_filepath = files(SequenceConstants.def_path).joinpath(SequenceConstants.def_lib_filename)
-        monomer_df_filepath = files(path).joinpath(monomer_lib)
-
-        if monomer_df_filepath.is_file() is False:
-            monomer_df_filepath = default_monomer_df_filepath
-
-        new_df = get_monomer_info(str(monomer_df_filepath))
-
-        try:
-            if SequenceConstants.chain_separator in biln:
-                m_seq = biln.split(SequenceConstants.chain_separator)[0]
-            else:
-                m_seq = biln
-        except ValueError:
-            warnings.warn(f"No main peptide was detected for peptide \
-                          with BILN: {biln}")
-            sys.exit(1)
-
-        # Loop through the list of monomers of the main peptide
+        sequence = Sequence(biln, path=path, monomer_lib=monomer_lib)
+        new_df = sequence.monomer_df
         total_monomers = []
-        monomers = m_seq.split(SequenceConstants.monomer_join)
+        monomers = [sequence.s_monomers[index]['m_abbr']
+                    for index in sequence.s_chains['s_monomerIDs'][0]]
         for res in monomers:
             mon = re.sub(r'\(\d+,\d+\)', '', res)
             if mon in aa_dict:
@@ -144,13 +126,17 @@ class Conformer:
                 # Check if a natural analog is available in the dataframe
                 type_mon = new_df.loc[new_df['m_abbr'] == mon, 'm_type'].item()
                 if type_mon != 'cap':
-                    nat_analog = new_df.loc[new_df['m_abbr'] == mon, 'natAnalog'].item()
-                    if nat_analog != "X":
+                    nat_analog = new_df.loc[mon].get('natAnalog', 'X')
+                    if nat_analog in aa_dict:
                         total_monomers.append(nat_analog)
                     else:
                         # Run a similarity calculation to chek the most similar AAs
-                        biln = f'{mon}'
-                        seq = Sequence(biln)
+                        if mon in sequence._synthetic_aa_smiles:
+                            monomer_biln = f'<{sequence._synthetic_aa_smiles[mon]}>'
+                        else:
+                            monomer_biln = mon
+                        seq = Sequence(
+                            monomer_biln, path=path, monomer_lib=monomer_lib)
                         mol = Molecule(seq)
                         romol = mol.get_molecule(fmt='ROMol')
                         mol1 = Chem.RemoveHs(romol)

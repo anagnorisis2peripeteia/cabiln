@@ -1,0 +1,97 @@
+[
+  {
+    "category": "GLP-1 / Incretin Agonists",
+    "items": [
+      {
+        "name": "Semaglutide",
+        "description": "GLP-1 agonist · 31 AA · C18 diacid via AEEA–AEEA–γGlu on K26 · Ozempic/Wegovy",
+        "cabiln": "H-Aib-E-G-T-F-T-S-D-V-S-S-Y-L-E-G-Q-A-A-K.[AEEA(4,2).AEEA(1,2).E_g(1,2).C18FA(1,2)]-E-F-I-A-W-L-V-R-G-R-G"
+      },
+      {
+        "name": "Liraglutide",
+        "description": "GLP-1 agonist · 31 AA · C16 palmitoyl via γGlu on K26 · Victoza/Saxenda",
+        "cabiln": "H-A-E-G-T-F-T-S-D-V-S-S-Y-L-E-G-Q-A-A-K.[E(4,4).Pal(1,2)]-E-F-I-A-W-L-V-R-G-R-G"
+      },
+      {
+        "name": "Tirzepatide",
+        "description": "GIP/GLP-1 dual agonist · 39 AA · C20 diacid via AEEA–AEEA–γGlu on K20 · Mounjaro/Zepbound",
+        "cabiln": "Y-Aib-E-G-T-F-T-S-D-Y-S-I-Aib-L-D-K-I-A-Q-K.[AEEA(4,2).AEEA(1,2).E_g(1,2).C20FA(1,2)]-A-F-V-Q-W-L-I-A-G-G-P-S-S-G-A-P-P-P-S-am"
+      },
+      {
+        "name": "Retatrutide",
+        "description": "GIP/GLP-1/GCG triple agonist · 39 AA · C20 diacid via AEEA–γGlu on K17 · LY3437943",
+        "cabiln": "Y-Aib-Q-G-T-F-T-S-D-Y-S-I-aMeLeu-L-D-K-K.[AEEA(4,2).E_g(1,2).C20FA(1,2)]-A-Q-Aib-A-F-I-E-Y-L-L-E-G-G-P-S-S-G-A-P-P-P-S-am"
+      },
+      {
+        "name": "Exenatide",
+        "description": "GLP-1 agonist · 39 AA · exendin-4 · amidated C-terminus · no lipid · Byetta",
+        "cabiln": "H-G-E-G-T-F-T-S-D-L-S-K-Q-M-E-E-E-A-V-R-L-F-I-E-W-L-K-N-G-G-P-S-S-G-A-P-P-P-S-am"
+      },
+      {
+        "name": "Lixisenatide",
+        "description": "GLP-1 agonist · 44 AA · exendin-4 + 6×Lys C-terminal extension · amidated · Adlyxin",
+        "cabiln": "H-G-E-G-T-F-T-S-D-L-S-K-Q-M-E-E-E-A-V-R-L-F-I-E-W-L-K-N-G-G-P-S-S-G-A-P-P-S-K-K-K-K-K-K-am"
+      }
+    ]
+  },
+  {
+    "category": "Bicyclic Peptides (Bicycle Therapeutics)",
+    "items": [
+      {
+        "name": "TBMB Bicycle — minimal",
+        "description": "Three-Cys scaffold cyclised with TBMB · Bicycle Therapeutics platform",
+        "cabiln": "ac-C.!1(4,4)-A-A-C.!2(4,5)-A-A-C.!3(4,6)-am%TBMB.!1.!2.!3"
+      },
+      {
+        "name": "TBMB Bicycle — asymmetric loops",
+        "description": "Variable loop lengths for epitope shape mimicry",
+        "cabiln": "ac-C.!1(4,4)-G-A-K-C.!2(4,5)-E-L-F-C.!3(4,6)-am%TBMB.!1.!2.!3"
+      }
+    ]
+  },
+  {
+    "category": "Cyclic Peptides",
+    "items": [
+      {
+        "name": "Head-to-tail cyclic with lipid",
+        "description": "N→C cyclised backbone with C20 lipid branch on K",
+        "cabiln": "!1-A-K.[E_g(4,4).AEEA(1,2).C20FA(1,2)]-G-A-!1"
+      },
+      {
+        "name": "Head-to-tail cyclic",
+        "description": "Simple N→C cyclised hexapeptide",
+        "cabiln": "!1-A-K-G-E-L-F-!1"
+      }
+    ]
+  },
+  {
+    "category": "Lipid Conjugates",
+    "items": [
+      {
+        "name": "Dual-lipid backbone",
+        "description": "Two independent γGlu–AEEA–C20 arms on a 3-residue backbone",
+        "cabiln": "ac-K.[E_g(4,4).AEEA(1,2).C20FA(1,2)]-G-K.[E_g(4,4).AEEA(1,2).C20FA(1,2)]-am"
+      },
+      {
+        "name": "AEEA PEG spacer",
+        "description": "Tandem AEEA mini-PEG linker — common in half-life extension",
+        "cabiln": "ac-K.[AEEA(4,2).AEEA(1,2)]-G-am"
+      }
+    ]
+  },
+  {
+    "category": "Branched Peptides",
+    "items": [
+      {
+        "name": "RGD pendant arm",
+        "description": "Aspartate isopeptide — RGD integrin-targeting arm via β-carboxyl",
+        "cabiln": "ac-G-D.[R(4,1).G(2,1).D(2,1).am(2,1)]-S-am"
+      },
+      {
+        "name": "Dual-E isopeptide scaffold",
+        "description": "Two glutamate γ-carboxyl isopeptide arms — asymmetric dual-branch scaffold",
+        "cabiln": "ac-E.[G(4,1).A(2,1).am(2,1)]-G-E.[A(4,1).G(2,1).am(2,1)]-am"
+      }
+    ]
+  }
+]

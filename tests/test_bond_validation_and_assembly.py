@@ -638,7 +638,7 @@ class TestCapMonomers:
     def test_obn_cap_warns_hydroxylamine(self):
         """OBn_ cap on Gly forms O-N bond — warns hydroxylamine, assembles OK."""
         with pytest.warns(UserWarning, match='hydroxylamine|hydroxamic'):
-            mol = _romol('OBn_-G-am')
+            mol = _romol('G.OBn_(1,1)-am')
         assert mol is not None
         dummies = [a for a in mol.GetAtoms() if a.GetAtomicNum() == 0]
         assert dummies == [], f"Dummy atoms leaked: {len(dummies)}"
@@ -646,7 +646,7 @@ class TestCapMonomers:
     def test_ome_cap_warns_hydroxylamine(self):
         """OMe_ cap on Gly forms O-N bond — warns hydroxylamine, assembles OK."""
         with pytest.warns(UserWarning, match='hydroxylamine|hydroxamic'):
-            mol = _romol('OMe_-G-am')
+            mol = _romol('G.OMe_(1,1)-am')
         assert mol is not None
 
 
@@ -5316,7 +5316,25 @@ class TestLibraryRoundTrip:
             if mol is None:
                 continue
             rgroups = self._parse_rgroups(df.loc[sym, 'm_Rgroups'])
-            stored = self._canonical(Chem.MolToSmiles(mol))
+            # Legacy secondary-N entries used R3 for the first sidechain slot.
+            # The spec reserves R3 for backbone N-modification even when absent.
+            # Normalize labels on a copy, plus their leaving-group keys; preserve
+            # the graph and compare canonical isomeric SMILES as before.
+            normalized = Chem.Mol(mol)
+            slots = {
+                atom.GetIsotope(): atom.GetNeighbors()[0].GetIdx()
+                for atom in mol.GetAtoms()
+                if atom.GetAtomicNum() == 0 and atom.GetDegree() == 1
+            }
+            legacy_sidechain = (
+                all(slot in slots for slot in (1, 2, 3))
+                and slots[3] != slots[1]
+            )
+            if legacy_sidechain:
+                for atom in normalized.GetAtoms():
+                    if atom.GetAtomicNum() == 0 and atom.GetIsotope() >= 3:
+                        atom.SetIsotope(atom.GetIsotope() + 1)
+            stored = self._canonical(Chem.MolToSmiles(normalized))
 
             full_smi = self._restore_full_smiles(mol, rgroups)
             if full_smi is None:
@@ -5327,11 +5345,13 @@ class TestLibraryRoundTrip:
             except Exception:
                 continue
 
+            assert result.chem_types.get(3) in (None, 'backbone_n_mod')
             result_canon = self._canonical(result.chuckles)
             stored_lgs = {}
             for i, lg in enumerate(rgroups, 1):
                 if lg is not None:
-                    stored_lgs[i] = lg
+                    slot = i + 1 if legacy_sidechain and i >= 3 else i
+                    stored_lgs[slot] = lg
 
             if stored == result_canon and result.leaving == stored_lgs:
                 passed += 1
@@ -6199,22 +6219,19 @@ class TestSmilesToCabiln:
                 f"Unexpected '?' token in output for {biln!r}: {result!r}"
             )
 
-    def test_unknown_monomer_raises_on_empty_lib_match(self):
-        """Rule 2: ValueError with 'Unrecognised monomer' is raised when _s2c_match
-        returns None (lib has no match for the residue fragment).
+    def test_library_gap_uses_verified_synthetic_fallback(self):
+        """Missing library recognition may emit only a structure-preserving token."""
+        import unittest.mock as mock
+        from pyPept import smiles as converter
 
-        We test this by patching _s2c_match to return (None, 0), simulating a
-        library gap.  This exercises the raise path that replaced `abbr or '?'`.
-        """
-        import sys as _sys, os as _os, unittest.mock as _mock
-        _repo_root = _os.path.abspath(_os.path.join(_os.path.dirname(__file__), '..'))
-        if _repo_root not in _sys.path:
-            _sys.path.insert(0, _repo_root)
-        import tools.live_renderer as _lr
-        smi = 'CC(=O)NCC(N)=O'  # ac-G-am — valid SMILES, would normally succeed
-        with _mock.patch.object(_lr, '_s2c_match', return_value=(None, 0)):
-            with pytest.raises(ValueError, match='Unrecognised monomer'):
-                _lr.smiles_to_cabiln_core(smi)
+        smiles = 'CC(=O)NCC(N)=O'
+        with mock.patch.object(converter, '_s2c_match', return_value=(None, 0)):
+            with pytest.warns(UserWarning, match='synthetic CABILN'):
+                cabiln, details = converter.smiles_to_cabiln_core(smiles)
+        assert '<' in cabiln
+        assert details == []
+        rebuilt = Molecule(Sequence(cabiln)).get_molecule(fmt='ROMol')
+        assert Chem.MolToSmiles(rebuilt) == Chem.MolToSmiles(Chem.MolFromSmiles(smiles))
 
     # ------------------------------------------------------------------
     # Edge-case tests 14-20, 22-30
@@ -6423,14 +6440,10 @@ class TestEdgeCasesErrorHandling:
         result, _ = smiles_to_cabiln_core(smi)
         assert '?' not in result, f"Unexpected '?' in output for disconnected SMILES: {result!r}"
 
-    def test_self_crosslink_same_id_twice_does_not_raise(self):
-        """Duplicate crosslink ID on the same residue (.!1.!1) is accepted without error.
-
-        This is a degenerate input that falls through to single-arm (no bond
-        formed); the Sequence constructor must not raise.
-        """
-        seq = Sequence('ac-C.!1(4,4).!1(4,4)-am')
-        assert seq is not None
+    def test_self_crosslink_same_id_twice_is_rejected(self):
+        """A bond cannot consume the same attachment slot twice."""
+        with pytest.raises(ValueError, match='same attachment'):
+            Sequence('ac-C.!1(4,4).!1(4,4)-am')
 
     def test_scaffold_with_zero_crosslinks_assembles(self):
         """Scaffold suffix with no crosslink annotations assembles (scaffold unattached)."""
@@ -6446,14 +6459,10 @@ class TestEdgeCasesErrorHandling:
         with pytest.raises(ValueError):
             Sequence('ac-C.!1(4,9)-am%TBMB.!1')
 
-    def test_same_rgroup_dual_crosslinks_assembles(self):
-        """R4 of Cys annotated for two different crosslinks: only one bond forms; no crash."""
-        import warnings
-        with warnings.catch_warnings():
-            warnings.simplefilter('ignore')
-            seq = Sequence('ac-C.!1(4,4).!2(4,4)-am%TBMB.!1.!2')
-            mol = Molecule(seq).get_molecule(fmt='ROMol')
-        assert mol is not None
+    def test_same_rgroup_dual_crosslinks_is_rejected(self):
+        """Conflicting annotations must not silently collapse to one bond."""
+        with pytest.raises(ValueError, match='already used'):
+            Sequence('ac-C.!1(4,4).!2(4,4)-am%TBMB.!1.!2')
 
     def test_crosslink_id_zero_assembles(self):
         """Crosslink ID !0 (zero) is accepted and forms a bond (disulfide)."""
@@ -6586,20 +6595,16 @@ class TestAdditionalChemistryEdgeCases:
 # ---------------------------------------------------------------------------
 # GLP-1 agonist drug SMILES → CABILN regression tests
 # SMILES sourced from Wikipedia infoboxes and PubChem (CID noted inline).
-# Each test passes the drug's canonical SMILES directly to smiles_to_cabiln_core
-# and asserts (a) zero unknown residues and (b) the expected CABILN string.
+# Each test verifies the supplied molecular structure after conversion. Historical
+# abbreviation strings are retained below for readable, faithful decompositions.
 # ---------------------------------------------------------------------------
 class TestGLP1DrugSMILES:
-    """Regression tests for smiles_to_cabiln_core on approved GLP-1 agonist drugs."""
+    """Molecular-fidelity regressions for the six named GLP-1 drug fixtures."""
 
     @staticmethod
-    def _smiles_to_cabiln(smi: str):
-        import sys as _sys, os as _os
-        _repo_root = _os.path.abspath(_os.path.join(_os.path.dirname(__file__), '..'))
-        if _repo_root not in _sys.path:
-            _sys.path.insert(0, _repo_root)
-        from tools.live_renderer import smiles_to_cabiln_core
-        return smiles_to_cabiln_core(smi)
+    def _convert_smiles(smi: str):
+        from pyPept.smiles import convert_smiles
+        return convert_smiles(smi)
 
     @pytest.mark.parametrize("drug,smiles,expected_cabiln,n_res", [
         pytest.param(
@@ -6721,24 +6726,43 @@ class TestGLP1DrugSMILES:
         ),
     ])
     def test_glp1_drug_smiles_roundtrip(self, drug, smiles, expected_cabiln, n_res):
-        """Wikipedia/PubChem SMILES for approved GLP-1 agonists must decode to
-        the expected CABILN with the correct number of residues and zero unknowns.
+        """Preserve the supplied molecular graph and every defined stereo center.
 
-        SMILES sources:
-          semaglutide, liraglutide, exenatide — Wikipedia infobox
-          lixisenatide, tirzepatide, retatrutide — PubChem canonical SMILES
+        The historical expected strings identify useful library decompositions,
+        but some silently change a histidine tautomer or omit defined stereo.
+        Exact isomeric SMILES equality is required for fully specified fixtures.
+        Retatrutide omits two alpha configurations: library inference is allowed
+        there only if connectivity and every supplied configuration are retained.
         """
-        cabiln, details = self._smiles_to_cabiln(smiles)
-        unknown = [abbr for abbr, _, _ in details if abbr == '?']
-        assert not unknown, (
-            f"{drug}: {len(unknown)} unknown residue(s) in {cabiln!r}"
-        )
-        assert len(details) == n_res, (
-            f"{drug}: expected {n_res} residues, got {len(details)}"
-        )
-        assert cabiln == expected_cabiln, (
-            f"{drug}: CABILN mismatch\n  got:      {cabiln!r}\n  expected: {expected_cabiln!r}"
-        )
+        result = self._convert_smiles(smiles)
+        cabiln, details = result.cabiln, result.details
+        source = Chem.MolFromSmiles(smiles)
+        rebuilt = Molecule(Sequence(cabiln)).get_molecule(fmt='ROMol')
+        assert all(abbr != '?' for abbr, _, _ in details)
+        if drug != 'retatrutide':
+            assert Chem.MolToSmiles(rebuilt) == Chem.MolToSmiles(source)
+        else:
+            source_flat, rebuilt_flat = Chem.Mol(source), Chem.Mol(rebuilt)
+            Chem.RemoveStereochemistry(source_flat)
+            Chem.RemoveStereochemistry(rebuilt_flat)
+            assert Chem.MolToSmiles(rebuilt_flat) == Chem.MolToSmiles(source_flat)
+            assert rebuilt.HasSubstructMatch(source, useChirality=True)
+        # Molecular identity and editable residue decomposition are independent
+        # requirements. A whole-component synthetic fallback fails this check.
+        assert len(details) == n_res
+        assert result.inferred_stereo == (drug == 'retatrutide')
+        if drug in {'semaglutide', 'exenatide', 'lixisenatide'}:
+            synthetic = [abbr for abbr, _, _ in details if abbr.startswith('<')]
+            assert len(synthetic) == 1
+            ordinary_name = 'R' if drug == 'exenatide' else 'H'
+            assert cabiln.replace(synthetic[0], ordinary_name) == expected_cabiln
+            assert result.synthetic_components == (0,)
+            assert any('local synthetic' in message for message in result.warnings)
+        else:
+            assert result.synthetic_components == ()
+        if drug in {'liraglutide', 'tirzepatide'}:
+            assert cabiln == expected_cabiln
+
 
 
 if __name__ == '__main__':

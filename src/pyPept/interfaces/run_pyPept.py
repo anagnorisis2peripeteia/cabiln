@@ -154,12 +154,8 @@ def main():
     # Handle as a pyPept.Sequence object
     ########################################
     seq = Sequence(biln)
-    # Correct PDB atom names
-    seq = correct_pdb_atoms(seq)
-    # Loop with the included monomers
-    mm_values = seq.s_monomers
-    for i, monomer in enumerate(mm_values):
-        mol_mon = monomer['m_romol']
+    if not args.noconf:
+        seq = correct_pdb_atoms(seq)
 
     # Generate the RDKit object
     logger.info("2. Creating the RDKit object")

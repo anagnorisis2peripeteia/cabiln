@@ -26,7 +26,10 @@ import logging
 from importlib.resources import files
 
 # Third-party libraries
+from rdkit import Chem
 from rdkit.Chem import PandasTools
+
+from pyPept.monomer_store import _index_monomer_names, library_path
 
 
 ##########################################################################
@@ -70,7 +73,11 @@ class MonomerLibrary:
         :type monomer_lib_file: str
         """
 
-        monomer_df_filepath = files(data_dir).joinpath(monomer_lib_file)
+        if (data_dir == MonomerConstants.def_path
+                and monomer_lib_file == MonomerConstants.def_lib_filename):
+            monomer_df_filepath = library_path()
+        else:
+            monomer_df_filepath = files(data_dir).joinpath(monomer_lib_file)
 
         if monomer_df_filepath.is_file() is False:
             backup_path = files(MonomerConstants.def_path).joinpath(
@@ -100,6 +107,13 @@ class MonomerLibrary:
         :return: monomer dictionary as a dataframe
         """
         df_group = PandasTools.LoadSDF(path)
+        symbols = list(df_group['symbol'])
+        abbreviations = list(df_group.get('m_abbr', [None] * len(symbols)))
+        _index_monomer_names(zip(symbols, abbreviations))
+        df_group['m_abbr'] = [
+            abbr.strip() if isinstance(abbr, str) and abbr.strip() else symbol
+            for symbol, abbr in zip(symbols, abbreviations)
+        ]
 
         # Only m_Rgroups needs parsing; m_RgroupIdx and m_attachmentPointIdx
         # are vestigial sidecar properties — attachment points are now read
@@ -108,7 +122,7 @@ class MonomerLibrary:
         df_group[rg_col] = df_group[rg_col].astype(object)
         for idx in df_group.index:
             change = df_group[rg_col][idx].split(MonomerConstants.sdf_change_separator)
-            df_group.at[idx, rg_col] = [None if v == 'None' else v for v in change]
+            df_group.at[idx, rg_col] = [None if v.strip() in ('None', '') else v.strip() for v in change]
         df_group = df_group.set_index('symbol')
         df_group = df_group.rename(columns={"ROMol": "m_romol"})
 
@@ -145,7 +159,8 @@ class MonomerLibrary:
         """Return the CHUCKLES unit SMILES for a monomer row.
 
         R-group dummy atoms are written as isotope-labelled wildcards:
-        slot 0 → [1*] (N-term), slot 1 → [2*] (C-term), slot 2 → [3*] (sidechain).
+        R1 → [1*] (N-term), R2 → [2*] (C-term), R3 → [3*] (N-modification),
+        and R4+ are sidechain attachment points.
         Concatenating unit SMILES across a sequence at matching slots yields
         the full-peptide SMILES (Siani et al. JCICS 1994).
 
@@ -156,10 +171,7 @@ class MonomerLibrary:
         mol = monomer_row['m_romol']
         if mol is None:
             return ''
-        try:
-            return Chem.MolToSmiles(mol)
-        except Exception:
-            return ''
+        return Chem.MolToSmiles(mol)
 
     ############################################################
     def GetRGroups(self, monomer):

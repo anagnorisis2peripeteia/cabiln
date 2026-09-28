@@ -1,0 +1,5 @@
+# Optional dependencies for the interactive peptide builder.
+fastapi >= 0.100
+uvicorn
+pydantic >= 2
+epam.indigo
