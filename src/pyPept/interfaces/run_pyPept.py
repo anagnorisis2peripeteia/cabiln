@@ -22,16 +22,15 @@ __version__ = "1.0"
 import argparse
 import logging
 import sys
+import warnings
 
 # RDKit
 from rdkit import Chem
 from rdkit.Chem import Draw
 
 # PyPept modules
-from pyPept.sequence import Sequence
+from pyPept.inputs import read_input
 from pyPept.sequence import correct_pdb_atoms
-from pyPept.converter import Converter
-from pyPept.molecule import Molecule
 from pyPept.conformer import Conformer, ConformerConstants, SecStructPredictor
 
 
@@ -133,39 +132,37 @@ def main():
     ########################################
     # What flavor of input to handle?
     ########################################
-    if args.biln:
-        # Create the Sequence object
-        biln = args.biln
-        logger.info("1. Processing the BILN sequence %s", biln)
-    elif args.helm:
-        b = Converter(helm=args.helm)
-        biln = b.get_biln()
-        logger.info("1. Processing the HELM->BILN sequence %s", biln)
-    elif args.fasta:
-        residues=list(args.fasta)
-        biln = "-".join(residues)
-        logger.info("1. Processing the FASTA->BILN sequence %s", biln)
-    else:
+    selected = next(
+        ((kind, getattr(args, kind)) for kind in ("biln", "helm", "fasta")
+         if getattr(args, kind)),
+        None,
+    )
+    if selected is None:
         logger.error(
             "An input should be provided using BILN, HELM or FASTA format.")
         sys.exit(1)
+    kind, source = selected
+    # The historical --biln flag accepts current CABILN, as before.
+    parsed = read_input(
+        source, input_format="cabiln" if kind == "biln" else kind,
+        warning_sink=warnings.warn,
+    )
+    biln, seq = parsed.source, parsed.sequence
+    label = "BILN" if kind == "biln" else f"{kind.upper()}->BILN"
+    logger.info("1. Processing the %s sequence %s", label, biln)
 
-    ########################################
-    # Handle as a pyPept.Sequence object
-    ########################################
-    seq = Sequence(biln)
     if not args.noconf:
-        seq = correct_pdb_atoms(seq)
+        parsed.sequence = seq = correct_pdb_atoms(seq)
 
     # Generate the RDKit object
     logger.info("2. Creating the RDKit object")
     if args.depiction in ["local", "rdkit"]:
-        mol = Molecule(seq, args.depiction)
+        romol = parsed.assemble(depiction=args.depiction)
+        mol = parsed.assembly
     else:
         logger and logger.error(
             "Please select a depiction mode from (local, rdkit)")
         exit(2)
-    romol = mol.get_molecule(fmt='ROMol')
     print(f"The SMILES of the peptide is: {Chem.MolToSmiles(romol)}")
     if args.sdf2D:
         mol.write_molecule(fmt='SDF', out_file=f'{args.prefix}.sdf')

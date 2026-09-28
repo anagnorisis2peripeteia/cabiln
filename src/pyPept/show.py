@@ -104,51 +104,21 @@ def show(source, fmt='auto', output=None, open_after=True, size=(600, 400)):
 
 def _to_rdmol(source):
     """Return (RDKit ROMol, n_residues_estimate).  n_residues may be None."""
-    # Already an RDKit mol
-    if isinstance(source, Chem.rdchem.Mol):
-        return source, None
+    from pyPept.inputs import detect_input
 
-    # pyPept Molecule wrapper
+    def report_error(exc):
+        print(f"[pyPept.show] Could not parse {source!r} as BILN: {exc}")
+
     try:
-        from pyPept.molecule import Molecule as _Mol
-        if isinstance(source, _Mol):
-            return source.get_molecule(fmt='ROMol'), None
-    except ImportError:
-        pass
-
-    # pyPept Sequence -> assemble
-    try:
-        from pyPept.sequence import Sequence as _Seq
-        from pyPept.molecule import Molecule as _Mol
-        if isinstance(source, _Seq):
-            n = source.length()
-            mol = _Mol(source).get_molecule(fmt='ROMol')
-            return mol, n
-    except ImportError:
-        pass
-
-    # String — try as BILN first, fall back to SMILES
-    if isinstance(source, str):
-        # SMILES heuristic
-        _SMILES_CHARS = set('()[]=#@+\\/')
-        if _SMILES_CHARS & set(source):
-            mol = Chem.MolFromSmiles(source)
-            return mol, None
-
-        # Try BILN
-        try:
-            from pyPept.sequence import Sequence as _Seq
-            from pyPept.molecule import Molecule as _Mol
-            seq = _Seq(source)
-            n = seq.length()
-            mol = _Mol(seq).get_molecule(fmt='ROMol')
-            return mol, n
-        except Exception as exc:
-            print(f"[pyPept.show] Could not parse {source!r} as BILN: {exc}")
-            mol = Chem.MolFromSmiles(source)
-            return mol, None
-
-    return None, None
+        parsed = detect_input(source, policy="display", on_notation_error=report_error)
+    except TypeError:
+        return None, None
+    except ValueError:
+        if not isinstance(source, str):
+            raise
+        return None, None
+    count = parsed.sequence.length() if parsed.sequence is not None else None
+    return parsed.molecule, count
 
 
 # ── Format detection ─────────────────────────────────────────────────────────

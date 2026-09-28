@@ -26,6 +26,7 @@ import warnings
 # pyPept functions
 from pyPept.sequence import SequenceConstants
 from pyPept.sequence import split_outside
+from pyPept.notation import legacy_attachment_slot
 
 ##########################################################################
 # Main class
@@ -140,16 +141,14 @@ class Converter:
         chains = copy.deepcopy(self.polymerinfo["chains"])
         bonds = copy.deepcopy(self.polymerinfo["bonds"])
 
-        def _helm_slot(rg):
-            """HELM/old-BILN R3 (sidechain) → pyPept slot 4 (backbone_n_mod at slot 3)."""
-            return 4 if rg == 3 else rg
-
         # move bond info into monomers using CABILN .!n(y,z) inline notation
         for ibond, bond in enumerate(bonds):
             c1_value, res1, rgroup1, c2_value, res2, rgroup2 = bond
             bid = ibond + 1
+            slot1 = legacy_attachment_slot(rgroup1)
+            slot2 = legacy_attachment_slot(rgroup2)
             chains[c1_value][res1] = (
-                f"{chains[c1_value][res1]}.!{bid}({_helm_slot(rgroup1)},{_helm_slot(rgroup2)})")
+                f"{chains[c1_value][res1]}.!{bid}({slot1},{slot2})")
             chains[c2_value][res2] = (
                 f"{chains[c2_value][res2]}.!{bid}")
 
@@ -327,41 +326,7 @@ class Converter:
         :param chuckles: CHUCKLES sequence string
         :type chuckles: str
         """
-        chains = chuckles.split('|')
-        bondinfo = {}
-        list_of_simple_polymers = []
-
-        for cidx, chain in enumerate(chains):
-            residues = chain.split('.')
-            polymer = []
-            for ridx, res in enumerate(residues):
-                match = re.findall(r"\((\d+),(\d+)\)", res)
-                resname = re.sub(r"\(.*\)", "", res)
-                if match:
-                    for m_val in match:
-                        bidx = m_val[0]
-                        gidx = int(m_val[1])
-                        try:
-                            bondinfo[bidx].append(cidx)
-                        except KeyError:
-                            bondinfo[bidx] = [cidx]
-                        bondinfo[bidx].append(ridx)
-                        bondinfo[bidx].append(gidx)
-                polymer.append(resname)
-            list_of_simple_polymers.append(polymer)
-
-        self.polymerinfo["chains"] = list_of_simple_polymers
-
-        list_of_connections = []
-        for key in bondinfo:
-            if len(bondinfo[key]) != 6:
-                raise ValueError(
-                    f"CHUCKLES bond {key} must have exactly two endpoints.")
-            c1_val, r1_val, g1_val, c2_val, r2_val, g2_val = bondinfo[key]
-            list_of_connections.append(
-                [c1_val, r1_val, g1_val, c2_val, r2_val, g2_val])
-
-        self.polymerinfo["bonds"] = list_of_connections
+        self._read_legacy(chuckles, "|", ".", "CHUCKLES")
 
     ############################################################
     def __to_chuckles(self):
@@ -407,49 +372,25 @@ class Converter:
             raise ValueError(
                 "Converter(biln=...) accepts legacy BILN, not CABILN attachments. "
                 "Use Sequence for CABILN parsing.")
-        # split BILN into chains
-        chains = biln.split(".")
+        self._read_legacy(biln, ".", SequenceConstants.monomer_join, "BILN")
 
-        bondinfo = {}
-        list_of_simple_polymers = []
-
-        for cidx, chain in enumerate(chains):
-            residues = chain.split(SequenceConstants.monomer_join)
-
-            # go through residues and collect the bond information needed
-            polymer = []
-            for ridx, res in enumerate(residues):
-                match = re.findall(r"\((\d+),(\d+)\)", res)
-                resname = re.sub(r"\(.*\)", "", res)
-                if match:
-                    for m_val in match:
-                        bidx = m_val[0]
-                        gidx = int(m_val[1])
-                        try:
-                            bondinfo[bidx].append(cidx)
-                        except KeyError:
-                            bondinfo[bidx] = [cidx]
-
-                        bondinfo[bidx].append(ridx)
-                        bondinfo[bidx].append(gidx)
-
-                polymer.append(resname)
-            list_of_simple_polymers.append(polymer)
-
-        self.polymerinfo["chains"] = list_of_simple_polymers
-
-        # compile bondinfo
-        list_of_connections = []
-        for key in bondinfo:
-            if len(bondinfo[key]) != 6:
-                raise ValueError(f"BILN bond {key} must have exactly two endpoints.")
-
-            c1_val, r1_val, g1_val, c2_val, r2_val, g2_val = bondinfo[key]
-
-            bond = [c1_val, r1_val, g1_val, c2_val, r2_val, g2_val]
-            list_of_connections.append(bond)
-
-        self.polymerinfo["bonds"] = list_of_connections
+    def _read_legacy(self, text, chain_separator, monomer_separator, kind):
+        """Read paired legacy endpoints once for BILN and CHUCKLES."""
+        chains, endpoints = [], {}
+        for chain_index, chain in enumerate(text.split(chain_separator)):
+            residues = []
+            for residue_index, residue in enumerate(chain.split(monomer_separator)):
+                for bond_id, slot in re.findall(r"\((\d+),(\d+)\)", residue):
+                    endpoints.setdefault(bond_id, []).extend(
+                        (chain_index, residue_index, int(slot))
+                    )
+                residues.append(re.sub(r"\(.*\)", "", residue))
+            chains.append(residues)
+        self.polymerinfo["chains"] = chains
+        for bond_id, bond in endpoints.items():
+            if len(bond) != 6:
+                raise ValueError(f"{kind} bond {bond_id} must have exactly two endpoints.")
+        self.polymerinfo["bonds"] = list(endpoints.values())
 
     ############################################################
     def get_helm(self):
@@ -462,10 +403,12 @@ class Converter:
 
     ############################################################
     def get_biln(self):
-        """Return a BILN string from the PolymerInfo generated at
-        instantiation.
+        """Return CABILN text under the retained historical method name.
 
-        :return: str"""
+        Legacy input and HELM attachment R3 become modern CABILN R4. Pass this
+        result to Sequence, not Converter(biln=...), which reads legacy BILN.
+
+        :return: str or None"""
         biln = self.__to_biln()
         return biln
 

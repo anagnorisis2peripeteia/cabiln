@@ -5,9 +5,10 @@ from __future__ import annotations
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
+from pyPept.inputs import detect_input, read_input
+
 from .cache import _rc_get, _rc_put, library_version
 from .drawing import _draw_mol, _mol_block
-from .notation import parse_source
 from .schemas import _CabilnReq, _MolBlockReq, _ReferenceReq, _SmilesReq, _VerifyReq
 
 router = APIRouter()
@@ -23,15 +24,13 @@ def render(req: _CabilnReq):
     try:
         from rdkit.Chem.Descriptors import ExactMolWt
 
-        from pyPept.molecule import Molecule
         from pyPept.peptide import Peptide
 
         messages = []
-        seq, parsed_source = parse_source(
-            req.cabiln, warning_sink=messages.append, track_source=True
-        )
-        mol = Molecule(seq)
-        romol = mol.get_molecule(fmt="ROMol")
+        parsed = read_input(req.cabiln, warning_sink=messages.append, track_source=True)
+        seq, parsed_source = parsed.sequence, parsed.source
+        romol = parsed.assemble()
+        mol = parsed.assembly
         if romol is None:
             return JSONResponse(
                 {"error": "Assembly produced no molecule"}, status_code=400
@@ -76,12 +75,9 @@ def render(req: _CabilnReq):
 @router.post("/render_smiles")
 def render_smiles(req: _SmilesReq):
     try:
-        from rdkit import Chem
         from rdkit.Chem.Descriptors import ExactMolWt
 
-        romol = Chem.MolFromSmiles(req.smiles)
-        if romol is None:
-            return JSONResponse({"error": "Invalid SMILES"}, status_code=400)
+        romol = read_input(req.smiles, input_format="smiles").molecule
 
         w, h = max(400, req.width), max(300, req.height)
         svg = _draw_mol(romol, w, h)
@@ -100,60 +96,12 @@ def render_reference(req: _ReferenceReq):
     from rdkit import Chem
     from rdkit.Chem.Descriptors import ExactMolWt
 
-    txt = req.input.strip()
     w, h = max(400, req.width), max(300, req.height)
-    romol = None
-    fmt = None
-
-    romol = Chem.MolFromSmiles(txt)
-    if romol is not None:
-        fmt = "SMILES"
-
-    if romol is None and "PEPTIDE" in txt.upper() and "$" in txt:
-        try:
-
-            from pyPept.converter import Converter
-            from pyPept.molecule import Molecule
-            from pyPept.sequence import Sequence
-
-            conv = Converter(helm=txt)
-            biln = conv.get_biln()
-            seq = Sequence(biln, fmt="biln")
-            mol = Molecule(seq)
-            romol = mol.get_molecule(fmt="ROMol")
-            fmt = "HELM"
-        except Exception:
-            pass
-
-    if romol is None:
-        try:
-            from pyPept.molecule import Molecule
-            from pyPept.sequence import Sequence
-
-            seq = Sequence(txt, fmt="biln")
-            mol = Molecule(seq)
-            romol = mol.get_molecule(fmt="ROMol")
-            fmt = "BILN"
-        except Exception:
-            pass
-
-    if romol is None:
-        try:
-            from pyPept.molecule import Molecule
-            from pyPept.sequence import Sequence
-
-            seq, _ = parse_source(txt)
-            mol = Molecule(seq)
-            romol = mol.get_molecule(fmt="ROMol")
-            fmt = "CABILN"
-        except Exception:
-            pass
-
-    if romol is None:
-        return JSONResponse(
-            {"error": "Could not parse as SMILES, BILN, HELM, or CABILN"},
-            status_code=400,
-        )
+    try:
+        parsed = detect_input(req.input)
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    romol, fmt = parsed.molecule, parsed.format
 
     svg = _draw_mol(romol, w, h)
     smiles = Chem.MolToSmiles(romol)
@@ -171,9 +119,7 @@ def render_mol(req: _MolBlockReq):
         from rdkit import Chem
         from rdkit.Chem.Descriptors import ExactMolWt
 
-        romol = Chem.MolFromMolBlock(req.mol_block)
-        if romol is None:
-            return JSONResponse({"error": "Invalid .mol data"}, status_code=400)
+        romol = read_input(req.mol_block, input_format="mol").molecule
 
         w, h = max(400, req.width), max(300, req.height)
         svg = _draw_mol(romol, w, h)
@@ -191,17 +137,8 @@ def render_mol(req: _MolBlockReq):
 @router.post("/verify")
 def verify(req: _VerifyReq):
     try:
-        from rdkit import Chem
-
-        from pyPept.molecule import Molecule
-
-        smiles_mol = Chem.MolFromSmiles(req.smiles)
-        if smiles_mol is None:
-            return JSONResponse({"error": "Invalid SMILES"}, status_code=400)
-
-        seq, _ = parse_source(req.cabiln)
-        mol = Molecule(seq)
-        cabiln_mol = mol.get_molecule(fmt="ROMol")
+        smiles_mol = read_input(req.smiles, input_format="smiles").molecule
+        cabiln_mol = read_input(req.cabiln).assemble()
         if cabiln_mol is None:
             return JSONResponse(
                 {"error": "CABILN assembly produced no molecule"}, status_code=400
