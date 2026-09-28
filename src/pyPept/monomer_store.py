@@ -184,11 +184,11 @@ def monomer_record(
     from pyPept.attachments import attachment_sites
     from pyPept.interfaces.reaction_library import _CHEM_TYPE_REGISTRY, REACTION_INDEX
     from pyPept.leaving_groups import restore_leaving_groups
-    from pyPept.structure import require_supported_stereo
+    from pyPept.structure import parse_template_smiles, require_supported_stereo
 
     _index_monomer_names([(symbol, symbol)])
     mol = (
-        Chem.MolFromSmiles(template)
+        parse_template_smiles(template)
         if isinstance(template, str)
         else Chem.Mol(template)
     )

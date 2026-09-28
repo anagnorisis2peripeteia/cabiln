@@ -51,7 +51,7 @@ from pathlib import Path
 from rdkit import Chem, RDLogger
 from rdkit.Chem import PandasTools, SDWriter, rdDepictor
 
-from pyPept.structure import require_supported_stereo
+from pyPept.structure import parse_template_smiles, require_supported_stereo
 from pyPept.monomer_store import format_chem_types, monomer_record, parse_chem_types
 
 class ActivationError(ValueError):
@@ -793,8 +793,8 @@ def derive_monomers(csv_path, rebuild=False):
         token = row.get("token", "").strip()
         existing_chuckles = row.get("chuckles", "").strip()
         row_type = row.get("type", "").strip()
-        existing = Chem.MolFromSmiles(existing_chuckles) if existing_chuckles else None
         try:
+            existing = parse_template_smiles(existing_chuckles) if existing_chuckles else None
             if existing is not None and not (rebuild and row_type == "aa"):
                 chem_types = _row_chemistry(row, existing)
             else:
@@ -805,7 +805,7 @@ def derive_monomers(csv_path, rebuild=False):
                     raise ActivationError(norm_err)
                 if is_chuckles:
                     row["chuckles"] = normalized
-                    chem_types = _row_chemistry(row, Chem.MolFromSmiles(normalized))
+                    chem_types = _row_chemistry(row, parse_template_smiles(normalized))
                 else:
                     overrides = (
                         None

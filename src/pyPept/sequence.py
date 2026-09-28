@@ -40,6 +40,7 @@ from importlib.resources import files
 import hashlib
 import numpy as np
 from rdkit import Chem
+from pyPept.structure import parse_template_smiles
 
 
 ##########################################################################
@@ -85,7 +86,7 @@ def _build_synthetic_aa(sidechain_smi):
     else:
         smi = f'[1*]NC({sc})C(=O)[2*]'
     try:
-        return Chem.MolFromSmiles(smi)
+        return parse_template_smiles(smi)
     except Exception:
         return None
 
@@ -122,7 +123,7 @@ def _build_synthetic_cap(cap_smi, side):
     else:
         return None
     try:
-        return Chem.MolFromSmiles(smi)
+        return parse_template_smiles(smi)
     except Exception:
         return None
 

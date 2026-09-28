@@ -131,6 +131,58 @@ def test_record_construction_retains_unrelated_properties_without_mutation():
     assert stored.GetProp("symbol") == "Annotated"
 
 
+@pytest.mark.parametrize("entry", ["csv", "web"])
+def test_extended_smiles_keeps_numbered_slots_through_registration(
+    tmp_path, monkeypatch, entry
+):
+    from pyPept.molecule import Molecule
+    from pyPept.sequence import Sequence
+
+    path = tmp_path / "monomers.sdf"
+    path.touch()
+    monkeypatch.setenv("CABILN_MONOMER_LIBRARY", str(path))
+    template = "[1*]N[C@@H]([13CH3])C([2*])=O |a:2|"
+    try:
+        if entry == "csv":
+            csv_path = tmp_path / "monomers.csv"
+            author_csv(
+                csv_path,
+                {
+                    "token": "AbsoluteAla",
+                    "input": template,
+                    "type": "aa",
+                    "r1_leaving": "[H]",
+                    "r2_leaving": "[OH]",
+                },
+            )
+            for _ in range(2):
+                assert build_library_from_csv(csv_path, path) == (1, [])
+        else:
+            with TestClient(create_app(allow_registration=True)) as client:
+                response = client.post(
+                    "/register_monomer",
+                    json={
+                        "abbr": "AbsoluteAla",
+                        "name": "Absolute alanine",
+                        "chuckles": template,
+                        "leaving": {1: "[H]", 2: "[OH]"},
+                        "chem_types": {1: "backbone_n", 2: "backbone_c"},
+                    },
+                )
+                assert response.status_code == 200, response.text
+        stored = one_record(path)
+        assert {
+            atom.GetIsotope() for atom in stored.GetAtoms() if atom.GetAtomicNum() == 0
+        } == {1, 2}
+        assert stored.GetProp("m_chem_types") == "1:backbone_n,2:backbone_c"
+        product = Molecule(Sequence("AbsoluteAla")).mol
+        assert Chem.MolToSmiles(product) == Chem.MolToSmiles(
+            Chem.MolFromSmiles("N[C@@H]([13CH3])C(=O)O")
+        )
+    finally:
+        monomer_store._invalidate_sdf()
+
+
 def test_cli_and_http_construct_equivalent_definitions(tmp_path, monkeypatch):
     path = tmp_path / "monomers.sdf"
     path.touch()

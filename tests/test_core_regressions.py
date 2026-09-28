@@ -621,6 +621,12 @@ def test_absolute_stereo_groups_remain_supported():
     assert smiles("<[1*]N[C@@H](C)C([2*])=O |a:2|>") == smiles("A")
 
 
+def test_absolute_stereo_preserves_synthetic_aldehyde_marker():
+    source = "<[1*]N[C@@H]([13CH3])C([2*:99])=O |a:2|>"
+    expected = Chem.MolFromSmiles("N[C@@H]([13CH3])C=O")
+    assert smiles(source) == Chem.MolToSmiles(expected)
+
+
 @pytest.mark.parametrize("abbreviation", ["AliasGly", None])
 def test_external_library_identifiers_resolve_consistently(
     tmp_path, monkeypatch, abbreviation
