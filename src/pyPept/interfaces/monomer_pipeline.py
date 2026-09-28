@@ -52,6 +52,7 @@ from rdkit import Chem, RDLogger
 from rdkit.Chem import PandasTools, SDWriter, rdDepictor
 
 from pyPept.structure import require_supported_stereo
+from pyPept.monomer_store import format_chem_types, monomer_record, parse_chem_types
 
 class ActivationError(ValueError):
     """Raised when pre_activate cannot generate a valid CHUCKLES fragment."""
@@ -589,7 +590,6 @@ def pre_activate(smiles, slot_overrides=None, leaving_overrides=None,
         raise ActivationError(str(exc)) from exc
     mol = Chem.AddHs(mol)
 
-    _is_cap = False
     _sidechain_only = False
     if backbone_indices is not None:
         backbone = dict(backbone_indices)
@@ -597,7 +597,6 @@ def pre_activate(smiles, slot_overrides=None, leaving_overrides=None,
         backbone = find_backbone_slots(mol)
     if backbone is None:
         backbone, backbone_chem_types = find_cap_slots(mol)
-        _is_cap = True
         if backbone is None:
             # Last resort: sidechain-only molecule (multi-arm crosslinkers)
             _sc_all = find_sidechain_slots(mol, assigned_atoms=set(), start_slot=4)
@@ -754,145 +753,131 @@ _LG_COLS = {
 }
 
 
+def _row_leaving(row):
+    """Read legacy columns and additional explicit slots without renumbering."""
+    return {
+        int(match.group(1)): value.strip()
+        for column, value in row.items()
+        if (match := re.fullmatch(r"r([1-9][0-9]*)_leaving", column))
+        and value
+        and value.strip() != "None"
+    }
+
+
+def _row_chemistry(row, molecule):
+    from pyPept.attachments import attachment_sites
+
+    declared = parse_chem_types(row.get("chem_types", ""))
+    if declared:
+        return declared
+    leaving = _row_leaving(row)
+    groups = [leaving.get(slot) for slot in range(1, max(leaving, default=0) + 1)]
+    return {
+        site["slot"]: site["chem_type"] for site in attachment_sites(molecule, groups)
+    }
+
+
 def derive_monomers(csv_path, rebuild=False):
-    """
-    Derive CHUCKLES and leaving groups for all monomers in a CSV.
+    """Read CSV and derive activated structures and persistent slot metadata.
 
-    Pure transform — reads the CSV, runs pre_activate() for any row that
-    lacks a valid CHUCKLES (or all 'aa' rows when rebuild=True), and returns
-    the updated rows as a list of dicts.  Nothing is written to disk.
-
-    :param csv_path: path to the monomer CSV.
-    :param rebuild: if True, re-derive all 'aa' type rows even if CHUCKLES present.
-    :returns: (rows, errors) where rows is list[dict] and errors is list[str].
+    Existing CSV files need no schema migration. Chemistry declarations are
+    added when absent; explicit declarations and additional leaving-group
+    columns survive unchanged builds. No files are written by this transform.
     """
     csv_path = Path(csv_path)
-    with open(csv_path, newline='', encoding='utf-8') as f:
+    with open(csv_path, newline="", encoding="utf-8") as f:
         rows = list(csv.DictReader(f))
 
     errors = []
     for row in rows:
-        token = row.get('token', '').strip()
-        inp = row.get('input', '').strip()
-        existing_chuckles = row.get('chuckles', '').strip()
-        row_type = row.get('type', '').strip()
-        chem_types_derived = {}
-
-        chuckles_valid = (
-            bool(existing_chuckles and Chem.MolFromSmiles(existing_chuckles))
-            and not (rebuild and row_type == 'aa')
-        )
-
-        if chuckles_valid:
-            continue  # keep existing columns as-is
-
-        smiles_or_chuck, is_chuckles, norm_err = normalize_input(inp)
-        if norm_err:
-            errors.append(f"{token}: {norm_err}")
-            warnings.warn(f"Skipping monomer '{token}': {norm_err}")
-            continue
-
-        if is_chuckles:
-            row['chuckles'] = smiles_or_chuck
-            continue
-
-        leaving_overrides = None if (rebuild and row_type == 'aa') else (
-            {slot: val for slot, col in _LG_COLS.items()
-             if (val := (row.get(col) or '').strip()) and val != 'None'} or None
-        )
+        token = row.get("token", "").strip()
+        existing_chuckles = row.get("chuckles", "").strip()
+        row_type = row.get("type", "").strip()
+        existing = Chem.MolFromSmiles(existing_chuckles) if existing_chuckles else None
         try:
-            result = pre_activate(smiles_or_chuck, leaving_overrides=leaving_overrides)
-        except ActivationError as e:
-            errors.append(f"{token}: {e}")
-            warnings.warn(f"Skipping monomer '{token}': {e}")
-            continue
-
-        row['chuckles'] = result.chuckles
-        chem_types_derived = result.chem_types
-        for slot, col in _LG_COLS.items():
-            row[col] = result.leaving.get(slot, '') or ''
-        row['_chem_types'] = chem_types_derived  # transient; not written to CSV
+            if existing is not None and not (rebuild and row_type == "aa"):
+                chem_types = _row_chemistry(row, existing)
+            else:
+                normalized, is_chuckles, norm_err = normalize_input(
+                    row.get("input", "").strip()
+                )
+                if norm_err:
+                    raise ActivationError(norm_err)
+                if is_chuckles:
+                    row["chuckles"] = normalized
+                    chem_types = _row_chemistry(row, Chem.MolFromSmiles(normalized))
+                else:
+                    overrides = (
+                        None
+                        if (rebuild and row_type == "aa")
+                        else (_row_leaving(row) or None)
+                    )
+                    result = pre_activate(normalized, leaving_overrides=overrides)
+                    row["chuckles"] = result.chuckles
+                    for slot in (
+                        set(_LG_COLS) | set(_row_leaving(row)) | set(result.leaving)
+                    ):
+                        row[f"r{slot}_leaving"] = result.leaving.get(slot, "") or ""
+                    chem_types = result.chem_types
+            # Keep the existing programmatic return field; persist a text field
+            # as well so the next unchanged CSV build has the same declarations.
+            row["_chem_types"] = chem_types
+            row["chem_types"] = format_chem_types(chem_types)
+        except (ActivationError, ValueError) as error:
+            errors.append(f"{token}: {error}")
+            warnings.warn(f"Skipping monomer '{token}': {error}")
 
     if errors:
         warnings.warn(f"{len(errors)} monomer(s) failed:\n" + "\n".join(errors))
-
     return rows, errors
 
 
 def write_sdf(rows, output_sdf):
-    """
-    Write a list of monomer row dicts to an SDF file.
-
-    :param rows: list of dicts as returned by derive_monomers().
-    :param output_sdf: path for the output SDF.
-    :returns: (ok_count, error_list)
-    """
-    writer = SDWriter(str(output_sdf))
-    errors = []
-
-    for row in rows:
-        token = row.get('token', '').strip()
-        chuckles = row.get('chuckles', '').strip()
-        if not chuckles:
-            continue
-
-        leaving = {
-            slot: (row.get(col) or '').strip() or None
-            for slot, col in _LG_COLS.items()
-        }
-        chem_types_derived = row.get('_chem_types', {})
-
-        mol = Chem.MolFromSmiles(chuckles)
-        if mol is None:
-            errors.append(f"{token}: cannot parse CHUCKLES '{chuckles}'")
-            continue
-
-        rdDepictor.Compute2DCoords(mol)
-        mol.SetProp('symbol', token)
-        mol.SetProp('m_abbr', token)
-        mol.SetProp('m_name', row.get('name', token))
-        mol.SetProp('m_type', row.get('type', 'aa'))
-        mol.SetProp('m_subtype', 'natural' if row.get('type', '') == 'aa' else 'cap')
-
-        max_slot = max((s for s, v in leaving.items() if v), default=3)
-        lg_vals = [leaving.get(s, None) for s in range(1, max_slot + 1)]
-        mol.SetProp('m_Rgroups', ','.join(str(v) if v else 'None' for v in lg_vals))
-
-        if chem_types_derived:
-            mol.SetProp('m_chem_types',
-                        ','.join(f"{s}:{ct}" for s, ct in sorted(chem_types_derived.items())))
-
-        writer.write(mol)
-
-    writer.close()
-    ok = sum(1 for r in rows if r.get('chuckles')) - len(errors)
-    return ok, errors
+    """Write validated monomer definitions and return (written_count, errors)."""
+    errors, written = [], 0
+    with SDWriter(str(output_sdf)) as writer:
+        for row in rows:
+            token = row.get("token", "").strip()
+            chuckles = row.get("chuckles", "").strip()
+            if not chuckles:
+                continue
+            try:
+                chem_types = row.get("_chem_types")
+                if chem_types is None:
+                    chem_types = parse_chem_types(row.get("chem_types", "")) or None
+                mol = monomer_record(
+                    chuckles,
+                    token,
+                    _row_leaving(row),
+                    chem_types,
+                    name=row.get("name", token),
+                    m_type=row.get("type", "aa"),
+                    m_subtype="natural" if row.get("type", "") == "aa" else "cap",
+                    strict_metadata=False,
+                )
+            except ValueError as error:
+                errors.append(f"{token}: {error}")
+                continue
+            writer.write(mol)
+            written += 1
+    return written, errors
 
 
 def build_library_from_csv(csv_path, output_sdf, rebuild=False):
-    """
-    Derive CHUCKLES for all monomers and write to SDF + update CSV in place.
-
-    Thin wrapper around derive_monomers() + write_sdf() for convenience.
-
-    :param csv_path: path to the monomer CSV file.
-    :param output_sdf: path for the output SDF.
-    :param rebuild: if True, re-derive all 'aa' rows even if CHUCKLES present.
-    :returns: (ok_count, errors)
-    """
+    """Build SDF and preserve authoring fields for subsequent CSV rebuilds."""
     csv_path = Path(csv_path)
     rows, errors = derive_monomers(csv_path, rebuild=rebuild)
-    write_sdf(rows, output_sdf)
-
-    # Write updated CSV back (strip transient _chem_types key)
+    written, write_errors = write_sdf(rows, output_sdf)
+    # Preserve legacy columns, author metadata, and newly discovered slots.
+    fields = list(_CSV_COLUMNS)
     for row in rows:
-        row.pop('_chem_types', None)
-    with open(csv_path, 'w', newline='', encoding='utf-8') as f:
-        writer_csv = csv.DictWriter(f, fieldnames=_CSV_COLUMNS, extrasaction='ignore')
+        row.pop("_chem_types", None)
+        fields.extend(key for key in row if key not in fields)
+    with open(csv_path, "w", newline="", encoding="utf-8") as f:
+        writer_csv = csv.DictWriter(f, fieldnames=fields)
         writer_csv.writeheader()
         writer_csv.writerows(rows)
-
-    return len(rows) - len(errors), errors
+    return written, list(dict.fromkeys(errors + write_errors))
 
 
 def import_helm_sdf(helm_sdf_path, csv_out_path, peptide_only=True):

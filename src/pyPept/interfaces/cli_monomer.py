@@ -28,11 +28,10 @@ import sys
 from pathlib import Path
 
 from rdkit import Chem
-from rdkit.Chem import rdDepictor
 
 from pyPept.sequence import Sequence
 from pyPept.molecule import Molecule
-from pyPept.monomer_store import library_path, register_molecule
+from pyPept.monomer_store import library_path, monomer_record, register_molecule
 from pyPept.interfaces.monomer_pipeline import pre_activate, ActivationError
 
 
@@ -96,27 +95,10 @@ def register_monomer(smiles, symbol, name=None, m_type='aa', m_subtype='modified
 
     result = pre_activate(smiles, backbone_indices=backbone_indices)
 
-    mol = Chem.MolFromSmiles(result.chuckles)
-    if mol is None:
-        raise ActivationError(
-            f"pre_activate produced unparseable CHUCKLES for {symbol!r}: "
-            f"{result.chuckles!r}")
-
-    rdDepictor.Compute2DCoords(mol)
-    mol.SetProp('symbol', symbol)
-    mol.SetProp('m_abbr', symbol)
-    mol.SetProp('m_name', name)
-    mol.SetProp('m_type', m_type)
-    mol.SetProp('m_subtype', m_subtype)
-
-    leaving = result.leaving
-    max_slot = max((s for s, v in leaving.items() if v), default=3)
-    lg_vals = [leaving.get(s) for s in range(1, max_slot + 1)]
-    mol.SetProp('m_Rgroups', ','.join(str(v) if v else 'None' for v in lg_vals))
-
-    if result.chem_types:
-        mol.SetProp('m_chem_types',
-                    ','.join(f"{s}:{ct}" for s, ct in sorted(result.chem_types.items())))
+    mol = monomer_record(
+        result.chuckles, symbol, result.leaving, result.chem_types,
+        name=name, m_type=m_type, m_subtype=m_subtype,
+    )
 
     register_molecule(mol, sdf_path=sdf_path)
     return result

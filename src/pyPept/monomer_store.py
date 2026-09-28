@@ -138,6 +138,116 @@ def _load_sdf_snapshot():
     raise ValueError("Monomer library changed repeatedly while loading structures")
 
 
+def parse_chem_types(value):
+    """Read the numbered chemistry declarations used by SDF and CSV records."""
+    if not value:
+        return {}
+    return {
+        int(slot.strip()): kind.strip()
+        for item in value.split(",")
+        for slot, kind in [item.split(":", 1)]
+    }
+
+
+def format_chem_types(chem_types):
+    """Write declarations in stable numeric slot order."""
+    return ",".join(f"{slot}:{kind}" for slot, kind in sorted(chem_types.items()))
+
+
+def monomer_record(
+    template,
+    symbol,
+    leaving,
+    chem_types=None,
+    *,
+    name=None,
+    m_type="aa",
+    m_subtype="modified",
+    minimum_slots=1,
+    strict_metadata=True,
+):
+    """Construct a usable stored definition for CLI, web, and bulk ingestion.
+
+    Accept activated SMILES or an existing molecule. Copy molecules so unrelated
+    properties survive without mutating the caller. Missing chemistry metadata
+    is detected from the template; explicit declarations retain their meaning.
+    Legacy bulk records can have sparse declarations or no attachment sites.
+    ``strict_metadata=False`` retains the older bulk-import contract: absent
+    leaving values mean implicit H, extra values and unsupported chemistry
+    labels remain metadata. New registration requires complete, known metadata.
+    ``minimum_slots`` only preserves a caller's legacy SDF padding convention.
+    Persistence, duplicate-name checks, and HTTP permission remain with callers.
+    """
+    from rdkit import Chem
+    from rdkit.Chem import rdDepictor
+
+    from pyPept.attachments import attachment_sites
+    from pyPept.interfaces.reaction_library import _CHEM_TYPE_REGISTRY, REACTION_INDEX
+    from pyPept.leaving_groups import restore_leaving_groups
+    from pyPept.structure import require_supported_stereo
+
+    _index_monomer_names([(symbol, symbol)])
+    mol = (
+        Chem.MolFromSmiles(template)
+        if isinstance(template, str)
+        else Chem.Mol(template)
+    )
+    if mol is None or mol.GetNumAtoms() == 0:
+        raise ValueError("Invalid CHUCKLES SMILES")
+    require_supported_stereo(mol)
+    dummies = [atom for atom in mol.GetAtoms() if atom.GetAtomicNum() == 0]
+    slots = {atom.GetIsotope() for atom in dummies}
+    if (
+        0 in slots
+        or len(slots) != len(dummies)
+        or any(atom.GetDegree() != 1 for atom in dummies)
+    ):
+        raise ValueError(
+            "Each attachment needs a unique numbered dummy with one neighbour"
+        )
+    leaving = {
+        int(slot): value
+        for slot, value in leaving.items()
+        if value not in (None, "", "None")
+    }
+    if strict_metadata and slots != set(leaving):
+        raise ValueError(
+            "Attachment slots, chemistry types, and leaving groups must match"
+        )
+    for group in leaving.values():
+        atom = Chem.MolFromSmiles(group)
+        if atom is None or atom.GetNumAtoms() != 1:
+            raise ValueError(f"Leaving group must be a single atom: {group}")
+    last_slot = max(slots if strict_metadata else leaving, default=3)
+    groups = [leaving.get(slot) for slot in range(1, last_slot + 1)]
+    if chem_types is None:
+        chem_types = {
+            site["slot"]: site["chem_type"] for site in attachment_sites(mol, groups)
+        }
+    else:
+        chem_types = {int(slot): kind for slot, kind in chem_types.items()}
+    if strict_metadata and not set(chem_types) <= slots:
+        raise ValueError(
+            "Attachment slots, chemistry types, and leaving groups must match"
+        )
+    known_types = {kind for pair in REACTION_INDEX for kind in pair} | {
+        entry[0] for entry in _CHEM_TYPE_REGISTRY
+    }
+    if strict_metadata and set(chem_types.values()) - known_types:
+        raise ValueError("Unknown attachment chemistry type")
+    restore_leaving_groups(mol, leaving)
+    mol.SetProp("symbol", symbol)
+    mol.SetProp("m_abbr", symbol)
+    mol.SetProp("m_name", symbol if name is None else name)
+    mol.SetProp("m_type", m_type)
+    mol.SetProp("m_subtype", m_subtype)
+    groups.extend([None] * max(0, minimum_slots - len(groups)))
+    mol.SetProp("m_Rgroups", ",".join(value or "None" for value in groups))
+    mol.SetProp("m_chem_types", format_chem_types(chem_types))
+    rdDepictor.Compute2DCoords(mol)
+    return mol
+
+
 def register_molecule(mol, sdf_path=None):
     """Append a validated monomer atomically to the default or an explicit SDF.
 

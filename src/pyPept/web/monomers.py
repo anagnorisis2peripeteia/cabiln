@@ -6,7 +6,12 @@ from fastapi import APIRouter, Query, Request
 from fastapi.responses import JSONResponse
 
 from pyPept.attachments import attachment_sites
-from pyPept.monomer_store import _load_sdf, library_path, register_molecule
+from pyPept.monomer_store import (
+    _load_sdf,
+    library_path,
+    monomer_record,
+    register_molecule,
+)
 
 from .cache import _rc_get, _rc_put, library_version
 from .drawing import _draw_mol
@@ -201,72 +206,29 @@ def register_monomer(req: _RegisterReq, request: Request):
             {"error": "This monomer library is read-only."}, status_code=403
         )
     try:
-        from rdkit import Chem
         from rdkit.Chem import rdDepictor
 
-        from pyPept.interfaces.reaction_library import (
-            _CHEM_TYPE_REGISTRY,
-            REACTION_INDEX,
-        )
-
-        mol = Chem.MolFromSmiles(req.chuckles)
-        if mol is None or mol.GetNumAtoms() == 0:
-            return JSONResponse({"error": "Invalid CHUCKLES SMILES"}, status_code=400)
-
-        dummies = [a for a in mol.GetAtoms() if a.GetAtomicNum() == 0]
-        slots = {a.GetIsotope() for a in dummies}
-        if (
-            not slots
-            or 0 in slots
-            or len(slots) != len(dummies)
-            or any(a.GetDegree() != 1 for a in dummies)
-        ):
+        # The preview payload describes every detected site. Bulk import also
+        # accepts standalone records and sparse declarations from older SDFs.
+        if not req.leaving:
             raise ValueError(
                 "Each attachment needs a unique numbered dummy with one neighbour"
             )
-        if slots != set(req.chem_types) or slots != set(req.leaving):
+        if set(req.chem_types) != set(req.leaving):
             raise ValueError(
                 "Attachment slots, chemistry types, and leaving groups must match"
             )
-        known_types = {kind for pair in REACTION_INDEX for kind in pair} | {
-            entry[0] for entry in _CHEM_TYPE_REGISTRY
-        }
-        if set(req.chem_types.values()) - known_types:
-            raise ValueError("Unknown attachment chemistry type")
-        for leaving in req.leaving.values():
-            leaving_mol = Chem.MolFromSmiles(leaving)
-            if leaving_mol is None or leaving_mol.GetNumAtoms() != 1:
-                raise ValueError(f"Leaving group must be a single atom: {leaving}")
-
         rdDepictor.SetPreferCoordGen(True)
-        rdDepictor.Compute2DCoords(mol)
-
-        rgroups_list = ["None"] * max(6, max(slots))
-        for slot_s, lg in req.leaving.items():
-            slot = int(slot_s) - 1
-            rgroups_list[slot] = lg
-        rgroups_str = ",".join(rgroups_list)
-
-        # Format m_chem_types
-        chem_types_str = ",".join(
-            f"{slot}:{ct}"
-            for slot, ct in sorted(req.chem_types.items(), key=lambda x: int(x[0]))
+        mol = monomer_record(
+            req.chuckles,
+            req.abbr,
+            req.leaving,
+            req.chem_types,
+            name=req.name,
+            m_type=req.type,
+            m_subtype=req.subtype,
+            minimum_slots=6,
         )
-
-        mol.SetProp("m_abbr", req.abbr)
-        mol.SetProp("symbol", req.abbr)
-        mol.SetProp("m_name", req.name)
-        mol.SetProp("m_type", req.type)
-        mol.SetProp("m_subtype", req.subtype)
-        mol.SetProp("m_Rgroups", rgroups_str)
-        mol.SetProp("m_chem_types", chem_types_str)
-
-        # Validate the stored template as a usable standalone monomer before
-        # committing it. A syntactically valid leaving atom can still be a dummy
-        # or produce impossible valence when bonded to this structure.
-        from pyPept.leaving_groups import restore_leaving_groups
-
-        restore_leaving_groups(mol, req.leaving)
 
         return {"ok": True, "total": register_molecule(mol)}
 
