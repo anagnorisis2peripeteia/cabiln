@@ -398,19 +398,19 @@ function insertAbbr(abbr) {
 // ─── monomer preview tooltip ──────────────────────────────────────────────────
 function startPreview(abbr, row) {
   clearTimeout(previewTimer);
+  const request = startRequest('monomer-preview');
   previewTimer = setTimeout(async () => {
-    if (previewCache[abbr]) {
-      showPreview(previewCache[abbr], row);
-      return;
-    }
     try {
-      const res = await fetch(`/monomer_svg?abbr=${encodeURIComponent(abbr)}`);
-      const data = await readResponse(res);
+      const data = previewCache[abbr] || await readResponse(await fetch(
+        `/monomer_svg?abbr=${encodeURIComponent(abbr)}`, { signal: request.signal }
+      ));
+      if (!request.current()) return;
       if (data.svg) {
         previewCache[abbr] = data;
         showPreview(data, row);
       }
     } catch (e) { /* silent */ }
+    finally { request.finish(); }
   }, 200);
 }
 
@@ -474,6 +474,7 @@ function showPreview(data, row) {
 
 function hidePreview() {
   clearTimeout(previewTimer);
+  cancelRequests('monomer-preview');
   libPreview.style.display = 'none';
 }
 
@@ -554,24 +555,7 @@ function buildResidueUI(resMap, residues, layout, crosslinkGroups) {
       chip.addEventListener('mouseenter', () => highlightResidue(r.idx));
     }
     chip.addEventListener('mouseleave', clearHighlight);
-    chip.addEventListener('click', () => {
-      if (buildMode) {
-        if (buildLeft && buildLeftRIdx !== r.idx) {
-          loadBuildRight(r.abbr, r.idx);
-          chip.style.outline = '2px solid #e0a05a';
-          resChips.querySelectorAll('.res-chip').forEach(c => {
-            if (c !== chip && parseInt(c.dataset.residue) !== buildLeftRIdx)
-              c.style.outline = '';
-          });
-        } else {
-          loadBuildLeft(r.abbr, r.idx);
-          chip.style.outline = '2px solid #5a9ae0';
-          resChips.querySelectorAll('.res-chip').forEach(c => {
-            if (c !== chip) c.style.outline = '';
-          });
-        }
-      }
-    });
+    chip.addEventListener('click', () => selectBuildResidue(r));
     return chip;
   }
 
@@ -705,64 +689,36 @@ function clearHighlight() {
   resChips.querySelectorAll('.res-chip.hover').forEach(c => c.classList.remove('hover'));
 }
 
+function svgResidueIndex(target, svg) {
+  for (let el = target; el && el !== svg; el = el.parentElement) {
+    const atom = (el.getAttribute('class') || '').match(/atom-(\d+)/);
+    if (atom) {
+      const rIdx = atomToRes[parseInt(atom[1])];
+      if (rIdx !== undefined) return rIdx;
+    }
+  }
+}
+
 function wireUpSvgHover() {
   const svg = document.querySelector('#render-inner svg');
   if (!svg) return;
   svg.addEventListener('mousemove', e => {
     if (!hlEnabled) return;
-    let el = e.target;
-    while (el && el !== svg) {
-      const cls = (el.getAttribute('class') || '');
-      const m = cls.match(/atom-(\d+)/);
-      if (m) {
-        const rIdx = atomToRes[parseInt(m[1])];
-        if (rIdx !== undefined) {
-          const xlinks = xlinkByRes[rIdx];
-          if (xlinks && xlinks.length) {
-            const allMembers = [...new Set(xlinks.flatMap(g => g.members))];
-            highlightGroup(allMembers);
-          } else {
-            highlightResidue(rIdx);
-          }
-          return;
-        }
-      }
-      el = el.parentElement;
+    const rIdx = svgResidueIndex(e.target, svg);
+    if (rIdx === undefined) return clearHighlight();
+    const xlinks = xlinkByRes[rIdx];
+    if (xlinks && xlinks.length) {
+      highlightGroup([...new Set(xlinks.flatMap(g => g.members))]);
+    } else {
+      highlightResidue(rIdx);
     }
-    clearHighlight();
   });
   svg.addEventListener('mouseleave', clearHighlight);
   svg.addEventListener('click', e => {
     if (!buildMode) return;
-    let el = e.target;
-    while (el && el !== svg) {
-      const cls = (el.getAttribute('class') || '');
-      const m = cls.match(/atom-(\d+)/);
-      if (m) {
-        const rIdx = atomToRes[parseInt(m[1])];
-        if (rIdx !== undefined) {
-          const r = residueList.find(r => r.idx === rIdx);
-          if (r) {
-            if (buildLeft && buildLeftRIdx !== rIdx) {
-              loadBuildRight(r.abbr, r.idx);
-              resChips.querySelectorAll('.res-chip').forEach(c => {
-                const cIdx = parseInt(c.dataset.residue);
-                if (cIdx === rIdx) c.style.outline = '2px solid #e0a05a';
-                else if (cIdx !== buildLeftRIdx) c.style.outline = '';
-              });
-            } else {
-              loadBuildLeft(r.abbr, r.idx);
-              resChips.querySelectorAll('.res-chip').forEach(c => {
-                c.style.outline = parseInt(c.dataset.residue) === rIdx
-                  ? '2px solid #5a9ae0' : '';
-              });
-            }
-          }
-          return;
-        }
-      }
-      el = el.parentElement;
-    }
+    const rIdx = svgResidueIndex(e.target, svg);
+    const residue = residueList.find(r => r.idx === rIdx);
+    if (residue) selectBuildResidue(residue);
   });
 }
 
@@ -844,6 +800,23 @@ btnMol.addEventListener('click', async () => {
 });
 
 // ─── build mode ──────────────────────────────────────────────────────────────
+function selectBuildResidue(residue) {
+  if (!buildMode) return;
+  const right = buildLeft && buildLeftRIdx !== residue.idx;
+  const pending = right
+    ? loadBuildRight(residue.abbr, residue.idx)
+    : loadBuildLeft(residue.abbr, residue.idx);
+  resChips.querySelectorAll('.res-chip').forEach(chip => {
+    const idx = parseInt(chip.dataset.residue);
+    if (idx === residue.idx) {
+      chip.style.outline = right ? '2px solid #e0a05a' : '2px solid #5a9ae0';
+    } else if (!right || idx !== buildLeftRIdx) {
+      chip.style.outline = '';
+    }
+  });
+  return pending;
+}
+
 function openBuild() {
   buildMode = true;
   buildPanel.classList.add('open');
@@ -959,20 +932,7 @@ async function doInsertBetween(abbr) {
     }
     cabilnInput.value = data.result;
     cabilnInput.dispatchEvent(new Event('input'));
-    // Reset build state for next operation
-    buildLeft = null; buildRight = null; buildLeftRIdx = null; buildRightRIdx = null;
-    insertBetweenActive = false;
-    buildInsertRow.style.display = 'none';
-    buildInsertBtn.textContent = '⊕ Insert Between';
-    buildLeftAbbr.textContent = '—';
-    buildLeftSvg.innerHTML = '<div class="box-placeholder">Click a chip above</div>';
-    buildLeftRg.innerHTML = '';
-    buildRightAbbr.textContent = '—';
-    buildRightSvg.innerHTML = '<div class="box-placeholder">Right-click from library</div>';
-    buildRightRg.innerHTML = '';
-    buildConnect.disabled = true;
     buildHint.textContent = `${abbr} inserted — select chips to continue building`;
-    resChips.querySelectorAll('.res-chip').forEach(c => c.style.outline = '');
     if (libLoaded) renderLibList(libSearch.value.trim().toLowerCase());
   } catch (e) {
     if (!request.current()) return;
@@ -1192,15 +1152,6 @@ buildConnect.addEventListener('click', async () => {
     }
     cabilnInput.value = data.result;
     cabilnInput.dispatchEvent(new Event('input'));
-
-    // Clear right side for next addition
-    buildRight = null;
-    buildRightAbbr.textContent = '—';
-    buildRightSvg.innerHTML = '<div class="box-placeholder">Right-click from library</div>';
-    buildRightRg.innerHTML = '';
-    buildConnect.disabled = true;
-    buildStatus.textContent = '';
-    buildStatus.className = 'build-status';
     buildHint.textContent = 'Connection added — select a chip and right-click another monomer';
   } catch (e) {
     if (!request.current()) return;

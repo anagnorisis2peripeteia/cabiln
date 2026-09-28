@@ -19,6 +19,40 @@ jobs:
       - name: Test browser request lifetimes
         run: node --test tests/test_frontend.js
 
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: tests/browser/package-lock.json
+      - name: Install application and browser test dependencies
+        run: |
+          python -m pip install -e ".[dev,web]"
+          npm ci --prefix tests/browser
+      - name: Install Chromium
+        working-directory: tests/browser
+        run: npx playwright install --with-deps chromium
+      - name: Exercise builder, panels, registration and exports
+        working-directory: tests/browser
+        env:
+          CABILN_PYTHON: python
+          CABILN_BROWSER_ARTIFACTS: ${{ runner.temp }}/cabiln-browser
+        run: npm test
+      - name: Preserve browser results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-results
+          path: ${{ runner.temp }}/cabiln-browser
+          if-no-files-found: ignore
+
   test:
     runs-on: ubuntu-latest
     strategy:

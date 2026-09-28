@@ -1,0 +1,181 @@
+const fs = require('node:fs');
+const path = require('node:path');
+const os = require('node:os');
+const net = require('node:net');
+const { spawn } = require('node:child_process');
+const { once } = require('node:events');
+const { test: base, expect } = require('@playwright/test');
+
+const repo = path.resolve(__dirname, '../..');
+const appRoot = path.resolve(process.env.CABILN_APP_ROOT || repo);
+const localPython = path.join(repo, '.venv', process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python');
+const python = process.env.CABILN_PYTHON || (fs.existsSync(localPython) ? localPython : 'python3');
+
+async function freePort() {
+  const server = net.createServer();
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const port = server.address().port;
+  await new Promise(resolve => server.close(resolve));
+  return port;
+}
+
+async function startApp(workerInfo, registration) {
+  const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'cabiln-browser-library-'));
+  for (const name of ['monomers.sdf', 'monomers.csv']) {
+    fs.copyFileSync(path.join(appRoot, 'src/pyPept/data', name), path.join(temporary, name));
+  }
+  const port = await freePort();
+  const url = `http://127.0.0.1:${port}`;
+  const logPath = path.join(workerInfo.project.outputDir, `server-${registration ? 'writable' : 'readonly'}.log`);
+  fs.mkdirSync(path.dirname(logPath), { recursive: true });
+  const log = fs.createWriteStream(logPath);
+  fs.writeFileSync(path.join(workerInfo.project.outputDir, 'application.json'), JSON.stringify({
+    appRoot, python, browserChannel: process.env.CABILN_BROWSER_CHANNEL || 'chromium',
+    viewport: workerInfo.project.use.viewport,
+  }, null, 2));
+  const server = spawn(python, [
+    '-m', 'uvicorn', 'pyPept.web.app:app', '--host', '127.0.0.1', '--port', String(port),
+  ], {
+    cwd: appRoot,
+    env: {
+      ...process.env,
+      // Explicitly select the app source even when python belongs to another editable checkout.
+      PYTHONPATH: path.join(appRoot, 'src'),
+      CABILN_MONOMER_LIBRARY: path.join(temporary, 'monomers.sdf'),
+      CABILN_ENABLE_REGISTRATION: registration ? '1' : '0',
+    },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  server.stdout.pipe(log);
+  server.stderr.pipe(log);
+  let spawnError;
+  server.on('error', error => { spawnError = error; });
+  async function stop() {
+    if (server.exitCode === null && !spawnError) {
+      const exited = once(server, 'exit');
+      server.kill('SIGTERM');
+      const force = setTimeout(() => server.kill('SIGKILL'), 5000);
+      await exited;
+      clearTimeout(force);
+    }
+    await new Promise(resolve => log.end(resolve));
+    fs.rmSync(temporary, { recursive: true, force: true });
+  }
+  try {
+    const deadline = Date.now() + 30_000;
+    while (true) {
+      if (spawnError) throw spawnError;
+      if (server.exitCode !== null) throw new Error(`Application exited (${server.exitCode}); see ${logPath}`);
+      try {
+        if ((await fetch(`${url}/health`, { signal: AbortSignal.timeout(1000) })).ok) break;
+      } catch { /* Wait for this process to bind its local socket. */ }
+      if (Date.now() > deadline) throw new Error(`Application did not become healthy; see ${logPath}`);
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    return { url, appRoot, temporary, logPath, stop };
+  } catch (error) {
+    await stop();
+    throw error;
+  }
+}
+
+const test = base.extend({
+  app: [async ({}, use, workerInfo) => {
+    const app = await startApp(workerInfo, true);
+    try { await use(app); } finally { await app.stop(); }
+  }, { scope: 'worker' }],
+  readonlyApp: [async ({}, use, workerInfo) => {
+    const app = await startApp(workerInfo, false);
+    try { await use(app); } finally { await app.stop(); }
+  }, { scope: 'worker' }],
+  page: async ({ page, context, app }, use) => {
+    const errors = [];
+    page.on('pageerror', error => errors.push(error.message));
+    const watchPage = child => child.on('pageerror', error => errors.push(error.message));
+    context.on('page', watchPage);
+    await page.goto(app.url);
+    await use(page);
+    context.off('page', watchPage);
+    expect(errors, 'No unhandled browser exceptions').toEqual([]);
+  },
+});
+
+async function render(page, source) {
+  const received = page.waitForResponse(response =>
+    new URL(response.url()).pathname === '/render' &&
+    response.request().postDataJSON()?.cabiln === source);
+  await page.locator('#cabiln-input').fill(source);
+  const response = await received;
+  expect(response.status(), await response.text()).toBe(200);
+  const data = await response.json();
+  expect(data.error).toBeUndefined();
+  await expect(page.locator('#cabiln-input')).toHaveClass('ok');
+  await expect(page.locator('#render-inner svg')).toBeVisible();
+  await expect(page.locator('#residue-chips [data-residue]')).toHaveCount(data.residues.length);
+  return data;
+}
+
+async function tile(page, abbr, button = 'left') {
+  await page.locator('#lib-search').fill(abbr);
+  await page.locator('.lib-row').filter({ has: page.locator('.lib-abbr', { hasText: new RegExp(`^${abbr}$`) }) }).click({ button });
+}
+
+async function site(page, side, slot) {
+  const button = page.locator(`#build-${side}-rgroups button`).filter({ hasText: new RegExp(`^R${slot} `) });
+  await expect(button).not.toHaveClass(/used/);
+  await button.click();
+  await expect(button).toHaveClass(/selected/);
+}
+
+async function selectChip(page, idx, side, abbr) {
+  await page.locator(`#residue-chips [data-residue="${idx}"]`).click();
+  await expect(page.locator(`#build-${side}-abbr`)).toHaveText(abbr);
+  await expect(page.locator(`#build-${side}-rgroups button`).first()).toBeVisible();
+}
+
+async function connect(page) {
+  await expect(page.locator('#build-connect')).toBeEnabled();
+  const result = page.waitForResponse(response => new URL(response.url()).pathname === '/insert_bond');
+  await page.locator('#build-connect').click();
+  const response = await result;
+  expect(response.status(), await response.text()).toBe(200);
+  const data = await response.json();
+  expect(data.error).toBeUndefined();
+  await expect(page.locator('#cabiln-input')).toHaveValue(data.result);
+  await expect(page.locator('#cabiln-input')).toHaveClass('ok');
+  return { data, submitted: response.request().postDataJSON() };
+}
+
+async function capture(page, testInfo, name) {
+  // Compare settled visual states; live interaction tests retain the shipped
+  // transitions. Fast-forwarding only for capture avoids timing noise in PNGs.
+  await page.screenshot({ path: testInfo.outputPath(`${name}.png`), animations: 'disabled' });
+  const state = await page.evaluate(() => {
+    const ids = ['lib-panel', 'examples-panel', 'build-panel', 'verify-pane', 'render-canvas'];
+    return {
+      source: document.querySelector('#cabiln-input').value,
+      notation: document.querySelector('#notation-select').value,
+      chips: [...document.querySelectorAll('#residue-chips .res-chip')].map(el => ({
+        text: el.textContent, occurrence: el.dataset.residue, members: el.dataset.members,
+        outline: el.style.outline, hover: el.classList.contains('hover'),
+      })),
+      panels: Object.fromEntries(ids.map(id => {
+        const el = document.getElementById(id);
+        const rect = el.getBoundingClientRect();
+        return [id, { visible: !!(rect.width && rect.height), open: el.classList.contains('open'),
+          x: rect.x, y: rect.y, width: rect.width, height: rect.height }];
+      })),
+      controls: [...document.querySelectorAll('button')].filter(el => el.id).map(el => ({
+        id: el.id, text: el.textContent, disabled: el.disabled, active: el.classList.contains('active'),
+      })),
+      highlighted: [...document.querySelectorAll('#render-inner .res-hl')].map(el => el.getAttribute('class')),
+      previewVisible: document.getElementById('lib-preview').getBoundingClientRect().width > 0,
+    };
+  });
+  const statePath = testInfo.outputPath(`${name}.json`);
+  fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
+  await testInfo.attach(`${name}.json`, { path: statePath, contentType: 'application/json' });
+}
+
+module.exports = { test, expect, render, tile, site, selectChip, connect, capture };

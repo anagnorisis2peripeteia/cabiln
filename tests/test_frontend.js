@@ -255,6 +255,51 @@ test('older library refresh cannot replace a newer library', async () => {
   assert.equal(ui.run('allMonomers[0].abbr'), 'New');
 });
 
+function previewRow(ui) {
+  ui.run(`
+    window.innerHeight = 1000;
+    const previewRow = { getBoundingClientRect: () => ({top: 50, right: 300}) };
+  `);
+}
+
+test('hiding a library preview discards its queued response', async () => {
+  const ui = page('builder.js');
+  previewRow(ui);
+  ui.run('startPreview("G", previewRow)');
+  await ui.timers();
+  ui.run('hidePreview()');
+  ui.requests[0].resolve({svg: '<svg>OLD PREVIEW</svg>'});
+  await new Promise(setImmediate);
+  assert.equal(ui.element('lib-preview').style.display, 'none');
+  assert.doesNotMatch(ui.element('lib-preview').innerHTML, /OLD PREVIEW/);
+});
+
+test('an older library hover cannot replace the latest preview', async () => {
+  const ui = page('builder.js');
+  previewRow(ui);
+  ui.run('startPreview("G", previewRow)');
+  await ui.timers();
+  ui.run('startPreview("A", previewRow)');
+  await ui.timers();
+  ui.requests[1].resolve({svg: '<svg>CURRENT PREVIEW</svg>'});
+  await new Promise(setImmediate);
+  ui.requests[0].resolve({svg: '<svg>OLD PREVIEW</svg>'});
+  await new Promise(setImmediate);
+  assert.equal(ui.element('lib-preview').style.display, 'block');
+  assert.match(ui.element('lib-preview').innerHTML, /CURRENT PREVIEW/);
+  assert.doesNotMatch(ui.element('lib-preview').innerHTML, /OLD PREVIEW/);
+});
+
+test('closing a cached preview before its debounce leaves it hidden', async () => {
+  const ui = page('builder.js');
+  previewRow(ui);
+  ui.run('previewCache.G = {svg: "<svg>CACHED PREVIEW</svg>"}; startPreview("G", previewRow)');
+  ui.run('hidePreview()');
+  await ui.timers();
+  assert.equal(ui.requests.length, 0);
+  assert.equal(ui.element('lib-preview').style.display, 'none');
+});
+
 test('a discovered cap family asks for its attachment form before loading slots', async () => {
   const ui = page('builder.js');
   ui.run("allMonomers = [{abbr:'NovelCap', degenerate:true, nterm_abbr:'NovelCap_', cterm_abbr:'_NovelCap'}]");

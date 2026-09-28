@@ -1,0 +1,12 @@
+{
+  "name": "cabiln-browser-acceptance",
+  "private": true,
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "test": "playwright test",
+    "test:list": "playwright test --list"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0"
+  }
+}
