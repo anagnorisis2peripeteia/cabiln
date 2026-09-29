@@ -1,5 +1,22 @@
 const { test, expect, render, selectChip, site, connect, capture } = require('./fixtures');
 
+test('invalid bracket syntax keeps the last valid drawing without accepting changed chemistry', async ({ page }) => {
+  for (const source of [
+    'ac-K.[[K(4,2).A(1,2)garbage].ac(4,2)]-am',
+    'ac-K.[!x(4,1)]-D.!x(4,4)-am',
+  ]) {
+    await render(page, 'A-G');
+    const drawing = await page.locator('#render-inner').innerHTML();
+    await page.locator('#cabiln-input').fill(source);
+    await expect(page.locator('#cabiln-input')).toHaveClass('err');
+    await expect(page.locator('#cabiln-input')).toHaveValue(source);
+    expect(await page.locator('#render-inner').innerHTML()).toBe(drawing);
+    await expect(page.locator('#render-progress-label')).toContainText('Previous drawing');
+    await expect(page.locator('#btn-mol')).toBeDisabled();
+    await expect(page.locator('#residue-chips [data-residue]').first()).toBeDisabled();
+  }
+});
+
 test('editing retains the drawing and zoom while stale atom controls stay disabled', async ({ page }, testInfo) => {
   await render(page, 'A-G');
   await page.locator('#btn-build').click();

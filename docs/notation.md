@@ -97,6 +97,38 @@ branch = cabiln_to_branch(bracket)
 restored = cabiln_to_bracket(branch)
 ```
 
+## Output conventions
+
+The requested output style is a layout preference. The modern
+`pyPept.inputs.format_source(source, "bracket")` and `"percent"` paths check that
+formatting preserves monomer occurrences, attachment slots, and the assembled
+molecular structure. The library-free legacy text converters have separate
+compatibility behavior.
+
+For example, these forms describe the same peptide:
+
+```text
+K.[G(4,2).ac(1,2)]-A
+K.!1(4,2)-A%ac-G.!1(2,4)
+```
+
+The bracket starts at G and continues through G's R1 to acetyl R2. The explicit
+branch reads `ac-G`, since its dash must run from acetyl R2 to G R1. Each explicit
+crosslink endpoint names its own slot first; its partner therefore reverses the
+pair.
+
+Formatting does not define a unique string for every molecular graph. Aliases
+such as `Ala-Gly` and `A-G`, chosen crosslink tag names, and preserved source
+groups can still yield different strings. Explicit chains have deterministic
+ordering preferences; source groups also preserve editing intent. Protected
+brackets remain protected. These are different guarantees from graph-wide
+canonicalization or choosing one universal main chain.
+
+The parser requires complete bracket entries and consistent crosslink slot pairs.
+Library-free text converters preserve unsupported input unchanged. They do not
+discard unknown annotations to make an input valid. See the
+[normalization review](notation-normalization-review.md) for examples and checks.
+
 ## BILN and HELM
 
 Declare legacy BILN explicitly to avoid ambiguous slot interpretation:

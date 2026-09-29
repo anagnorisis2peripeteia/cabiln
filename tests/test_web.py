@@ -24,6 +24,29 @@ def canonical(notation):
     return Chem.MolToSmiles(Molecule(Sequence(notation)).get_molecule(fmt="ROMol"))
 
 
+@pytest.mark.parametrize(
+    "source",
+    [
+        "ac-K.[[K(4,2).A(1,2)garbage].ac(4,2)]-am",
+        "ac-K.[!x(4,1)]-D.!x(4,4)-am",
+    ],
+)
+@pytest.mark.parametrize("target", [None, "branch", "bracket"])
+def test_notation_routes_reject_discarded_text_and_conflicting_slots(
+    client, source, target
+):
+    path = "/convert_notation" if target else "/render"
+    body = {"cabiln": source}
+    if target:
+        body["target"] = target
+    response = client.post(path, json=body)
+    assert response.status_code == 400, response.text
+    assert response.json()["error"]
+    assert "svg" not in response.json()
+    assert "result" not in response.json()
+    assert client.get("/health").status_code == 200
+
+
 @pytest.mark.parametrize("notation", ["percent", "bracket"])
 def test_conversion_assignments_follow_rendered_occurrences(client, notation):
     source = canonical("ac-K.!1(4,2)-A-am%ac-G-G.!1(2,4)")

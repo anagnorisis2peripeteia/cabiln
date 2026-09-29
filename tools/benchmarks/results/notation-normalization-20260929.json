@@ -1,0 +1,550 @@
+{
+  "schema_version": 1,
+  "date": "2026-09-29",
+  "baseline_revision": "d0ddeb4",
+  "candidate": "d0ddeb4 with complete notation parsing and text-fold validation",
+  "environment": {
+    "python": "3.11.15 (main, May  8 2026, 18:24:56) [Clang 22.1.3 ]",
+    "rdkit": "2026.03.6",
+    "platform": "macOS-27.0-arm64-arm-64bit"
+  },
+  "source_sha256": {
+    "src/pyPept/notation.py": "574183a3aa5fe3f92fb64360aa3f2da4b782736d7545bc1357e02c37625244f1",
+    "src/pyPept/sequence.py": "acccf4ace08401a89199e5bead6ff0adc98fe91dd2add83f8cf2bd53c267970c"
+  },
+  "regressions": {
+    "new_grammar_cases": 48,
+    "frozen_baseline_failed": 35,
+    "frozen_baseline_passed": 13,
+    "candidate_focused_passed": 318,
+    "http_cases": 6,
+    "http_baseline_statuses": [
+      200,
+      200,
+      200,
+      200,
+      200,
+      200
+    ],
+    "http_candidate_statuses": [
+      400,
+      400,
+      400,
+      400,
+      400,
+      400
+    ]
+  },
+  "scaling_protocol": {
+    "legacy_unit": "ac-K.[[K(4,2).A(1,2)].ac(4,2)]-am",
+    "modern_unit": "ac-K.[K(4,2)[.A(1,2)][.ac(4,2)]]-am",
+    "input": "Repeat the legacy unit with percent separators for each group count.",
+    "groups": [
+      1,
+      8,
+      32,
+      128
+    ],
+    "batches": 3,
+    "repetitions_per_batch": "max(4, 160 // groups)",
+    "statistic": "Median of three per-call batch averages, measured with perf_counter_ns.",
+    "operations": {
+      "normalize": "normalize_legacy_brackets",
+      "expand": "_expand_inline_caps"
+    },
+    "tracked": "Construct SourceText.original(input) inside every timed call.",
+    "profile": "cProfile of _expand_inline_caps on 128 modern groups.",
+    "limitations": "Small local sample, no chemical assembly, no application-wide speed or asymptotic claim."
+  },
+  "scaling": {
+    "baseline": {
+      "label": "d0ddeb4",
+      "timings": [
+        {
+          "operation": "normalize",
+          "tracked": false,
+          "groups": 1,
+          "characters": 33,
+          "milliseconds": 0.00414
+        },
+        {
+          "operation": "normalize",
+          "tracked": false,
+          "groups": 8,
+          "characters": 271,
+          "milliseconds": 0.03369
+        },
+        {
+          "operation": "normalize",
+          "tracked": false,
+          "groups": 32,
+          "characters": 1087,
+          "milliseconds": 0.13419
+        },
+        {
+          "operation": "normalize",
+          "tracked": false,
+          "groups": 128,
+          "characters": 4351,
+          "milliseconds": 0.55776
+        },
+        {
+          "operation": "normalize",
+          "tracked": true,
+          "groups": 1,
+          "characters": 33,
+          "milliseconds": 0.05655
+        },
+        {
+          "operation": "normalize",
+          "tracked": true,
+          "groups": 8,
+          "characters": 271,
+          "milliseconds": 0.43849
+        },
+        {
+          "operation": "normalize",
+          "tracked": true,
+          "groups": 32,
+          "characters": 1087,
+          "milliseconds": 1.78153
+        },
+        {
+          "operation": "normalize",
+          "tracked": true,
+          "groups": 128,
+          "characters": 4351,
+          "milliseconds": 8.39276
+        },
+        {
+          "operation": "expand",
+          "tracked": false,
+          "groups": 1,
+          "characters": 33,
+          "milliseconds": 0.02104
+        },
+        {
+          "operation": "expand",
+          "tracked": false,
+          "groups": 8,
+          "characters": 271,
+          "milliseconds": 0.1085
+        },
+        {
+          "operation": "expand",
+          "tracked": false,
+          "groups": 32,
+          "characters": 1087,
+          "milliseconds": 0.46414
+        },
+        {
+          "operation": "expand",
+          "tracked": false,
+          "groups": 128,
+          "characters": 4351,
+          "milliseconds": 1.81043
+        },
+        {
+          "operation": "expand",
+          "tracked": true,
+          "groups": 1,
+          "characters": 33,
+          "milliseconds": 0.13515
+        },
+        {
+          "operation": "expand",
+          "tracked": true,
+          "groups": 8,
+          "characters": 271,
+          "milliseconds": 1.087
+        },
+        {
+          "operation": "expand",
+          "tracked": true,
+          "groups": 32,
+          "characters": 1087,
+          "milliseconds": 4.16985
+        },
+        {
+          "operation": "expand",
+          "tracked": true,
+          "groups": 128,
+          "characters": 4351,
+          "milliseconds": 17.20653
+        }
+      ],
+      "modern_128_profile_calls": {
+        "_sub_bracket": 128
+      }
+    },
+    "candidate": {
+      "label": "current",
+      "timings": [
+        {
+          "operation": "normalize",
+          "tracked": false,
+          "groups": 1,
+          "characters": 33,
+          "milliseconds": 0.0058
+        },
+        {
+          "operation": "normalize",
+          "tracked": false,
+          "groups": 8,
+          "characters": 271,
+          "milliseconds": 0.04525
+        },
+        {
+          "operation": "normalize",
+          "tracked": false,
+          "groups": 32,
+          "characters": 1087,
+          "milliseconds": 0.1845
+        },
+        {
+          "operation": "normalize",
+          "tracked": false,
+          "groups": 128,
+          "characters": 4351,
+          "milliseconds": 0.85617
+        },
+        {
+          "operation": "normalize",
+          "tracked": true,
+          "groups": 1,
+          "characters": 33,
+          "milliseconds": 0.03502
+        },
+        {
+          "operation": "normalize",
+          "tracked": true,
+          "groups": 8,
+          "characters": 271,
+          "milliseconds": 0.2326
+        },
+        {
+          "operation": "normalize",
+          "tracked": true,
+          "groups": 32,
+          "characters": 1087,
+          "milliseconds": 0.88292
+        },
+        {
+          "operation": "normalize",
+          "tracked": true,
+          "groups": 128,
+          "characters": 4351,
+          "milliseconds": 4.21201
+        },
+        {
+          "operation": "expand",
+          "tracked": false,
+          "groups": 1,
+          "characters": 33,
+          "milliseconds": 0.02632
+        },
+        {
+          "operation": "expand",
+          "tracked": false,
+          "groups": 8,
+          "characters": 271,
+          "milliseconds": 0.19205
+        },
+        {
+          "operation": "expand",
+          "tracked": false,
+          "groups": 32,
+          "characters": 1087,
+          "milliseconds": 0.64041
+        },
+        {
+          "operation": "expand",
+          "tracked": false,
+          "groups": 128,
+          "characters": 4351,
+          "milliseconds": 2.70987
+        },
+        {
+          "operation": "expand",
+          "tracked": true,
+          "groups": 1,
+          "characters": 33,
+          "milliseconds": 0.14428
+        },
+        {
+          "operation": "expand",
+          "tracked": true,
+          "groups": 8,
+          "characters": 271,
+          "milliseconds": 1.51707
+        },
+        {
+          "operation": "expand",
+          "tracked": true,
+          "groups": 32,
+          "characters": 1087,
+          "milliseconds": 5.06636
+        },
+        {
+          "operation": "expand",
+          "tracked": true,
+          "groups": 128,
+          "characters": 4351,
+          "milliseconds": 17.41742
+        }
+      ],
+      "modern_128_profile_calls": {
+        "crosslink_declarations": 384,
+        "_sub_bracket": 128,
+        "parse_bracket_entries": 384
+      }
+    }
+  },
+  "static_checks": {
+    "new_flake8_F_findings": [],
+    "existing_sequence_findings": [
+      "F401 'copy' imported but unused",
+      "F401 'dataclasses.field' imported but unused",
+      "F401 'numpy as np' imported but unused",
+      "F401 'os' imported but unused",
+      "F401 'sys' imported but unused",
+      "F841 local variable 'cr' is assigned to but never used",
+      "F841 local variable 'in_bracket' is assigned to but never used"
+    ],
+    "removed_findings": [
+      "F401 'pyPept.notation._ENTRY_ANY' imported but unused",
+      "F401 'pyPept.notation._flatten_one_nested' imported but unused"
+    ],
+    "new_python_lines_at_most_88_columns": true,
+    "sequence_line_endings": "CRLF, preserved",
+    "line_wrapping_ast_equivalent": true
+  },
+  "integration": {
+    "python": {
+      "python311": {
+        "python": "3.11.15",
+        "rdkit": "2026.03.6",
+        "passed": 1343,
+        "seconds": 114.19,
+        "distribution_included": true
+      },
+      "python39": {
+        "python": "3.9.6",
+        "rdkit": "2025.09.2",
+        "passed": 1342,
+        "seconds": 83.97,
+        "distribution_included": false
+      },
+      "python313": {
+        "python": "3.13.15",
+        "rdkit": "2026.03.6",
+        "passed": 1342,
+        "seconds": 72.4,
+        "distribution_included": false
+      }
+    },
+    "browser": {
+      "startTime": "2026-09-29T02:33:11.751Z",
+      "duration": 64659.475,
+      "expected": 42,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "corpus": {
+      "baseline_revision": "433b14c",
+      "exact_structure_cases": 26,
+      "unspecified_stereo_controls": 2,
+      "rows": [
+        {
+          "id": "glutathione-0",
+          "exact_response": true,
+          "equal_metrics": true,
+          "accepted": true
+        },
+        {
+          "id": "glutathione-1",
+          "exact_response": true,
+          "equal_metrics": true,
+          "accepted": true
+        },
+        {
+          "id": "oxytocin-0",
+          "exact_response": true,
+          "equal_metrics": true,
+          "accepted": true
+        },
+        {
+          "id": "oxytocin-1",
+          "exact_response": true,
+          "equal_metrics": true,
+          "accepted": true
+        },
+        {
+          "id": "gssg-0",
+          "exact_response": true,
+          "equal_metrics": true,
+          "accepted": true
+        },
+        {
+          "id": "gssg-1",
+          "exact_response": true,
+          "equal_metrics": true,
+          "accepted": true
+        },
+        {
+          "id": "carnosine-0",
+          "exact_response": true,
+          "equal_metrics": true,
+          "accepted": true
+        },
+        {
+          "id": "carnosine-1",
+          "exact_response": true,
+          "equal_metrics": true,
+          "accepted": true
+        },
+        {
+          "id": "acetylglycine-0",
+          "exact_response": true,
+          "equal_metrics": true,
+          "accepted": true
+        },
+        {
+          "id": "acetylglycine-1",
+          "exact_response": true,
+          "equal_metrics": true,
+          "accepted": true
+        },
+        {
+          "id": "leu_enkephalin-0",
+          "exact_response": true,
+          "equal_metrics": true,
+          "accepted": true
+        },
+        {
+          "id": "leu_enkephalin-1",
+          "exact_response": true,
+          "equal_metrics": true,
+          "accepted": true
+        },
+        {
+          "id": "ala_gly-0",
+          "exact_response": true,
+          "equal_metrics": true,
+          "accepted": true
+        },
+        {
+          "id": "ala_gly-1",
+          "exact_response": true,
+          "equal_metrics": true,
+          "accepted": true
+        },
+        {
+          "id": "cyclo_ala_gly-0",
+          "exact_response": true,
+          "equal_metrics": true,
+          "accepted": true
+        },
+        {
+          "id": "cyclo_ala_gly-1",
+          "exact_response": true,
+          "equal_metrics": true,
+          "accepted": true
+        },
+        {
+          "id": "sar_gly-0",
+          "exact_response": true,
+          "equal_metrics": true,
+          "accepted": true
+        },
+        {
+          "id": "sar_gly-1",
+          "exact_response": true,
+          "equal_metrics": true,
+          "accepted": true
+        },
+        {
+          "id": "unknown_isotope-0",
+          "exact_response": true,
+          "equal_metrics": true,
+          "accepted": true
+        },
+        {
+          "id": "unknown_isotope-1",
+          "exact_response": true,
+          "equal_metrics": true,
+          "accepted": true
+        },
+        {
+          "id": "diglycyl_lysine-0",
+          "exact_response": true,
+          "equal_metrics": true,
+          "accepted": true
+        },
+        {
+          "id": "diglycyl_lysine-1",
+          "exact_response": true,
+          "equal_metrics": true,
+          "accepted": true
+        },
+        {
+          "id": "unspecified_ala_gly-0",
+          "exact_response": true,
+          "equal_metrics": true,
+          "accepted": true
+        },
+        {
+          "id": "unspecified_ala_gly-1",
+          "exact_response": true,
+          "equal_metrics": true,
+          "accepted": true
+        },
+        {
+          "id": "disconnected_diglycine-0",
+          "exact_response": true,
+          "equal_metrics": true,
+          "accepted": true
+        },
+        {
+          "id": "disconnected_diglycine-1",
+          "exact_response": true,
+          "equal_metrics": true,
+          "accepted": true
+        },
+        {
+          "id": "ambiguous_diglycine-0",
+          "exact_response": true,
+          "equal_metrics": true,
+          "accepted": true
+        },
+        {
+          "id": "ambiguous_diglycine-1",
+          "exact_response": true,
+          "equal_metrics": true,
+          "accepted": true
+        }
+      ],
+      "source_unchanged": true
+    },
+    "long_import_confirmation": {
+      "method": "One fresh process, two calls to the existing Exenatide input; full ConversionResult equality versus the recorded baseline. Confirmation only, not a new paired timing study.",
+      "initialization_seconds": 0.36277791700558737,
+      "samples": [
+        {
+          "seconds": 7.042686333996244,
+          "assemblies": 129,
+          "full_result_equal_to_baseline": true,
+          "full_result_sha256": "7004b3e4b27d567540469e0173badba1d68c94a21d77b15eb5b219dea76dd977"
+        },
+        {
+          "seconds": 6.073757792008109,
+          "assemblies": 129,
+          "full_result_equal_to_baseline": true,
+          "full_result_sha256": "7004b3e4b27d567540469e0173badba1d68c94a21d77b15eb5b219dea76dd977"
+        }
+      ],
+      "hash_serialization": "SHA256 of UTF-8 JSON with sorted keys, compact separators, and default ASCII escaping; same convention as ux-performance-20260929.json."
+    }
+  }
+}

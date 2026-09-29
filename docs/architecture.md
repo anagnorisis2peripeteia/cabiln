@@ -104,6 +104,14 @@ identity and the exact requested change using the shared numbered connections.
 An occurrence's atom index, its attachment number, and its identity are different
 things, even when two attachment slots share one anchor atom.
 
+`notation` consumes complete bracket entries before legacy normalization can move
+them. Parsed entries retain source slices and distinguish sequential continuation
+from an arm that leaves the outer pointer unchanged. A shared declaration check
+enforces inverse crosslink slots across inline, bracket, and arm spellings before
+terminal inference. Library-free text adapters preserve unsupported input rather
+than deleting unknown annotations. The [normalization review](notation-normalization-review.md)
+records the connection rules and regression cases.
+
 The source layout records every explicit segment, bracket delimiter, nested arm
 and crosslink marker. The renderer consumes those records. It does not recover
 branches from connected components or guess all brackets from one character in

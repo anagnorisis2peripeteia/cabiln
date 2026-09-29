@@ -32,10 +32,11 @@ from pyPept.source import (
 )
 
 from pyPept.notation import (
-    BRACKET_ENTRY_RE as _BRACKET_ENTRY_RE, MIXED_ENTRY_RE as _MIXED_ENTRY_RE,
-    bracket_chain, legacy_attachment_slot,
+    BracketArm, bracket_chain, bracket_regions, parse_bracket_entries,
+    INLINE_BOND_RE as _INLINE_BOND_RE, parse_chain_entry, supports_bracket_token,
+    crosslink_declarations, text_crosslink_declarations,
+    validate_crosslink_declarations, legacy_attachment_slot,
     normalize_legacy_brackets as _flatten_nested_brackets,
-    _flatten_one_nested, _ENTRY_ANY,
 )
 
 import string
@@ -235,10 +236,6 @@ def _slot_for_attachment(mol, atom_idx):
     return None
 
 
-# Matches .!marker with optional (host_r,cap_r) — crosslink endpoint.
-# Parens required on first occurrence; may be omitted on second (inverse inferred).
-_INLINE_BOND_RE = re.compile(r'\.(!\w+)(?:\((\d+),(\d+)\))?')
-
 # Matches .CapToken(host_r,cap_r) — named cap attachment.  The token may start
 # with a letter OR underscore: the monomer library uses `_OMe`, `_Bn`, `_NHBn`,
 # etc. for sidechain fragments whose token deliberately begins with `_` to
@@ -250,19 +247,6 @@ _INLINE_CAP_RE  = re.compile(r'\.([A-Za-z_]\w*)\((\d+),(\d+)\)')
 
 # Detects old BILN bare-integer crosslink annotations: Token(bid,rg) not preceded by '.'.
 _OLD_BILN_RE = re.compile(r'(?<![.!\w\[{])([A-Za-z]\w*)\((\d+),(\d+)\)')
-
-# Matches .[...] sequential reaction bracket on a residue: .[Cap1(x,y).Cap2(z,w)...]
-# The dot sits outside the bracket (consistent with inline .Cap(r,r) notation).
-# Each entry inside uses Fragment(prev_r, cap_r); entries separated by '.'.
-# Sub-bracket arms [.Entry(r,r)] inside .[...] are supported: each arm connects from
-# the current chain pointer without advancing it, enabling multi-arm hubs.
-_BRACKET_RE = re.compile(
-    r'\.\[([^\[\]]*(?:\[[^\[\]]*\])*[^\[\]]*)\]'  # .[...] with optional inner [.arm]s
-    r'|\.\{([^{}]*)\}'                              # .{...} legacy BILN form
-)
-
-
-
 
 def biln_to_cabiln(biln):
     """Convert old BILN crosslink notation ``Token(bid,rg)`` to CABILN ``.!n(y,z)`` form.
@@ -399,26 +383,33 @@ def _expand_inline_caps(biln, peptide_branch_threshold=2, warning_sink=None):
     separator; branch_rgroup maps each !x to its partner rgroup from first occurrence.
     """
     biln = _preprocess_cabiln(biln)
-    segments = [s for s in biln.split('%') if s.strip()]
+    original_segments = [s for s in biln.split('%') if s.strip()]
+    segments = [_flatten_nested_brackets(seg) for seg in original_segments]
 
-    # Preliminary scan: collect _seen from all explicit .!n(y,z) occurrences so
-    # terminal markers and no-parens second occurrences can look up the inverse
-    # regardless of segment order.
-    _seen = {}
-    _SCAN_RE = re.compile(r'\.(!\w+)\((\d+),(\d+)\)')
+    # Parse each bracket once, then collect declarations in source order from
+    # those entries and the surrounding inline text. All endpoint spellings use
+    # the same inverse-pair check before terminal/bare markers infer their slots.
+    parsed_brackets = []
+    declarations = []
+
+    def inline_declarations(text):
+        return (
+            (m.group(1), m.group(2), m.group(3))
+            for m in _INLINE_BOND_RE.finditer(text) if m.group(2) is not None
+        )
+
     for seg in segments:
-        for m in _SCAN_RE.finditer(seg):
-            tok, hr, cr = m.group(1), m.group(2), m.group(3)
-            if tok not in _seen:
-                _seen[tok] = (hr, cr)
-            else:
-                fhr, fcr = _seen[tok]
-                if hr != fcr or cr != fhr:
-                    raise ValueError(
-                        f"Bond {tok!r}: R-group conflict. "
-                        f"First endpoint declared R{fhr}→partner R{fcr}; "
-                        f"second endpoint declares R{hr}→partner R{cr} "
-                        f"(expected inverse R{fcr}→partner R{fhr}).")
+        groups = []
+        previous_end = 0
+        for start, end in bracket_regions(seg):
+            declarations.extend(inline_declarations(seg[previous_end:start]))
+            entries = parse_bracket_entries('.' + seg[start + 2:end - 1])
+            declarations.extend(crosslink_declarations(entries))
+            groups.append(entries)
+            previous_end = end
+        declarations.extend(inline_declarations(seg[previous_end:]))
+        parsed_brackets.append(groups)
+    _seen = validate_crosslink_declarations(declarations)
 
     appended = []
     _ctr = [100]
@@ -452,49 +443,28 @@ def _expand_inline_caps(biln, peptide_branch_threshold=2, warning_sink=None):
     # set just before each call: (host_name, prefix_before_host, rest_of_seg)
     _bracket_ctx = [None]
 
-    def _sub_bracket(m):
-        # dot lives outside bracket in notation; restore for _MIXED_ENTRY_RE parsing
-        raw = _source_group(m, 1) if m.group(1) is not None else _source_group(m, 2)
-        content = '.' + raw
-        tokens = list(_MIXED_ENTRY_RE.finditer(content))
-        if not tokens:
-            raise ValueError(
-                f"Sequential bracket {m.group(0)!r} contains no valid "
-                f".Fragment(host_r,cap_r) entries.")
-        reconstructed = ''.join(t.group(0) for t in tokens)
-        if reconstructed != content:
-            raise ValueError(
-                f"Sequential bracket {m.group(0)!r} has unrecognised content; "
-                f"expected only .Fragment(r,r), .!n(r,r), or [.arm(r,r)] entries.")
-
+    def _sub_bracket(bracket, tokens):
         first = tokens[0]
-        if first.group(1) is not None:
-            raise ValueError(
-                f"Sequential bracket {m.group(0)!r}: first entry must be a flat "
-                f".Entry(r,r) or .!n(r,r), not a sub-bracket arm.")
-
-        tok1, hr1, cr1 = _source_group(first, 2), first.group(3), first.group(4)
-        _source_record(tok1, _source_group(first), 'bracket', _source_group(m), terminal=len(tokens) == 1)
+        tok1, hr1, cr1 = first.token, first.previous_slot, first.own_slot
+        _source_record(tok1, first.text, 'bracket', bracket, terminal=len(tokens) == 1)
 
         if tok1.startswith('!'):
             # Pure crosslink bracket: .[!1(4,4)] or .[!1(4,4).!2(5,3)]
             # Each entry is a crosslink bond on the host monomer — no pendant fragment.
             host_bonds = []
             for t in tokens:
-                if t.group(1) is not None:
+                if isinstance(t, BracketArm):
                     raise ValueError(
-                        f"Sequential bracket {m.group(0)!r}: sub-bracket arm cannot "
+                        f"Sequential bracket {bracket!r}: sub-bracket arm cannot "
                         f"appear in a pure-crosslink bracket.")
-                tok = t.group(2)
+                tok = t.token
                 if not tok.startswith('!'):
                     raise ValueError(
-                        f"Sequential bracket {m.group(0)!r}: monomer entry {tok!r} "
+                        f"Sequential bracket {bracket!r}: monomer entry {tok!r} "
                         f"cannot follow crosslink-first entries.")
-                prev_r, cur_r = t.group(3), t.group(4)
-                if tok not in _seen:
-                    _seen[tok] = (prev_r, cur_r)
+                prev_r, cur_r = t.previous_slot, t.own_slot
                 _count[tok] = _count.get(tok, 0) + 1
-                _source_bond_marker(_source_group(t), int(prev_r), bracket=_source_group(m))
+                _source_bond_marker(t.text, int(prev_r), bracket=bracket)
                 host_bonds.append(f'({tok},{prev_r})')
             return ''.join(host_bonds)
 
@@ -505,27 +475,24 @@ def _expand_inline_caps(biln, peptide_branch_threshold=2, warning_sink=None):
         pointer_idx = 0  # index into frag_bond_parts of the current chain tail
 
         for token_position, t in enumerate(tokens[1:], 1):
-            if t.group(1) is not None:
+            if isinstance(t, BracketArm):
                 # Sub-bracket arm [.sub_content]: process its entries as a chain
                 # branching FROM the current pointer.  The arm does NOT advance
                 # pointer_idx — the next sibling arm or flat entry still bonds from
                 # the same host fragment.
-                sub_content = '.' + _source_group(t, 1)
-                sub_steps = list(_BRACKET_ENTRY_RE.finditer(sub_content))
-                if not sub_steps or ''.join(step.group(0) for step in sub_steps) != sub_content:
-                    raise ValueError(
-                        f"Sequential sub-bracket {t.group(0)!r} has unrecognised "
-                        "content; expected only .Fragment(r,r) or .!n(r,r) entries.")
+                sub_steps = t.entries
                 sub_ptr = pointer_idx
                 for step_position, step in enumerate(sub_steps):
-                    tok, prev_r, cur_r = _source_group(step, 1), step.group(2), step.group(3)
-                    _source_record(tok, _source_group(step), 'bracket', _source_group(m), _source_group(t), step_position == len(sub_steps) - 1)
+                    tok, prev_r, cur_r = step.token, step.previous_slot, step.own_slot
+                    _source_record(
+                        tok, step.text, 'bracket', bracket, t.text,
+                        step_position == len(sub_steps) - 1,
+                    )
                     if tok.startswith('!'):
-                        _source_bond_marker(_source_group(step), int(prev_r),
-                                            owner=frag_tokens[sub_ptr], bracket=_source_group(m), arm=_source_group(t))
+                        _source_bond_marker(step.text, int(prev_r),
+                                            owner=frag_tokens[sub_ptr],
+                                            bracket=bracket, arm=t.text)
                         frag_bond_parts[sub_ptr] += f'({tok},{prev_r})'
-                        if tok not in _seen:
-                            _seen[tok] = (prev_r, cur_r)
                         _count[tok] = _count.get(tok, 0) + 1
                     else:
                         bid = _ctr[0]; _ctr[0] += 1
@@ -536,14 +503,15 @@ def _expand_inline_caps(biln, peptide_branch_threshold=2, warning_sink=None):
                 # pointer_idx intentionally NOT updated: arm is a branch, not chain
             else:
                 # Flat entry: crosslink annotates current host; monomer advances chain.
-                tok, prev_r, cur_r = _source_group(t, 2), t.group(3), t.group(4)
-                _source_record(tok, _source_group(t), 'bracket', _source_group(m), terminal=token_position == len(tokens) - 1)
+                tok, prev_r, cur_r = t.token, t.previous_slot, t.own_slot
+                _source_record(
+                    tok, t.text, 'bracket', bracket,
+                    terminal=token_position == len(tokens) - 1,
+                )
                 if tok.startswith('!'):
-                    _source_bond_marker(_source_group(t), int(prev_r),
-                                        owner=frag_tokens[pointer_idx], bracket=_source_group(m))
+                    _source_bond_marker(t.text, int(prev_r),
+                                        owner=frag_tokens[pointer_idx], bracket=bracket)
                     frag_bond_parts[pointer_idx] += f'({tok},{prev_r})'
-                    if tok not in _seen:
-                        _seen[tok] = (prev_r, cur_r)
                     _count[tok] = _count.get(tok, 0) + 1
                 else:
                     bid = _ctr[0]; _ctr[0] += 1
@@ -557,8 +525,8 @@ def _expand_inline_caps(biln, peptide_branch_threshold=2, warning_sink=None):
         if (peptide_branch_threshold is not None
                 and len(_backbone_steps) >= peptide_branch_threshold):
             flat_chain_toks = [
-                t.group(2) for t in tokens
-                if t.group(1) is None and not t.group(2).startswith('!')
+                t.token for t in tokens
+                if not isinstance(t, BracketArm) and not t.token.startswith('!')
             ]
             frag_chain = '-'.join(flat_chain_toks)
             branch_seg = f'!n-{frag_chain}' if cr1 == '1' else f'{frag_chain}-!n'
@@ -569,7 +537,7 @@ def _expand_inline_caps(biln, peptide_branch_threshold=2, warning_sink=None):
             else:
                 suggestion = f"host.!n({hr1},{cr1})-[chain]%%{branch_seg}"
             _emit_warning(
-                f"Sequential bracket {m.group(0)!r} contains {len(_backbone_steps)} "
+                f"Sequential bracket {bracket!r} contains {len(_backbone_steps)} "
                 f"R2->R1 connections: backbone amide pattern detected — this creates "
                 f"a peptide branch inside [...].  Did you mean:\n"
                 f"  {suggestion}",
@@ -584,16 +552,16 @@ def _expand_inline_caps(biln, peptide_branch_threshold=2, warning_sink=None):
     for segment_number, seg in enumerate(segments):
         if isinstance(seg, SourceText):
             seg.tracker.segment = segment_number
-            for root in split_outside(seg, '-', '[]'):
+            for root in split_outside(original_segments[segment_number], '-', '[]'):
                 seg.tracker.root(root, segment_number)
         seg = _handle_terminal_bond_markers(seg, _seen, _count)
-        seg = _flatten_nested_brackets(seg)
-        # Brackets first: they may contain .!n(r,r) crosslink entries that
-        # _INLINE_BOND_RE would otherwise grab prematurely.
+        # Terminal markers only alter text outside brackets. Locate the unchanged
+        # groups again after that edit, reusing their already parsed entries.
         parts = []
         last_end = 0
-        for bm in _BRACKET_RE.finditer(seg):
-            prefix = seg[last_end:bm.start()]
+        for (start, end), entries in zip(
+                bracket_regions(seg), parsed_brackets[segment_number]):
+            prefix = seg[last_end:start]
             parts.append(prefix)
             if '-' in prefix:
                 pre_host, host_token = prefix.rsplit('-', 1)
@@ -601,9 +569,9 @@ def _expand_inline_caps(biln, peptide_branch_threshold=2, warning_sink=None):
             else:
                 pre_host, host_token = '', prefix
             host_name = re.split(r'[(\[{]', host_token)[0].strip()
-            _bracket_ctx[0] = (host_name, pre_host, seg[bm.end():])
-            parts.append(_sub_bracket(bm))
-            last_end = bm.end()
+            _bracket_ctx[0] = (host_name, pre_host, seg[end:])
+            parts.append(_sub_bracket(seg[start:end], entries))
+            last_end = end
         parts.append(seg[last_end:])
         seg = _source_join('', parts)
         seg = _source_sub(_INLINE_BOND_RE, _sub_bond, seg)
@@ -702,6 +670,9 @@ def cabiln_to_branch(cabiln):
 
     Single-monomer brackets stay inline. ``{}`` brackets are immune.
     """
+    if validate_crosslink_declarations(
+            text_crosslink_declarations(cabiln), strict=False) is None:
+        return cabiln
     result = cabiln
     branches = []
     search_start = 0
@@ -905,6 +876,10 @@ def cabiln_to_bracket(cabiln):
     if '%' not in cabiln and '\n' not in cabiln:
         return cabiln
 
+    if validate_crosslink_declarations(
+            text_crosslink_declarations(cabiln), strict=False) is None:
+        return cabiln
+
     segments = _re.split(r'[%\n]', cabiln)
     segments = [s.strip() for s in segments if s.strip()]
     if len(segments) < 2:
@@ -936,11 +911,37 @@ def cabiln_to_bracket(cabiln):
 
     branch_segs = [_normalize_terminal_marker(bs) for bs in branch_segs]
 
-    # Separate branches: crosslink-connected vs positional
+    # Only rewrite branches whose full token/annotation syntax is understood.
+    # Preserve unsupported text byte-for-byte; never strip parentheses to make
+    # a malformed symbol or endpoint look valid.
+    parsed_branches = {}
+    endpoint_counts = {}
+    for bs in branch_segs:
+        entries = tuple(parse_chain_entry(part.strip()) for part in bs.split('-'))
+        if any(
+            entry is None or not supports_bracket_token(entry.token)
+            for entry in entries
+        ):
+            return cabiln
+        for entry in entries:
+            for tag, slots in entry.markers:
+                # This legacy adapter folds numeric labels. Named labels remain
+                # available to the modern parser/writer without prefix matching.
+                if not _re.fullmatch(r'!\d+', tag):
+                    return cabiln
+                endpoint_counts[tag] = endpoint_counts.get(tag, 0) + 1
+        parsed_branches[bs] = entries
+    for marker in _INLINE_BOND_RE.finditer(main_seg):
+        tag = marker.group(1)
+        endpoint_counts[tag] = endpoint_counts.get(tag, 0) + 1
+    if any(count > 2 for count in endpoint_counts.values()):
+        return cabiln
+
+    # Separate branches: crosslink-connected vs positional.
     positional = []
     crosslink = []
     for bs in branch_segs:
-        if _re.search(r'\.!\d+', bs):
+        if any(entry.markers for entry in parsed_branches[bs]):
             crosslink.append(bs)
         else:
             positional.append(bs)
@@ -950,17 +951,17 @@ def cabiln_to_bracket(cabiln):
     # chain MONO.!n.!m(a,b) → MONO.!m.!p(c,d) → MONO.!p (terminal).
     # These are emitted by cabiln_to_branch for non-standard (rt≠2) continuations.
     def _parse_chain_seg(bs):
-        raw = [p.strip() for p in _re.split(r'(?<!\()[-](?!\))', bs) if p.strip()]
-        if len(raw) != 1:
+        entries = parsed_branches[bs]
+        if len(entries) != 1:
             return None
-        seg = raw[0]
-        monomer = _re.split(r'\.!', seg)[0].strip()
-        outgoing = {}
-        for m in _re.finditer(r'\.(!\d+)\((\d+),(\d+)\)', seg):
-            outgoing[m.group(1)] = (m.group(2), m.group(3))
-        all_tags = _re.findall(r'\.(!\d+)', seg)
-        incoming = [t for t in all_tags if t not in outgoing]
-        return monomer, incoming, outgoing
+        entry = entries[0]
+        if entry.slots is not None:
+            return None
+        outgoing = {tag: slots for tag, slots in entry.markers if slots is not None}
+        incoming = [tag for tag, slots in entry.markers if slots is None]
+        if len(incoming) != 1 or len(outgoing) > 1:
+            return None
+        return entry.token, incoming, outgoing
 
     seg_parse = {}
     for bs in crosslink:
@@ -1026,17 +1027,16 @@ def cabiln_to_bracket(cabiln):
     # --- Phase 1: crosslink branches (.!n anchor in the branch) ---
     unconverted_crosslink = []
     for branch_seg in crosslink:
-        all_tags = _re.findall(r'\.(!\d+)', branch_seg)
+        entries = parsed_branches[branch_seg]
+        all_tags = [tag for entry in entries for tag, _ in entry.markers]
         unique_tags = list(dict.fromkeys(all_tags))
 
         if len(unique_tags) > 1:
             # Multi-tag hub (e.g., TBMB.!1.!2.!3) — single monomer only
-            raw_parts = _re.split(r'(?<!\()[-](?!\))', branch_seg)
-            raw_parts = [p.strip() for p in raw_parts if p.strip()]
-            if len(raw_parts) != 1:
+            if len(entries) != 1 or entries[0].slots is not None:
                 unconverted_crosslink.append(branch_seg)
                 continue
-            hub_name = _re.split(r'\.!', branch_seg)[0].strip()
+            hub_name = entries[0].token
             tag_info = {}
             for tag in unique_tags:
                 host_pat = _re.escape(f'.{tag}') + r'\((\d+),(\d+)\)'
@@ -1068,11 +1068,7 @@ def cabiln_to_bracket(cabiln):
             host_pat = _re.escape(f'.{anchor_tag}') + r'\(\d+,\d+\)'
             main_seg = _re.sub(host_pat, bracket_str, main_seg, count=1)
             continue
-        tag_m = _re.search(r'\.(!\d+)', branch_seg)
-        if not tag_m:
-            unconverted_crosslink.append(branch_seg)
-            continue
-        tag = tag_m.group(1)
+        tag = unique_tags[0]
         host_pat = _re.escape(f'.{tag}') + r'\((\d+),(\d+)\)'
         host_m = _re.search(host_pat, main_seg)
         if not host_m:
@@ -1080,22 +1076,15 @@ def cabiln_to_bracket(cabiln):
             continue
         r_host, r_branch = host_m.group(1), host_m.group(2)
 
-        raw_parts = _re.split(r'(?<!\()[-](?!\))', branch_seg)
-        raw_parts = [p.strip() for p in raw_parts if p.strip()]
-
-        # Find which monomer is the anchor (has .!n)
+        # Find the complete marker on its monomer, never a numeric prefix of
+        # another tag. Continuation slots belong to the monomer, not the marker.
         anchor_idx = None
         parsed = []
-        for j, rp in enumerate(raw_parts):
-            if f'.{tag}' in rp:
+        for j, entry in enumerate(entries):
+            if any(marker == tag for marker, _ in entry.markers):
                 anchor_idx = j
-            clean = _re.sub(r'\.' + _re.escape(tag), '', rp)
-            rg_m = _re.search(r'\((\d+),(\d+)\)', clean)
-            abbr = _re.sub(r'\([^)]*\)', '', clean).strip()
-            if rg_m:
-                parsed.append((abbr, rg_m.group(1), rg_m.group(2)))
-            else:
-                parsed.append((abbr, None, None))
+            previous, own = entry.slots or (None, None)
+            parsed.append((entry.token, previous, own))
         if anchor_idx is None:
             unconverted_crosslink.append(branch_seg)
             continue
@@ -1113,19 +1102,10 @@ def cabiln_to_bracket(cabiln):
             continue
         r_host, r_branch = host_m.group(1), host_m.group(2)
 
-        branch_parts = _re.split(r'(?<!\()[-](?!\))', branch_seg)
-        branch_parts = [p.strip() for p in branch_parts if p.strip()]
-
         bracket_items = []
-        for i, bp in enumerate(branch_parts):
-            if i == 0:
-                abbr = _re.sub(r'\([^)]*\)', '', bp).strip()
-                bracket_items.append(f'{abbr}({r_host},{r_branch})')
-            else:
-                if '(' in bp:
-                    bracket_items.append(bp)
-                else:
-                    bracket_items.append(f'{bp}(2,1)')
+        for i, entry in enumerate(parsed_branches[branch_seg]):
+            previous, own = (r_host, r_branch) if i == 0 else entry.slots or ('2', '1')
+            bracket_items.append(f'{entry.token}({previous},{own})')
         bracket_str = '.[' + '.'.join(bracket_items) + ']'
 
         main_seg = (main_seg[:host_m.start()] + bracket_str
