@@ -4,50 +4,53 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Register Monomer — pyPept</title>
+<link rel="stylesheet" href="/static/theme.css">
 <link rel="stylesheet" href="/static/register.css">
 </head>
 <body>
 <header>
-  <span class="title">Register Monomer <span style="color:#3a5580">— pyPept</span></span>
-  <a href="/">← Back to Renderer</a>
+  <h1 class="title">Register monomer <span>— pyPept</span></h1>
+  <a href="/"><svg class="ui-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M7 3L2 8l5 5M2 8h12"/></svg>Back to renderer</a>
 </header>
 
-<div class="page">
-  <div class="card">
-    <h2>STEP 1 — SMILES INPUT</h2>
+<main class="page">
+  <section class="card" aria-labelledby="smiles-step">
+    <h2 id="smiles-step">1. Enter SMILES</h2>
     <div class="field">
-      <label>Full monomer SMILES (all atoms, including leaving groups)</label>
-      <textarea id="smiles-in" placeholder="e.g.  NCC(=O)O  (glycine)  or  O=C(O)CN1C(=O)C=CC1=O  (Mal-Gly)" spellcheck="false" autocomplete="off"></textarea>
+      <label for="smiles-in">Full monomer SMILES</label>
+      <p id="smiles-help" class="field-help">Include all atoms and leaving groups.</p>
+      <textarea id="smiles-in" placeholder="e.g.  NCC(=O)O  (glycine)  or  O=C(O)CN1C(=O)C=CC1=O  (Mal-Gly)" spellcheck="false" autocomplete="off" aria-describedby="smiles-help"></textarea>
     </div>
-    <button class="btn btn-primary" id="btn-preview">Preview &amp; detect R-groups</button>
-  </div>
+    <button type="button" class="btn btn-primary" id="btn-preview">Preview &amp; detect R-groups</button>
+  </section>
 
   <div id="preview-section">
-    <div class="card">
-      <h2>STEP 2 — DETECTED R-GROUPS &amp; PREVIEW</h2>
-      <div id="preview-canvas"><div style="color:#b0bec5;font-size:13px">…</div></div>
-      <div id="detected-display" class="detected-types"></div>
+    <section class="card" aria-labelledby="preview-step">
+      <h2 id="preview-step">2. Review detected R-groups</h2>
+      <div id="preview-canvas" role="group" aria-label="Monomer preview"><div class="preview-message">Preview the monomer to inspect its attachment sites.</div></div>
+      <div id="detected-display" class="detected-types" role="status" aria-live="polite"></div>
       <div class="field">
-        <label>CHUCKLES (generated from the previewed SMILES)</label>
-        <textarea id="chuckles-out" spellcheck="false" autocomplete="off" readonly></textarea>
+        <label for="chuckles-out">CHUCKLES</label>
+        <p id="chuckles-help" class="field-help">Generated from the previewed SMILES.</p>
+        <textarea id="chuckles-out" spellcheck="false" autocomplete="off" readonly aria-describedby="chuckles-help"></textarea>
       </div>
-    </div>
+    </section>
 
-    <div class="card">
-      <h2>STEP 3 — METADATA</h2>
+    <section class="card" aria-labelledby="metadata-step">
+      <h2 id="metadata-step">3. Name and register</h2>
       <div class="field-row">
         <div class="field">
-          <label>Abbreviation (unique token)</label>
+          <label for="abbr-in">Abbreviation (unique token)</label>
           <input id="abbr-in" type="text" placeholder="e.g.  MalGly" autocomplete="off">
         </div>
         <div class="field">
-          <label>Full name</label>
+          <label for="name-in">Full name</label>
           <input id="name-in" type="text" placeholder="e.g.  Maleimidoglycine" autocomplete="off">
         </div>
       </div>
       <div class="field-row">
         <div class="field">
-          <label>Type</label>
+          <label for="type-in">Type</label>
           <select id="type-in">
             <option value="aa">aa</option>
             <option value="cap">cap</option>
@@ -55,7 +58,7 @@
           </select>
         </div>
         <div class="field">
-          <label>Subtype</label>
+          <label for="subtype-in">Subtype</label>
           <select id="subtype-in">
             <option value="natural">natural</option>
             <option value="modified">modified</option>
@@ -66,11 +69,11 @@
           </select>
         </div>
       </div>
-      <button class="btn btn-success" id="btn-register" disabled>Register monomer</button>
-      <div id="status-msg"></div>
-    </div>
+      <button type="button" class="btn btn-success" id="btn-register" disabled>Register monomer</button>
+      <div id="status-msg" role="status" aria-live="polite" aria-atomic="true"></div>
+    </section>
   </div>
-</div>
+</main>
 
 <script src="/static/register.js" defer></script>
 </body>

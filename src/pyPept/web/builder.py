@@ -125,8 +125,14 @@ def monomer_rgroups(
             target_mol = Chem.Mol(target_mol)
 
         sites = attachment_sites(target_mol, leaving_groups)
+        site_atoms = {
+            atom.GetIsotope(): atom.GetIdx()
+            for atom in target_mol.GetAtoms()
+            if atom.GetAtomicNum() == 0
+        }
         for site in sites:
             site["used"] = site["slot"] in used_slots
+            site["atom_idx"] = site_atoms[site["slot"]]
         svg = _draw_mol(target_mol, 180, 140, used_slots or None)
         return {"svg": svg, "rgroups": sites, "abbr": abbr}
     except Exception as exc:

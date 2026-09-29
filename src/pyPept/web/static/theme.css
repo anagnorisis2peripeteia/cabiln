@@ -1,0 +1,52 @@
+:root {
+  color-scheme: dark;
+  --surface-base: #202525;
+  --surface-panel: #242c29;
+  --surface-raised: #2b3231;
+  --surface-inset: #171d1b;
+  --surface-hover: #353f3a;
+  --line: #46524e;
+  --line-soft: #35413a;
+  --text: #edf2ef;
+  --muted: #a9b8b0;
+  --focus: #b8d4e2;
+  --action: #d6bb85;
+  --action-hover: #e4cd9f;
+  --action-ink: #292319;
+  --selection: #3d5452;
+  --selection-line: #8abbb4;
+  --success: #99c5a5;
+  --success-surface: #263c30;
+  --warning: #e8c68c;
+  --error: #f0a8a5;
+  --error-surface: #442b2c;
+  --canvas-text: #5f6b65;
+  --canvas-error: #a33736;
+  --font-ui: "Avenir Next", "Segoe UI", sans-serif;
+  --font-code: "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+  --radius-control: 5px;
+  --radius-panel: 7px;
+}
+
+[hidden] { display: none !important; }
+button, input, select { font-family: inherit; }
+button:focus-visible, a:focus-visible, input:focus-visible,
+textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
+}
+
+.ui-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; }
+}

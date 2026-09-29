@@ -10,6 +10,7 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -21,6 +22,7 @@ SERVER_ID = uuid.uuid4().hex[:8]
 
 def create_app(*, allow_registration=None):
     app = FastAPI(title="CABILN peptide builder")
+    app.add_middleware(GZipMiddleware, minimum_size=1000, compresslevel=4)
     app.state.allow_registration = (
         os.environ.get("CABILN_ENABLE_REGISTRATION") == "1"
         if allow_registration is None

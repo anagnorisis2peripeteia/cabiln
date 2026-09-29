@@ -46,6 +46,25 @@ uvicorn pyPept.web.app:app --host 0.0.0.0 --port 8732
 Render can also run `python tools/live_renderer.py`, which reads its `PORT`
 environment variable. `/health` reports whether the server responds.
 
+## Use the builder
+
+Open Library and choose **Use** beside a monomer to start a peptide. Select a
+residue chip, choose another monomer, select an attachment site on each side,
+and press **Connect**. The selected sites light up in their previews. Existing
+tile insertion, right-click selection, and selection through the drawing remain
+available. The same controls work with newly registered monomers.
+
+Sequence edits, connections, and conversions support **Undo** and **Redo**.
+Use Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z from the sequence input or builder controls.
+Changing the input format retains that format's draft and conversion warnings.
+The drawing stays visible during updates, with an explicit previous-drawing
+notice; selection and exports resume after the current input is validated.
+
+Drafts are saved in this browser. After reloading, choose **Restore saved draft**
+to recover the sequence, format drafts, and reference text. Starting new work
+resolves the recovery offer and saves the new draft. Browser storage must be
+available for recovery; Undo still works when storage is unavailable.
+
 ## Build a peptide
 
 ```python
@@ -160,8 +179,9 @@ Python 3.9, 3.11, and 3.13. Historical repair scripts under `tools/` are not tes
 entry points; some modify library files when run.
 
 The code layout and review findings are in [docs/architecture.md](docs/architecture.md)
-and [docs/cleanup-review.md](docs/cleanup-review.md). The current test results and
-browser acceptance are in [docs/rework-validation.md](docs/rework-validation.md).
+and [docs/cleanup-review.md](docs/cleanup-review.md). The latest editing, browser,
+and performance evidence is in
+[docs/ux-performance-validation.md](docs/ux-performance-validation.md).
 
 ## Attribution
 

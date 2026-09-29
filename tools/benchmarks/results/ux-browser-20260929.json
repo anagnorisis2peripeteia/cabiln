@@ -1,0 +1,240 @@
+{
+  "baseline": "433b14c",
+  "method": "Two fresh browser/server runs per revision, ordered baseline/current/current/baseline. Each records five edits and five explicit connections. Event-to-painted-result uses MutationObserver plus two animation frames; automation polling is excluded. Local macOS/Chrome samples after visual refinement, not hosted or production percentiles.",
+  "runs": {
+    "baseline": [
+      {
+        "application": "/var/folders/rn/ykyl5br95yx9qpywpm3bl5100000gn/T/cabiln-ux-backend-433b14c-sbvnvcch",
+        "browser": "chrome",
+        "viewport": {
+          "width": 1440,
+          "height": 1000
+        },
+        "edits": [
+          {
+            "source": "A-G",
+            "milliseconds": 1457.6000000238419
+          },
+          {
+            "source": "A-G-A",
+            "milliseconds": 335.30000001192093
+          },
+          {
+            "source": "A-G-A-G",
+            "milliseconds": 341.60000002384186
+          },
+          {
+            "source": "A-G-A-G-A",
+            "milliseconds": 341.80000001192093
+          },
+          {
+            "source": "A-G-A-G-A-G",
+            "milliseconds": 341.30000001192093
+          }
+        ],
+        "connections": [
+          {
+            "source": "A-G-A-G-A-G-A",
+            "milliseconds": 391.5999999642372
+          },
+          {
+            "source": "A-G-A-G-A-G-A-G",
+            "milliseconds": 379.19999998807907
+          },
+          {
+            "source": "A-G-A-G-A-G-A-G-A",
+            "milliseconds": 375
+          },
+          {
+            "source": "A-G-A-G-A-G-A-G-A-G",
+            "milliseconds": 379.80000001192093
+          },
+          {
+            "source": "A-G-A-G-A-G-A-G-A-G-A",
+            "milliseconds": 408.39999997615814
+          }
+        ],
+        "note": "Browser event through completed drawing/chips and two animation frames. Excludes automation polling. Run this file alone for a cold first edit. Small local samples, not production percentiles."
+      },
+      {
+        "application": "/var/folders/rn/ykyl5br95yx9qpywpm3bl5100000gn/T/cabiln-ux-backend-433b14c-sbvnvcch",
+        "browser": "chrome",
+        "viewport": {
+          "width": 1440,
+          "height": 1000
+        },
+        "edits": [
+          {
+            "source": "A-G",
+            "milliseconds": 933.6999999880791
+          },
+          {
+            "source": "A-G-A",
+            "milliseconds": 335.30000001192093
+          },
+          {
+            "source": "A-G-A-G",
+            "milliseconds": 338.89999997615814
+          },
+          {
+            "source": "A-G-A-G-A",
+            "milliseconds": 345.30000001192093
+          },
+          {
+            "source": "A-G-A-G-A-G",
+            "milliseconds": 355.30000001192093
+          }
+        ],
+        "connections": [
+          {
+            "source": "A-G-A-G-A-G-A",
+            "milliseconds": 383
+          },
+          {
+            "source": "A-G-A-G-A-G-A-G",
+            "milliseconds": 377.9000000357628
+          },
+          {
+            "source": "A-G-A-G-A-G-A-G-A",
+            "milliseconds": 392.0999999642372
+          },
+          {
+            "source": "A-G-A-G-A-G-A-G-A-G",
+            "milliseconds": 379.5
+          },
+          {
+            "source": "A-G-A-G-A-G-A-G-A-G-A",
+            "milliseconds": 424.39999997615814
+          }
+        ],
+        "note": "Browser event through completed drawing/chips and two animation frames. Excludes automation polling. Run this file alone for a cold first edit. Small local samples, not production percentiles."
+      }
+    ],
+    "current": [
+      {
+        "application": "current checkout",
+        "browser": "chrome",
+        "viewport": {
+          "width": 1440,
+          "height": 1000
+        },
+        "edits": [
+          {
+            "source": "A-G",
+            "milliseconds": 703.5999999642372
+          },
+          {
+            "source": "A-G-A",
+            "milliseconds": 205.80000001192093
+          },
+          {
+            "source": "A-G-A-G",
+            "milliseconds": 203.89999997615814
+          },
+          {
+            "source": "A-G-A-G-A",
+            "milliseconds": 207.5
+          },
+          {
+            "source": "A-G-A-G-A-G",
+            "milliseconds": 207.80000001192093
+          }
+        ],
+        "connections": [
+          {
+            "source": "A-G-A-G-A-G-A",
+            "milliseconds": 88.59999996423721
+          },
+          {
+            "source": "A-G-A-G-A-G-A-G",
+            "milliseconds": 77.69999998807907
+          },
+          {
+            "source": "A-G-A-G-A-G-A-G-A",
+            "milliseconds": 73.40000003576279
+          },
+          {
+            "source": "A-G-A-G-A-G-A-G-A-G",
+            "milliseconds": 78.80000001192093
+          },
+          {
+            "source": "A-G-A-G-A-G-A-G-A-G-A",
+            "milliseconds": 104.70000004768372
+          }
+        ],
+        "note": "Browser event through completed drawing/chips and two animation frames. Excludes automation polling. Run this file alone for a cold first edit. Small local samples, not production percentiles."
+      },
+      {
+        "application": "current checkout",
+        "browser": "chrome",
+        "viewport": {
+          "width": 1440,
+          "height": 1000
+        },
+        "edits": [
+          {
+            "source": "A-G",
+            "milliseconds": 1216.3999999761581
+          },
+          {
+            "source": "A-G-A",
+            "milliseconds": 204.69999998807907
+          },
+          {
+            "source": "A-G-A-G",
+            "milliseconds": 211.70000004768372
+          },
+          {
+            "source": "A-G-A-G-A",
+            "milliseconds": 203.30000001192093
+          },
+          {
+            "source": "A-G-A-G-A-G",
+            "milliseconds": 205.70000004768372
+          }
+        ],
+        "connections": [
+          {
+            "source": "A-G-A-G-A-G-A",
+            "milliseconds": 87.40000003576279
+          },
+          {
+            "source": "A-G-A-G-A-G-A-G",
+            "milliseconds": 78.89999997615814
+          },
+          {
+            "source": "A-G-A-G-A-G-A-G-A",
+            "milliseconds": 72.19999998807907
+          },
+          {
+            "source": "A-G-A-G-A-G-A-G-A-G",
+            "milliseconds": 77.40000003576279
+          },
+          {
+            "source": "A-G-A-G-A-G-A-G-A-G-A",
+            "milliseconds": 103.89999997615814
+          }
+        ],
+        "note": "Browser event through completed drawing/chips and two animation frames. Excludes automation polling. Run this file alone for a cold first edit. Small local samples, not production percentiles."
+      }
+    ]
+  },
+  "summary": {
+    "baseline": {
+      "first_edit_ms": [
+        1457.6000000238419,
+        933.6999999880791
+      ],
+      "warm_edit_median_ms": 341.4500000178814,
+      "connection_median_ms": 381.40000000596046
+    },
+    "current": {
+      "first_edit_ms": [
+        703.5999999642372,
+        1216.3999999761581
+      ],
+      "warm_edit_median_ms": 205.75000002980232,
+      "connection_median_ms": 78.84999999403954
+    }
+  }
+}

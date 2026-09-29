@@ -1,0 +1,100 @@
+{
+  "method": "Actual encoded response bytes via TestClient.iter_raw(), Accept-Encoding: gzip. Current includes the shared theme stylesheet and final visual refinement. Local application transfer sizes; excludes headers/TLS and hosting-edge compression.",
+  "baseline": [
+    {
+      "path": "/",
+      "status": 200,
+      "encoding": "identity",
+      "transferred_bytes": 7329,
+      "sha256_transferred": "23a5a67d081bab55e872efc9b828d14e37101660a1caffc19fa2910238483a0e"
+    },
+    {
+      "path": "/static/builder.js",
+      "status": 200,
+      "encoding": "identity",
+      "transferred_bytes": 62102,
+      "sha256_transferred": "e24f1bd28093f4ae74ed94ee59e547bea213882572efdbc68b990158ceee0f33"
+    },
+    {
+      "path": "/static/builder.css",
+      "status": 200,
+      "encoding": "identity",
+      "transferred_bytes": 15700,
+      "sha256_transferred": "b59015a8a40edefc37f80f68653fe96c0a2af450af583719b7e206189924fbd4"
+    },
+    {
+      "path": "/render",
+      "status": 200,
+      "encoding": "identity",
+      "transferred_bytes": 28122,
+      "sha256_transferred": "56e0c2892d1b02ff0c8a4b9b23259f4228b0e11fe4746cc585afa23b75f9b7a3"
+    }
+  ],
+  "current": [
+    {
+      "path": "/",
+      "status": 200,
+      "encoding": "gzip",
+      "transferred_bytes": 3154,
+      "sha256_transferred": "78e91f449b03a98ce5d57fa518db3720a9f32e08649e69d4811b49f4671dcb12"
+    },
+    {
+      "path": "/static/theme.css",
+      "status": 200,
+      "encoding": "gzip",
+      "transferred_bytes": 677,
+      "sha256_transferred": "0a252c68e1d7f28ba2c797fd448afc3579a27c9de801cd638f82a74f19816e58"
+    },
+    {
+      "path": "/static/builder.js",
+      "status": 200,
+      "encoding": "gzip",
+      "transferred_bytes": 17567,
+      "sha256_transferred": "95136c3978682663a311bd1c5ef2691ff88ee714cf6c378a9d37f7f3540a82e7"
+    },
+    {
+      "path": "/static/builder.css",
+      "status": 200,
+      "encoding": "gzip",
+      "transferred_bytes": 4712,
+      "sha256_transferred": "e8ff36074a0c240daf196981c46886ede32a1ce0b76d37f92f353fb8485d1509"
+    },
+    {
+      "path": "/render",
+      "status": 200,
+      "encoding": "gzip",
+      "transferred_bytes": 5111,
+      "sha256_transferred": "0a864bcc37496f3de125c52a0bbd2775ddc6412a15c5e85aba4328daa83fa006"
+    }
+  ],
+  "registration": [
+    {
+      "path": "/register",
+      "status": 200,
+      "encoding": "gzip",
+      "transferred_bytes": 1203,
+      "sha256_transferred": "b9bb283cd6b3852503c3b5b9d9f9f9d10ac7bd34de1ea31f1dfce626c48681e3"
+    },
+    {
+      "path": "/static/theme.css",
+      "status": 200,
+      "encoding": "gzip",
+      "transferred_bytes": 677,
+      "sha256_transferred": "0a252c68e1d7f28ba2c797fd448afc3579a27c9de801cd638f82a74f19816e58"
+    },
+    {
+      "path": "/static/register.js",
+      "status": 200,
+      "encoding": "gzip",
+      "transferred_bytes": 1840,
+      "sha256_transferred": "1805caa558a37307aba8c3e61b9091b335a77ad8405dea2fc0ef6b825b6601e1"
+    },
+    {
+      "path": "/static/register.css",
+      "status": 200,
+      "encoding": "gzip",
+      "transferred_bytes": 1331,
+      "sha256_transferred": "99fa7aa12dd0f1e269799b261725835e438067872cafd281a6957f8d25c339b3"
+    }
+  ]
+}

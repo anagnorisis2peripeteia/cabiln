@@ -4,33 +4,40 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>CABILN Live Renderer</title>
+<link rel="stylesheet" href="/static/theme.css">
 <link rel="stylesheet" href="/static/builder.css">
 </head>
 <body>
 
 <header>
-  <span class="title">CABILN Live Renderer <span>— pyPept</span></span>
-  <button id="btn-lib"      class="hbtn green"  title="Browse monomer library">📋 Library</button>
-  <button id="btn-examples" class="hbtn green"  title="Browse example peptides">🧬 Examples</button>
-  <button id="btn-hl"     class="hbtn active" title="Toggle residue highlighting">🔗 Highlight</button>
-  <button id="btn-dark"   class="hbtn"        title="Toggle dark canvas">🌙 Dark</button>
-  <button id="btn-verify" class="hbtn"        title="SMILES vs CABILN comparison">⚖ Verify</button>
-  <button id="btn-build"  class="hbtn green" title="Visual peptide builder">🔧 Build</button>
-  <button id="btn-to-bracket" class="hbtn" title="Convert to bracket notation">→[ ]</button>
-  <button id="btn-to-branch"  class="hbtn" title="Convert to branch (%) notation">→%</button>
-  <button id="btn-reroll" class="hbtn"        title="New 2D layout seed" disabled>⟳ Reroll</button>
-  <button id="btn-png"    class="hbtn"        title="Download PNG" disabled>⬇ PNG</button>
-  <button id="btn-mol"    class="hbtn"        title="Download MOL file" disabled>⬇ MOL</button>
-  <a id="register-link" href="/register" target="_blank" rel="noopener" style="text-decoration:none;" hidden>
-    <button class="hbtn green" title="Register a new monomer">＋ Register</button>
-  </a>
+  <h1 class="title">CABILN Live Renderer <span>— pyPept</span></h1>
+  <div class="toolbar-group" role="group" aria-label="Panels">
+    <button type="button" id="btn-lib" class="hbtn green" title="Browse monomer library" aria-controls="lib-panel" aria-expanded="false"><svg class="ui-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M2 3h3v10H2zM7 3h3v10H7zM12 3l2 10"/></svg>Library</button>
+    <button type="button" id="btn-examples" class="hbtn green" title="Browse example peptides" aria-controls="examples-panel" aria-expanded="false"><svg class="ui-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M5 2h8v9M3 5h8v9H3zM5 8h4M5 11h3"/></svg>Examples</button>
+    <button type="button" id="btn-build" class="hbtn green" title="Visual peptide builder" aria-controls="build-panel" aria-expanded="false"><svg class="ui-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><circle cx="3" cy="8" r="2"/><circle cx="12" cy="3" r="2"/><circle cx="12" cy="13" r="2"/><path d="M5 7l5-3M5 9l5 3"/></svg>Build</button>
+    <button type="button" id="btn-verify" class="hbtn" title="SMILES vs CABILN comparison" aria-controls="verify-pane" aria-expanded="false"><svg class="ui-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M9 3H2v10h10V8M6 7l2 2 6-6"/></svg>Verify</button>
+  </div>
+  <div class="toolbar-group" role="group" aria-label="Drawing">
+    <button type="button" id="btn-hl" class="hbtn active" title="Toggle residue highlighting" aria-pressed="true"><svg class="ui-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M6 3l7 7-4 4-7-7zM2 11l3 3M1 15h6M9 1l5 5"/></svg>Highlight</button>
+    <button type="button" id="btn-dark" class="hbtn" title="Toggle dark canvas" aria-pressed="true"><svg class="ui-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M13.8 9.1A6 6 0 0 1 6.9 2.2a6 6 0 1 0 6.9 6.9z"/></svg>Dark</button>
+    <button type="button" id="btn-reroll" class="hbtn" title="New 2D layout seed" disabled>⟳ Reroll</button>
+  </div>
+  <div class="toolbar-group" role="group" aria-label="Notation">
+    <button type="button" id="btn-to-bracket" class="hbtn" title="Convert to bracket notation" aria-label="Convert to bracket notation">→[ ]</button>
+    <button type="button" id="btn-to-branch" class="hbtn" title="Convert to branch (%) notation" aria-label="Convert to branch notation">→%</button>
+  </div>
+  <div class="toolbar-group" role="group" aria-label="Export and registration">
+    <button type="button" id="btn-png" class="hbtn" title="Download PNG" disabled><svg class="ui-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M8 2v8M5 7l3 3 3-3M2 11v3h12v-3"/></svg>PNG</button>
+    <button type="button" id="btn-mol" class="hbtn" title="Download MOL file" disabled><svg class="ui-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M8 2v8M5 7l3 3 3-3M2 11v3h12v-3"/></svg>MOL</button>
+    <a id="register-link" class="hbtn green" href="/register" target="_blank" rel="noopener" title="Register a new monomer in a new tab" hidden><svg class="ui-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M8 3v10M3 8h10"/></svg>Register</a>
+  </div>
 </header>
 
 <!-- input bar (always visible) -->
 <div id="input-bar">
   <div id="input-bar-row">
-    <span class="seq-label" id="cabiln-label">Sequence</span>
-    <select id="notation-select" title="Input notation">
+    <label class="seq-label" id="cabiln-label" for="cabiln-input">Sequence</label>
+    <select id="notation-select" title="Input notation" aria-label="Input notation">
       <option value="cabiln" selected>CABILN</option>
       <option value="smiles">SMILES</option>
       <option value="biln">BILN</option>
@@ -38,111 +45,126 @@
     </select>
     <textarea id="cabiln-input"
               placeholder="e.g.  fmoc-A-G-L-am&#10;fmoc-C.trt(4,2)-A-K.boc(4,2)-am&#10;fmoc-K.!1(4,4)-G-G-E.!1-am"
-              spellcheck="false" autocomplete="off"></textarea>
-    <button id="btn-to-cabiln-pct"     class="hbtn green" style="display:none;font-size:10px;padding:2px 10px;white-space:nowrap;" title="Convert to CABILN (% branch notation)">→ %</button>
-    <button id="btn-to-cabiln-bracket" class="hbtn green" style="display:none;font-size:10px;padding:2px 10px;white-space:nowrap;" title="Convert to CABILN ([] bracket notation)">→ []</button>
+              spellcheck="false" autocomplete="off" aria-describedby="cabiln-status conversion-status"></textarea>
+    <div class="history-controls" role="group" aria-label="Sequence history">
+      <button type="button" id="btn-undo" class="hbtn" title="Undo last edit" disabled><svg class="ui-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M6 3L2 7l4 4M2 7h7a4 4 0 0 1 4 4v2"/></svg>Undo</button>
+      <button type="button" id="btn-redo" class="hbtn" title="Redo last edit" disabled><svg class="ui-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M10 3l4 4-4 4M14 7H7a4 4 0 0 0-4 4v2"/></svg>Redo</button>
+    </div>
+    <button type="button" id="btn-to-cabiln-pct" class="hbtn green convert-input" style="display:none;" title="Convert to CABILN (% branch notation)" aria-label="Convert input to branch notation">→ %</button>
+    <button type="button" id="btn-to-cabiln-bracket" class="hbtn green convert-input" style="display:none;" title="Convert to CABILN ([] bracket notation)" aria-label="Convert input to bracket notation">→ []</button>
   </div>
-  <div id="cabiln-status" class="statusbar"></div>
-  <div id="conversion-status" class="statusbar warn" hidden></div>
-  <div id="residue-chips"></div>
+  <div id="draft-notice" class="draft-notice" hidden>
+    <span id="draft-status" role="status" aria-live="polite" aria-atomic="true"></span>
+    <button type="button" id="btn-restore-draft" class="hbtn">Restore saved draft</button>
+    <button type="button" id="btn-dismiss-draft" class="hbtn">Dismiss</button>
+  </div>
+  <div id="cabiln-status" class="statusbar" role="status" aria-live="polite" aria-atomic="true"></div>
+  <div id="conversion-status" class="statusbar warn" role="status" aria-live="polite" aria-atomic="true" hidden></div>
+  <div id="conversion-progress" class="operation-progress" hidden>
+    <span id="conversion-progress-label" role="status" aria-live="polite" aria-atomic="true">Converting structure…</span>
+  </div>
+  <div id="residue-chips" role="group" aria-label="Residues and connections"></div>
 </div>
 
 <!-- build panel -->
-<div id="build-panel">
+<section id="build-panel" aria-labelledby="build-title">
   <div class="build-header">
-    <span>Build by Connection</span>
-    <span class="build-hint" id="build-hint">Select a chip on the sequence, then right-click a monomer in the library</span>
-    <button id="build-close" style="background:none;border:none;color:#4a6a9a;font-size:16px;cursor:pointer;padding:2px 4px;">✕</button>
+    <h2 class="panel-title" id="build-title">Build by Connection</h2>
+    <span class="build-hint" id="build-hint" role="status" aria-live="polite">Select a residue, then choose Use beside a library monomer</span>
+    <button type="button" id="build-close" class="panel-close" title="Close Build" aria-label="Close Build panel">✕</button>
   </div>
   <div class="build-boxes">
     <div class="build-box" id="build-left">
-      <div class="box-label"><span>Current residue</span><button class="box-clear-btn" id="build-left-change" title="Clear selection">Clear</button></div>
+      <div class="box-label"><span id="build-left-label">Current residue</span><button type="button" class="box-clear-btn" id="build-left-change" title="Clear selection" aria-label="Clear current residue selection">Clear</button></div>
       <div class="box-abbr" id="build-left-abbr">—</div>
       <div class="box-svg" id="build-left-svg">
         <div class="box-placeholder">Click a chip above</div>
       </div>
-      <div class="rgroup-buttons" id="build-left-rgroups"></div>
+      <div class="rgroup-buttons" id="build-left-rgroups" role="group" aria-labelledby="build-left-label"></div>
     </div>
     <div class="build-arrow">
-      <div class="arrow-icon">⟷</div>
-      <button class="build-connect-btn" id="build-connect" disabled>Connect</button>
-      <div class="build-status" id="build-status"></div>
+      <div class="arrow-icon" aria-hidden="true">⟷</div>
+      <button type="button" class="build-connect-btn" id="build-connect" disabled>Connect</button>
+      <div class="build-status" id="build-status" role="status" aria-live="polite" aria-atomic="true"></div>
     </div>
     <div class="build-box" id="build-right">
-      <div class="box-label"><span id="build-right-label">New monomer</span><button class="box-clear-btn" id="build-right-change" title="Clear selection">Clear</button></div>
+      <div class="box-label"><span id="build-right-label">New monomer</span><button type="button" class="box-clear-btn" id="build-right-change" title="Clear selection" aria-label="Clear new monomer selection">Clear</button></div>
       <div class="box-abbr" id="build-right-abbr">—</div>
       <div class="box-svg" id="build-right-svg">
-        <div class="box-placeholder">Right-click from library</div>
+        <div class="box-placeholder">Choose Use in the library</div>
       </div>
-      <div class="rgroup-buttons" id="build-right-rgroups"></div>
+      <div class="rgroup-buttons" id="build-right-rgroups" role="group" aria-labelledby="build-right-label"></div>
     </div>
   </div>
-  <div id="build-insert-row" style="display:none;align-items:center;gap:10px;padding:6px 2px 0;">
-    <span id="build-insert-info" style="font-size:10px;color:#5a8ab0;flex:1;"></span>
-    <button id="build-insert-btn" class="hbtn green" style="font-size:10px;padding:2px 10px;">⊕ Insert Between</button>
+  <div id="build-insert-row" style="display:none;">
+    <span id="build-insert-info"></span>
+    <button type="button" id="build-insert-btn" class="hbtn green">⊕ Insert Between</button>
   </div>
-</div>
+</section>
 
 <!-- main area -->
-<div id="main">
+<main id="main">
 
   <!-- library sidebar (persistent until dismissed) -->
-  <div id="lib-panel">
+  <aside id="lib-panel" aria-labelledby="lib-title">
     <div id="lib-header">
-      <span>Monomer Library</span>
-      <input id="lib-search" type="text" placeholder="Search abbr / name / type…" autocomplete="off">
-      <button id="btn-rxn-filter" class="hbtn" title="Filter to monomers reactive with selected residue" disabled>⚗ Filter</button>
-      <button id="lib-close" title="Close">✕</button>
+      <h2 class="panel-title" id="lib-title">Monomer Library</h2>
+      <input id="lib-search" type="search" placeholder="Search abbr / name / type…" autocomplete="off" aria-label="Search monomer library" aria-describedby="lib-count">
+      <button type="button" id="btn-rxn-filter" class="hbtn" title="Filter to monomers reactive with selected residue" aria-pressed="false" disabled><svg class="ui-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M2 3h12L9 9v4l-2 1V9z"/></svg>Filter</button>
+      <button type="button" id="lib-close" class="panel-close" title="Close Library" aria-label="Close monomer library">✕</button>
     </div>
-    <div id="lib-count"></div>
+    <div id="lib-count" role="status" aria-live="polite"></div>
     <div id="lib-list"><div class="placeholder">Loading…</div></div>
-  </div>
+  </aside>
   <div id="lib-preview"></div>
 
   <!-- render mode -->
-  <div id="render-pane">
-    <div id="render-canvas" class="canvas-wrap">
+  <section id="render-pane" aria-label="Peptide drawing" aria-busy="false">
+    <div id="render-canvas" class="canvas-wrap" role="group" aria-label="Peptide structure; scroll to zoom, drag to pan, double-click to reset">
       <div class="canvas-inner" id="render-inner">
         <div class="placeholder">Start typing a sequence…</div>
       </div>
     </div>
-  </div>
+    <div id="render-progress" class="operation-progress" hidden>
+      <span id="render-progress-label" role="status" aria-live="polite" aria-atomic="true">Updating drawing…</span>
+    </div>
+  </section>
 
   <!-- example peptide sidebar (right, persistent) -->
-  <div id="examples-panel">
+  <aside id="examples-panel" aria-labelledby="examples-title">
     <div id="examples-header">
-      <span>Example Peptides</span>
-      <button id="examples-close" title="Close">✕</button>
+      <h2 class="panel-title" id="examples-title">Example Peptides</h2>
+      <button type="button" id="examples-close" class="panel-close" title="Close Examples" aria-label="Close example peptides">✕</button>
     </div>
     <div id="examples-list"><div class="placeholder">Loading…</div></div>
-  </div>
+  </aside>
 
   <!-- verify reference pane (hidden by default, shown beside render-pane) -->
-  <div id="verify-pane" style="display:none;">
-    <div class="vpanel" style="border-right:none;">
-      <div style="display:flex;gap:6px;align-items:center;">
-        <span class="seq-label" style="flex:none;">Reference</span>
-        <label class="hbtn" style="font-size:11px;padding:2px 8px;cursor:pointer;margin:0;">
-          📂 .mol
-          <input type="file" id="mol-upload" accept=".mol,.sdf" style="display:none;">
+  <section id="verify-pane" style="display:none;" aria-label="Verify against a reference structure">
+    <div class="vpanel">
+      <div class="reference-actions">
+        <label class="seq-label" for="smiles-input">Reference</label>
+        <label class="hbtn upload-trigger">
+          <svg class="ui-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M2 5V3h5l2 2h5v8H2zM2 7h12"/></svg>.mol
+          <input type="file" id="mol-upload" class="sr-only" accept=".mol,.sdf" aria-label="Upload a MOL or SDF file">
         </label>
-        <button id="btn-s2c" class="hbtn green" style="font-size:10px;padding:2px 10px;" title="Convert SMILES → % CABILN (branch form)">→ %</button>
-        <button id="btn-s2c-bracket" class="hbtn green" style="font-size:10px;padding:2px 10px;" title="Convert SMILES → [] CABILN (bracket form)">→ []</button>
+        <button type="button" id="btn-s2c" class="hbtn green" title="Convert SMILES → % CABILN (branch form)" aria-label="Convert reference to branch notation">→ %</button>
+        <button type="button" id="btn-s2c-bracket" class="hbtn green" title="Convert SMILES → [] CABILN (bracket form)" aria-label="Convert reference to bracket notation">→ []</button>
       </div>
       <textarea id="smiles-input" placeholder="Paste SMILES, BILN, or HELM here…"
-                spellcheck="false" autocomplete="off"></textarea>
-      <div id="smiles-status" class="statusbar"></div>
-      <div id="smiles-canvas" class="canvas-wrap">
+                spellcheck="false" autocomplete="off" aria-describedby="smiles-status"></textarea>
+      <div id="smiles-status" class="statusbar" role="status" aria-live="polite" aria-atomic="true"></div>
+      <div id="smiles-canvas" class="canvas-wrap" role="group" aria-label="Reference drawing">
         <div class="canvas-inner" id="smiles-inner">
           <div class="placeholder">Paste SMILES or upload .mol to compare…</div>
         </div>
       </div>
     </div>
-  </div>
-</div>
+  </section>
+</main>
 
 <!-- compare bar (verify mode only) -->
-<div id="compare-bar" style="display:none;"></div>
+<div id="compare-bar" style="display:none;" role="status" aria-live="polite" aria-atomic="true"></div>
 
 <script src="/static/builder.js" defer></script>
 </body>

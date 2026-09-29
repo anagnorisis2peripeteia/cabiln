@@ -68,7 +68,7 @@ test('all main input selectors convert through both output controls', async ({ p
   ]) {
     for (const output of ['pct', 'bracket']) {
       await page.locator('#notation-select').selectOption(format);
-      await expect(page.locator('#cabiln-input')).toHaveValue('');
+      await expect(page.locator('#cabiln-input')).toHaveValue(output === 'pct' ? '' : source);
       await page.locator('#cabiln-input').fill(source);
       await expect(page.locator('#render-inner svg')).toBeVisible();
       await expect(page.locator('#cabiln-input')).toHaveClass('ok');
@@ -136,6 +136,7 @@ test('registration refreshes the open library and supplies detected sites to bui
   await expect(registration.locator('#btn-register')).toBeEnabled();
   await registration.locator('#btn-register').click();
   await expect(registration.locator('#status-msg')).toContainText('registered successfully');
+  await expect(registration.locator('#status-msg')).toBeVisible();
   await expect(registration.locator('#btn-register')).toBeDisabled();
   await registration.screenshot({ path: testInfo.outputPath('registered-monomer.png'), animations: 'disabled' });
   await registration.close();
@@ -198,7 +199,7 @@ test('attachment-form choices load the selected family member before its sites',
     const data = await response.json();
     expect(data.rgroups.length).toBeGreaterThan(0);
     await expect(page.locator('#build-right-abbr')).toHaveText(symbol);
-    await expect(page.locator('#build-right-rgroups button')).toHaveText(data.rgroups.map(site => `R${site.slot} ${site.chem_type || ''}`));
+    await expect(page.locator('#build-right-rgroups button')).toHaveText(data.rgroups.map(site => `R${site.slot} ${(site.chem_type || '').replaceAll('_', ' ')}${site.used ? ' · used' : ''}`));
     await capture(page, testInfo, `attachment-form-${label}`);
   }
 });

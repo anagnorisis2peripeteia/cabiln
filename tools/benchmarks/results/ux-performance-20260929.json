@@ -1,0 +1,645 @@
+{
+  "schema_version": 1,
+  "date": "2026-09-29",
+  "baseline_revision": "433b14c",
+  "candidate": "433b14c with UX backend working-tree changes",
+  "environment": {
+    "python": "3.11.15 (main, May  8 2026, 18:24:56) [Clang 22.1.3 ]",
+    "rdkit": "2026.03.6",
+    "platform": "macOS-27.0-arm64-arm-64bit"
+  },
+  "protocol": {
+    "pairs": 3,
+    "order": [
+      "baseline,current",
+      "current,baseline",
+      "baseline,current"
+    ],
+    "processes": "Fresh independent Python process for every operation/revision/pair; two calls in each process.",
+    "cold": "First handler/conversion call after imports; imports timed separately. OS filesystem caches were not cleared.",
+    "warm": "Second call in the same process. Render uses A-G-A after A-G, so the warm render is a new document rather than a render-cache hit. Library repeats the palette and hits its existing bounded cache.",
+    "exact_output_comparison": "Complete JSON results were compared structurally, including all ConversionResult fields. SHA256 below covers those complete results.",
+    "conversion_input": "Existing exenatide literal from tests/test_bond_validation_and_assembly.py",
+    "library": "Bundled source tree library per revision; no mutation.",
+    "limitations": [
+      "Three pairs on one host; CPU scaling and other host work uncontrolled.",
+      "Handler timings exclude network/browser work.",
+      "Cold library measurements varied; no startup speedup is claimed.",
+      "The same-process palette control uses warm shared definitions and only isolates handler/header work."
+    ]
+  },
+  "summary": {
+    "import": {
+      "exact_outputs": true,
+      "baseline_init": 0.36126266699284315,
+      "current_init": 0.3676284580142237,
+      "baseline_cold": 12.083822084008716,
+      "current_cold": 7.396352957992349,
+      "baseline_warm": 9.516985166992527,
+      "current_warm": 6.025177916046232
+    },
+    "render": {
+      "exact_outputs": true,
+      "baseline_init": 0.7051506669959053,
+      "current_init": 0.6879424579674378,
+      "baseline_cold": 0.5126468329690397,
+      "current_cold": 0.5519375830190256,
+      "baseline_warm": 0.010965332970954478,
+      "current_warm": 0.009071666048839688
+    },
+    "library": {
+      "exact_outputs": true,
+      "baseline_init": 0.43716687499545515,
+      "current_init": 0.5164872499881312,
+      "baseline_cold": 0.43559333303710446,
+      "current_cold": 0.5630139579880051,
+      "baseline_warm": 0.00010158302029594779,
+      "current_warm": 8.025002898648381e-05
+    }
+  },
+  "samples": {
+    "baseline": {
+      "import": [
+        {
+          "initialization_seconds": 1.6988688749843277,
+          "samples": [
+            {
+              "seconds": 12.083822084008716,
+              "assemblies": 129,
+              "full_output_sha256": "7004b3e4b27d567540469e0173badba1d68c94a21d77b15eb5b219dea76dd977"
+            },
+            {
+              "seconds": 9.516985166992527,
+              "assemblies": 129,
+              "full_output_sha256": "7004b3e4b27d567540469e0173badba1d68c94a21d77b15eb5b219dea76dd977"
+            }
+          ]
+        },
+        {
+          "initialization_seconds": 0.36126266699284315,
+          "samples": [
+            {
+              "seconds": 13.727327375032473,
+              "assemblies": 129,
+              "full_output_sha256": "7004b3e4b27d567540469e0173badba1d68c94a21d77b15eb5b219dea76dd977"
+            },
+            {
+              "seconds": 9.524672208994161,
+              "assemblies": 129,
+              "full_output_sha256": "7004b3e4b27d567540469e0173badba1d68c94a21d77b15eb5b219dea76dd977"
+            }
+          ]
+        },
+        {
+          "initialization_seconds": 0.3588353330269456,
+          "samples": [
+            {
+              "seconds": 10.702841582999099,
+              "assemblies": 129,
+              "full_output_sha256": "7004b3e4b27d567540469e0173badba1d68c94a21d77b15eb5b219dea76dd977"
+            },
+            {
+              "seconds": 9.33670704200631,
+              "assemblies": 129,
+              "full_output_sha256": "7004b3e4b27d567540469e0173badba1d68c94a21d77b15eb5b219dea76dd977"
+            }
+          ]
+        }
+      ],
+      "render": [
+        {
+          "initialization_seconds": 0.6271310420124792,
+          "samples": [
+            {
+              "seconds": 0.5126468329690397,
+              "full_output_sha256": "c764caec958f738e3cde9cb8a60da780883c0b07276e0c3bb8d38ab05972bb27"
+            },
+            {
+              "seconds": 0.01251504197716713,
+              "full_output_sha256": "0d15b281dc21fc1b3b2face9e530fbd0e1043de5c0e64c3c3039be0be72db655"
+            }
+          ]
+        },
+        {
+          "initialization_seconds": 0.7399838339770213,
+          "samples": [
+            {
+              "seconds": 0.4499102080008015,
+              "full_output_sha256": "c764caec958f738e3cde9cb8a60da780883c0b07276e0c3bb8d38ab05972bb27"
+            },
+            {
+              "seconds": 0.010199540993198752,
+              "full_output_sha256": "0d15b281dc21fc1b3b2face9e530fbd0e1043de5c0e64c3c3039be0be72db655"
+            }
+          ]
+        },
+        {
+          "initialization_seconds": 0.7051506669959053,
+          "samples": [
+            {
+              "seconds": 0.5663591669872403,
+              "full_output_sha256": "c764caec958f738e3cde9cb8a60da780883c0b07276e0c3bb8d38ab05972bb27"
+            },
+            {
+              "seconds": 0.010965332970954478,
+              "full_output_sha256": "0d15b281dc21fc1b3b2face9e530fbd0e1043de5c0e64c3c3039be0be72db655"
+            }
+          ]
+        }
+      ],
+      "library": [
+        {
+          "initialization_seconds": 0.4505677089910023,
+          "samples": [
+            {
+              "seconds": 0.44662995799444616,
+              "full_output_sha256": "fbdbcd3516cddc30093c253619fbc25397764804a88a9b4aa3f3de6c74da15f1"
+            },
+            {
+              "seconds": 0.00010304199531674385,
+              "full_output_sha256": "fbdbcd3516cddc30093c253619fbc25397764804a88a9b4aa3f3de6c74da15f1"
+            }
+          ]
+        },
+        {
+          "initialization_seconds": 0.43716687499545515,
+          "samples": [
+            {
+              "seconds": 0.43559333303710446,
+              "full_output_sha256": "fbdbcd3516cddc30093c253619fbc25397764804a88a9b4aa3f3de6c74da15f1"
+            },
+            {
+              "seconds": 9.850005153566599e-05,
+              "full_output_sha256": "fbdbcd3516cddc30093c253619fbc25397764804a88a9b4aa3f3de6c74da15f1"
+            }
+          ]
+        },
+        {
+          "initialization_seconds": 0.4187270419788547,
+          "samples": [
+            {
+              "seconds": 0.4159508330048993,
+              "full_output_sha256": "fbdbcd3516cddc30093c253619fbc25397764804a88a9b4aa3f3de6c74da15f1"
+            },
+            {
+              "seconds": 0.00010158302029594779,
+              "full_output_sha256": "fbdbcd3516cddc30093c253619fbc25397764804a88a9b4aa3f3de6c74da15f1"
+            }
+          ]
+        }
+      ]
+    },
+    "current": {
+      "import": [
+        {
+          "initialization_seconds": 0.3676284580142237,
+          "samples": [
+            {
+              "seconds": 7.396352957992349,
+              "assemblies": 129,
+              "full_output_sha256": "7004b3e4b27d567540469e0173badba1d68c94a21d77b15eb5b219dea76dd977"
+            },
+            {
+              "seconds": 6.025177916046232,
+              "assemblies": 129,
+              "full_output_sha256": "7004b3e4b27d567540469e0173badba1d68c94a21d77b15eb5b219dea76dd977"
+            }
+          ]
+        },
+        {
+          "initialization_seconds": 0.38236558297649026,
+          "samples": [
+            {
+              "seconds": 8.350777417013887,
+              "assemblies": 129,
+              "full_output_sha256": "7004b3e4b27d567540469e0173badba1d68c94a21d77b15eb5b219dea76dd977"
+            },
+            {
+              "seconds": 6.128454125020653,
+              "assemblies": 129,
+              "full_output_sha256": "7004b3e4b27d567540469e0173badba1d68c94a21d77b15eb5b219dea76dd977"
+            }
+          ]
+        },
+        {
+          "initialization_seconds": 0.3389246670412831,
+          "samples": [
+            {
+              "seconds": 7.029119500017259,
+              "assemblies": 129,
+              "full_output_sha256": "7004b3e4b27d567540469e0173badba1d68c94a21d77b15eb5b219dea76dd977"
+            },
+            {
+              "seconds": 5.694112874974962,
+              "assemblies": 129,
+              "full_output_sha256": "7004b3e4b27d567540469e0173badba1d68c94a21d77b15eb5b219dea76dd977"
+            }
+          ]
+        }
+      ],
+      "render": [
+        {
+          "initialization_seconds": 0.7650590420234948,
+          "samples": [
+            {
+              "seconds": 0.5519375830190256,
+              "full_output_sha256": "c764caec958f738e3cde9cb8a60da780883c0b07276e0c3bb8d38ab05972bb27"
+            },
+            {
+              "seconds": 0.009071666048839688,
+              "full_output_sha256": "0d15b281dc21fc1b3b2face9e530fbd0e1043de5c0e64c3c3039be0be72db655"
+            }
+          ]
+        },
+        {
+          "initialization_seconds": 0.6650123330182396,
+          "samples": [
+            {
+              "seconds": 0.5752140830154531,
+              "full_output_sha256": "c764caec958f738e3cde9cb8a60da780883c0b07276e0c3bb8d38ab05972bb27"
+            },
+            {
+              "seconds": 0.01006208301987499,
+              "full_output_sha256": "0d15b281dc21fc1b3b2face9e530fbd0e1043de5c0e64c3c3039be0be72db655"
+            }
+          ]
+        },
+        {
+          "initialization_seconds": 0.6879424579674378,
+          "samples": [
+            {
+              "seconds": 0.49728458299068734,
+              "full_output_sha256": "c764caec958f738e3cde9cb8a60da780883c0b07276e0c3bb8d38ab05972bb27"
+            },
+            {
+              "seconds": 0.008691666997037828,
+              "full_output_sha256": "0d15b281dc21fc1b3b2face9e530fbd0e1043de5c0e64c3c3039be0be72db655"
+            }
+          ]
+        }
+      ],
+      "library": [
+        {
+          "initialization_seconds": 0.5164872499881312,
+          "samples": [
+            {
+              "seconds": 0.5630139579880051,
+              "full_output_sha256": "fbdbcd3516cddc30093c253619fbc25397764804a88a9b4aa3f3de6c74da15f1"
+            },
+            {
+              "seconds": 5.679100286215544e-05,
+              "full_output_sha256": "fbdbcd3516cddc30093c253619fbc25397764804a88a9b4aa3f3de6c74da15f1"
+            }
+          ]
+        },
+        {
+          "initialization_seconds": 0.47148745896993205,
+          "samples": [
+            {
+              "seconds": 0.4442280419752933,
+              "full_output_sha256": "fbdbcd3516cddc30093c253619fbc25397764804a88a9b4aa3f3de6c74da15f1"
+            },
+            {
+              "seconds": 8.025002898648381e-05,
+              "full_output_sha256": "fbdbcd3516cddc30093c253619fbc25397764804a88a9b4aa3f3de6c74da15f1"
+            }
+          ]
+        },
+        {
+          "initialization_seconds": 0.6458000839920714,
+          "samples": [
+            {
+              "seconds": 0.6861154590151273,
+              "full_output_sha256": "fbdbcd3516cddc30093c253619fbc25397764804a88a9b4aa3f3de6c74da15f1"
+            },
+            {
+              "seconds": 0.00042695796582847834,
+              "full_output_sha256": "fbdbcd3516cddc30093c253619fbc25397764804a88a9b4aa3f3de6c74da15f1"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "source_sha256": {
+    "baseline": {
+      "src/pyPept/interfaces/reaction_library.py": "9156a7af47dbb9c5f3f928d4bd45833e06eecc41da524311e92b538b18bdbe6d",
+      "src/pyPept/structure.py": "4300dd261a15e8f879aa0b051168be3348df8316168009ae6de79238809c4b4c",
+      "src/pyPept/web/monomers.py": "4e92364007bb080817a799fa9133937f99baf23e0c0c92cebdac05333d8a6b5b"
+    },
+    "current": {
+      "src/pyPept/interfaces/reaction_library.py": "bd10410edc0ff7ba7b22ab98a34250800fdd38d66d1154c2bcc2eaaca16191fd",
+      "src/pyPept/structure.py": "6a5a555afe4ab1cb700140b287f9cadd8af55b3f3c0f70e8d5cac274aa61744d",
+      "src/pyPept/web/monomers.py": "058000edf0ce876778ba92fcab241a7c58f88191bb5c51225fbfdd6814025f78"
+    }
+  },
+  "palette_body_control": {
+    "description": "Alternating original/current /monomers bodies against the same warmed definitions in one process; response cache cleared per call. Current includes actual header creation.",
+    "samples": {
+      "baseline": [
+        0.14590516703901812,
+        0.13964424998266622,
+        0.08824029203969985,
+        0.10400212497916073,
+        0.14791958295973018,
+        0.09506262495415285,
+        0.11261791596189141,
+        0.18692783400183544,
+        0.09510312497150153,
+        0.10502233396982774,
+        0.2059517499874346,
+        0.14457558299181983,
+        0.1207479169825092,
+        0.14629133301787078,
+        0.10266920801950619,
+        0.11369241599459201,
+        0.1419370420044288,
+        0.12590633297804743,
+        0.19727833301294595,
+        0.15036037500249222,
+        0.21423404099186882,
+        0.12348645902238786,
+        0.13250499998684973,
+        0.1341897920356132,
+        0.09519208403071389,
+        0.15220783301629126,
+        0.11624800000572577,
+        0.15199666697299108,
+        0.1093241250491701,
+        0.1014759999816306,
+        0.09699683298822492,
+        0.11458570801187307,
+        0.1161335000069812,
+        0.09434075001627207,
+        0.14449241699185222,
+        0.1708842500229366,
+        0.17118258401751518,
+        0.1309976659831591,
+        0.20405683299759403,
+        0.11959891702281311
+      ],
+      "current": [
+        0.09161487501114607,
+        0.10726712498581037,
+        0.16153666703030467,
+        0.1439434580388479,
+        0.1653219169820659,
+        0.1447683330043219,
+        0.10067916702246293,
+        0.10838054202031344,
+        0.09233870799653232,
+        0.1983195830252953,
+        0.16202054201858118,
+        0.21368637500563636,
+        0.10247091698693112,
+        0.10472450003726408,
+        0.08708491700235754,
+        0.11785862501710653,
+        0.10639724996872246,
+        0.1318544169771485,
+        0.09501966700190678,
+        0.11078954202821478,
+        0.09538191696628928,
+        0.22308000002522022,
+        0.1913167079910636,
+        0.09470258402870968,
+        0.11730766703840345,
+        0.09517100005177781,
+        0.09929962496971712,
+        0.11495983402710408,
+        0.11405549995834008,
+        0.12846641603391618,
+        0.10822033399017528,
+        0.22772008401807398,
+        0.11171954200835899,
+        0.11440308298915625,
+        0.09530737501336262,
+        0.13612420798745006,
+        0.13762341701658443,
+        0.1798672919976525,
+        0.17297833296470344,
+        0.09237491694511846
+      ]
+    },
+    "median_seconds": {
+      "baseline": 0.12845199948060326,
+      "current": 0.11422929147374816
+    },
+    "all_bodies_equal": true
+  },
+  "validation": {
+    "focused_python311": {
+      "passed": 63,
+      "seconds": 4.88
+    },
+    "non_distribution_matrix": [
+      {
+        "python": "3.9.6",
+        "rdkit": "2025.09.2",
+        "passed": 1288,
+        "deselected": 1,
+        "seconds": 89.7
+      },
+      {
+        "python": "3.13.15",
+        "rdkit": "2026.03.6",
+        "passed": 1288,
+        "deselected": 1,
+        "seconds": 99.87
+      }
+    ],
+    "independent_corpus": {
+      "rows": [
+        {
+          "id": "glutathione-0",
+          "exact_response": true,
+          "equal_metrics": true,
+          "accepted": true
+        },
+        {
+          "id": "glutathione-1",
+          "exact_response": true,
+          "equal_metrics": true,
+          "accepted": true
+        },
+        {
+          "id": "oxytocin-0",
+          "exact_response": true,
+          "equal_metrics": true,
+          "accepted": true
+        },
+        {
+          "id": "oxytocin-1",
+          "exact_response": true,
+          "equal_metrics": true,
+          "accepted": true
+        },
+        {
+          "id": "gssg-0",
+          "exact_response": true,
+          "equal_metrics": true,
+          "accepted": true
+        },
+        {
+          "id": "gssg-1",
+          "exact_response": true,
+          "equal_metrics": true,
+          "accepted": true
+        },
+        {
+          "id": "carnosine-0",
+          "exact_response": true,
+          "equal_metrics": true,
+          "accepted": true
+        },
+        {
+          "id": "carnosine-1",
+          "exact_response": true,
+          "equal_metrics": true,
+          "accepted": true
+        },
+        {
+          "id": "acetylglycine-0",
+          "exact_response": true,
+          "equal_metrics": true,
+          "accepted": true
+        },
+        {
+          "id": "acetylglycine-1",
+          "exact_response": true,
+          "equal_metrics": true,
+          "accepted": true
+        },
+        {
+          "id": "leu_enkephalin-0",
+          "exact_response": true,
+          "equal_metrics": true,
+          "accepted": true
+        },
+        {
+          "id": "leu_enkephalin-1",
+          "exact_response": true,
+          "equal_metrics": true,
+          "accepted": true
+        },
+        {
+          "id": "ala_gly-0",
+          "exact_response": true,
+          "equal_metrics": true,
+          "accepted": true
+        },
+        {
+          "id": "ala_gly-1",
+          "exact_response": true,
+          "equal_metrics": true,
+          "accepted": true
+        },
+        {
+          "id": "cyclo_ala_gly-0",
+          "exact_response": true,
+          "equal_metrics": true,
+          "accepted": true
+        },
+        {
+          "id": "cyclo_ala_gly-1",
+          "exact_response": true,
+          "equal_metrics": true,
+          "accepted": true
+        },
+        {
+          "id": "sar_gly-0",
+          "exact_response": true,
+          "equal_metrics": true,
+          "accepted": true
+        },
+        {
+          "id": "sar_gly-1",
+          "exact_response": true,
+          "equal_metrics": true,
+          "accepted": true
+        },
+        {
+          "id": "unknown_isotope-0",
+          "exact_response": true,
+          "equal_metrics": true,
+          "accepted": true
+        },
+        {
+          "id": "unknown_isotope-1",
+          "exact_response": true,
+          "equal_metrics": true,
+          "accepted": true
+        },
+        {
+          "id": "diglycyl_lysine-0",
+          "exact_response": true,
+          "equal_metrics": true,
+          "accepted": true
+        },
+        {
+          "id": "diglycyl_lysine-1",
+          "exact_response": true,
+          "equal_metrics": true,
+          "accepted": true
+        },
+        {
+          "id": "unspecified_ala_gly-0",
+          "exact_response": true,
+          "equal_metrics": true,
+          "accepted": true
+        },
+        {
+          "id": "unspecified_ala_gly-1",
+          "exact_response": true,
+          "equal_metrics": true,
+          "accepted": true
+        },
+        {
+          "id": "disconnected_diglycine-0",
+          "exact_response": true,
+          "equal_metrics": true,
+          "accepted": true
+        },
+        {
+          "id": "disconnected_diglycine-1",
+          "exact_response": true,
+          "equal_metrics": true,
+          "accepted": true
+        },
+        {
+          "id": "ambiguous_diglycine-0",
+          "exact_response": true,
+          "equal_metrics": true,
+          "accepted": true
+        },
+        {
+          "id": "ambiguous_diglycine-1",
+          "exact_response": true,
+          "equal_metrics": true,
+          "accepted": true
+        }
+      ],
+      "baseline_source_unchanged": true,
+      "current_source_unchanged": true,
+      "exact_response_count": 28,
+      "accepted_count": 28
+    },
+    "fixture_sha256": "99eee2b3411506277c1e9c0c5a65b5368843d128a8e4f2e0c419379ca88db67b",
+    "negative_controls": [
+      "Empty vector iterator raises if unnecessarily invoked.",
+      "Same mutable molecule gets AND/OR groups after a successful prior check and is then rejected; absolute groups are accepted.",
+      "Six actual assemblies retain independent isotope occurrence-owner witnesses through caps, branching, crosslinks, disconnected chains, click chemistry, and metathesis.",
+      "A structure update preserving file size and mtime changes the opaque library header while the palette body remains identical.",
+      "CSV alias-only change also changes the header.",
+      "A library update during palette construction prevents both response certification and stale cache insertion."
+    ]
+  },
+  "artifacts": {
+    "raw_timings": "/tmp/cabiln-ux-paired-results.json",
+    "timing_runner": "/tmp/cabiln-ux-paired.py",
+    "corpus_baseline": "/tmp/cabiln-ux-decomposition-baseline/results.json",
+    "corpus_current": "/tmp/cabiln-ux-decomposition-current/results.json",
+    "matrix_log": "/tmp/cabiln-ux-matrix-checks.log",
+    "focused_log": "/tmp/cabiln-ux-backend-checks.log"
+  }
+}

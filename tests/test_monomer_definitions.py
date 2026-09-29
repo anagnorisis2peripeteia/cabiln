@@ -97,6 +97,75 @@ def replace_preserving_metadata(path, before, after):
     assert path.stat().st_mtime_ns == metadata.st_mtime_ns
 
 
+def test_palette_version_header_tracks_unchanged_metadata_and_alias_updates(definitions):
+    with TestClient(create_app()) as client:
+        initial = client.get("/monomers")
+        initial_version = initial.headers.get("x-library-version")
+        assert initial_version
+        assert isinstance(initial.json(), list)
+        cached = client.get("/monomers")
+        assert cached.headers["x-library-version"] == initial_version
+        assert cached.json() == initial.json()
+
+        metadata = definitions.stat()
+        records = list(Chem.SDMolSupplier(str(definitions), removeHs=False))
+        alanine = records[0]
+        alpha = next(
+            atom for atom in alanine.GetAtoms()
+            if atom.GetAtomicNum() == 6
+            and any(neighbor.GetAtomicNum() == 7 for neighbor in atom.GetNeighbors())
+        )
+        alpha.SetAtomicNum(14)
+        Chem.SanitizeMol(alanine)
+        replacement = definitions.with_suffix(".new")
+        with Chem.SDWriter(str(replacement)) as writer:
+            for record in records:
+                writer.write(record)
+        os.utime(replacement, ns=(metadata.st_atime_ns, metadata.st_mtime_ns))
+        replacement.replace(definitions)
+        assert definitions.stat().st_size == metadata.st_size
+        assert definitions.stat().st_mtime_ns == metadata.st_mtime_ns
+
+        changed = client.get("/monomers")
+        assert changed.status_code == 200
+        assert changed.json() == initial.json()  # Tile labels/sites did not change.
+        assert changed.headers["x-library-version"] != initial_version
+
+        aliases = definitions.with_name("monomers.csv")
+        aliases.write_text("token,synonyms\nA,CustomAlias\n")
+        renamed = client.get("/monomers")
+        assert renamed.json() == changed.json()
+        assert renamed.headers["x-library-version"] != changed.headers["x-library-version"]
+
+
+def test_palette_does_not_certify_a_revision_that_changes_during_loading(
+    definitions, monkeypatch
+):
+    from pyPept.web import monomers
+
+    attachment_sites = monomers.attachment_sites
+    changed = False
+
+    def inspect_and_change_library(*args):
+        nonlocal changed
+        if not changed:
+            changed = True
+            definitions.with_name("monomers.csv").write_text(
+                "token,synonyms\nA,CustomAlias\n"
+            )
+        return attachment_sites(*args)
+
+    monkeypatch.setattr(monomers, "attachment_sites", inspect_and_change_library)
+    with TestClient(create_app()) as client:
+        interrupted = client.get("/monomers")
+        assert interrupted.status_code == 200
+        assert "x-library-version" not in interrupted.headers
+        stable = client.get("/monomers")
+        assert stable.status_code == 200
+        assert stable.headers["x-library-version"]
+        assert stable.json() == interrupted.json()
+
+
 def test_preserved_mtime_replacement_refreshes_parser_and_recognition(definitions):
     source = Chem.MolFromSmiles("N[C@@H](C)C(=O)NCC(=O)O")
     expected = Chem.MolToSmiles(source)

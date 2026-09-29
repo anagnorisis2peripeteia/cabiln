@@ -3,6 +3,7 @@ let darkMode   = true;
 let verifyMode = false;
 let hlEnabled  = true;
 let libLoaded  = false;
+let libraryVersion = null;
 let allMonomers = [];
 let cabilnTimer = null;
 let smilesTimer = null;
@@ -24,6 +25,10 @@ let insertBetweenActive = false;
 let rerollSeed   = 0;
 let reactionPairs = null;  // lazy-loaded list of [ct_a, ct_b] pairs
 let rxnFilterActive = false;
+let mainStale = false;
+let hasMainDrawing = false;
+let displayedSource = '';
+let displayedNotation = '';
 
 // A response may already be queued when abort() runs. Only the current request
 // in each group may change the UI, even if a cancelled fetch still resolves.
@@ -121,6 +126,172 @@ const btnRxnFilter  = document.getElementById('btn-rxn-filter');
 const notationSelect = document.getElementById('notation-select');
 const btnToCabilnPct     = document.getElementById('btn-to-cabiln-pct');
 const btnToCabilnBracket = document.getElementById('btn-to-cabiln-bracket');
+const btnUndo = document.getElementById('btn-undo');
+const btnRedo = document.getElementById('btn-redo');
+const draftNotice = document.getElementById('draft-notice');
+const draftStatus = document.getElementById('draft-status');
+const btnRestoreDraft = document.getElementById('btn-restore-draft');
+const btnDismissDraft = document.getElementById('btn-dismiss-draft');
+const renderPane = document.getElementById('render-pane');
+const renderProgress = document.getElementById('render-progress');
+const renderProgressLabel = document.getElementById('render-progress-label');
+const conversionProgress = document.getElementById('conversion-progress');
+const conversionProgressLabel = document.getElementById('conversion-progress-label');
+
+// One document transition owns history, format drafts, saving, and rendering.
+// Atom indices are valid only for the last successfully rendered document.
+const DRAFT_KEY = 'cabiln.draft.v1';
+const editor = {
+  present: { text: '', notation: 'cabiln', warning: '' },
+  past: [], future: [], drafts: {}, typedAt: 0, saveTimer: null, saved: null,
+};
+
+function documentSnapshot() {
+  return { text: cabilnInput.value, notation: notationSelect.value,
+    warning: conversionStatus.hidden ? '' : conversionStatus.textContent };
+}
+
+function updateHistoryControls() {
+  btnUndo.disabled = !editor.past.length;
+  btnRedo.disabled = !editor.future.length;
+}
+
+function saveDraft() {
+  clearTimeout(editor.saveTimer);
+  if (editor.saved) return; // Leave an offered recovery intact until it is handled.
+  try {
+    window.localStorage.setItem(DRAFT_KEY, JSON.stringify({ version: 1,
+      document: editor.present, drafts: editor.drafts, reference: smilesInput.value }));
+    draftStatus.textContent = 'Draft saved in this browser';
+  } catch (error) {
+    draftStatus.textContent = 'Draft storage is unavailable; this session still supports Undo';
+  }
+  draftNotice.hidden = false;
+}
+
+function recordDocument(typing = false) {
+  const next = documentSnapshot();
+  if (next.text === editor.present.text && next.notation === editor.present.notation &&
+      next.warning === editor.present.warning) return;
+  if (next.text) beginDraftEdit();
+  const now = Date.now();
+  if (!typing || !editor.typedAt || now - editor.typedAt > 750 ||
+      next.notation !== editor.present.notation) {
+    editor.past.push(editor.present);
+    if (editor.past.length > 100) editor.past.shift();
+  }
+  editor.present = next;
+  editor.drafts[next.notation] = { text: next.text, warning: next.warning };
+  editor.future = [];
+  editor.typedAt = typing ? now : 0;
+  updateHistoryControls();
+  clearTimeout(editor.saveTimer);
+  editor.saveTimer = setTimeout(saveDraft, 200);
+}
+
+function updateNotationControls() {
+  const mode = notationSelect.value;
+  cabilnInput.placeholder = NOTATION_PLACEHOLDER[mode] || '';
+  btnToCabilnPct.style.display = mode === 'cabiln' ? 'none' : '';
+  btnToCabilnBracket.style.display = mode === 'cabiln' ? 'none' : '';
+  btnToBracket.disabled = btnToBranch.disabled = mode !== 'cabiln';
+}
+
+function setConversionWarning(warning = '') {
+  conversionStatus.textContent = warning;
+  conversionStatus.title = warning;
+  conversionStatus.hidden = !warning;
+}
+
+function commitDocument(text, notation = notationSelect.value, warning = '') {
+  cabilnInput.value = text;
+  notationSelect.value = notation;
+  updateNotationControls();
+  setConversionWarning(warning);
+  recordDocument();
+  renderDocument(true);
+}
+
+function travelHistory(direction) {
+  const from = direction === 'undo' ? editor.past : editor.future;
+  const to = direction === 'undo' ? editor.future : editor.past;
+  if (!from.length) return;
+  to.push(editor.present);
+  editor.present = from.pop();
+  editor.typedAt = 0;
+  const { text, notation, warning } = editor.present;
+  editor.drafts[notation] = { text, warning };
+  cabilnInput.value = text;
+  notationSelect.value = notation;
+  updateNotationControls();
+  setConversionWarning(warning);
+  updateHistoryControls();
+  saveDraft();
+  renderDocument(true);
+}
+
+btnUndo.addEventListener('click', () => travelHistory('undo'));
+btnRedo.addEventListener('click', () => travelHistory('redo'));
+window.addEventListener('keydown', event => {
+  if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
+  const target = event.target;
+  if (target !== cabilnInput && (target?.matches?.('input, textarea') || target?.isContentEditable)) return;
+  const key = event.key.toLowerCase();
+  if (key !== 'z' && !(event.ctrlKey && key === 'y')) return;
+  event.preventDefault();
+  travelHistory(key === 'y' || event.shiftKey ? 'redo' : 'undo');
+});
+window.addEventListener('pagehide', saveDraft);
+
+function finishDraftRecovery() {
+  editor.saved = null;
+  btnRestoreDraft.hidden = btnDismissDraft.hidden = true;
+}
+function beginDraftEdit() {
+  if (!editor.saved) return;
+  finishDraftRecovery();
+  draftStatus.textContent = 'New draft started in this browser';
+}
+btnRestoreDraft.addEventListener('click', () => {
+  if (!editor.saved) return;
+  const saved = editor.saved;
+  finishDraftRecovery();
+  editor.drafts = saved.drafts;
+  clearReference();
+  smilesInput.value = saved.reference;
+  setInner(smilesInner, '<div class="placeholder">Paste SMILES or upload .mol to compare…</div>');
+  commitDocument(saved.document.text, saved.document.notation, saved.document.warning);
+  saveDraft();
+  if (verifyMode && smilesInput.value.trim()) doRenderRef(smilesInput.value.trim());
+});
+btnDismissDraft.addEventListener('click', () => {
+  finishDraftRecovery();
+  saveDraft();
+});
+
+function offerSavedDraft() {
+  btnRestoreDraft.hidden = btnDismissDraft.hidden = true;
+  try {
+    const saved = JSON.parse(window.localStorage.getItem(DRAFT_KEY));
+    if (!saved || saved.version !== 1 || !saved.document ||
+        typeof saved.document.text !== 'string' ||
+        !Object.hasOwn(NOTATION_PLACEHOLDER, saved.document.notation)) return;
+    const drafts = {};
+    for (const mode of Object.keys(NOTATION_PLACEHOLDER)) {
+      const draft = saved.drafts?.[mode];
+      if (typeof draft === 'string') drafts[mode] = { text: draft, warning: '' };
+      else if (typeof draft?.text === 'string') drafts[mode] = {
+        text: draft.text, warning: typeof draft.warning === 'string' ? draft.warning : '',
+      };
+    }
+    if (!saved.document.text && !Object.values(drafts).some(draft => draft.text) && !saved.reference) return;
+    editor.saved = { document: { text: saved.document.text, notation: saved.document.notation,
+      warning: typeof saved.document.warning === 'string' ? saved.document.warning : '' },
+      drafts, reference: typeof saved.reference === 'string' ? saved.reference : '' };
+    draftStatus.textContent = 'A saved draft is available in this browser';
+    draftNotice.hidden = btnRestoreDraft.hidden = btnDismissDraft.hidden = false;
+  } catch (error) { /* Storage can be disabled, full, or contain an older format. */ }
+}
 
 async function loadCapabilities() {
   const link = document.getElementById('register-link');
@@ -139,6 +310,7 @@ loadCapabilities();
 btnDark.addEventListener('click', () => {
   darkMode = !darkMode;
   btnDark.classList.toggle('active', darkMode);
+  btnDark.setAttribute('aria-pressed', String(darkMode));
   for (const el of document.querySelectorAll('.canvas-wrap')) {
     el.classList.toggle('dark', darkMode);
   }
@@ -155,6 +327,7 @@ document.querySelectorAll('.build-box').forEach(el => el.classList.add('dark'));
 btnHl.addEventListener('click', () => {
   hlEnabled = !hlEnabled;
   btnHl.classList.toggle('active', hlEnabled);
+  btnHl.setAttribute('aria-pressed', String(hlEnabled));
   if (!hlEnabled) clearHighlight();
 });
 
@@ -162,16 +335,19 @@ btnHl.addEventListener('click', () => {
 btnVerify.addEventListener('click', () => {
   verifyMode = !verifyMode;
   btnVerify.classList.toggle('active', verifyMode);
+  btnVerify.setAttribute('aria-expanded', String(verifyMode));
   document.getElementById('verify-pane').style.display = verifyMode ? '' : 'none';
   compareBar.style.display = verifyMode ? '' : 'none';
   clearComparison();
-  if (verifyMode) triggerVerify();
+  if (verifyMode && smilesInput.value.trim() && !lastSmiles) doRenderRef(smilesInput.value.trim());
+  else if (verifyMode) triggerVerify();
 });
 
 // ─── library sidebar (persistent) ────────────────────────────────────────────
 function openLib() {
   libPanel.classList.add('open');
   btnLib.classList.add('active');
+  btnLib.setAttribute('aria-expanded', 'true');
   loadMonomers();
   libSearch.focus();
   loadReactions();
@@ -179,6 +355,7 @@ function openLib() {
 function closeLib() {
   libPanel.classList.remove('open');
   btnLib.classList.remove('active');
+  btnLib.setAttribute('aria-expanded', 'false');
   hidePreview();
 }
 
@@ -191,6 +368,7 @@ libSearch.addEventListener('input', () => renderLibList(libSearch.value.trim().t
 btnRxnFilter.addEventListener('click', () => {
   rxnFilterActive = !rxnFilterActive;
   btnRxnFilter.classList.toggle('active', rxnFilterActive);
+  btnRxnFilter.setAttribute('aria-pressed', String(rxnFilterActive));
   renderLibList(libSearch.value.trim().toLowerCase());
 });
 
@@ -200,11 +378,13 @@ let examplesLoaded = false;
 function openExamples() {
   examplesPanel.classList.add('open');
   btnExamples.classList.add('active');
+  btnExamples.setAttribute('aria-expanded', 'true');
   if (!examplesLoaded) loadExamples();
 }
 function closeExamples() {
   examplesPanel.classList.remove('open');
   btnExamples.classList.remove('active');
+  btnExamples.setAttribute('aria-expanded', 'false');
 }
 
 btnExamples.addEventListener('click', () =>
@@ -240,8 +420,7 @@ function renderExamples(categories) {
   examplesList.innerHTML = rows.join('');
   examplesList.querySelectorAll('.example-row').forEach(row => {
     row.addEventListener('click', () => {
-      cabilnInput.value = row.dataset.cabiln;
-      cabilnInput.dispatchEvent(new Event('input'));
+      commitDocument(row.dataset.cabiln, 'cabiln');
       cabilnInput.focus();
     });
   });
@@ -255,12 +434,20 @@ async function loadMonomers() {
     const data = await readResponse(res);
     if (!request.current()) return;
     if (!Array.isArray(data)) throw new Error(data.error || 'Invalid monomer library');
-    allMonomers = data;
+    const version = res.headers?.get('X-Library-Version') || null;
+    if (libLoaded && version && version === libraryVersion) return;
+    libraryVersion = version;
+    allMonomers = data.map(monomer => ({ ...monomer,
+      searchText: [monomer.abbr, monomer.name, monomer.type, monomer.chem_types].join(' ').toLowerCase(),
+      attachmentTypes: parseCts(monomer.chem_types),
+    }));
+    previewCache = {};
+    hidePreview();
     libLoaded = true;
     renderLibList(libSearch.value.trim().toLowerCase());
   } catch (e) {
     if (!request.current()) return;
-    libList.innerHTML = '<div class="placeholder err">Failed to load monomers</div>';
+    if (!libLoaded) libList.innerHTML = '<div class="placeholder err">Failed to load monomers. Close and reopen the library to retry.</div>';
   } finally {
     request.finish();
   }
@@ -275,6 +462,7 @@ async function loadReactions() {
   try {
     const res = await fetch('/reactions');
     reactionPairs = await res.json();
+    if (rxnFilterActive && libLoaded) renderLibList(libSearch.value.trim().toLowerCase());
   } catch (e) { reactionPairs = []; }
 }
 
@@ -285,12 +473,7 @@ function parseCts(cts) {
 
 function renderLibList(q) {
   let filtered = q
-    ? allMonomers.filter(m =>
-        m.abbr.toLowerCase().includes(q) ||
-        m.name.toLowerCase().includes(q) ||
-        m.type.toLowerCase().includes(q) ||
-        (m.chem_types || '').toLowerCase().includes(q)
-      )
+    ? allMonomers.filter(m => m.searchText.includes(q))
     : allMonomers;
 
   if (rxnFilterActive && buildLeft && Array.isArray(reactionPairs)) {
@@ -303,7 +486,7 @@ function renderLibList(q) {
       lcts = buildLeft.rgroups.filter(r => !r.used).map(r => r.chem_type);
     }
     filtered = filtered.filter(m => {
-      const mcts = parseCts(m.chem_types);
+      const mcts = m.attachmentTypes;
       return mcts.some(mct => lcts.some(lct =>
         pairSet.has(lct + '|' + mct) || pairSet.has(mct + '|' + lct)
       ));
@@ -325,10 +508,10 @@ function renderLibList(q) {
     const badge = m.degenerate
       ? `<span class="lib-badge cap">N/C cap</span>`
       : m.subtype === 'modified' || m.subtype === 'natural'
-      ? `<span class="lib-badge aa">${m.type}</span>`
+      ? `<span class="lib-badge aa">${escHtml(m.type)}</span>`
       : m.type === 'cap' && m.subtype === 'protecting'
       ? `<span class="lib-badge protect">cap</span>`
-      : `<span class="lib-badge cap">${m.type}</span>`;
+      : `<span class="lib-badge cap">${escHtml(m.type)}</span>`;
 
     let lg = m.leaving ? `  LG: ${escHtml(m.leaving)}` : '';
     if (m.degenerate) {
@@ -337,45 +520,67 @@ function renderLibList(q) {
       if (m.cterm_abbr) parts.push(`C: ${escHtml(m.cterm_abbr)} (${escHtml(m.cterm_leaving)})`);
       lg = '  ' + parts.join(' | ');
     }
-    return `<div class="lib-row" data-abbr="${escAttr(m.abbr)}">
+    return `<div class="lib-row" data-abbr="${escAttr(m.abbr)}" tabindex="0" aria-label="${escAttr(m.abbr + ': ' + m.name)}">
       <div class="lib-abbr">${escHtml(m.abbr)}</div>
       <div class="lib-info">
         <div class="lib-name" title="${escAttr(m.name)}">${escHtml(m.name)}</div>
         <div class="lib-meta">${escHtml(m.chem_types || '')}${lg}</div>
       </div>
       ${badge}
+      <button type="button" class="lib-use" aria-label="Use ${escAttr(m.abbr)} in builder" title="Choose this monomer in the builder">Use</button>
     </div>`;
   });
   libList.innerHTML = rows.join('');
 
-  libList.querySelectorAll('.lib-row').forEach(row => {
-    row.addEventListener('click', () => {
-      if (buildMode && insertBetweenActive) {
-        doInsertBetween(row.dataset.abbr);
-      } else if (buildMode) {
-        if (!cabilnInput.value.trim()) {
-          // No sequence yet — insert as first monomer
-          cabilnInput.value = row.dataset.abbr;
-          cabilnInput.dispatchEvent(new Event('input'));
-          buildHint.textContent = 'First monomer added — click its chip, then right-click another monomer';
-        } else if (!buildLeft) {
-          // Sequence exists but no chip selected — prompt
-          buildHint.textContent = 'Click a chip on the sequence first, then click a library monomer';
-        } else {
-          loadBuildRight(row.dataset.abbr);
-        }
-      } else {
-        insertAbbr(row.dataset.abbr);
-      }
-    });
-    row.addEventListener('contextmenu', e => {
-      if (buildMode) {
-        e.preventDefault();
-        loadBuildRight(row.dataset.abbr);
-      }
-    });
-    row.addEventListener('mouseenter', e => startPreview(row.dataset.abbr, row));
-    row.addEventListener('mouseleave', () => hidePreview());
+}
+
+function useLibraryMonomer(abbr, explicit = false) {
+  if (explicit && !buildMode) openBuild();
+  if (buildMode && notationSelect.value !== 'cabiln') {
+    buildHint.textContent = 'Convert this input to CABILN before building';
+  } else if (buildMode && insertBetweenActive) {
+    doInsertBetween(abbr);
+  } else if (buildMode && !cabilnInput.value.trim()) {
+    commitDocument(abbr, 'cabiln');
+    buildHint.textContent = 'First monomer added — select its residue, then choose another monomer';
+  } else if (buildMode && mainStale) {
+    buildHint.textContent = 'Wait for a valid drawing before choosing attachment sites';
+  } else if (buildMode) {
+    loadBuildRight(abbr);
+    if (!buildLeft) buildHint.textContent = 'Now select a residue in the sequence';
+  } else {
+    insertAbbr(abbr);
+  }
+}
+
+// Keep one set of listeners while search replaces the rows.
+libList.addEventListener('click', event => {
+  const row = event.target.closest('.lib-row');
+  if (row) useLibraryMonomer(row.dataset.abbr, !!event.target.closest('.lib-use'));
+});
+libList.addEventListener('contextmenu', event => {
+  const row = event.target.closest('.lib-row');
+  if (row && buildMode) {
+    event.preventDefault();
+    useLibraryMonomer(row.dataset.abbr, true);
+  }
+});
+libList.addEventListener('keydown', event => {
+  if (event.target.matches('.lib-row') && ['Enter', ' '].includes(event.key)) {
+    event.preventDefault();
+    useLibraryMonomer(event.target.dataset.abbr);
+  }
+});
+for (const type of ['mouseover', 'focusin']) {
+  libList.addEventListener(type, event => {
+    const row = event.target.closest('.lib-row');
+    if (row && !row.contains(event.relatedTarget)) startPreview(row.dataset.abbr, row);
+  });
+}
+for (const type of ['mouseout', 'focusout']) {
+  libList.addEventListener(type, event => {
+    const row = event.target.closest('.lib-row');
+    if (row && !row.contains(event.relatedTarget)) hidePreview();
   });
 }
 
@@ -388,11 +593,10 @@ function insertAbbr(abbr) {
   const after  = val.slice(end);
   const needDash = before.length > 0 && !before.endsWith('-') && !before.endsWith('\n');
   const insert = (needDash ? '-' : '') + abbr;
-  ta.value = before + insert + after;
+  commitDocument(before + insert + after);
   const newPos = start + insert.length;
   ta.setSelectionRange(newPos, newPos);
   ta.focus();
-  ta.dispatchEvent(new Event('input'));
 }
 
 // ─── monomer preview tooltip ──────────────────────────────────────────────────
@@ -484,7 +688,7 @@ let currentBranchSet = new Set();
 let xlinkByRes = {};
 
 function highlightGroup(idxList) {
-  if (!hlEnabled) return;
+  if (!hlEnabled || mainStale) return;
   clearHighlight();
   activeRIdx = -999;
   const svg = document.querySelector('#render-inner svg');
@@ -542,10 +746,12 @@ function buildResidueUI(resMap, residues, layout, crosslinkGroups) {
   function makeChip(rIdx, simpleHover) {
     const r = resById[rIdx];
     if (!r) return null;
-    const chip = document.createElement('span');
+    const chip = document.createElement('button');
+    chip.type = 'button';
     chip.className = 'res-chip';
     chip.textContent = r.abbr;
     chip.dataset.residue = r.idx;
+    chip.title = `Select residue ${r.idx + 1}: ${r.abbr}`;
     chip.style.background = RES_COLORS[r.colorIdx % RES_COLORS.length];
     const xlinks = xlinkByMember[r.idx];
     if (!simpleHover && xlinks && xlinks.length) {
@@ -555,6 +761,8 @@ function buildResidueUI(resMap, residues, layout, crosslinkGroups) {
       chip.addEventListener('mouseenter', () => highlightResidue(r.idx));
     }
     chip.addEventListener('mouseleave', clearHighlight);
+    chip.addEventListener('focus', () => highlightResidue(r.idx));
+    chip.addEventListener('blur', clearHighlight);
     chip.addEventListener('click', () => selectBuildResidue(r));
     return chip;
   }
@@ -567,8 +775,12 @@ function buildResidueUI(resMap, residues, layout, crosslinkGroups) {
     el.textContent = text;
     el.dataset.members = JSON.stringify(memberIdxs || []);
     if (memberIdxs && memberIdxs.length) {
+      el.tabIndex = 0;
+      el.setAttribute('aria-label', `Highlight ${text} group`);
       el.addEventListener('mouseenter', () => highlightGroup(memberIdxs));
       el.addEventListener('mouseleave', clearHighlight);
+      el.addEventListener('focus', () => highlightGroup(memberIdxs));
+      el.addEventListener('blur', clearHighlight);
     }
     return el;
   }
@@ -581,8 +793,12 @@ function buildResidueUI(resMap, residues, layout, crosslinkGroups) {
     el.style.fontSize = '0.8em';
     el.textContent = tag;
     el.dataset.members = JSON.stringify(members);
+    el.tabIndex = 0;
+    el.setAttribute('aria-label', `Highlight connection ${tag}`);
     el.addEventListener('mouseenter', () => highlightGroup(members));
     el.addEventListener('mouseleave', clearHighlight);
+    el.addEventListener('focus', () => highlightGroup(members));
+    el.addEventListener('blur', clearHighlight);
     return el;
   }
 
@@ -659,7 +875,7 @@ function buildResidueUI(resMap, residues, layout, crosslinkGroups) {
 let activeRIdx = null;
 
 function highlightResidue(rIdx) {
-  if (!hlEnabled) return;
+  if (!hlEnabled || mainStale) return;
   if (rIdx === activeRIdx) return;
   clearHighlight();
   activeRIdx = rIdx;
@@ -703,7 +919,7 @@ function wireUpSvgHover() {
   const svg = document.querySelector('#render-inner svg');
   if (!svg) return;
   svg.addEventListener('mousemove', e => {
-    if (!hlEnabled) return;
+    if (!hlEnabled || mainStale) return;
     const rIdx = svgResidueIndex(e.target, svg);
     if (rIdx === undefined) return clearHighlight();
     const xlinks = xlinkByRes[rIdx];
@@ -715,7 +931,7 @@ function wireUpSvgHover() {
   });
   svg.addEventListener('mouseleave', clearHighlight);
   svg.addEventListener('click', e => {
-    if (!buildMode) return;
+    if (!buildMode || mainStale) return;
     const rIdx = svgResidueIndex(e.target, svg);
     const residue = residueList.find(r => r.idx === rIdx);
     if (residue) selectBuildResidue(residue);
@@ -759,9 +975,10 @@ function makeZoomable(canvas, inner) {
     scale = 1; tx = 0; ty = 0;
     applyTransform();
   });
+  return { reset() { scale = 1; tx = 0; ty = 0; applyTransform(); } };
 }
 
-makeZoomable(renderCanvas, renderInner);
+const mainViewport = makeZoomable(renderCanvas, renderInner);
 makeZoomable(document.getElementById('smiles-canvas'), smilesInner);
 
 // ─── PNG download (client-side SVG → canvas → PNG) ────────────────────────────
@@ -801,7 +1018,7 @@ btnMol.addEventListener('click', async () => {
 
 // ─── build mode ──────────────────────────────────────────────────────────────
 function selectBuildResidue(residue) {
-  if (!buildMode) return;
+  if (!buildMode || mainStale) return;
   const right = buildLeft && buildLeftRIdx !== residue.idx;
   const pending = right
     ? loadBuildRight(residue.abbr, residue.idx)
@@ -821,6 +1038,7 @@ function openBuild() {
   buildMode = true;
   buildPanel.classList.add('open');
   btnBuild.classList.add('active');
+  btnBuild.setAttribute('aria-expanded', 'true');
   if (!libPanel.classList.contains('open')) openLib();
   clearBuild();
 }
@@ -828,6 +1046,7 @@ function closeBuild() {
   buildMode = false;
   buildPanel.classList.remove('open');
   btnBuild.classList.remove('active');
+  btnBuild.setAttribute('aria-expanded', 'false');
   clearBuild();
 }
 function clearBuild() {
@@ -840,17 +1059,20 @@ function clearBuild() {
   buildLeftSvg.innerHTML = '<div class="box-placeholder">Click a chip above</div>';
   buildLeftRg.innerHTML = '';
   buildRightAbbr.textContent = '—';
-  buildRightSvg.innerHTML = '<div class="box-placeholder">Right-click from library</div>';
+  buildRightSvg.innerHTML = '<div class="box-placeholder">Choose Use in the library</div>';
   buildRightRg.innerHTML = '';
   buildConnect.disabled = true;
-  buildStatus.textContent = '';
+  buildStatus.textContent = 'Choose a residue and a monomer to connect';
   buildStatus.className = 'build-status';
-  buildHint.textContent = 'Select a chip on the sequence, then right-click a monomer in the library';
+  buildHint.textContent = cabilnInput.value.trim()
+    ? 'Select a residue, then choose Use beside a library monomer'
+    : 'Choose Use beside a monomer to start a peptide';
   resChips.querySelectorAll('.res-chip').forEach(c => c.style.outline = '');
   btnRxnFilter.disabled = true;
   if (rxnFilterActive) {
     rxnFilterActive = false;
     btnRxnFilter.classList.remove('active');
+    btnRxnFilter.setAttribute('aria-pressed', 'false');
     if (libLoaded) renderLibList(libSearch.value.trim().toLowerCase());
   }
 }
@@ -896,7 +1118,7 @@ buildInsertBtn.addEventListener('click', () => {
   if (insertBetweenActive) {
     insertBetweenActive = false;
     buildInsertBtn.textContent = '⊕ Insert Between';
-    buildHint.textContent = 'Select a chip on the sequence, then right-click a monomer in the library';
+    buildHint.textContent = 'Select a residue, then choose Use beside a library monomer';
     if (libLoaded) renderLibList(libSearch.value.trim().toLowerCase());
     return;
   }
@@ -930,8 +1152,7 @@ async function doInsertBetween(abbr) {
       buildHint.textContent = 'Insert failed: ' + data.error;
       return;
     }
-    cabilnInput.value = data.result;
-    cabilnInput.dispatchEvent(new Event('input'));
+    commitDocument(data.result, 'cabiln');
     buildHint.textContent = `${abbr} inserted — select chips to continue building`;
     if (libLoaded) renderLibList(libSearch.value.trim().toLowerCase());
   } catch (e) {
@@ -967,10 +1188,11 @@ async function loadBuildLeft(abbr, rIdx) {
     buildLeftSvg.innerHTML = data.svg || '';
     buildLeft = { abbr, rgroups: data.rgroups || [], selectedSlot: null };
     renderRgroupButtons(buildLeftRg, buildLeft, 'left');
-    buildHint.textContent = buildRight ? 'Select R-groups to connect' : 'Now right-click a monomer in the library';
+    buildHint.textContent = buildRight ? 'Choose an attachment site on each side' : 'Choose Use beside a library monomer';
     btnRxnFilter.disabled = false;
     if (rxnFilterActive && libLoaded) renderLibList(libSearch.value.trim().toLowerCase());
     updateInsertBetweenUI();
+    checkBuildValidity();
   } catch (e) {
     if (!request.current()) return;
     buildLeftSvg.innerHTML = '<div class="box-placeholder">Error loading monomer</div>';
@@ -1022,8 +1244,9 @@ async function loadBuildRight(abbr, rIdx) {
     buildRightSvg.innerHTML = data.svg || '';
     buildRight = { abbr, rgroups: data.rgroups || [], selectedSlot: null };
     renderRgroupButtons(buildRightRg, buildRight, 'right');
-    buildHint.textContent = 'Select R-groups to connect';
+    buildHint.textContent = buildLeft ? 'Choose an attachment site on each side' : 'Select a residue in the sequence';
     updateInsertBetweenUI();
+    checkBuildValidity();
   } catch (e) {
     if (!request.current()) return;
     buildRightSvg.innerHTML = '<div class="box-placeholder">Error loading monomer</div>';
@@ -1038,14 +1261,22 @@ function renderRgroupButtons(container, state, side) {
     const btn = document.createElement('button');
     btn.className = 'rgroup-btn';
     if (rg.used) btn.classList.add('used');
+    btn.disabled = !!rg.used;
+    btn.setAttribute('aria-pressed', String(state.selectedSlot === rg.slot));
     if (state.selectedSlot === rg.slot) btn.classList.add('selected');
-    btn.textContent = `R${rg.slot} ${rg.chem_type || ''}`;
-    btn.title = `R${rg.slot}: ${rg.chem_type || 'unknown'}${rg.leaving ? ' (LG: ' + rg.leaving + ')' : ''}`;
+    btn.textContent = `R${rg.slot} ${(rg.chem_type || '').replaceAll('_', ' ')}${rg.used ? ' · used' : ''}`;
+    btn.title = `R${rg.slot}: ${rg.chem_type || 'unknown'}${rg.leaving ? ' (LG: ' + rg.leaving + ')' : ''}${rg.used ? ' — already connected' : ''}`;
     if (!rg.used) {
       btn.addEventListener('click', () => selectRgroup(side, rg.slot));
     }
     container.appendChild(btn);
   });
+  const drawing = side === 'left' ? buildLeftSvg : buildRightSvg;
+  drawing.querySelectorAll('.site-selected').forEach(path => path.classList.remove('site-selected'));
+  const selected = state.rgroups.find(rg => rg.slot === state.selectedSlot);
+  if (Number.isInteger(selected?.atom_idx)) {
+    drawing.querySelectorAll(`.atom-${selected.atom_idx}`).forEach(path => path.classList.add('site-selected'));
+  }
 }
 
 function selectRgroup(side, slot) {
@@ -1066,7 +1297,10 @@ async function checkBuildValidity() {
   buildConnect.disabled = true;
   if (!buildLeft?.selectedSlot || !buildRight?.selectedSlot) {
     buildConnect.disabled = true;
-    buildStatus.textContent = '';
+    buildStatus.textContent = !buildLeft ? 'Select a residue in the sequence'
+      : !buildRight ? 'Choose a monomer from the library'
+      : !buildLeft.selectedSlot ? 'Choose a site on the current residue'
+      : 'Choose a site on the other monomer';
     buildStatus.className = 'build-status';
     return;
   }
@@ -1150,9 +1384,8 @@ buildConnect.addEventListener('click', async () => {
       buildStatus.className = 'build-status invalid';
       return;
     }
-    cabilnInput.value = data.result;
-    cabilnInput.dispatchEvent(new Event('input'));
-    buildHint.textContent = 'Connection added — select a chip and right-click another monomer';
+    commitDocument(data.result, 'cabiln');
+    buildHint.textContent = 'Connection added — select a residue to continue building';
   } catch (e) {
     if (!request.current()) return;
     buildStatus.textContent = 'Insert failed';
@@ -1178,8 +1411,7 @@ async function convertNotation(target) {
     if (!request.current() || cabilnInput.value.trim() !== val) return;
     if (data.error) { console.error('convert error:', data.error); return; }
     if (data.result) {
-      cabilnInput.value = data.result;
-      cabilnInput.dispatchEvent(new Event('input'));
+      commitDocument(data.result, 'cabiln');
     }
   } catch (e) {
     if (request.current()) console.error('convertNotation error:', e);
@@ -1194,7 +1426,7 @@ btnReroll.addEventListener('click', () => {
   if (!lastCabiln) return;
   rerollSeed++;
   btnReroll.textContent = rerollSeed % 2 === 1 ? '⟳ Indigo' : '⟳ CoordGen';
-  showSpinner(renderInner);
+  setMainProgress(true);
   doRenderCabiln(lastCabiln);
 });
 
@@ -1205,22 +1437,17 @@ function startConversion(button) {
   const request = startRequest('sequence-edit', () => {
     button.textContent = label;
     button.disabled = false;
+    conversionProgress.hidden = true;
   });
   button.textContent = '…';
   button.disabled = true;
+  conversionProgress.hidden = false;
+  conversionProgressLabel.textContent = 'Recognizing monomers and checking the structure. Large peptides can take several seconds.';
   return request;
 }
 
 function useConvertedCabiln(sequence, warning = '') {
-  notationSelect.value = 'cabiln';
-  btnToCabilnPct.style.display = 'none';
-  btnToCabilnBracket.style.display = 'none';
-  cabilnInput.placeholder = NOTATION_PLACEHOLDER.cabiln;
-  cabilnInput.value = sequence;
-  cabilnInput.dispatchEvent(new Event('input'));
-  conversionStatus.textContent = warning;
-  conversionStatus.title = warning;
-  conversionStatus.hidden = !warning;
+  commitDocument(sequence, 'cabiln', warning);
 }
 
 async function doS2c(notation) {
@@ -1319,7 +1546,6 @@ function canvasSize(el) {
 
 function setInner(inner, html) {
   inner.innerHTML = html;
-  inner.style.transform = '';
 }
 
 function showSpinner(inner) {
@@ -1335,31 +1561,79 @@ const NOTATION_PLACEHOLDER = {
 };
 
 notationSelect.addEventListener('change', () => {
-  const mode = notationSelect.value;
-  cabilnInput.placeholder = NOTATION_PLACEHOLDER[mode] || '';
-  const showConvert = mode !== 'cabiln';
-  btnToCabilnPct.style.display     = showConvert ? '' : 'none';
-  btnToCabilnBracket.style.display = showConvert ? '' : 'none';
-  cabilnInput.value = '';
-  cabilnInput.className = '';
-  resetCabiln();
+  const draft = editor.drafts[notationSelect.value];
+  commitDocument(draft?.text || '', notationSelect.value, draft?.warning || '');
 });
 
 // ─── CABILN render ────────────────────────────────────────────────────────────
 cabilnInput.addEventListener('input', () => {
+  setConversionWarning();
+  recordDocument(true);
+  renderDocument();
+});
+
+function setMainProgress(pending) {
+  renderPane.setAttribute('aria-busy', String(pending));
+  renderProgress.hidden = !pending && !(mainStale && hasMainDrawing);
+  renderProgressLabel.textContent = pending
+    ? (hasMainDrawing ? 'Updating — previous drawing shown' : 'Drawing structure…')
+    : 'Previous drawing — correct the input to update';
+}
+
+function invalidateDocument() {
+  clearTimeout(cabilnTimer);
+  cancelRequests('main-render', 'sequence-edit');
+  clearComparison();
+  clearBuild();
+  clearHighlight();
+  clearExports();
+  lastCabiln = '';
+  mainStale = true;
+  renderCanvas.classList.add('stale');
+  resChips.classList.add('stale');
+  resChips.setAttribute('aria-disabled', 'true');
+  resChips.querySelectorAll('button').forEach(button => { button.disabled = true; });
+  rerollSeed = 0;
+  btnReroll.disabled = true;
+  btnReroll.textContent = '⟳ Layout';
+  cabilnInput.className = '';
+  cabilnStatus.textContent = '';
+  cabilnStatus.className = 'statusbar';
+}
+
+function renderDocument(immediate = false) {
   const seq = cabilnInput.value.trim();
   const mode = notationSelect.value;
-  resetCabiln();
-  if (!seq) return;
-  if (mode !== 'cabiln') {
-    // Non-CABILN: render via render_reference for a live preview
-    showSpinner(renderInner);
-    cabilnTimer = setTimeout(() => doRenderForeign(seq), 400);
+  if (!seq) {
+    resetCabiln();
     return;
   }
-  showSpinner(renderInner);
-  cabilnTimer = setTimeout(() => doRenderCabiln(seq), 300);
-});
+  invalidateDocument();
+  if (!hasMainDrawing) showSpinner(renderInner);
+  setMainProgress(true);
+  const render = () => mode === 'cabiln' ? doRenderCabiln(seq) : doRenderForeign(seq);
+  if (immediate) render();
+  else cabilnTimer = setTimeout(render, 180);
+}
+
+function acceptMainDrawing(svg, source, notation) {
+  setInner(renderInner, svg);
+  hasMainDrawing = true;
+  mainStale = false;
+  displayedSource = source;
+  displayedNotation = notation;
+  renderCanvas.classList.remove('stale');
+  resChips.classList.remove('stale');
+  resChips.setAttribute('aria-disabled', 'false');
+}
+
+function mainRenderError(message) {
+  mainStale = true;
+  if (!hasMainDrawing) setInner(renderInner, `<div class="placeholder err">${escHtml(message)}</div>`);
+  cabilnStatus.textContent = message;
+  cabilnStatus.className = 'statusbar';
+  cabilnInput.className = 'err';
+}
 
 async function doRenderForeign(txt) {
   const request = startRequest('main-render');
@@ -1380,56 +1654,49 @@ async function doRenderForeign(txt) {
     if (!request.current() || cabilnInput.value.trim() !== txt ||
         notationSelect.value !== mode) return;
     if (data.error) {
-      setInner(renderInner, `<div class="placeholder err">${escHtml(data.error)}</div>`);
-      cabilnStatus.textContent = data.error;
-      cabilnStatus.className = 'statusbar';
-      cabilnInput.className = 'err';
+      mainRenderError(data.error);
     } else {
-      setInner(renderInner, data.svg);
+      acceptMainDrawing(data.svg, txt, mode);
+      resChips.innerHTML = '';
+      residueMap = {}; atomToRes = {}; residueList = [];
       cabilnStatus.textContent = `${data.format}: ${data.info || ''}`;
       cabilnStatus.className = 'statusbar ok';
       cabilnInput.className = 'ok';
     }
   } catch (e) {
     if (!request.current()) return;
-    cabilnStatus.textContent = 'Server error';
-    cabilnStatus.className = 'statusbar';
+    mainRenderError('Could not reach the renderer. Your input is preserved.');
   } finally {
+    if (request.current()) setMainProgress(false);
     request.finish();
   }
 }
 
 function resetCabiln() {
-  clearTimeout(cabilnTimer);
-  cancelRequests('main-render', 'sequence-edit');
-  clearComparison();
-  clearBuild();
-  lastCabiln = '';
-  rerollSeed = 0;
-  btnReroll.disabled = true;
-  btnReroll.textContent = '⟳ Layout';
-  cabilnInput.className = '';
-  cabilnStatus.textContent = '';
-  cabilnStatus.className = 'statusbar';
-  conversionStatus.textContent = '';
-  conversionStatus.hidden = true;
+  invalidateDocument();
+  hasMainDrawing = false;
+  mainStale = false;
+  displayedSource = displayedNotation = '';
+  renderCanvas.classList.remove('stale');
+  resChips.classList.remove('stale');
+  resChips.setAttribute('aria-disabled', 'false');
+  mainViewport.reset();
   setInner(renderInner, '<div class="placeholder">Start typing a sequence…</div>');
-  clearExports();
   resChips.innerHTML = '';
   residueMap = {}; atomToRes = {}; residueList = [];
   chainData = [];
   currentBranchSet = new Set();
+  setMainProgress(false);
 }
 
 async function doRenderCabiln(seq) {
   const request = startRequest('main-render');
-  const _seqChanged = seq !== lastCabiln;
+  const sameDocument = seq === displayedSource && displayedNotation === 'cabiln';
   lastCabiln = '';
   clearExports();
   clearComparison();
   btnReroll.disabled = true;
-  if (buildMode && _seqChanged) clearBuild();
-  resChips.innerHTML = '';
+  if (buildMode && !sameDocument) clearBuild();
   const { w, h } = canvasSize(renderCanvas);
   try {
     const res  = await fetch('/render', {
@@ -1442,19 +1709,19 @@ async function doRenderCabiln(seq) {
     if (!request.current() || cabilnInput.value.trim() !== seq ||
         notationSelect.value !== 'cabiln') return;
     if (data.error) {
-      const html = `<div class="placeholder err">${escHtml(data.error)}</div>`;
-      setInner(renderInner, html);
-      cabilnStatus.textContent = data.error;
-      cabilnStatus.className = 'statusbar';
-      cabilnInput.className = 'err';
+      mainRenderError(data.error);
       clearExports();
       btnReroll.disabled = true;
-      resChips.innerHTML = '';
     } else {
       const displayedSequence = data.normalized_cabiln || seq;
-      if (data.normalized_cabiln) cabilnInput.value = displayedSequence;
+      if (data.normalized_cabiln) {
+        cabilnInput.value = displayedSequence;
+        editor.present = { ...editor.present, text: displayedSequence };
+        editor.drafts.cabiln = { text: displayedSequence, warning: editor.present.warning };
+        saveDraft();
+      }
       lastCabiln = displayedSequence;
-      setInner(renderInner, data.svg);
+      acceptMainDrawing(data.svg, displayedSequence, 'cabiln');
       cabilnStatus.textContent = [data.info, ...(data.warnings || [])].filter(Boolean).join(' · ');
       cabilnStatus.title = cabilnStatus.textContent;
       cabilnStatus.className = data.warnings?.length ? 'statusbar warn' : 'statusbar ok';
@@ -1462,13 +1729,20 @@ async function doRenderCabiln(seq) {
       btnReroll.disabled = false;
       setExportReady(data.svg, data.mol_block);
       buildResidueUI(data.residue_map, data.residues, data.layout, data.crosslink_groups);
+      if (sameDocument) {
+        resChips.querySelectorAll('.res-chip').forEach(chip => {
+          const idx = parseInt(chip.dataset.residue);
+          if (idx === buildLeftRIdx) chip.style.outline = '2px solid #5a9ae0';
+          else if (idx === buildRightRIdx) chip.style.outline = '2px solid #e0a05a';
+        });
+      }
       if (verifyMode && lastSmiles) triggerVerify();
     }
   } catch (e) {
     if (!request.current()) return;
-    cabilnStatus.textContent = 'Server error — is the renderer running?';
-    cabilnStatus.className = 'statusbar';
+    mainRenderError('Could not reach the renderer. Your input is preserved.');
   } finally {
+    if (request.current()) setMainProgress(false);
     request.finish();
   }
 }
@@ -1486,19 +1760,23 @@ function clearReference() {
 
 smilesInput.addEventListener('input', () => {
   clearReference();
+  if (smilesInput.value) beginDraftEdit();
+  clearTimeout(editor.saveTimer);
+  editor.saveTimer = setTimeout(saveDraft, 200);
   const txt = smilesInput.value.trim();
   if (!txt) {
     setInner(smilesInner, '<div class="placeholder">Paste SMILES, BILN, or HELM…</div>');
     compareBar.innerHTML = '';
     return;
   }
-  showSpinner(smilesInner);
-  smilesTimer = setTimeout(() => doRenderRef(txt), 300);
+  smilesStatus.textContent = 'Updating reference…';
+  smilesTimer = setTimeout(() => doRenderRef(txt), 180);
 });
 
 molUpload.addEventListener('change', async (e) => {
   const file = e.target.files[0];
   if (!file) return;
+  beginDraftEdit();
   // The selected File is retained locally; allow choosing it again after cancel.
   molUpload.value = '';
   clearReference();
@@ -1526,6 +1804,7 @@ molUpload.addEventListener('change', async (e) => {
       setInner(smilesInner, data.svg);
       lastSmiles = data.smiles || '';
       smilesInput.value = lastSmiles;
+      saveDraft();
       smilesInput.className = 'ok';
       if (lastCabiln) triggerVerify();
     }
@@ -1638,3 +1917,6 @@ function escAttr(s) { return escHtml(s); }
     } catch(e) {}
   }, 5000);
 })();
+
+offerSavedDraft();
+updateHistoryControls();

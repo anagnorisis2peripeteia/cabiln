@@ -16,6 +16,7 @@ class Element {
     this.dataset = {};
     this.children = [];
     this.listeners = new Map();
+    this.attributes = new Map();
     this.disabled = false;
     this.hidden = true;
     const classes = new Set();
@@ -38,6 +39,8 @@ class Element {
     return Promise.all((this.listeners.get(event.type) || []).map(fn => fn(event)));
   }
   querySelectorAll() { return []; }
+  setAttribute(name, value) { this.attributes.set(name, String(value)); }
+  getAttribute(name) { return this.attributes.get(name) ?? null; }
   querySelector() { return null; }
   appendChild(element) { this.children.push(element); }
   focus() {}
@@ -316,9 +319,8 @@ test('a discovered cap family asks for its attachment form before loading slots'
 test('conversion warnings survive rendering and clear when the sequence is edited', async () => {
   const ui = page('builder.js');
   ui.run("useConvertedCabiln('A', 'Input stereochemistry was inferred')");
-  const pending = ui.run("doRenderCabiln('A')");
   ui.requests[0].resolve(rendered);
-  await pending;
+  await new Promise(resolve => setImmediate(resolve));
   assert.equal(ui.element('conversion-status').hidden, false);
   assert.match(ui.element('conversion-status').textContent, /stereochemistry/);
   await ui.input('cabiln-input', 'G');
@@ -489,7 +491,7 @@ test('a cleared R-group selection cannot be enabled by old bond validation', asy
   ui.requests[0].resolve({ valid: true, reaction: 'amide' });
   await pending;
   assert.equal(ui.element('build-connect').disabled, true);
-  assert.equal(ui.element('build-status').textContent, '');
+  assert.equal(ui.element('build-status').textContent, 'Choose a site on the current residue');
 });
 
 test('cancelled SMILES conversion restores the button without replacing main input', async () => {

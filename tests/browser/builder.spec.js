@@ -40,8 +40,8 @@ test('right-click tiles and detected sites build backbone, branch and cap', asyn
   await expect(page.locator('#cabiln-input')).toHaveClass('ok');
   await selectChip(page, 0, 'left', 'K');
   await expect(page.locator('#build-left-rgroups button')).toHaveText([
-    'R1 backbone_n', 'R2 backbone_c', 'R3 backbone_n_mod',
-    'R4 amine_primary', 'R5 amine_primary',
+    'R1 backbone n', 'R2 backbone c', 'R3 backbone n mod',
+    'R4 amine primary', 'R5 amine primary',
   ]);
   await tile(page, 'G', 'right');
   await expect(page.locator('#build-right-abbr')).toHaveText('G');

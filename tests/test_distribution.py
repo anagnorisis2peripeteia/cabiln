@@ -126,8 +126,8 @@ def test_built_wheel_runs_core_and_web_outside_checkout(tmp_path):
                 assert client.get("/capabilities").json() == {"registration": False}
                 assert client.get("/register").status_code == 403
                 for name in (
-                    "builder.js", "builder.css", "register.js", "register.css",
-                    "examples.json",
+                    "theme.css", "builder.js", "builder.css", "register.js",
+                    "register.css", "examples.json",
                 ):
                     response = client.get("/static/" + name)
                     assert response.status_code == 200, name

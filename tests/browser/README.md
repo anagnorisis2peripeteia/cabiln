@@ -17,6 +17,25 @@ scaffolds; panels; tile families; chip/SVG selection; insertion; nested atom
 highlights; input formats; verification/uploads; registration; unknown-region
 editing; canvas controls; exports; and delayed/failed responses.
 
+The UX journeys also cover retained drawings and zoom, disabled stale selections,
+keyboard building, attachment highlights, Undo/Redo, format drafts, recovery,
+unavailable storage, preserved stereo warnings, library revision refreshes, and
+building/verification at a 390 px viewport.
+
+For comparable browser timings, run the performance file alone against each
+revision with the same Python and browser:
+
+```sh
+CABILN_BROWSER_ARTIFACTS=/tmp/cabiln-current-timing npx playwright test performance.spec.js
+CABILN_APP_ROOT=/path/to/frozen/source CABILN_BROWSER_ARTIFACTS=/tmp/cabiln-baseline-timing npx playwright test performance.spec.js
+```
+
+Its `browser-timings.json` measures input/click events through completed drawing
+and chip updates followed by two animation frames. It excludes assertion polling
+time. The first edit uses a fresh server only when this file runs alone. The
+small sample is performance evidence, with no machine-specific speed threshold
+in the acceptance suite.
+
 `CABILN_PYTHON` selects an interpreter. Otherwise the repository's `.venv` is used
 when available, falling back to `python3`. `CABILN_APP_ROOT` selects another
 checkout for baseline comparisons. Explicit `PYTHONPATH` keeps that source

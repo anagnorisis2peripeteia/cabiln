@@ -146,6 +146,36 @@ selection. Node tests exercise these races with controlled delayed responses.
 Chip and SVG selection share one transition. Hover previews use the same request
 lifetime manager as other reads, so closing a panel also cancels its preview.
 
+The browser separates the current document from the last successful drawing.
+Editing invalidates selection, comparison and exports immediately while keeping
+the previous drawing and viewport visible. Explicit edits render immediately;
+free typing has a 180 ms debounce. Only a successful current response admits a
+new atom map. Reroll preserves selections only for the same source and notation.
+
+Document commits own bounded Undo/Redo, per-format text and conversion warnings,
+and local draft saving. Recovery clears reference requests and derived chemistry
+before restoring text. Beginning new work resolves an offered recovery so a
+pending banner cannot suppress autosave. Existing reference-field native editing
+remains separate from sequence history.
+
+Builder and registration share local theme tokens for colour, typography,
+keyboard focus, and reduced motion. Their page stylesheets own layout. Toolbar
+icons are local inline SVG with visible labels; no font or UI framework download
+is required. Molecular atom colours and occurrence colours remain independent
+of the interface theme.
+
+Palette responses carry an opaque library revision header. An unchanged revision
+preserves rows, focus and hover previews; changed definitions invalidate them,
+even if the tile labels are identical. Palette events are delegated once, and
+search text and attachment types are prepared once per library revision.
+
+The web app negotiates gzip for responses of at least 1,000 bytes, using the
+existing FastAPI/Starlette middleware with compression level 4. Stereo validation
+checks empty RDKit group vectors by length before iterating. Reaction ownership
+restoration writes only missing owners. Both optimizations retain the molecular
+verification path. The [UX and performance evidence](ux-performance-validation.md)
+records their measured scope and limits.
+
 The core suite checks molecular graphs, stereochemistry, attachment slots, and
 notation conversion. HTTP tests exercise rendered MOL exports, edits, request
 errors, registration, and responsiveness. The distribution test uses an installed

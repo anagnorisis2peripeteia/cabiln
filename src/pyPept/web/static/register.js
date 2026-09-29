@@ -87,7 +87,7 @@ btnPreview.addEventListener('click', async () => {
   const current = () => previewRequest === request && smilesIn.value.trim() === smi;
   btnPreview.disabled = true;
   btnPreview.textContent = 'Detecting…';
-  prevCanvas.innerHTML = '<div style="color:#b0bec5;font-size:13px">Analysing…</div>';
+  prevCanvas.innerHTML = '<div class="preview-message">Analysing…</div>';
   detDisp.innerHTML = '';
   prevSec.style.display = 'block';
   try {
@@ -101,7 +101,7 @@ btnPreview.addEventListener('click', async () => {
     if (!current()) return;
     const error = responseError(res, data);
     if (error) {
-      prevCanvas.innerHTML = `<div style="color:#d9534f;font-size:13px;padding:20px">${escHtml(error)}</div>`;
+      prevCanvas.innerHTML = `<div class="preview-message err">${escHtml(error)}</div>`;
       smilesIn.className = 'err';
       btnRegister.disabled = true;
     } else {
@@ -119,7 +119,7 @@ btnPreview.addEventListener('click', async () => {
     detectedSmiles = '';
     chucklesOut.value = '';
     detDisp.innerHTML = '';
-    prevCanvas.innerHTML = '<div style="color:#d9534f;font-size:13px;padding:20px">Server error</div>';
+    prevCanvas.innerHTML = '<div class="preview-message err">Server error</div>';
   } finally {
     if (current()) {
       previewRequest = null;

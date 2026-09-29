@@ -334,6 +334,10 @@ def _inherit_residue_ownership(product, reactants):
     Restore ownership before those inputs are replaced by the next product.
     """
     for atom in product.GetAtoms():
+        # Unmapped atoms already retain their original owner. Only mapped
+        # junction atoms lose it; avoid reassigning the entire growing chain.
+        if atom.HasProp('_residue_idx'):
+            continue
         if atom.HasProp('react_idx') and atom.HasProp('react_atom_idx'):
             source = reactants[atom.GetIntProp('react_idx')].GetAtomWithIdx(
                 atom.GetIntProp('react_atom_idx'))

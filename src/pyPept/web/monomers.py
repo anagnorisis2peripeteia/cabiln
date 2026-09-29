@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Query, Request
+from hashlib import sha256
+
+from fastapi import APIRouter, Query, Request, Response
 from fastapi.responses import JSONResponse
 
 from pyPept.attachments import attachment_sites
@@ -22,11 +24,15 @@ router = APIRouter()
 
 
 @router.get("/monomers")
-def list_monomers():
+def list_monomers(response: Response = None):
     try:
-        key = (library_version(), "monomers")
+        version = library_version()
+        key = (version, "monomers")
+        token = sha256(repr(version).encode("utf-8")).hexdigest()
         cached = _rc_get(key)
         if cached is not None:
+            if response is not None:
+                response.headers["X-Library-Version"] = token
             return cached
         all_mols, mol_by_abbr = _load_sdf()
         from pyPept.sequence import get_monomer_info
@@ -93,7 +99,13 @@ def list_monomers():
                 merged["cterm_abbr"] = ct["abbr"]
                 merged["cterm_leaving"] = ct["leaving"]
             monomers.append(merged)
-        _rc_put(key, monomers)
+        # A definition can change without changing its tile labels. Expose its
+        # revision so browser previews can invalidate independently of the body.
+        # Do not certify or cache a response assembled across a library update.
+        if library_version() == version:
+            _rc_put(key, monomers)
+            if response is not None:
+                response.headers["X-Library-Version"] = token
         return monomers
     except Exception as exc:
         return JSONResponse({"error": str(exc)}, status_code=500)

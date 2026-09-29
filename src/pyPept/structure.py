@@ -45,9 +45,14 @@ def parse_template_smiles(smiles):
 
 def require_supported_stereo(molecule) -> None:
     """Do not discard relative or mixture stereo groups during SMILES emission."""
-    if molecule is not None and any(
+    if molecule is None:
+        return
+    groups = molecule.GetStereoGroups()
+    # Iterating RDKit's empty C++ vector can be much slower than reading its
+    # length. Most templates have no groups; no chemistry check is needed then.
+    if len(groups) and any(
         group.GetGroupType() != Chem.StereoGroupType.STEREO_ABSOLUTE
-        for group in molecule.GetStereoGroups()
+        for group in groups
     ):
         raise ValueError(
             "Enhanced AND/OR stereochemistry is not supported. "
