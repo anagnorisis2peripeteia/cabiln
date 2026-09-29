@@ -1,3 +1,4 @@
-# Render build command: pip install -r requirements-render.txt
-# Install the project and its web extra from the checkout.
+# Compatibility with existing native Render build commands (Python 3.11.15).
+# The container profile in deploy/ is preferred for a retained release artifact.
+-r requirements-production.txt
 .[web]

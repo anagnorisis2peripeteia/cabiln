@@ -26,7 +26,9 @@ from rdkit import Chem, RDLogger
 from rdkit.Chem import AllChem
 from rdkit.Chem.Draw import rdDepictor
 
+from pyPept.attachments import reaction_for_types
 from pyPept.leaving_groups import restore_leaving_groups
+from pyPept.peptide import Endpoint, Peptide
 from pyPept.structure import require_supported_stereo
 
 # SanitizeMol fires "not removing hydrogen atom without neighbors" when it
@@ -47,9 +49,9 @@ class Molecule:
     ############################################################################
     def __init__(self, sequence=None, depiction='local'):
         """
-        Initialize a Molecule object, optionally with a Sequence object.
-        :param sequence:  input sequence to be converted to a molecule
-        :type sequence: pyPept.Sequence object.
+        Initialize from a Sequence or an already resolved Peptide.
+        :param sequence: parsed source or resolved peptide to assemble
+        :type sequence: pyPept.Sequence or pyPept.peptide.Peptide
         :param depiction: method to generate a 2D image
                           The local method is used by default.
                           Use 'rdkit' for RDKit depiction, or None to assemble
@@ -74,119 +76,85 @@ class Molecule:
                 'problem initializing rdkit.ROMol')
 
     ############################################################################
-    def __add_bonds_to_mol(self, sequence):
-        """
-        Form inter-monomer bonds using SMIRKS reactions from reactions.yaml.
+    def __assemble(self, peptide):
+        """Join resolved endpoints and restore their unconsumed leaving groups.
 
-        Each dummy atom in every monomer is relabeled to a globally unique
-        isotope  (m_idx + 1) * 100 + original_isotope  before any reactions
-        run.  This means that even when multiple monomers of the same type
-        (e.g. two Cys) are present, each dummy is uniquely addressable and
-        the targeted SMIRKS can match exactly the right pair.
-
-        Supported connections are defined by the reaction library.
+        Reaction isotopes are temporary labels allocated per endpoint. They do
+        not encode occurrence IDs or slots, which can be large or nonconsecutive.
         """
-        from pyPept.attachments import resolve_connection
         from pyPept.interfaces.reaction_library import run_bond_smirks
-        from pyPept.sequence import _slot_for_attachment
 
-        monomers_orig = [mon['m_romol'] for mon in sequence.s_monomers]
-        for monomer in monomers_orig:
-            require_supported_stereo(monomer)
+        if not peptide.occurrences:
+            raise ValueError("Cannot assemble an empty peptide")
+        labels, chemistry, leaving_groups, pool = {}, {}, {}, {}
+        for node in peptide.occurrences:
+            if node.definition is None:
+                raise ValueError("Assembly requires resolved monomer definitions")
+            molecule = node.definition.copy_template()
+            require_supported_stereo(molecule)
+            metadata = {
+                slot: (chem_type, leaving)
+                for slot, chem_type, leaving, _ in node.definition.attachment_metadata
+            }
+            for atom in molecule.GetAtoms():
+                atom.SetIntProp('_residue_idx', node.id)
+                if atom.GetAtomicNum() != 0:
+                    continue
+                endpoint = Endpoint(node.id, atom.GetIsotope())
+                label = len(labels) + 1
+                labels[endpoint] = label
+                chemistry[endpoint], leaving_groups[label] = metadata[endpoint.slot]
+                atom.SetIsotope(label)
+                if atom.GetIsotope() != label:
+                    raise ValueError(
+                        "Too many attachment sites for RDKit isotope labels"
+                    )
+            pool[node.id] = molecule
 
-        # ── Step 1: relabel all dummies to globally unique isotopes ──────────
-        # unique_iso(m_idx, slot) = (m_idx + 1) * 100 + slot  (slot is 1-based)
-        tagged = []
-        for m_idx, mol in enumerate(monomers_orig):
-            rw = Chem.RWMol(mol)
-            for atom in rw.GetAtoms():
-                atom.SetIntProp('_residue_idx', m_idx)
-                if atom.GetAtomicNum() == 0:
-                    orig = atom.GetIsotope()      # 1-based slot index
-                    atom.SetIsotope((m_idx + 1) * 100 + orig)
-            tagged.append(rw.GetMol())
+        parent = {identity: identity for identity in pool}
 
-        # ── Step 2: fragment pool with union-find ─────────────────────────────
-        pool = {i: tagged[i] for i in range(len(tagged))}
-        parent = list(range(len(tagged)))
+        def find_root(identity):
+            while parent[identity] != identity:
+                parent[identity] = parent[parent[identity]]
+                identity = parent[identity]
+            return identity
 
-        def find_root(i):
-            while parent[i] != i:
-                parent[i] = parent[parent[i]]
-                i = parent[i]
-            return i
-
-        # ── Step 3: process each bond ─────────────────────────────────────────
-        for bond in self.bondlist:
-            m1, at1, m2, at2 = bond[:4]
-            root1, root2 = find_root(m1), find_root(m2)
-            frag1, frag2 = pool[root1], pool[root2]
-
-            # Globally unique isotopes for this bond's two attachment dummies.
-            # Use the stored slot when present (avoids _slot_for_attachment
-            # ambiguity when an atom neighbours multiple dummies, e.g. backbone N).
-            slot1 = bond[4] if len(bond) > 4 else _slot_for_attachment(monomers_orig[m1], at1)
-            slot2 = bond[5] if len(bond) > 4 else _slot_for_attachment(monomers_orig[m2], at2)
-            iso1 = (m1 + 1) * 100 + slot1
-            iso2 = (m2 + 1) * 100 + slot2
-
-            # Look up SMIRKS reaction
-            ct1, ct2, entry = resolve_connection(
-                monomers_orig[m1], slot1, monomers_orig[m2], slot2,
-                leaving_groups1=sequence.s_monomers[m1].get('m_Rgroups'),
-                leaving_groups2=sequence.s_monomers[m2].get('m_Rgroups'),
-            )
-
-            if entry is None:
+        for edge in peptide.connections:
+            left, right = edge.endpoints
+            root1 = find_root(left.occurrence_id)
+            root2 = find_root(right.occurrence_id)
+            type1, type2 = chemistry[left], chemistry[right]
+            reaction = reaction_for_types(type1, type2)
+            if reaction is None:
                 raise ValueError(
-                    f"No reaction defined for chem_type pair ({ct1!r}, {ct2!r}) "
-                    f"between monomer {m1} (slot {slot1}) and monomer {m2} "
-                    f"(slot {slot2}). Check the slot indices in your CABILN — "
-                    f"this is most likely a wrong R-group index."
+                    f"No reaction defined for chem_type pair ({type1!r}, {type2!r}) "
+                    f"between monomer {left.occurrence_id} (slot {left.slot}) "
+                    f"and monomer {right.occurrence_id} (slot {right.slot}). "
+                    "Check the slot indices in your CABILN — "
+                    "this is most likely a wrong R-group index."
                 )
-            intramol = (root1 == root2)
-
+            intramolecular = root1 == root2
             try:
-                product = run_bond_smirks(frag1, frag2, iso1, iso2, entry, intramol)
+                product = run_bond_smirks(
+                    pool[root1], pool[root2], labels[left], labels[right],
+                    reaction, intramolecular,
+                )
             except ValueError as exc:
                 raise ValueError(
-                    f"Bond formation failed between monomer {m1} (slot {slot1}, "
-                    f"{ct1}) and monomer {m2} (slot {slot2}, {ct2}): {exc}"
+                    f"Bond formation failed between monomer {left.occurrence_id} "
+                    f"(slot {left.slot}, {type1}) and monomer {right.occurrence_id} "
+                    f"(slot {right.slot}, {type2}): {exc}"
                 ) from exc
-
             pool[root1] = product
-            if not intramol:
+            if not intramolecular:
                 del pool[root2]
                 parent[root2] = root1
 
-        # ── Step 4: combine any remaining disconnected fragments ──────────────
-        frags = list(pool.values())
-        combined = frags[0]
-        for frag in frags[1:]:
-            combined = Chem.CombineMols(combined, frag)
-
-        self.mol = Chem.RWMol(combined)
-
-    ############################################################################
-    def __restore_and_remove_rgroups(self, sequence):
-        """
-        Restore leaving-group atoms on unbound R-group slots, then remove all
-        remaining dummy atoms.
-
-        After SMIRKS-based assembly, bonded dummies are already consumed by the
-        reactions.  Only unbound dummies remain in self.mol.  Each is identified
-        by its globally unique isotope  (m_idx + 1) * 100 + slot  (slot 1-based),
-        which maps back to the monomer's m_Rgroups list to determine whether
-        to remove the dummy ([H]) or replace it with a leaving-group atom ([OH]).
-        """
-        # Build leaving-group lookup: globally-unique isotope → leaving SMILES
-        leaving_for_iso: dict = {}
-        for m_idx, mon in enumerate(sequence.s_monomers):
-            for slot_idx, lg in enumerate(mon['m_Rgroups']):
-                iso = (m_idx + 1) * 100 + (slot_idx + 1)
-                leaving_for_iso[iso] = lg
-
-        return restore_leaving_groups(self.mol, leaving_for_iso, sanitize=False)
+        fragments = iter(pool.values())
+        combined = next(fragments)
+        for fragment in fragments:
+            combined = Chem.CombineMols(combined, fragment)
+        return restore_leaving_groups(combined, leaving_groups, sanitize=False)
 
     ########################################################################################
     def __fixDihedrals(self):
@@ -288,34 +256,29 @@ class Molecule:
     ########################################################################################
     def __from_sequence(self, sequence):
         """
-        Function to convert a pyPept.Sequence object into a rdkit mol object.
+        Convert parsed source or a resolved peptide into a rdkit mol object.
 
         :param sequence: Input sequence
-        :type sequence: pyPept.Sequence or None
+        :type sequence: pyPept.Sequence, pyPept.peptide.Peptide, or None
 
         :return: rdkit.Chem.ROMol object.
         """
 
         if sequence is None:
             return None
-        if not sequence.is_valid():
-            warnings.warn('Invalid sequence object given! Returning None.')
-            return None
+        if isinstance(sequence, Peptide):
+            peptide = sequence
+        else:
+            if not sequence.is_valid():
+                warnings.warn('Invalid sequence object given! Returning None.')
+                return None
+            # Preserve the legacy inspection attributes for Sequence callers.
+            self.monomers = sequence.s_monomers
+            self.bondlist = sequence.s_bonds
+            peptide = Peptide.from_sequence(sequence)
+        self.mol = self.__assemble(peptide)
 
-        self.monomers = sequence.s_monomers
-        self.bondlist = sequence.s_bonds
-
-        # Step 1: form all inter-monomer bonds via SMIRKS, building self.mol
-        # as the combined product.  Uses globally-unique dummy isotopes so that
-        # each reactive site is unambiguously targeted even when multiple
-        # monomers of the same type are present.
-        self.__add_bonds_to_mol(sequence)
-
-        # Step 2: restore unbound R-group slots (remove [H] dummies, replace
-        # others with their leaving-group atom).
-        self.mol = self.__restore_and_remove_rgroups(sequence)
-
-        # Step 4: sanitize and generate 2D coords
+        # Sanitize the completed product before generating coordinates.
         try:
             Chem.SanitizeMol(self.mol)
         except Exception as exc:
@@ -396,7 +359,10 @@ class Molecule:
     ########################################################################################
     def get_residue_atom_map(self):
         """
-        Return {residue_idx: [atom_indices]} for the assembled molecule.
+        Return {occurrence_id: [atom_indices]} for the assembled molecule.
+
+        Sequence inputs use their original zero-based residue indices. Resolved
+        Peptide inputs retain their occurrence IDs even when reordered.
 
         Each atom inherits its original monomer's property at every reaction
         step. Leaving-group replacement preserves it as well. Unmapped atoms

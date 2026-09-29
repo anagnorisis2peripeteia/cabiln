@@ -6,9 +6,12 @@ from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
 from pyPept.inputs import detect_input, read_input
+from pyPept.structure import require_supported_stereo
 
 from .cache import _rc_get, _rc_put, library_version
 from .drawing import _draw_mol, _mol_block
+from .execution import error_response
+from .projects import checked_context, project_context
 from .schemas import _CabilnReq, _MolBlockReq, _ReferenceReq, _SmilesReq, _VerifyReq
 
 router = APIRouter()
@@ -17,15 +20,23 @@ router = APIRouter()
 @router.post("/render")
 def render(req: _CabilnReq):
     w, h = max(400, req.width), max(300, req.height)
-    _ck = (library_version(), req.cabiln, w, h, req.seed)
-    _hit = _rc_get(_ck)
-    if _hit is not None:
-        return _hit
     try:
         from rdkit.Chem.Descriptors import ExactMolWt
 
+        from pyPept.canonical import canonical_convention
+        from pyPept.monomer_store import library_binding
         from pyPept.peptide import Peptide
 
+        binding = library_binding()
+        _ck = (library_version(), req.cabiln, w, h, req.seed)
+        _hit = _rc_get(_ck)
+        if (
+            _hit is not None
+            and _hit.get("context", {}).get("library_binding") == binding
+        ):
+            if library_binding() != binding:
+                raise ValueError("The monomer library changed; retry the render")
+            return _hit
         messages = []
         parsed = read_input(req.cabiln, warning_sink=messages.append, track_source=True)
         seq, parsed_source = parsed.sequence, parsed.source
@@ -40,15 +51,24 @@ def render(req: _CabilnReq):
         block = _mol_block(romol)
 
         res_map = mol.get_residue_atom_map()
+        peptide = Peptide.from_sequence(seq)
         residues = [
-            {"idx": i, "abbr": m.get("m_abbr", f"?{i}")}
-            for i, m in enumerate(seq.s_monomers)
+            {
+                "idx": i,
+                "abbr": m.get("m_abbr", f"?{i}"),
+                "kind": (
+                    "synthetic" if occurrence.definition.synthetic_role else "library"
+                ),
+            }
+            for i, (m, occurrence) in enumerate(
+                zip(seq.s_monomers, peptide.occurrences)
+            )
         ]
 
         chain_ids = seq.s_chains.get("s_monomerIDs", [])
         chains = [{"idx": ci, "residues": ids} for ci, ids in enumerate(chain_ids)]
 
-        layout, crosslink_groups = _renderer_layout(Peptide.from_sequence(seq))
+        layout, crosslink_groups = _renderer_layout(peptide)
 
         result = {
             "svg": svg,
@@ -62,14 +82,21 @@ def render(req: _CabilnReq):
             "crosslink_groups": crosslink_groups,
             "warnings": messages,
             "cabiln_echo": parsed_source,
+            "context": {
+                "project_version": 1,
+                "library_binding": binding,
+                "canonical": canonical_convention(),
+            },
         }
         if parsed_source != req.cabiln:
             result["normalized_cabiln"] = parsed_source
+        if library_binding() != binding:
+            raise ValueError("The monomer library changed; retry the render")
         _rc_put(_ck, result)
         return result
 
     except Exception as exc:
-        return JSONResponse({"error": str(exc).split("\n")[0]}, status_code=400)
+        return error_response(exc)
 
 
 @router.post("/render_smiles")
@@ -77,40 +104,50 @@ def render_smiles(req: _SmilesReq):
     try:
         from rdkit.Chem.Descriptors import ExactMolWt
 
+        context = project_context()
         romol = read_input(req.smiles, input_format="smiles").molecule
+        require_supported_stereo(romol)
 
         w, h = max(400, req.width), max(300, req.height)
         svg = _draw_mol(romol, w, h)
         return {
             "svg": svg,
             "info": f"{romol.GetNumAtoms()} atoms · MW {ExactMolWt(romol):.2f}",
+            "context": checked_context(context),
         }
 
     except Exception as exc:
-        return JSONResponse({"error": str(exc).split("\n")[0]}, status_code=400)
+        return error_response(exc)
 
 
 @router.post("/render_reference")
 def render_reference(req: _ReferenceReq):
-    """Auto-detect input format (SMILES, old BILN, HELM, CABILN) and render."""
-    from rdkit import Chem
-    from rdkit.Chem.Descriptors import ExactMolWt
-
-    w, h = max(400, req.width), max(300, req.height)
+    """Render the requested input format, using auto-detection by default."""
     try:
-        parsed = detect_input(req.input)
-    except ValueError as exc:
-        return JSONResponse({"error": str(exc)}, status_code=400)
-    romol, fmt = parsed.molecule, parsed.format
+        from rdkit import Chem
+        from rdkit.Chem.Descriptors import ExactMolWt
 
-    svg = _draw_mol(romol, w, h)
-    smiles = Chem.MolToSmiles(romol)
-    return {
-        "svg": svg,
-        "smiles": smiles,
-        "format": fmt,
-        "info": f"{romol.GetNumAtoms()} atoms · MW {ExactMolWt(romol):.2f}",
-    }
+        context = project_context()
+        w, h = max(400, req.width), max(300, req.height)
+        parsed = (
+            detect_input(req.input)
+            if req.input_format == "auto"
+            else read_input(req.input, input_format=req.input_format)
+        )
+        romol, fmt = parsed.assemble(), parsed.format
+        require_supported_stereo(romol)
+
+        svg = _draw_mol(romol, w, h)
+        smiles = Chem.MolToSmiles(romol)
+        return {
+            "svg": svg,
+            "smiles": smiles,
+            "format": fmt,
+            "context": checked_context(context),
+            "info": f"{romol.GetNumAtoms()} atoms · MW {ExactMolWt(romol):.2f}",
+        }
+    except Exception as exc:
+        return error_response(exc)
 
 
 @router.post("/render_mol")
@@ -119,7 +156,9 @@ def render_mol(req: _MolBlockReq):
         from rdkit import Chem
         from rdkit.Chem.Descriptors import ExactMolWt
 
+        context = project_context()
         romol = read_input(req.mol_block, input_format="mol").molecule
+        require_supported_stereo(romol)
 
         w, h = max(400, req.width), max(300, req.height)
         svg = _draw_mol(romol, w, h)
@@ -127,11 +166,12 @@ def render_mol(req: _MolBlockReq):
         return {
             "svg": svg,
             "smiles": smiles,
+            "context": checked_context(context),
             "info": f"{romol.GetNumAtoms()} atoms · MW {ExactMolWt(romol):.2f}",
         }
 
     except Exception as exc:
-        return JSONResponse({"error": str(exc).split("\n")[0]}, status_code=400)
+        return error_response(exc)
 
 
 @router.post("/verify")
@@ -163,7 +203,7 @@ def verify(req: _VerifyReq):
         return resp
 
     except Exception as exc:
-        return JSONResponse({"error": str(exc).split("\n")[0]}, status_code=400)
+        return error_response(exc)
 
 
 def _renderer_layout(peptide):

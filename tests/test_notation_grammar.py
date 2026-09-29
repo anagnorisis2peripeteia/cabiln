@@ -19,29 +19,36 @@ def product(sequence):
 
 
 @pytest.mark.parametrize(
-    "bracket",
+    "bracket, sequence_message",
     [
-        "[[K(4,2).A(1,2)garbage].ac(4,2)]",
-        "[[?K(4,2).A(1,2)].ac(4,2)]",
-        "[[K(4,2).garbage.A(1,2)].ac(4,2)]",
-        "[[K(4,2)A(1,2)].ac(4,2)]",
-        "[[K(4,2).A(1,2)]garbage.ac(4,2)]",
-        "[[K(4,2).A(1,2)].ac(4,2)garbage]",
-        "[[K(4,2).A(1,2)]ac(4,2)]",
-        "[[K(4,2).A(1,2)]..ac(4,2)]",
-        "[[K(4,2)[.A(1,2)]].ac(4,2)garbage]",
-        "[[K(4,2)[.A(1,2)garbage]].ac(4,2)]",
-        "[[K(4,2).A(1,2)].ac(4,2)",
-        "[[K(4,2).A(1,2)}.ac(4,2)]",
-        "[K(4,2)[.A(1,2)]garbage.ac(4,2)]",
+        (bracket, None)
+        for bracket in [
+            "[[K(4,2).A(1,2)garbage].ac(4,2)]",
+            "[[?K(4,2).A(1,2)].ac(4,2)]",
+            "[[K(4,2).garbage.A(1,2)].ac(4,2)]",
+            "[[K(4,2)A(1,2)].ac(4,2)]",
+            "[[K(4,2).A(1,2)]garbage.ac(4,2)]",
+            "[[K(4,2).A(1,2)].ac(4,2)garbage]",
+            "[[K(4,2).A(1,2)]ac(4,2)]",
+            "[[K(4,2).A(1,2)]..ac(4,2)]",
+            "[[K(4,2)[.A(1,2)]].ac(4,2)garbage]",
+            "[[K(4,2)[.A(1,2)garbage]].ac(4,2)]",
+            "[[K(4,2).A(1,2)].ac(4,2)",
+            "[[K(4,2).A(1,2)}.ac(4,2)]",
+            "[K(4,2)[.A(1,2)]garbage.ac(4,2)]",
+        ]
+    ] + [
+        ("[G(4,2)[.bad]]", "sub-bracket|unrecognised"),
+        ("[G(4,2)[.A(2,1)garbage]]", "sub-bracket|unrecognised"),
+        ("[G(4,2)[.]]", "sub-bracket|unrecognised"),
     ],
 )
-def test_bracket_parser_rejects_unconsumed_or_unbalanced_regions(bracket):
+def test_bracket_parser_rejects_unconsumed_or_unbalanced_regions(bracket, sequence_message):
     source = f"ac-K.{bracket}-am"
     with pytest.raises(ValueError, match="bracket|unrecognised"):
         _expand_inline_caps(source)
     for tracking in (False, True):
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match=sequence_message):
             Sequence(source, track_source=tracking)
     assert not Sequence.validate(source).ok
 

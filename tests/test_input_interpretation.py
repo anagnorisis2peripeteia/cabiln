@@ -92,6 +92,70 @@ def test_reference_preserves_smiles_precedence(source):
     assert canonical(parsed.molecule) == canonical(Chem.MolFromSmiles(source))
 
 
+@pytest.mark.parametrize(
+    "input_format, expected_format, expected_smiles",
+    [
+        (None, "SMILES", "C"),
+        ("auto", "SMILES", "C"),
+        ("smiles", "SMILES", "C"),
+        ("biln", "BILN", "N[C@@H](CS)C(=O)O"),
+        ("cabiln", "CABILN", "N[C@@H](CS)C(=O)O"),
+    ],
+)
+def test_reference_http_respects_selected_input_format(
+    input_format, expected_format, expected_smiles
+):
+    payload = {"input": "C"}
+    if input_format is not None:
+        payload["input_format"] = input_format
+    with TestClient(create_app()) as client:
+        response = client.post("/render_reference", json=payload)
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["format"] == expected_format
+    assert data["smiles"] == canonical(Chem.MolFromSmiles(expected_smiles))
+    assert data["context"]["library_binding"]
+
+
+@pytest.mark.parametrize("input_format", ["biln", "cabiln"])
+@pytest.mark.parametrize("notation", ["percent", "bracket"])
+def test_selected_peptide_c_converts_to_cysteine(input_format, notation):
+    with TestClient(create_app()) as client:
+        response = client.post(
+            "/to_cabiln",
+            json={"input": "C", "input_format": input_format, "notation": notation},
+        )
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["from"] == input_format.upper()
+    assert data["cabiln"] == "C"
+    assert data["details"] == []
+    assert data["context"]["library_binding"]
+    product = Molecule(Sequence(data["cabiln"])).get_molecule(fmt="ROMol")
+    assert canonical(product) == canonical(Chem.MolFromSmiles("N[C@@H](CS)C(=O)O"))
+
+
+@pytest.mark.parametrize("input_format", [None, "auto", "smiles"])
+def test_methane_conversion_does_not_claim_a_cysteine_residue(input_format):
+    payload = {"input": "C"}
+    if input_format is not None:
+        payload["input_format"] = input_format
+    with TestClient(create_app()) as client:
+        response = client.post("/to_cabiln", json=payload)
+    assert response.status_code == 400, response.text
+    assert response.json()["error"]
+
+
+@pytest.mark.parametrize("route", ["/render_reference", "/to_cabiln"])
+def test_explicit_smiles_does_not_fall_back_to_peptide_notation(route):
+    with TestClient(create_app()) as client:
+        response = client.post(
+            route, json={"input": "A", "input_format": "smiles"}
+        )
+    assert response.status_code == 400, response.text
+    assert "Invalid SMILES" in response.json()["error"]
+
+
 def test_explicit_legacy_input_maps_r3_once_and_keeps_modern_r3_distinct():
     from pyPept.inputs import read_input
 
@@ -105,18 +169,21 @@ def test_explicit_legacy_input_maps_r3_once_and_keeps_modern_r3_distinct():
     assert canonical(modern.assemble()) == canonical(expected)
 
 
-@pytest.mark.parametrize("depiction", ["local", "rdkit"])
 @pytest.mark.parametrize(
-    "flag, source, expected",
+    "flag, source, expected, depiction",
     [
-        ("--biln", "ac-A-G-am", "ac-A-G-am"),
-        ("--fasta", "AG", "A-G"),
-        (
-            "--helm",
-            "PEPTIDE1{C.C}$PEPTIDE1,PEPTIDE1,1:R3-2:R3$$$V2.0",
-            "C.!1(4,4)-C.!1",
-        ),
-    ],
+        (flag, source, expected, depiction)
+        for flag, source, expected in [
+            ("--biln", "ac-A-G-am", "ac-A-G-am"),
+            ("--fasta", "AG", "A-G"),
+            (
+                "--helm",
+                "PEPTIDE1{C.C}$PEPTIDE1,PEPTIDE1,1:R3-2:R3$$$V2.0",
+                "C.!1(4,4)-C.!1",
+            ),
+        ]
+        for depiction in ("local", "rdkit")
+    ] + [("--biln", "ac-A-G-am", "ac-A-G-am", None)],
 )
 def test_cli_formats_keep_depiction_and_exports(
     flag, source, expected, depiction, monkeypatch, tmp_path
@@ -124,20 +191,12 @@ def test_cli_formats_keep_depiction_and_exports(
     from pyPept.interfaces.run_pyPept import main
 
     output = tmp_path / "peptide"
-    monkeypatch.setattr(
-        "sys.argv",
-        [
-            "run_pyPept",
-            flag,
-            source,
-            "--depiction",
-            depiction,
-            "--noconf",
-            "--sdf2D",
-            "--prefix",
-            str(output),
-        ],
-    )
+    arguments = [
+        "run_pyPept", flag, source, "--noconf", "--sdf2D", "--prefix", str(output)
+    ]
+    if depiction is not None:
+        arguments.extend(["--depiction", depiction])
+    monkeypatch.setattr("sys.argv", arguments)
     main()
     assert output.with_suffix(".png").read_bytes().startswith(b"\x89PNG")
     exported = Chem.MolFromMolFile(str(output.with_suffix(".sdf")))

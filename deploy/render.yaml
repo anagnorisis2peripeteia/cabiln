@@ -1,0 +1,26 @@
+# Reviewable staging profile. Applying it provisions paid hosting; no deployment
+# or purchase is performed by adding this file. Promote only after release gates.
+services:
+  - type: web
+    name: cabiln-staging
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: 1c-2g
+    numInstances: 1
+    autoDeployTrigger: 'off'
+    healthCheckPath: /ready
+    maxShutdownDelaySeconds: 40
+    envVars:
+      - key: CABILN_ENV
+        value: production
+      - key: CABILN_EXECUTION
+        value: process
+      - key: CABILN_WORKERS
+        value: '1'
+      - key: CABILN_WORKER_MEMORY_MB
+        value: '1024'
+      - key: CABILN_JOB_TIMEOUT_SECONDS
+        value: '30'
+      - key: CABILN_ENABLE_REGISTRATION
+        value: '0'

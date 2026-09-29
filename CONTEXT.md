@@ -37,3 +37,37 @@ preserves structure without claiming those monomer boundaries.
 **Notation layout**:
 The choice of chains, branches, bracket grouping and labels used to write a
 peptide description. Equivalent layouts preserve the occurrences and connections.
+
+**Branch host**:
+The monomer occurrence from which an attached branch starts. Two sibling
+branches have the same host; a child branch starts from an occurrence inside
+another branch.
+
+**Bracket scope**:
+The part of a notation describing an attached branch and its descendants.
+Closing the scope returns to its host; a scope can contain several child scopes.
+
+**Implicit continuation**:
+A branch step whose own brackets are omitted in the written notation. Its host
+and attachment sites remain the same as in the equivalent explicit nesting.
+
+**Resolved monomer graph**:
+A peptide description with specific monomer definitions, distinct occurrences,
+and numbered-site connections. Different decompositions of the same molecule
+can give different resolved monomer graphs.
+
+**Canonical CABILN**:
+The unique spelling of a resolved monomer graph within one output notation,
+library binding, and versioned convention. It does not identify one unique
+decomposition of every molecular structure.
+
+**Library quality baseline**:
+Versioned compatibility observations tied to an exact definition fingerprint.
+Known exceptions remain explicit; a new or changed definition is unreviewed.
+The baseline does not certify chemical identity or biological activity.
+
+**Project context**:
+The library, reaction rules and canonical convention under which source and
+recognition evidence were resolved. Each document, notation draft and reference
+retains its own context. Saved resolution signatures permit unrelated library
+additions without silently accepting changed selected definitions.

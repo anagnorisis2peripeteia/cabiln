@@ -13,6 +13,7 @@ from pyPept.peptide import Peptide
 from pyPept.sequence import Sequence
 
 from .drawing import _draw_mol
+from .execution import error_response
 from .schemas import _InsertBackboneReq, _InsertBondReq, _ValidateBondReq
 
 router = APIRouter()
@@ -41,7 +42,7 @@ def insert_bond(req: _InsertBondReq):
             result = document.attach(host, req.r_host, req.new_abbr, req.r_new)
         return {"result": result}
     except Exception as exc:
-        return JSONResponse({"error": str(exc).split("\n")[0]}, status_code=400)
+        return error_response(exc)
 
 
 @router.post("/insert_backbone")
@@ -53,7 +54,7 @@ def insert_backbone(req: _InsertBackboneReq):
         result = document.insert_backbone(document.select(req.after_idx), req.new_abbr)
         return {"result": result}
     except Exception as exc:
-        return JSONResponse({"error": str(exc).split("\n")[0]}, status_code=400)
+        return error_response(exc)
 
 
 @router.post("/validate_bond")
@@ -73,7 +74,7 @@ def validate_bond(req: _ValidateBondReq):
                 "reason": f"No reaction for {req.chem_type_a} + {req.chem_type_b}",
             }
     except Exception as exc:
-        return JSONResponse({"error": str(exc).split("\n")[0]}, status_code=400)
+        return error_response(exc)
 
 
 @router.get("/reactions")
@@ -85,7 +86,7 @@ def list_reactions():
         pairs = [list(pair) for pair in REACTION_INDEX.keys()]
         return JSONResponse(pairs)
     except Exception as exc:
-        return JSONResponse({"error": str(exc)}, status_code=400)
+        return error_response(exc)
 
 
 @router.get("/monomer_rgroups")
@@ -136,4 +137,4 @@ def monomer_rgroups(
         svg = _draw_mol(target_mol, 180, 140, used_slots or None)
         return {"svg": svg, "rgroups": sites, "abbr": abbr}
     except Exception as exc:
-        return JSONResponse({"error": str(exc).split("\n")[0]}, status_code=400)
+        return error_response(exc)

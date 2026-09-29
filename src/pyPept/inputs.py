@@ -141,9 +141,13 @@ def detect_input(source, *, policy="reference", on_notation_error=None):
     raise ValueError("Could not parse as SMILES, BILN, HELM, or CABILN")
 
 
-def convert_input(source, notation="percent"):
-    """Return (detected format, formatted text or the full SMILES conversion result)."""
-    parsed = detect_input(source, policy="conversion")
+def convert_input(source, notation="percent", *, input_format="auto"):
+    """Convert the requested format, or use the established auto precedence."""
+    parsed = (
+        detect_input(source, policy="conversion")
+        if input_format.lower() == "auto"
+        else read_input(source, input_format=input_format, track_source=True)
+    )
     if parsed.format == "SMILES":
         from pyPept.smiles import convert_smiles
 
@@ -224,13 +228,17 @@ def parse_source(cabiln: str, warning_sink=None, *, track_source=False):
     return sequence, parsed_source
 
 
-def format_source(source: str, notation: str) -> str:
-    """Format resolved occurrences and verify their identity and chemistry."""
+def format_source(source: str, notation: str, *, canonical: bool = False) -> str:
+    """Format resolved occurrences and verify their identity and chemistry.
+
+    Canonical output ignores source layout and spelling, retaining the selected
+    monomer decomposition. The default preserves existing layout preferences.
+    """
     parsed = read_input(source, track_source=True)
-    return _format_parsed(parsed, notation)
+    return _format_parsed(parsed, notation, canonical=canonical)
 
 
-def _format_parsed(parsed, notation):
+def _format_parsed(parsed, notation, *, canonical=False):
     from rdkit import Chem
 
     from pyPept.peptide import Peptide, serialize
@@ -239,7 +247,12 @@ def _format_parsed(parsed, notation):
 
     sequence = parsed.sequence
     peptide = Peptide.from_sequence(sequence)
-    emission = serialize(peptide, notation=notation)
+    emission = serialize(peptide, notation=notation, canonical=canonical)
+    if (
+        len(emission.occurrence_order) != len(peptide.occurrences)
+        or set(emission.occurrence_order) != set(range(len(peptide.occurrences)))
+    ):
+        raise ValueError("Notation conversion would lose or duplicate a monomer")
     converted = Sequence(emission.text, warning_sink=lambda message: None)
     remapped = Peptide.from_sequence(converted, emission.occurrence_order)
     if set(peptide.connections) != set(remapped.connections):

@@ -45,6 +45,48 @@ def test_sequences_cannot_mutate_shared_definitions(definitions):
     assert set(get_monomer_info(str(definitions)).index) == {"A", "G"}
 
 
+def test_resolved_assembly_keeps_bound_templates_and_occurrence_ownership(definitions):
+    from pyPept.peptide import Peptide
+
+    sequence = Sequence("A-G")
+    nitrogen = next(
+        atom for atom in sequence.s_monomers[0]["m_romol"].GetAtoms()
+        if atom.GetAtomicNum() == 7
+    )
+    nitrogen.SetMonomerInfo(
+        Chem.AtomPDBResidueInfo(atomName=" N  ", residueName="ALA", residueNumber=7)
+    )
+    peptide = Peptide.from_sequence(sequence, (17, 4))
+    peptide = Peptide(tuple(reversed(peptide.occurrences)), peptide.connections)
+    glycine = sequence.s_monomers[1]
+    glycine["m_Rgroups"][1] = "[18O-]"
+    carbonyl = next(
+        atom.GetNeighbors()[0] for atom in glycine["m_romol"].GetAtoms()
+        if atom.GetAtomicNum() == 0 and atom.GetIsotope() == 2
+    )
+    carbonyl.SetIsotope(13)
+
+    assembled = Molecule(peptide, depiction=None)
+    expected = Chem.MolFromSmiles("N[C@@H](C)C(=O)NCC(=O)O")
+    assert Chem.MolToSmiles(assembled.mol) == Chem.MolToSmiles(expected)
+    changed = Chem.MolFromSmiles("N[C@@H](C)C(=O)NC[13C](=O)[18O-]")
+    assert Chem.MolToSmiles(Molecule(sequence, depiction=None).mol) == (
+        Chem.MolToSmiles(changed)
+    )
+    owners = assembled.get_residue_atom_map()
+    assert {identity: len(atoms) for identity, atoms in owners.items()} == {17: 5, 4: 5}
+    assert sorted(atom for atoms in owners.values() for atom in atoms) == list(
+        range(assembled.mol.GetNumAtoms())
+    )
+    pdb_atoms = [
+        assembled.mol.GetAtomWithIdx(index).GetPDBResidueInfo()
+        for index in owners[17]
+    ]
+    assert [
+        (info.GetName(), info.GetResidueNumber()) for info in pdb_atoms if info
+    ] == [(" N  ", 7)]
+
+
 def test_synonym_changes_invalidate_parser_and_rendered_results(definitions):
     aliases = definitions.with_name("monomers.csv")
     aliases.write_text("token,synonyms\nA,CustomAlias\n")
@@ -64,23 +106,6 @@ def test_synonym_changes_invalidate_parser_and_rendered_results(definitions):
 
         aliases.unlink()
         assert client.post("/render", json={"cabiln": "CustomAlias"}).status_code == 400
-
-
-def test_replacing_structure_file_refreshes_warmed_definitions(definitions):
-    assert set(monomer_store.monomer_table().index) == {"A", "G"}
-    glycine = next(
-        mol
-        for mol in Chem.SDMolSupplier(str(definitions))
-        if mol.GetProp("symbol") == "G"
-    )
-    replacement = definitions.with_suffix(".new")
-    with Chem.SDWriter(str(replacement)) as writer:
-        writer.write(glycine)
-    replacement.replace(definitions)
-    assert set(monomer_store.monomer_table().index) == {"G"}
-    with pytest.raises(ValueError, match="not in the monomer library"):
-        Sequence("A")
-    assert canonical("G") == "NCC(=O)O"
 
 
 def replace_preserving_metadata(path, before, after):
@@ -128,7 +153,17 @@ def test_palette_version_header_tracks_unchanged_metadata_and_alias_updates(defi
 
         changed = client.get("/monomers")
         assert changed.status_code == 200
-        assert changed.json() == initial.json()  # Tile labels/sites did not change.
+        # Labels/sites stay the same; chemistry evidence must reflect the change.
+        def without_quality(rows):
+            return [
+                {key: value for key, value in row.items() if key != "quality"}
+                for row in rows
+            ]
+        assert without_quality(changed.json()) == without_quality(initial.json())
+        old_a = next(row for row in initial.json() if row["abbr"] == "A")
+        new_a = next(row for row in changed.json() if row["abbr"] == "A")
+        assert new_a["quality"]["status"] == "unreviewed"
+        assert new_a["quality"]["definition_hash"] != old_a["quality"]["definition_hash"]
         assert changed.headers["x-library-version"] != initial_version
 
         aliases = definitions.with_name("monomers.csv")

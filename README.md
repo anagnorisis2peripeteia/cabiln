@@ -138,11 +138,13 @@ The web app serves a read-only library by default. For a trusted local instance:
 cabiln --enable-registration
 ```
 
-This enables the Register page and writes to the installed monomer library.
-`CABILN_ENABLE_REGISTRATION=1` enables the same behavior for ASGI deployments.
-This switch is for a trusted instance; it does not provide user authentication.
-Keep public deployments read-only. Back up custom monomers before replacing an
-installation or redeploying to an ephemeral filesystem.
+This enables the Register page for loopback clients. Use an external library
+for durable custom data. `CABILN_ENABLE_REGISTRATION=1` enables the same route
+for ASGI deployments. For remote administration, set a secret
+`CABILN_REGISTRATION_TOKEN` of at least 32 characters; the browser prompts for
+HTTP Basic credentials (username `admin`, or `CABILN_REGISTRATION_USER`). Serve
+remote administration over HTTPS. The public builder stays read-only by default.
+Production administration also requires an external library and backup directory.
 
 Preview detects attachment sites before registration. The server checks that
 slots and metadata agree, rejects duplicate symbols, and replaces the SDF
@@ -154,6 +156,7 @@ and select it before starting the application or CLI:
 
 ```bash
 export CABILN_MONOMER_LIBRARY=/path/to/monomers.sdf
+export CABILN_LIBRARY_BACKUP_DIR=/path/to/backups
 cabiln --enable-registration
 ```
 
@@ -163,6 +166,28 @@ New records are discovered without a server restart; reopen the palette or
 return to its browser window to refresh the tiles. Reaction filters and slot
 buttons use the same chemistry detection as assembly. Adding an unsupported
 reaction still requires a reaction definition and detection rules.
+
+Each registration snapshots the existing SDF and companion aliases when the
+backup directory is configured. If that backup fails, registration does not
+write. [Deployment and recovery](docs/deployment.md) describes offline restore.
+The library's [quality baseline](docs/library-quality.md) identifies known
+compatibility exceptions without changing stored structures or attachment slots.
+
+## Saved work and production
+
+Save project downloads editable source, notation drafts, original reference,
+recognition details, and the library/rule binding. Open project checks that its
+sources and chemistry still agree before replacing current work. Adding an
+unrelated monomer can remain compatible; changed selected definitions or rules
+require re-verification. Browser drafts remain local, with a clear-draft control
+in Help. Server processing and local storage are explained there.
+
+Production uses a bounded worker process with a deadline, cancellation cleanup,
+memory limit on Linux, and explicit overload responses. `/health` reports
+liveness; `/ready` checks startup data and worker availability. The container
+profile freezes Python and runtime dependencies and disables registration.
+See [deployment](docs/deployment.md) and the current
+[launch evidence](docs/launch-validation.md) before deploying.
 
 ## Development
 

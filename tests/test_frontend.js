@@ -43,10 +43,11 @@ class Element {
   getAttribute(name) { return this.attributes.get(name) ?? null; }
   querySelector() { return null; }
   appendChild(element) { this.children.push(element); }
+  click() { return this.dispatchEvent({ type: 'click' }); }
   focus() {}
 }
 
-function page(script, { registration = false } = {}) {
+function page(script, { registration = false, storedDraft = null, now = Date.now } = {}) {
   const elements = new Map();
   const element = id => {
     if (!elements.has(id)) elements.set(id, new Element());
@@ -59,8 +60,18 @@ function page(script, { registration = false } = {}) {
   const requests = [];
   const timers = new Map();
   let timerId = 0;
+  const downloads = [];
+  const storage = new Map(storedDraft ? [['cabiln.draft.v1', JSON.stringify(storedDraft)]] : []);
+  const window = new Element();
+  window.localStorage = {
+    getItem: key => storage.get(key) || null,
+    setItem: (key, value) => storage.set(key, value),
+    removeItem: key => storage.delete(key),
+  };
   const context = vm.createContext({
-    console, AbortController,
+    console, AbortController, Blob,
+    Date: class extends Date { static now() { return now(); } },
+    URL: { createObjectURL(blob) { downloads.push(blob); return 'blob:project'; }, revokeObjectURL() {} },
     Event: class { constructor(type) { this.type = type; } },
     document: {
       getElementById: element,
@@ -68,7 +79,7 @@ function page(script, { registration = false } = {}) {
       querySelector: () => null,
       createElement: () => new Element(),
     },
-    window: new Element(),
+    window,
     setTimeout(callback) { timers.set(++timerId, callback); return timerId; },
     clearTimeout(id) { timers.delete(id); },
     setInterval() {},
@@ -79,15 +90,23 @@ function page(script, { registration = false } = {}) {
       return new Promise((resolve, reject) => {
         requests.push({
           url, options, reject,
-          resolve(data, ok = true) { resolve({ ok, json: async () => data }); },
+          resolve(data, ok = true, status = ok ? 200 : 400, headers = {}) {
+            resolve({ ok, status, headers: { get: key => headers[key] || null }, json: async () => data });
+          },
         });
       });
     },
   });
   const filename = path.join(__dirname, '../src/pyPept/web/static', script);
+  if (script === 'builder.js') {
+    for (const name of ['project.js', 'document.js']) {
+      const dependency = path.join(path.dirname(filename), name);
+      vm.runInContext(fs.readFileSync(dependency, 'utf8'), context, { filename: dependency });
+    }
+  }
   vm.runInContext(fs.readFileSync(filename, 'utf8'), context, { filename });
   return {
-    element, requests,
+    element, requests, downloads, storage,
     run: source => vm.runInContext(source, context),
     async input(id, value) {
       element(id).value = value;
@@ -240,22 +259,17 @@ test('reopening the palette discovers new monomers and preserves its search', as
   assert.equal(ui.run('allMonomers.length'), 2);
 });
 
-test('returning from registration refreshes an open palette', async () => {
-  const ui = page('builder.js');
-  ui.run("libPanel.classList.add('open')");
-  await ui.run("window.dispatchEvent(new Event('focus'))");
-  assert.equal(ui.requests[0].url, '/monomers');
-});
-
 test('older library refresh cannot replace a newer library', async () => {
   const ui = page('builder.js');
   const old = ui.run('loadMonomers()');
-  const current = ui.run('loadMonomers()');
+  ui.run("libPanel.classList.add('open')");
+  ui.run("window.dispatchEvent(new Event('focus'))");
   ui.requests[1].resolve([{ abbr: 'New', name: 'New', type: 'aa', subtype: '', chem_types: '' }]);
-  await current;
+  await new Promise(setImmediate);
   ui.requests[0].resolve([]);
   await old;
   assert.equal(ui.run('allMonomers[0].abbr'), 'New');
+  assert.match(ui.element('lib-list').innerHTML, /New/);
 });
 
 function previewRow(ui) {
@@ -313,26 +327,6 @@ test('a discovered cap family asks for its attachment form before loading slots'
   const pending = choices[1].dispatchEvent({ type: 'click' });
   assert.equal(ui.requests[0].url, '/monomer_rgroups?abbr=_NovelCap');
   ui.requests[0].resolve({ svg: '<svg/>', rgroups: [] });
-  await pending;
-});
-
-test('conversion warnings survive rendering and clear when the sequence is edited', async () => {
-  const ui = page('builder.js');
-  ui.run("useConvertedCabiln('A', 'Input stereochemistry was inferred')");
-  ui.requests[0].resolve(rendered);
-  await new Promise(resolve => setImmediate(resolve));
-  assert.equal(ui.element('conversion-status').hidden, false);
-  assert.match(ui.element('conversion-status').textContent, /stereochemistry/);
-  await ui.input('cabiln-input', 'G');
-  assert.equal(ui.element('conversion-status').hidden, true);
-});
-
-test('starting detection makes the preview visible over its CSS default', async () => {
-  const ui = page('register.js');
-  await ui.input('smiles-in', 'NCC(=O)O');
-  const pending = ui.element('btn-preview').dispatchEvent({ type: 'click' });
-  assert.equal(ui.element('preview-section').style.display, 'block');
-  ui.requests[0].resolve(preview);
   await pending;
 });
 
@@ -399,6 +393,95 @@ test('notation conversion cannot replace an input edited during the request', as
   ui.requests[0].resolve({ result: 'OLD CONVERSION' });
   await pending;
   assert.equal(ui.element('cabiln-input').value, 'K-C');
+});
+
+test('canonical formatting is explicit and the original spelling remains undoable', async () => {
+  const ui = page('builder.js');
+  await ui.input('cabiln-input', 'Ala-Gly');
+  ui.element('notation-policy').value = 'canonical';
+  const pending = ui.run('convertNotation("bracket")');
+  const request = ui.requests.find(request => request.url === '/convert_notation');
+  assert.deepEqual(JSON.parse(request.options.body), {
+    cabiln: 'Ala-Gly', target: 'bracket', canonical: true,
+  });
+  request.resolve({ result: 'A-G' });
+  await pending;
+  assert.equal(ui.element('cabiln-input').value, 'A-G');
+  ui.run('travelHistory("undo")');
+  assert.equal(ui.element('cabiln-input').value, 'Ala-Gly');
+  ui.run('travelHistory("redo")');
+  assert.equal(ui.element('cabiln-input').value, 'A-G');
+});
+
+test('typing coalesces Undo while server normalization preserves Redo', async () => {
+  let clock = 1000;
+  const ui = page('builder.js', { now: () => clock });
+  await ui.input('cabiln-input', 'Ala');
+  clock += 300;
+  await ui.input('cabiln-input', 'Ala-Gly');
+  await ui.element('btn-undo').click();
+  assert.equal(ui.element('cabiln-input').value, '');
+  await ui.element('btn-redo').click();
+  assert.equal(ui.element('cabiln-input').value, 'Ala-Gly');
+
+  clock += 1000;
+  await ui.input('cabiln-input', 'Ala-Gly-Lys');
+  await ui.element('btn-undo').click();
+  assert.equal(ui.element('cabiln-input').value, 'Ala-Gly');
+  latestRequest(ui, '/render').resolve({ ...rendered, normalized_cabiln: 'A-G' });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(ui.element('cabiln-input').value, 'A-G');
+  assert.equal(ui.element('btn-redo').disabled, false);
+  assert.equal(JSON.parse(ui.storage.get('cabiln.draft.v1')).document.text, 'A-G');
+  await ui.element('btn-redo').click();
+  assert.equal(ui.element('cabiln-input').value, 'Ala-Gly-Lys');
+  await ui.element('btn-undo').click();
+  assert.equal(ui.element('cabiln-input').value, 'A-G');
+  clock += 1000;
+  await ui.input('cabiln-input', 'S');
+  assert.equal(ui.element('btn-redo').disabled, true);
+});
+
+test('layout formatting stays the default and errors retain the document', async () => {
+  const ui = page('builder.js');
+  const original = 'K.{G(4,2).ac(1,2)}-A';
+  await ui.input('cabiln-input', original);
+  const rendering = ui.run('doRenderCabiln(cabilnInput.value)');
+  const pending = ui.run('convertNotation("branch")');
+  const request = ui.requests.find(request => request.url === '/convert_notation');
+  assert.equal(JSON.parse(request.options.body).canonical, false);
+  request.resolve({ error: 'Cannot preserve the requested attachment' }, false);
+  await pending;
+  assert.equal(ui.element('cabiln-input').value, original);
+  assert.equal(ui.element('conversion-status').hidden, false);
+  assert.equal(ui.element('conversion-status').textContent, 'Cannot preserve the requested attachment');
+  latestRequest(ui, '/render').resolve({ ...rendered, context: binding });
+  await rendering;
+  assert.equal(ui.element('conversion-status').hidden, false);
+  assert.equal(ui.element('conversion-status').textContent, 'Cannot preserve the requested attachment');
+  assert.equal(JSON.parse(ui.storage.get('cabiln.draft.v1')).document.warning,
+    'Cannot preserve the requested attachment');
+});
+
+test('recursive sibling tabs return to their parent and highlight exact descendants', async () => {
+  const ui = page('builder.js');
+  const chips = tabs(ui, ['K', 'A', 'K', 'G', 'ac', 'ac'], {
+    segments: [{ roots: [0, 1], members: [0, 1, 2, 3, 4, 5] }],
+    groups: [
+      branch(0, 0, [2], '[', null, [2, 3, 4, 5]),
+      branch(1, 2, [3], '[', 0, [3, 4]),
+      branch(2, 3, [4], '[', 1),
+      branch(3, 2, [5], '[', 0),
+    ], markers: [],
+  });
+  assert.deepEqual(chips.filter(chip => chip.dataset.residue !== undefined)
+    .map(chip => chip.dataset.residue), [0, 2, 3, 4, 5, 1]);
+  ui.run('var hovered = null; highlightGroup = ids => { hovered = ids; }');
+  const brackets = chips.filter(chip => chip.textContent === '[');
+  for (const [index, members] of [[0, [2, 3, 4, 5]], [1, [3, 4]], [2, [4]], [3, [5]]]) {
+    await brackets[index].dispatchEvent({ type: 'mouseenter' });
+    assert.equal(ui.run('JSON.stringify(hovered)'), JSON.stringify(members));
+  }
 });
 
 test('editing monomer SMILES invalidates detected chemistry and registration', async () => {
@@ -513,6 +596,9 @@ test('conversion results cannot override a notation switch', async () => {
   ui.element('notation-select').value = 'smiles';
   ui.element('cabiln-input').value = 'NCC(=O)O';
   const pending = ui.run('doToCabiln("bracket")');
+  assert.deepEqual(JSON.parse(ui.requests[0].options.body), {
+    input: 'NCC(=O)O', input_format: 'smiles', notation: 'bracket',
+  });
   ui.element('notation-select').value = 'helm';
   await ui.element('notation-select').dispatchEvent({ type: 'change' });
   ui.requests[0].resolve({ cabiln: 'OLD', from: 'SMILES' });
@@ -583,6 +669,7 @@ test('registration uses preview chemistry and permits a second record after succ
   await ui.input('abbr-in', 'TestGly');
   await ui.input('name-in', 'Test glycine');
   let pending = ui.element('btn-preview').dispatchEvent({ type: 'click' });
+  assert.equal(ui.element('preview-section').style.display, 'block');
   ui.requests[0].resolve(preview);
   await pending;
   assert.equal(ui.element('btn-register').disabled, false);
@@ -610,4 +697,490 @@ test('Register is shown only when the server explicitly enables registration', a
   }
   const html = fs.readFileSync(path.join(__dirname, '../src/pyPept/web/static/index.html'), 'utf8');
   assert.match(html, /<a\b[^>]*id="register-link"[^>]*\bhidden\b/);
+});
+
+const binding = {
+  project_version: 1,
+  library_binding: { monomers: 'library-one', aliases: 'aliases', reactions: 'rules', caps: 'caps' },
+  canonical: { format: 'cabiln-graph-v1', labeling: 'rdkit-colored-port-graph-v1', rdkit: '2026.03.1' },
+};
+const imported = {
+  cabiln: 'G-<NCC(=O)O>', context: binding, recognition_status: 'partial',
+  search_complete: false, inferred_stereo: true, synthetic_components: [0],
+  warnings: ['Input stereochemistry was inferred'],
+  assignments: [
+    { symbol: 'G', recognized: true, residue_index: 0, source_atoms: [0, 1], attachments: [[2, 1]] },
+    { symbol: '_SYN0', recognized: false, residue_index: 1, source_atoms: [2, 3], attachments: [[1, 2]] },
+  ],
+};
+function portableProject() {
+  const quality = { ...imported };
+  delete quality.cabiln;
+  delete quality.context;
+  const document = { text: imported.cabiln, notation: 'cabiln',
+    warning: imported.warnings[0], quality, canonical: null, context: binding };
+  return { format: 'cabiln-project', version: 1, document,
+    drafts: { cabiln: document, smiles: { text: 'NCC(=O)O', notation: 'smiles' } },
+    reference: { text: 'NCC(=O)O', original: { kind: 'mol', content: 'EXACT ORIGINAL\r\nMOL\n', name: 'source.mol' }, context: binding },
+    context: binding, saved_at: '2026-09-29T12:00:00Z' };
+}
+function latestRequest(ui, url) {
+  return [...ui.requests].reverse().find(request => request.url === url);
+}
+function uploadProject(ui, project) {
+  const content = typeof project === 'string' ? project : JSON.stringify(project);
+  return ui.element('project-upload').dispatchEvent({ type: 'change', target: { files: [{
+    size: Buffer.byteLength(content), text: async () => content,
+  }] } });
+}
+function setImported(ui) {
+  ui.run(`useConvertedCabiln(${JSON.stringify(imported.cabiln)}, ${JSON.stringify(imported.warnings[0])}, ${JSON.stringify(imported)})`);
+}
+
+test('conversion records structured quality through rendering, notation drafts, Undo and Redo', async () => {
+  const ui = page('builder.js');
+  ui.element('notation-select').value = 'smiles';
+  await ui.input('cabiln-input', 'NCC(=O)O');
+  const converting = ui.run('doToCabiln("bracket")');
+  latestRequest(ui, '/to_cabiln').resolve({ ...imported, from: 'SMILES', warning: imported.warnings[0] });
+  await converting;
+  latestRequest(ui, '/render').resolve({ ...rendered, context: binding });
+  await new Promise(setImmediate);
+  assert.equal(ui.element('conversion-status').hidden, false);
+  assert.equal(ui.element('conversion-status').textContent, imported.warnings[0]);
+  assert.match(ui.element('quality-summary').textContent, /Partial recognition.*1\/2 library matches.*search limited.*stereochemistry inferred/);
+  assert.equal(ui.element('import-quality').hidden, false);
+  assert.deepEqual(JSON.parse(ui.run('JSON.stringify(editor.present.quality.assignments)')), imported.assignments);
+  ui.element('notation-select').value = 'smiles';
+  await ui.element('notation-select').dispatchEvent({ type: 'change' });
+  assert.equal(ui.element('import-quality').hidden, true);
+  assert.equal(ui.element('cabiln-input').value, 'NCC(=O)O');
+  ui.element('notation-select').value = 'cabiln';
+  await ui.element('notation-select').dispatchEvent({ type: 'change' });
+  assert.equal(ui.element('import-quality').hidden, false);
+  await ui.input('cabiln-input', 'A-G');
+  assert.equal(ui.element('conversion-status').hidden, true);
+  assert.equal(ui.element('import-quality').hidden, true);
+  assert.equal(ui.run('editor.present.quality'), null);
+  await ui.element('btn-undo').click();
+  assert.equal(ui.element('import-quality').hidden, false);
+  assert.equal(ui.element('conversion-status').textContent, imported.warnings[0]);
+  await ui.element('btn-redo').click();
+  assert.equal(ui.run('editor.present.quality'), null);
+});
+
+test('formatting clears occurrence assignments while preserving warning and canonical convention', async () => {
+  const ui = page('builder.js');
+  setImported(ui);
+  ui.element('notation-policy').value = 'canonical';
+  const pending = ui.run('convertNotation("bracket")');
+  latestRequest(ui, '/convert_notation').resolve({ result: '<NCC(=O)O>-G', context: binding,
+    canonical: { ...binding.canonical, binding: binding.library_binding } });
+  await pending;
+  assert.equal(ui.run('editor.present.quality'), null);
+  assert.match(ui.element('canonical-status').textContent, /cabiln-graph-v1.*2026.03.1/);
+  assert.equal(ui.element('conversion-status').textContent, imported.warnings[0]);
+  await ui.element('btn-undo').click();
+  assert.equal(ui.run('editor.present.quality.assignments.length'), 2);
+  assert.equal(ui.element('canonical-status').hidden, true);
+});
+
+test('new library or convention clears import evidence and cancels an outdated project save', async () => {
+  for (const current of [
+    { ...binding, library_binding: { ...binding.library_binding, monomers: 'library-two' } },
+    { ...binding, canonical: { ...binding.canonical, rdkit: '2026.09.1' } },
+  ]) {
+    const ui = page('builder.js');
+    setImported(ui);
+    const saving = ui.element('btn-project-save').click();
+    const request = latestRequest(ui, '/prepare_project');
+    latestRequest(ui, '/render').resolve({ ...rendered, context: current });
+    await new Promise(setImmediate);
+    request.resolve({ project: portableProject() });
+    await saving;
+    assert.equal(ui.downloads.length, 0);
+    assert.equal(request.options.signal.aborted, true);
+    assert.equal(ui.run('editor.present.quality'), null);
+    assert.equal(ui.element('conversion-status').hidden, true);
+    assert.match(ui.element('project-status').textContent, /Import evidence was cleared/);
+  }
+});
+
+test('synthetic and opaque occurrences remain selectable and library symbols are never guessed from names', async () => {
+  const ui = page('builder.js');
+  const residues = [
+    { idx: 0, abbr: '_SYNcustom', kind: 'library' },
+    { idx: 1, abbr: '_SYN0', kind: 'synthetic' },
+    { idx: 2, abbr: '_SYN1', kind: 'opaque' },
+  ];
+  ui.run(`buildResidueUI({}, ${JSON.stringify(residues)}, {segments: [{roots: [0, 1, 2], members: [0, 1, 2]}], groups: [], markers: []})`);
+  ui.run('let selected = []; selectBuildResidue = residue => selected.push(residue.idx)');
+  const chips = ui.element('residue-chips').children;
+  assert.equal(chips[0].dataset.quality, undefined);
+  assert.equal(chips[1].dataset.quality, 'synthetic');
+  assert.equal(chips[2].dataset.quality, 'opaque');
+  assert.match(chips[2].getAttribute('aria-label'), /Opaque preserved fragment.*editable/);
+  for (const chip of chips) {
+    assert.equal(chip.disabled, false);
+    await chip.click();
+  }
+  assert.equal(ui.run('JSON.stringify(selected)'), '[0,1,2]');
+});
+
+test('palette and preview show library quality issues as escaped text', async () => {
+  const ui = page('builder.js');
+  const monomer = { abbr: 'G', name: 'Glycine', type: 'aa', subtype: 'natural', chem_types: '',
+    quality: { status: 'review', issues: [{ code: 'curation', message: 'Review <atom> mapping' }] } };
+  const pending = ui.run('loadMonomers()');
+  latestRequest(ui, '/monomers').resolve([monomer]);
+  await pending;
+  assert.match(ui.element('lib-list').innerHTML, /lib-quality.*Review &lt;atom&gt; mapping/);
+  assert.match(ui.element('lib-list').innerHTML, /aria-label="G: Glycine. Library quality: Review/);
+  previewRow(ui);
+  ui.run(`showPreview(${JSON.stringify({ ...preview, quality: monomer.quality })}, previewRow)`);
+  assert.match(ui.element('lib-preview').innerHTML, /Library quality: Review &lt;atom&gt; mapping/);
+  assert.doesNotMatch(ui.element('lib-preview').innerHTML, /<atom>/);
+});
+
+test('project save downloads only server-prepared source, drafts, evidence and exact reference', async () => {
+  const ui = page('builder.js');
+  setImported(ui);
+  ui.run(`referenceOriginal = ${JSON.stringify(portableProject().reference.original)}; referenceContext = ${JSON.stringify(binding)}; smilesInput.value = 'NCC(=O)O'; editor.drafts.smiles = {text: 'NCC(=O)O', notation: 'smiles', warning: '', quality: null, canonical: null, context: null}`);
+  const pending = ui.element('btn-project-save').click();
+  const request = latestRequest(ui, '/prepare_project');
+  const submitted = JSON.parse(request.options.body).project;
+  assert.equal(ui.downloads.length, 0);
+  assert.deepEqual(submitted.reference, portableProject().reference);
+  assert.deepEqual(submitted.document.quality.assignments, imported.assignments);
+  const context = { ...binding, resolutions: { document: { source: 'source', resolved: 'chemistry' } } };
+  const prepared = { ...submitted, context,
+    document: { ...submitted.document, context },
+    drafts: Object.fromEntries(Object.entries(submitted.drafts).map(([mode, state]) => [mode, { ...state, context }])) };
+  request.resolve({ project: prepared });
+  await pending;
+  assert.equal(ui.element('btn-project-save').disabled, false);
+  assert.equal(ui.downloads.length, 1);
+  assert.deepEqual(JSON.parse(await ui.downloads[0].text()), prepared);
+  const draft = JSON.parse(ui.storage.get('cabiln.draft.v1'));
+  assert.deepEqual(draft.document.context, context);
+  assert.deepEqual(draft.reference_original, portableProject().reference.original);
+});
+
+test('validated project open restores all document metadata and accepts proved unrelated library additions', async () => {
+  const ui = page('builder.js');
+  await ui.input('cabiln-input', 'A-G');
+  const pending = uploadProject(ui, portableProject());
+  await new Promise(setImmediate);
+  assert.equal(ui.element('cabiln-input').value, 'A-G');
+  const current = { ...binding, library_binding: { ...binding.library_binding, monomers: 'with-unrelated-addition' } };
+  latestRequest(ui, '/validate_project').resolve({ valid: true, context: current });
+  await pending;
+  assert.equal(ui.element('cabiln-input').value, imported.cabiln);
+  assert.equal(ui.element('import-quality').hidden, false);
+  assert.equal(ui.element('smiles-input').value, 'NCC(=O)O');
+  assert.equal(ui.run('referenceOriginal.content'), portableProject().reference.original.content);
+  latestRequest(ui, '/render').resolve({ ...rendered, context: current });
+  await new Promise(setImmediate);
+  assert.equal(ui.element('import-quality').hidden, false);
+  assert.equal(ui.run('editor.drafts.smiles.text'), 'NCC(=O)O');
+  await ui.element('btn-undo').click();
+  assert.equal(ui.element('cabiln-input').value, 'A-G');
+});
+
+test('binding mismatch or incompatible conventions leave current work and history unchanged', async () => {
+  const ui = page('builder.js');
+  await ui.input('cabiln-input', 'A-G');
+  const history = ui.run('editor.past.length');
+  const pending = uploadProject(ui, portableProject());
+  await new Promise(setImmediate);
+  latestRequest(ui, '/validate_project').resolve({ code: 'project_binding_mismatch',
+    error: 'Selected definitions changed. Use the original library, or open the JSON to recover the source text.' }, false);
+  await pending;
+  assert.equal(ui.element('cabiln-input').value, 'A-G');
+  assert.equal(ui.run('editor.past.length'), history);
+  assert.equal(ui.downloads.length, 0);
+  assert.match(ui.element('project-status').textContent, /original library.*current work is unchanged/);
+});
+
+test('invalid project JSON, versions and malformed quality cannot mutate current state', async () => {
+  const invalid = portableProject();
+  invalid.document.quality.assignments = [null];
+  for (const project of ['not json', { ...portableProject(), version: 2 }, invalid]) {
+    const ui = page('builder.js');
+    await ui.input('cabiln-input', 'A-G');
+    await uploadProject(ui, project);
+    assert.equal(ui.element('cabiln-input').value, 'A-G');
+    assert.equal(latestRequest(ui, '/validate_project'), undefined);
+    assert.match(ui.element('project-status').textContent, /current work is unchanged/);
+  }
+});
+
+test('project validation and preparation responses cannot overwrite an intervening edit', async () => {
+  for (const action of ['open', 'save']) {
+    const ui = page('builder.js');
+    await ui.input('cabiln-input', 'A-G');
+    const pending = action === 'open' ? uploadProject(ui, portableProject()) : ui.element('btn-project-save').click();
+    await new Promise(setImmediate);
+    const request = latestRequest(ui, action === 'open' ? '/validate_project' : '/prepare_project');
+    await ui.input('cabiln-input', 'A-K');
+    request.resolve(action === 'open' ? { valid: true, context: binding } : { project: portableProject() });
+    await pending;
+    assert.equal(request.options.signal.aborted, true);
+    assert.equal(ui.element('cabiln-input').value, 'A-K');
+    assert.equal(ui.downloads.length, 0);
+    assert.match(ui.element('project-status').textContent, /changed during the project check/);
+  }
+});
+
+test('a project file still being read cannot override a reference edit', async () => {
+  const ui = page('builder.js');
+  let finishRead;
+  const pending = ui.element('project-upload').dispatchEvent({ type: 'change', target: { files: [{
+    size: 100, text: () => new Promise(resolve => { finishRead = resolve; }),
+  }] } });
+  await ui.input('smiles-input', 'NEW REFERENCE');
+  finishRead(JSON.stringify(portableProject()));
+  await pending;
+  assert.equal(latestRequest(ui, '/validate_project'), undefined);
+  assert.equal(ui.element('smiles-input').value, 'NEW REFERENCE');
+});
+
+test('MOL originals survive normalized rendering and rejected reference input', async () => {
+  for (const response of [{ svg: '<svg/>', smiles: 'NCC(=O)O' }, { error: 'Unsupported enhanced stereochemistry' }]) {
+    const ui = page('builder.js');
+    const original = 'EXACT ORIGINAL\r\nMOL WITH METADATA\n';
+    const pending = ui.element('mol-upload').dispatchEvent({ type: 'change', target: { files: [{
+      name: 'original.mol', text: async () => original,
+    }] } });
+    await new Promise(setImmediate);
+    latestRequest(ui, '/render_mol').resolve(response);
+    await pending;
+    const snapshot = JSON.parse(ui.run('JSON.stringify(projectSnapshot())'));
+    assert.equal(snapshot.reference.original.content, original);
+    assert.equal(snapshot.reference.original.name, 'original.mol');
+    assert.equal(snapshot.reference.text, response.smiles || '');
+  }
+});
+
+test('normalizing a pending MOL reference cancels a save of the previous reference state', async () => {
+  const ui = page('builder.js');
+  const rendering = ui.run('renderMolReference("ORIGINAL", "original.mol")');
+  const saving = ui.element('btn-project-save').click();
+  latestRequest(ui, '/render_mol').resolve({ svg: '<svg/>', smiles: 'NCC(=O)O' });
+  await rendering;
+  latestRequest(ui, '/prepare_project').resolve({ project: portableProject() });
+  await saving;
+  assert.equal(ui.downloads.length, 0);
+  assert.equal(ui.element('smiles-input').value, 'NCC(=O)O');
+});
+
+test('restored original text controls reference rendering and survives normalization', async () => {
+  const ui = page('builder.js');
+  const project = portableProject();
+  project.reference = { text: 'NORMALIZED OR DIFFERENT',
+    original: { kind: 'text', content: '  NC(C)C(=O)O  ', name: '' } };
+  const pending = uploadProject(ui, project);
+  await new Promise(setImmediate);
+  latestRequest(ui, '/validate_project').resolve({ valid: true, context: binding });
+  await pending;
+  assert.equal(ui.element('smiles-input').value, project.reference.original.content);
+  ui.run('restoreReferenceDrawing()');
+  assert.equal(JSON.parse(latestRequest(ui, '/render_reference').options.body).input, 'NC(C)C(=O)O');
+  latestRequest(ui, '/render_reference').resolve({ svg: '<svg/>', smiles: 'CC(N)C(=O)O', format: 'SMILES' });
+  await new Promise(setImmediate);
+  assert.equal(ui.run('lastSmiles'), 'CC(N)C(=O)O');
+  assert.equal(ui.run('referenceOriginal.content'), project.reference.original.content);
+});
+
+test('clearing browser storage preserves work and Undo, cancels recovery, and stays cleared until editing', async () => {
+  const project = portableProject();
+  const ui = page('builder.js', { storedDraft: { version: 1, document: project.document,
+    drafts: project.drafts, reference: project.reference.text,
+    reference_original: project.reference.original, context: project.context } });
+  assert.equal(ui.element('btn-restore-draft').hidden, false);
+  const restoring = ui.element('btn-restore-draft').click();
+  const validation = latestRequest(ui, '/prepare_project');
+  await ui.element('btn-clear-draft').click();
+  validation.resolve({ project });
+  await restoring;
+  assert.equal(ui.element('cabiln-input').value, '');
+  assert.equal(ui.storage.has('cabiln.draft.v1'), false);
+  ui.run(`acceptDocumentContext(${JSON.stringify(binding)})`);
+  await ui.run('window.dispatchEvent(new Event("pagehide"))');
+  assert.equal(ui.storage.has('cabiln.draft.v1'), false);
+  await ui.input('cabiln-input', 'A-G');
+  const history = ui.run('editor.past.length');
+  ui.run('saveDraft()');
+  assert.equal(ui.storage.has('cabiln.draft.v1'), true);
+  await ui.element('btn-clear-draft').click();
+  assert.equal(ui.element('cabiln-input').value, 'A-G');
+  assert.equal(ui.run('editor.past.length'), history);
+});
+
+test('help is keyboard dismissible and production script cannot force reload on server changes', async () => {
+  const ui = page('builder.js');
+  await ui.element('btn-help').click();
+  assert.equal(ui.element('help-panel').hidden, false);
+  assert.equal(ui.element('btn-help').getAttribute('aria-expanded'), 'true');
+  await ui.run('window.dispatchEvent({type: "keydown", key: "Escape"})');
+  assert.equal(ui.element('help-panel').hidden, true);
+  const source = fs.readFileSync(path.join(__dirname, '../src/pyPept/web/static/builder.js'), 'utf8');
+  assert.doesNotMatch(source, /location\.reload|\/server_id/);
+});
+
+test('a busy calculation retries after Retry-After and uses the same current document', async () => {
+  const ui = page('builder.js');
+  ui.element('cabiln-input').value = 'A-G';
+  const pending = ui.run('doRenderCabiln("A-G")');
+  latestRequest(ui, '/render').resolve({ error: 'Chemistry workers are busy' }, false, 503, { 'Retry-After': '1' });
+  await new Promise(setImmediate);
+  assert.equal(ui.requests.length, 1);
+  await ui.timers();
+  assert.equal(ui.requests.length, 2);
+  assert.equal(ui.requests[1].options.body, ui.requests[0].options.body);
+  ui.requests[1].resolve(rendered);
+  await pending;
+  assert.equal(ui.element('cabiln-input').className, 'ok');
+});
+
+test('editing during a busy retry cancels the wait without submitting obsolete chemistry', async () => {
+  const ui = page('builder.js');
+  ui.element('cabiln-input').value = 'A-G';
+  const pending = ui.run('doRenderCabiln("A-G")');
+  latestRequest(ui, '/render').resolve({ error: 'Busy' }, false, 503, { 'Retry-After': '1' });
+  await new Promise(setImmediate);
+  await ui.input('cabiln-input', '');
+  await pending;
+  await ui.timers();
+  assert.equal(ui.requests.filter(request => request.url === '/render').length, 1);
+  assert.equal(ui.element('cabiln-input').value, '');
+});
+
+test('persistent overload is visible after two retries and other errors are never retried', async () => {
+  for (const [status, header, attempts] of [[503, '1', 3], [503, '30', 1], [503, '', 1], [500, '1', 1]]) {
+    const ui = page('builder.js');
+    ui.element('cabiln-input').value = 'A-G';
+    const pending = ui.run('doRenderCabiln("A-G")');
+    for (let attempt = 0; attempt < attempts; attempt++) {
+      latestRequest(ui, '/render').resolve({ error: 'Server remains busy; try again shortly' }, false, status, { 'Retry-After': header });
+      await new Promise(setImmediate);
+      if (attempt < attempts - 1) await ui.timers();
+    }
+    await pending;
+    assert.equal(ui.requests.length, attempts);
+    assert.match(ui.element('cabiln-status').textContent, /Server remains busy/);
+    assert.equal(ui.element('cabiln-input').value, 'A-G');
+  }
+});
+
+test('reaction loading failure stays visible and does not poison the retry cache', async () => {
+  const ui = page('builder.js');
+  let pending = ui.run('loadReactions()');
+  latestRequest(ui, '/reactions').resolve({ error: 'Server remains busy' }, false, 503);
+  await pending;
+  assert.equal(ui.run('reactionPairs'), null);
+  assert.equal(ui.element('lib-status').hidden, false);
+  assert.match(ui.element('lib-status').textContent, /Server remains busy/);
+  pending = ui.run('loadReactions()');
+  latestRequest(ui, '/reactions').resolve([['backbone_n', 'backbone_c']]);
+  await pending;
+  assert.equal(ui.run('reactionPairs.length'), 1);
+  assert.equal(ui.element('lib-status').hidden, true);
+});
+
+test('ordinary browser drafts are prepared against their saved binding before recovery', async () => {
+  const project = portableProject();
+  for (const mismatch of [false, true]) {
+    const ui = page('builder.js', { storedDraft: { version: 1, document: project.document,
+      drafts: project.drafts, reference: project.reference.text,
+      reference_original: project.reference.original, context: binding } });
+    const restoring = ui.element('btn-restore-draft').click();
+    assert.equal(latestRequest(ui, '/validate_project'), undefined);
+    const prepare = latestRequest(ui, '/prepare_project');
+    if (mismatch) prepare.resolve({ error: 'Library definitions changed. Use the original library.' }, false);
+    else prepare.resolve({ project });
+    await restoring;
+    assert.equal(ui.element('cabiln-input').value, mismatch ? '' : imported.cabiln);
+    if (mismatch) {
+      assert.equal(ui.element('btn-restore-draft').hidden, false);
+      assert.match(ui.element('project-status').textContent, /Library definitions changed.*unchanged/);
+    } else assert.equal(ui.element('import-quality').hidden, false);
+  }
+});
+
+test('foreign input renders bind the current document and its recoverable notation draft', async () => {
+  const ui = page('builder.js');
+  ui.element('notation-select').value = 'biln';
+  await ui.input('cabiln-input', 'A-G');
+  const pending = ui.run('doRenderForeign("A-G")');
+  assert.equal(JSON.parse(latestRequest(ui, '/render_reference').options.body).input_format, 'biln');
+  latestRequest(ui, '/render_reference').resolve({ ...rendered, format: 'BILN', context: binding });
+  await pending;
+  const saved = JSON.parse(ui.storage.get('cabiln.draft.v1'));
+  assert.deepEqual(saved.document.context, binding);
+  assert.deepEqual(saved.drafts.biln.context, binding);
+  const checking = ui.element('btn-project-save').click();
+  const submitted = JSON.parse(latestRequest(ui, '/prepare_project').options.body).project;
+  assert.deepEqual(submitted.document.context, binding);
+  latestRequest(ui, '/prepare_project').resolve({ error: 'Library changed; render the source again' }, false);
+  await checking;
+  assert.equal(ui.downloads.length, 0);
+});
+
+test('a main-only library change preserves the reference binding and saved chemistry proof', async () => {
+  const ui = page('builder.js');
+  const oldContext = { ...binding, resolutions: { reference: { source: 'A', resolved: 'original-alanine' } } };
+  const current = { ...binding, library_binding: { ...binding.library_binding, monomers: 'new-library' } };
+  ui.run(`commitDocument('G', 'cabiln', '', {context: ${JSON.stringify(binding)}});
+    projectContext = ${JSON.stringify(oldContext)};
+    referenceOriginal = {kind: 'text', content: 'A', name: ''}; smilesInput.value = 'A'; lastSmiles = 'ORIGINAL';`);
+  latestRequest(ui, '/render').resolve({ ...rendered, context: current });
+  await new Promise(setImmediate);
+  const snapshot = JSON.parse(ui.run('JSON.stringify(projectSnapshot())'));
+  assert.deepEqual(snapshot.document.context, current);
+  assert.deepEqual(snapshot.context, current);
+  assert.deepEqual(snapshot.reference.context, oldContext);
+  assert.equal(ui.run('lastSmiles'), 'ORIGINAL');
+  const checking = ui.element('btn-project-save').click();
+  const submitted = JSON.parse(latestRequest(ui, '/prepare_project').options.body).project;
+  assert.deepEqual(submitted.reference.context, oldContext);
+  latestRequest(ui, '/prepare_project').resolve({ error: 'The reference library definition changed' }, false);
+  await checking;
+  assert.equal(ui.downloads.length, 0);
+  assert.equal(ui.element('smiles-input').value, 'A');
+});
+
+test('reference rendering records its own context and reference edits invalidate only its proof', async () => {
+  const ui = page('builder.js');
+  await ui.input('smiles-input', 'A-G');
+  const pending = ui.run('doRenderRef("A-G")');
+  latestRequest(ui, '/render_reference').resolve({ ...rendered, smiles: 'CHEMISTRY', format: 'BILN', context: binding });
+  await pending;
+  assert.deepEqual(JSON.parse(ui.run('JSON.stringify(referenceContext)')), binding);
+  const full = { ...binding, resolutions: { reference: { source: 'A-G', resolved: 'CHEMISTRY' } } };
+  ui.run(`referenceContext = ${JSON.stringify(full)}; acceptReferenceContext(${JSON.stringify(binding)})`);
+  assert.deepEqual(JSON.parse(ui.run('JSON.stringify(referenceContext)')), full);
+  await ui.input('smiles-input', 'A-K');
+  assert.deepEqual(JSON.parse(ui.run('JSON.stringify(referenceContext)')), binding);
+  ui.run('saveDraft()');
+  assert.deepEqual(JSON.parse(ui.storage.get('cabiln.draft.v1')).reference_context, binding);
+  await ui.input('smiles-input', '');
+  assert.equal(ui.run('referenceContext'), null);
+});
+
+test('validated project proof upgrades reference context and is retained by later matching renders', async () => {
+  const ui = page('builder.js');
+  const project = portableProject();
+  const current = { ...binding, library_binding: { ...binding.library_binding, monomers: 'unrelated-addition' },
+    resolutions: { reference: { source: 'original', resolved: 'same-reference' } } };
+  const pending = uploadProject(ui, project);
+  await new Promise(setImmediate);
+  latestRequest(ui, '/validate_project').resolve({ valid: true, context: current });
+  await pending;
+  assert.deepEqual(JSON.parse(ui.run('JSON.stringify(referenceContext)')), current);
+  const rendering = ui.run('renderMolReference(referenceOriginal.content, referenceOriginal.name)');
+  latestRequest(ui, '/render_mol').resolve({ svg: '<svg/>', smiles: project.reference.text, context: current });
+  await rendering;
+  assert.deepEqual(JSON.parse(ui.run('JSON.stringify(referenceContext)')), current);
+  assert.equal(ui.run('referenceOriginal.content'), project.reference.original.content);
 });

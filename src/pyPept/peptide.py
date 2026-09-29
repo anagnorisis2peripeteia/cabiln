@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field, replace
+from functools import cached_property
 
 from pyPept.attachments import attachment_sites
 from pyPept.notation import bracket_chain, supports_bracket_token
@@ -37,6 +38,55 @@ class AtomProvenance:
     recognized: bool
 
 
+@dataclass(frozen=True, eq=False)
+class ResolvedDefinition:
+    """Complete bound definition identity and its canonical notation token."""
+
+    symbol: str
+    monomer_type: str
+    synthetic_role: str | None
+    attachment_metadata: tuple
+    _template: object = field(repr=False, compare=False)
+
+    def __eq__(self, other):
+        if not isinstance(other, ResolvedDefinition):
+            return NotImplemented
+        return self.key == other.key
+
+    def __hash__(self):
+        return hash(self.key)
+
+    def copy_template(self):
+        """Return an editable template without exposing this bound definition."""
+        from rdkit import Chem
+
+        return Chem.Mol(self._template)
+
+    @cached_property
+    def key(self):
+        from rdkit import Chem
+
+        return (
+            "named" if self.synthetic_role is None else "synthetic",
+            self.symbol,
+            self.monomer_type,
+            self.synthetic_role or "",
+            Chem.MolToSmiles(self._template, isomericSmiles=True),
+            self.attachment_metadata,
+        )
+
+    @cached_property
+    def token(self):
+        if self.synthetic_role is None:
+            return self.symbol
+        token = f"<{self.key[4]}>"
+        if self.synthetic_role == "n":
+            return token + "_"
+        if self.synthetic_role == "c":
+            return "_" + token
+        return token
+
+
 @dataclass(frozen=True)
 class MonomerOccurrence:
     id: int
@@ -49,6 +99,7 @@ class MonomerOccurrence:
     source: SourceOccurrence | None = None
     provenance: AtomProvenance | None = None
     order_key: tuple[int, ...] = ()
+    definition: ResolvedDefinition | None = None
 
 
 @dataclass(frozen=True, order=True)
@@ -93,10 +144,19 @@ def _connection_occupancy(connections, sites):
 
 
 def _sequence_connections(sequence, ids):
-    return tuple(
-        Connection(Endpoint(ids[b[0]], b[4]), Endpoint(ids[b[2]], b[5]))
-        for b in sequence.s_bonds
-    )
+    from pyPept.sequence import _slot_for_attachment
+
+    connections = []
+    for bond in sequence.s_bonds:
+        left, anchor_left, right, anchor_right = bond[:4]
+        slots = bond[4:6] if len(bond) > 4 else (
+            _slot_for_attachment(sequence.s_monomers[left]["m_romol"], anchor_left),
+            _slot_for_attachment(sequence.s_monomers[right]["m_romol"], anchor_right),
+        )
+        connections.append(
+            Connection(Endpoint(ids[left], slots[0]), Endpoint(ids[right], slots[1]))
+        )
+    return tuple(connections)
 
 
 @dataclass(frozen=True)
@@ -132,8 +192,8 @@ class LayoutMarker:
 class NotationLayout:
     """Presentation facts; ``source`` exists only with valid original locations.
 
-    A serializer-generated layout has no original source spans. Its text and
-    output occurrence order are provided by Serialization instead.
+    Writers omit spans until their emitted text has been reparsed. Canonical
+    output is reparsed and therefore carries locations in its emitted source.
     """
 
     source: str | None
@@ -246,6 +306,8 @@ class Peptide:
         ``occurrence_ids`` optionally maps Sequence indices to retained IDs after
         an edit. No symbol matching or molecule isomorphism establishes identity.
         """
+        from rdkit import Chem
+
         ids = (
             tuple(range(len(sequence.s_monomers)))
             if occurrence_ids is None
@@ -261,8 +323,18 @@ class Peptide:
         definitions = {}
         for index, monomer in enumerate(sequence.s_monomers):
             mol = monomer["m_romol"]
-            definition = (id(mol), tuple(monomer["m_Rgroups"]))
+            symbol = monomer["m_abbr"]
+            role = None
+            if symbol in sequence._synthetic_aa_smiles:
+                role = "aa"
+            elif symbol in sequence._synthetic_caps:
+                role = sequence._synthetic_caps[symbol][1]
+            definition = (
+                id(mol), tuple(monomer["m_Rgroups"]), symbol,
+                monomer["m_type"], role,
+            )
             if definition not in definitions:
+                descriptions = attachment_sites(mol, monomer["m_Rgroups"])
                 anchors = {
                     atom.GetIsotope(): atom.GetNeighbors()[0].GetIdx()
                     for atom in mol.GetAtoms()
@@ -272,7 +344,7 @@ class Peptide:
                     AttachmentSite(
                         site["slot"], site["chem_type"], anchors[site["slot"]]
                     )
-                    for site in attachment_sites(mol, monomer["m_Rgroups"])
+                    for site in descriptions
                 )
                 types = {site.slot: site.chem_type for site in sites}
                 definitions[definition] = (
@@ -281,8 +353,17 @@ class Peptide:
                     and types.get(2)
                     in ("backbone_c", "backbone_c_red", "sp3_c_anchor"),
                     mol.GetNumHeavyAtoms(),
+                    ResolvedDefinition(
+                        symbol if role is None else "", monomer["m_type"], role,
+                        tuple(
+                            (site["slot"], site["chem_type"], site["leaving"],
+                             site["declared_chem_type"])
+                            for site in descriptions
+                        ),
+                        Chem.Mol(mol),
+                    ),
                 )
-            sites, has_backbone, size = definitions[definition]
+            sites, has_backbone, size, resolved = definitions[definition]
             location = sequence.s_sources[index] if tracked else None
             occurrences.append(
                 MonomerOccurrence(
@@ -298,13 +379,15 @@ class Peptide:
                         else None
                     ),
                     location,
+                    definition=resolved,
                 )
             )
         connections = _sequence_connections(sequence, ids)
         if not tracked:
             return cls(tuple(occurrences), connections)
         layout = _source_layout(
-            source, tuple(occurrences), sequence.s_biln.tracker.markers
+            source, tuple(occurrences), sequence.s_biln.tracker.markers,
+            sequence.s_biln.tracker.groups,
         )
         labels = {marker.endpoint: marker.label for marker in layout.markers}
         connections = tuple(
@@ -316,9 +399,15 @@ class Peptide:
         return cls(tuple(occurrences), connections, layout)
 
 
-def _source_layout(source, occurrences, markers):
+def _source_layout(source, occurrences, markers, recorded_groups=()):
     """Project parser-recorded groups and owners, including all source segments."""
-    source_groups = {}
+    recorded = {group.span: group for group in recorded_groups}
+    source_groups = {span: group.kind for span, group in recorded.items()}
+    owner_ids = {
+        span: item.id
+        for item in occurrences
+        for span in (item.source.token, item.source.entry)
+    }
     for item in occurrences:
         location = item.source
         if location.bracket is not None:
@@ -344,6 +433,9 @@ def _source_layout(source, occurrences, markers):
     }
     parents = {}
     for span in spans:
+        if span in recorded:
+            parents[span] = recorded[span].parent
+            continue
         enclosing = [
             other
             for other in spans
@@ -357,6 +449,16 @@ def _source_layout(source, occurrences, markers):
     groups = []
     for identity, span in enumerate(spans):
         parent = parents[span]
+        if span in recorded:
+            group = recorded[span]
+            if group.host not in owner_ids:
+                raise ValueError("Source group lost its recorded host occurrence")
+            groups.append(LayoutGroup(
+                identity, owner_ids[group.host], members[span], group.kind,
+                group.opening, group.closing, group.protected, span,
+                spans.index(parent) if parent is not None else None,
+            ))
+            continue
         if parent is None:
             candidates = [
                 item
@@ -405,26 +507,23 @@ def _source_layout(source, occurrences, markers):
                 spans.index(parent) if parent is not None else None,
             )
         )
-    owner_ids = {
-        span: item.id
-        for item in occurrences
-        for span in (item.source.token, item.source.entry)
-    }
     resolved_markers = []
     for marker in markers:
         match = re.search(r"!\w+", source[marker.span.start : marker.span.end])
         if match is None or marker.owner not in owner_ids:
             raise ValueError("Crosslink marker lost its source label or owner")
-        containing = [
-            span
-            for span in spans
-            if span.start <= marker.span.start and marker.span.end <= span.end
-        ]
-        group = (
-            spans.index(min(containing, key=lambda span: span.end - span.start))
-            if containing
-            else None
-        )
+        if marker.scope is not None:
+            group = spans.index(marker.scope)
+        else:
+            containing = [
+                span
+                for span in spans
+                if span.start <= marker.span.start and marker.span.end <= span.end
+            ]
+            group = (
+                spans.index(min(containing, key=lambda span: span.end - span.start))
+                if containing else None
+            )
         resolved_markers.append(
             LayoutMarker(
                 Endpoint(owner_ids[marker.owner], marker.slot),
@@ -528,7 +627,9 @@ def _fixed_source_groups(peptide, notation):
     return tuple(result)
 
 
-def serialize(peptide: Peptide, notation="percent") -> Serialization:
+def serialize(
+    peptide: Peptide, notation="percent", *, canonical=False
+) -> Serialization:
     """Format a resolved peptide and return exact output-index to occurrence IDs.
 
     ``preserve`` returns tracked source verbatim. ``percent`` and ``bracket``
@@ -536,7 +637,14 @@ def serialize(peptide: Peptide, notation="percent") -> Serialization:
     nested source arms and unsupported bracket tokens retain valid source forms.
     Bracket formatting may therefore retain explicit segments. It is a layout
     preference, not permission to alter chemistry or protected syntax.
+
+    ``canonical=True`` instead selects the versioned resolved-graph convention,
+    ignoring source layout and returning freshly parsed output locations.
     """
+    if canonical:
+        from pyPept.canonical import serialize_canonical
+
+        return serialize_canonical(peptide, notation)
     if notation not in ("preserve", "percent", "bracket"):
         raise ValueError(f"Unknown notation layout: {notation!r}")
     if not peptide.occurrences:

@@ -1,0 +1,26 @@
+# Production candidate: CPython 3.11.15, Linux x86_64.
+# Exact dependency closure from the tested environment. Linux installation is a
+# required CI gate; this file does not claim artifact hashes or a completed gate.
+annotated-doc==0.0.5
+annotated-types==0.8.0
+anyio==4.15.1
+biopython==1.88
+click==8.5.0
+epam-indigo==1.46.0
+fastapi==0.141.1
+filelock==4.0.5
+h11==0.16.0
+idna==3.20
+numpy==2.4.6
+pandas==3.0.6
+pillow==12.3.0
+pydantic==2.13.5
+pydantic_core==2.46.5
+python-dateutil==2.9.0.post0
+PyYAML==6.0.3
+rdkit==2026.3.6
+six==1.17.0
+starlette==1.7.0
+typing-inspection==0.4.4
+typing_extensions==4.16.0
+uvicorn==0.54.0

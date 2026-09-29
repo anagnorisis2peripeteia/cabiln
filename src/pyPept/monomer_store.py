@@ -6,12 +6,14 @@ import os
 import threading
 from collections import OrderedDict
 from copy import deepcopy
+from hashlib import sha256
 from pathlib import Path
 
 _SDF_PATH = Path(__file__).resolve().parent / "data" / "monomers.sdf"
 _sdf_cache = {"mols": None, "by_abbr": None, "version": None}
 _sdf_lock = threading.RLock()
 _table_cache = OrderedDict()
+_binding_cache = OrderedDict()
 
 
 def library_path():
@@ -80,6 +82,54 @@ def monomer_table(path=None):
             result.attrs = deepcopy(original.attrs)
             return result
     raise ValueError("Monomer library changed repeatedly while loading definitions")
+
+
+def library_binding():
+    """Content identifiers for portable canonical-export metadata.
+
+    Hash each library/rule snapshot once. File stamps only invalidate the cache;
+    exported identifiers contain neither local paths nor filesystem timestamps.
+    """
+    path = library_path()
+    data = Path(__file__).resolve().parent / "data"
+    files = {
+        "monomers": path,
+        "aliases": path.with_name("monomers.csv"),
+        "reactions": data / "reactions.yaml",
+        "caps": data / "cap_reactions.yaml",
+    }
+
+    def version():
+        rules = []
+        for key in ("reactions", "caps"):
+            stat = files[key].stat()
+            rules.append(
+                (stat.st_mtime_ns, stat.st_size, stat.st_ctime_ns, stat.st_ino)
+            )
+        return library_version(path), tuple(rules)
+
+    with _sdf_lock:
+        for _ in range(3):
+            stamp = version()
+            if stamp not in _binding_cache:
+                binding = {}
+                for name, file in files.items():
+                    if name == "aliases" and stamp[0][-1] is None:
+                        binding[name] = None
+                        continue
+                    digest = sha256()
+                    with file.open("rb") as handle:
+                        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                            digest.update(chunk)
+                    binding[name] = digest.hexdigest()
+                if version() != stamp:
+                    continue
+                _binding_cache[stamp] = binding
+                while len(_binding_cache) > 2:
+                    _binding_cache.popitem(last=False)
+            _binding_cache.move_to_end(stamp)
+            return dict(_binding_cache[stamp])
+    raise ValueError("Monomer library changed repeatedly while binding the export")
 
 
 def _index_monomer_names(identifiers):
@@ -299,6 +349,11 @@ def register_molecule(mol, sdf_path=None):
             raise ValueError(
                 f"Monomer name '{name}' already exists in library (or as an alias)"
             )
+        backup_directory = os.environ.get("CABILN_LIBRARY_BACKUP_DIR")
+        if backup_directory and exists:
+            from pyPept.library_snapshots import _snapshot_locked
+
+            _snapshot_locked(path, Path(backup_directory).expanduser().resolve())
         temporary = None
         try:
             with tempfile.NamedTemporaryFile(

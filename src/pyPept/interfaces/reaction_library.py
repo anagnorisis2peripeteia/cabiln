@@ -321,7 +321,7 @@ def _target_smirks(smirks, slot_a, slot_b, iso1, iso2):
 
     def replace(match):
         values = replacements.get(match.group(1))
-        return f'[{values.pop(0)}*]' if values else match.group()
+        return f'[{values.pop(0)}#0]' if values else match.group()
 
     return re.sub(r'\[(\d+)\*\]', replace, smirks)
 

@@ -16,8 +16,8 @@ flowchart LR
   E --> N[CABILN source]
   N --> Q[Sequence parser]
   L --> Q
-  Q --> M[Molecule assembly]
   Q --> P[Resolved occurrences and numbered connections]
+  P --> M[Molecule assembly]
   P --> E
   P --> S2[Shared serializer and occurrence order]
   S2 --> N
@@ -53,8 +53,14 @@ flowchart LR
 | `pyPept.recognition_notation` | Turn chosen ownership and local unknown regions into resolved occurrences and source atom assignments |
 | `pyPept.smiles` | Admit only verified decompositions, preserve components, and report recognition quality |
 | `pyPept.monomer_store` | Construct stored monomer records, load versioned definitions and aliases, give parsers detached copies, and perform atomic CLI/web registration |
+| `pyPept.library_quality` | Fingerprint definitions and expose the explicit compatibility baseline; audit only when requested |
+| `pyPept.library_snapshots` | Back up the locked SDF/alias pair and restore it while readers are stopped |
 | `pyPept.interfaces` | Monomer activation, reaction routing, and command-line tools |
 | `pyPept.web.app` | Configure routes, static assets, validation responses, and server startup |
+| `pyPept.web.execution` | Admit bounded chemistry jobs, own child processes, cancel/replace failed workers, and record safe request diagnostics |
+| `pyPept.web.readiness` | Validate installed data/assets at startup and cache the result |
+| `pyPept.web.projects` | Bind saved source and chemistry evidence to library definitions and canonical conventions |
+| `pyPept.web.security` | Enforce read-only, local, or authenticated administrative registration |
 | `pyPept.web.schemas` | Validate request sizes, dimensions, slots, and notation choices |
 | `pyPept.web.builder` | Expose editing and attachment inspection through HTTP |
 | `pyPept.web.conversion` | Expose format conversion through HTTP |
@@ -65,6 +71,11 @@ flowchart LR
 | `pyPept.web.notation` | Preserve historical imports of the core input/formatting functions |
 | `pyPept.web.static` | HTML, CSS, JavaScript, and example sequences |
 
+`web/static/document.js` owns editable source, evidence, bounded Undo/Redo and
+notation drafts. `builder.js` passes document transitions to it and updates the
+controls through one display function. Request lifetimes, storage timers and
+the last successful drawing remain separate because they outlive different edits.
+
 `tools/live_renderer.py` is a compatibility launcher. Old conversion imports
 continue to resolve, but new library callers should import `pyPept.smiles`.
 
@@ -74,10 +85,21 @@ recognition path. The recognizer uses the library's actual attachment slots and
 the same leaving-group restoration and effective chemistry as assembly. It
 does not select one backbone before accounting for the rest of the molecule.
 
-HTTP chemistry handlers are synchronous functions. FastAPI runs them in its
-thread pool, so expensive chemistry does not occupy the event loop. Render
-caches have bounded entry counts, use locks, and include the library file
-version in their keys. Monomer depictions use copies of cached molecules.
+HTTP chemistry handlers stay ordinary synchronous functions. Trusted local mode
+runs them in FastAPI's thread pool. Production sends the same validated HTTP
+operations to a fixed pool of child processes. That seam owns admission,
+payload bounds, deadlines, disconnect cancellation and worker replacement.
+It has no unbounded job queue. Static assets and liveness remain in the parent;
+authenticated library writes retain their existing lock/atomic replacement.
+Render caches have both entry and retained-byte limits, use locks, and include
+the library file version in their keys. Monomer depictions use molecule copies.
+
+The browser keeps recognition evidence with the exact document history entry.
+Editing or changing the library binding invalidates it; Undo restores the old
+entry. Formatting that reorders occurrences clears import assignments when no
+source correspondence is available. Project files retain original references,
+including MOL bytes, and resolve definitions/connections before accepting a
+changed library. Presentation never guesses scientific provenance from a name.
 
 `CABILN_MONOMER_LIBRARY` selects an existing SDF for default library consumers.
 The CLI, palette, converter, parser and assembly use that same selection.
@@ -97,10 +119,14 @@ Parsed notation and imported molecular structures both produce this model.
 Its serializer returns the output occurrence order directly. Formatting never
 needs to search molecular isomorphisms to rediscover which occurrence moved.
 
-`Sequence` remains the accepted parser and input to `Molecule`. Source tracking
-records original occurrences, including generated pendant chains and synthetic
-tokens. `PeptideDocument` edits those locations, reparses, and checks retained
-identity and the exact requested change using the shared numbered connections.
+`Sequence` remains the public parser and a compatible input to `Molecule`.
+Assembly consumes resolved `Peptide` definitions and `Endpoint` connections;
+Sequence callers adapt through `Peptide.from_sequence`. Temporary reaction labels
+come from an explicit endpoint map and do not encode slot or occurrence numbers.
+The same labels identify leaving groups during restoration.
+Source tracking records original occurrences, including generated pendant chains
+and synthetic tokens. `PeptideDocument` edits those locations, reparses, and checks
+retained definitions and the exact requested change before assembling that peptide.
 An occurrence's atom index, its attachment number, and its identity are different
 things, even when two attachment slots share one anchor atom.
 
@@ -129,6 +155,8 @@ warnings and parser-only acceptance without vetoing registered reactions.
 Input detection has explicit policies because existing callers differ: display
 prefers peptide notation for ambiguous bare text; reference/import controls
 prefer SMILES. Explicit BILN/HELM inputs retain their legacy slot interpretation.
+Main-editor requests carry the selected `input_format` through rendering and
+conversion. Free-form reference requests and older callers retain autodetection.
 The historical `Converter.get_biln()` returns CABILN, while `Converter(biln=...)`
 continues to accept legacy BILN only. Internal callers carry that format fact
 instead of relying on the method name.
@@ -184,8 +212,11 @@ restoration writes only missing owners. Both optimizations retain the molecular
 verification path. The [UX and performance evidence](ux-performance-validation.md)
 records their measured scope and limits.
 
-The core suite checks molecular graphs, stereochemistry, attachment slots, and
-notation conversion. HTTP tests exercise rendered MOL exports, edits, request
+The core suite is organized by activation, attachment reactions, restoration,
+parsing, notation conversion, assembly, recognition, CLI and bundled definitions.
+The shared chemistry oracle holds only reused product/atom-partition assertions.
+[Test ownership](../tests/AGENTS.md) maps each responsibility to its module.
+HTTP tests exercise rendered MOL exports, edits, request
 errors, registration, and responsiveness. The distribution test uses an installed
 wheel outside the source tree, so editable imports cannot hide missing resources.
 The [browser suite](../tests/browser/README.md) drives actual construction and

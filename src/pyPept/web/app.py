@@ -3,31 +3,80 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
+from contextlib import asynccontextmanager
+import ipaddress
 import json
 import os
-import uuid
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import builder, conversion, monomers, rendering
+from . import builder, conversion, monomers, projects, rendering
+from .execution import (
+    ChemistryExecutor, ExecutionConfig, ExecutionMiddleware,
+    RequestLoggingMiddleware, _internal_error, configure_logging,
+    deployment_version,
+)
+from .readiness import check_readiness
+from .security import configure_registration, require_registration
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
-SERVER_ID = uuid.uuid4().hex[:8]
+SERVER_ID = deployment_version()
 
 
-def create_app(*, allow_registration=None):
-    app = FastAPI(title="CABILN peptide builder")
-    app.add_middleware(GZipMiddleware, minimum_size=1000, compresslevel=4)
+def create_app(*, allow_registration=None, execution_mode=None, observability=True):
+    config = ExecutionConfig.from_env(execution_mode)
+    if (
+        os.environ.get("CABILN_ENV") == "production"
+        and config.mode != "process" and execution_mode is None
+    ):
+        raise ValueError("Production requires CABILN_EXECUTION=process")
+    if os.environ.get("CABILN_ENV") == "production":
+        from rdkit import rdBase
+
+        # Authorized parent-process registration also parses user structures.
+        # Expected errors remain in HTTP responses, never native stderr logs.
+        rdBase.DisableLog("rdApp.*")
+    version = deployment_version()
+
+    @asynccontextmanager
+    async def lifespan(app):
+        try:
+            app.state.readiness = await asyncio.to_thread(check_readiness, STATIC_DIR)
+            if config.mode == "process":
+                app.state.executor = ChemistryExecutor(config)
+                await app.state.executor.start()
+        except Exception as exc:
+            app.state.readiness = {"ready": False}
+            _internal_error(exc)
+        try:
+            yield
+        finally:
+            if app.state.executor is not None:
+                await app.state.executor.close()
+
+    app = FastAPI(title="CABILN peptide builder", lifespan=lifespan)
+    app.state.readiness = {"ready": False}
+    app.state.executor = None
+    app.state.execution_config = config
+    app.state.release = version
     app.state.allow_registration = (
         os.environ.get("CABILN_ENABLE_REGISTRATION") == "1"
         if allow_registration is None
         else allow_registration
     )
+    configure_registration(app, explicit_trusted_local=(allow_registration is True))
+    if config.mode == "process":
+        app.add_middleware(ExecutionMiddleware, state=app.state, config=config)
+    app.add_middleware(GZipMiddleware, minimum_size=1000, compresslevel=4)
+    if observability:
+        configure_logging()
+        app.add_middleware(RequestLoggingMiddleware, version=version)
 
     @app.exception_handler(RequestValidationError)
     async def invalid_request(request, exc):
@@ -36,11 +85,14 @@ def create_app(*, allow_registration=None):
         field = ".".join(str(part) for part in first["loc"][1:])
         return JSONResponse({"error": f"{field}: {first['msg']}"}, status_code=422)
 
-    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+    app.mount(
+        "/static", StaticFiles(directory=STATIC_DIR, check_dir=False), name="static"
+    )
     for router in (
         builder.router,
         conversion.router,
         monomers.router,
+        projects.router,
         rendering.router,
     ):
         app.include_router(router)
@@ -50,11 +102,8 @@ def create_app(*, allow_registration=None):
         return FileResponse(STATIC_DIR / "index.html")
 
     @app.get("/register", include_in_schema=False)
-    def register_page():
-        if not app.state.allow_registration:
-            return PlainTextResponse(
-                "This monomer library is read-only.", status_code=403
-            )
+    def register_page(request: Request):
+        require_registration(request)
         return FileResponse(STATIC_DIR / "register.html")
 
     @app.get("/capabilities")
@@ -63,15 +112,26 @@ def create_app(*, allow_registration=None):
 
     @app.get("/server_id", response_class=PlainTextResponse)
     def server_id():
-        return SERVER_ID
+        return version
 
     @app.get("/examples")
     def examples():
         return json.loads((STATIC_DIR / "examples.json").read_text(encoding="utf-8"))
 
     @app.get("/health")
-    def health():
+    async def health():
         return {"status": "ok"}
+
+    @app.get("/ready")
+    async def ready():
+        available = app.state.readiness.get("ready", False)
+        if config.mode == "process":
+            executor = app.state.executor
+            available = available and executor is not None and executor.ready
+        return JSONResponse(
+            {"status": "ready" if available else "not_ready", "release": version},
+            status_code=200 if available else 503,
+        )
 
     return app
 
@@ -99,4 +159,18 @@ def main():
     args = parser.parse_args()
     if args.enable_registration:
         app.state.allow_registration = True
-    uvicorn.run(app, host=args.host, port=args.port)
+        configure_registration(app, explicit_trusted_local=True)
+    try:
+        loopback = ipaddress.ip_address(args.host).is_loopback
+    except ValueError:
+        loopback = args.host == "localhost"
+    if (
+        app.state.allow_registration and not app.state.registration_token
+        and not loopback
+    ):
+        parser.error("Public registration requires CABILN_REGISTRATION_TOKEN")
+    options = {}
+    if app.state.execution_config.mode == "process":
+        options["limit_concurrency"] = 16
+        options["workers"] = 1
+    uvicorn.run(app, host=args.host, port=args.port, access_log=False, **options)

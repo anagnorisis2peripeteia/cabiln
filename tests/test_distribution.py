@@ -78,6 +78,7 @@ def test_built_wheel_runs_core_and_web_outside_checkout(tmp_path):
             for name in (
                 "monomers.sdf", "monomers.csv", "reactions.yaml",
                 "cap_reactions.yaml", "matrix.txt", "total_SS.txt",
+                "library-quality.json",
             ):
                 assert files("pyPept.data").joinpath(name).read_bytes(), name
             assert REACTIONS
@@ -127,12 +128,13 @@ def test_built_wheel_runs_core_and_web_outside_checkout(tmp_path):
                 assert client.get("/register").status_code == 403
                 for name in (
                     "theme.css", "builder.js", "builder.css", "register.js",
-                    "register.css", "examples.json",
+                    "register.css", "examples.json", "project.js", "document.js",
                 ):
                     response = client.get("/static/" + name)
                     assert response.status_code == 200, name
                     assert response.content, name
                 assert client.get("/health").json() == {"status": "ok"}
+                assert client.get("/ready").status_code == 200
                 assert client.get("/examples").json()
                 response = client.post("/render", json={"cabiln": "A-G"})
                 assert response.status_code == 200, response.text

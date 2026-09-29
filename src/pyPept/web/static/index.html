@@ -23,15 +23,33 @@
     <button type="button" id="btn-reroll" class="hbtn" title="New 2D layout seed" disabled>⟳ Reroll</button>
   </div>
   <div class="toolbar-group" role="group" aria-label="Notation">
+    <select id="notation-policy" class="hbtn" aria-label="Notation formatting" title="Canonical formatting uses a standard order for chains, branches and connection labels">
+      <option value="layout" selected>Keep layout</option>
+      <option value="canonical">Canonical</option>
+    </select>
     <button type="button" id="btn-to-bracket" class="hbtn" title="Convert to bracket notation" aria-label="Convert to bracket notation">→[ ]</button>
     <button type="button" id="btn-to-branch" class="hbtn" title="Convert to branch (%) notation" aria-label="Convert to branch notation">→%</button>
   </div>
   <div class="toolbar-group" role="group" aria-label="Export and registration">
+    <button type="button" id="btn-project-save" class="hbtn" title="Save source, drafts, reference and import details as a portable project">Save project</button>
+    <label class="hbtn upload-trigger">Open project
+      <input type="file" id="project-upload" class="sr-only" accept=".cabiln.json,.json,application/json" aria-label="Open a CABILN project">
+    </label>
     <button type="button" id="btn-png" class="hbtn" title="Download PNG" disabled><svg class="ui-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M8 2v8M5 7l3 3 3-3M2 11v3h12v-3"/></svg>PNG</button>
     <button type="button" id="btn-mol" class="hbtn" title="Download MOL file" disabled><svg class="ui-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M8 2v8M5 7l3 3 3-3M2 11v3h12v-3"/></svg>MOL</button>
     <a id="register-link" class="hbtn green" href="/register" target="_blank" rel="noopener" title="Register a new monomer in a new tab" hidden><svg class="ui-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M8 3v10M3 8h10"/></svg>Register</a>
+    <button type="button" id="btn-help" class="hbtn" aria-controls="help-panel" aria-expanded="false">Help</button>
   </div>
 </header>
+
+<section id="help-panel" class="help-panel" aria-labelledby="help-title" hidden>
+  <div class="help-heading"><h2 id="help-title">Working with CABILN</h2><button type="button" id="help-close" class="panel-close" aria-label="Close help">✕</button></div>
+  <p>Type a sequence, or choose SMILES, BILN or HELM and convert it. Open Build, select a residue, then choose Use in the library and connect free numbered sites. Nested brackets keep their own attachment parent. Undo and Redo restore sequence edits.</p>
+  <p>Keep layout preserves your grouping. Canonical exports order the resolved monomer graph under a recorded convention and library binding. Imported structures can include inferred stereochemistry or preserved synthetic regions; open Import quality for details. Valid synthetic sites remain editable.</p>
+  <p>Save project downloads your source, notation drafts, original reference and conversion details. Opening checks the definitions and reaction rules before loading. PNG and MOL export the current drawing and molecule.</p>
+  <p>Your inputs and uploaded structures are sent to the server hosting this page for chemistry processing. Browser drafts stay in this browser's local storage; project files download to your device. Clearing a draft removes that browser copy only. Avoid putting private structures in public feedback.</p>
+  <div class="help-actions"><button type="button" id="btn-clear-draft" class="hbtn">Clear saved browser draft</button><a class="hbtn" href="https://github.com/anagnorisis2peripeteia/pyPept/issues" target="_blank" rel="noopener noreferrer">Report a problem</a></div>
+</section>
 
 <!-- input bar (always visible) -->
 <div id="input-bar">
@@ -45,7 +63,7 @@
     </select>
     <textarea id="cabiln-input"
               placeholder="e.g.  fmoc-A-G-L-am&#10;fmoc-C.trt(4,2)-A-K.boc(4,2)-am&#10;fmoc-K.!1(4,4)-G-G-E.!1-am"
-              spellcheck="false" autocomplete="off" aria-describedby="cabiln-status conversion-status"></textarea>
+              spellcheck="false" autocomplete="off" aria-describedby="cabiln-status conversion-status quality-summary"></textarea>
     <div class="history-controls" role="group" aria-label="Sequence history">
       <button type="button" id="btn-undo" class="hbtn" title="Undo last edit" disabled><svg class="ui-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M6 3L2 7l4 4M2 7h7a4 4 0 0 1 4 4v2"/></svg>Undo</button>
       <button type="button" id="btn-redo" class="hbtn" title="Redo last edit" disabled><svg class="ui-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M10 3l4 4-4 4M14 7H7a4 4 0 0 0-4 4v2"/></svg>Redo</button>
@@ -60,6 +78,12 @@
   </div>
   <div id="cabiln-status" class="statusbar" role="status" aria-live="polite" aria-atomic="true"></div>
   <div id="conversion-status" class="statusbar warn" role="status" aria-live="polite" aria-atomic="true" hidden></div>
+  <div id="project-status" class="statusbar" role="status" aria-live="polite" aria-atomic="true" hidden></div>
+  <details id="import-quality" class="import-quality" hidden>
+    <summary><span id="quality-summary" role="status" aria-live="polite" aria-atomic="true"></span></summary>
+    <div id="quality-details"></div>
+  </details>
+  <div id="canonical-status" class="statusbar" hidden></div>
   <div id="conversion-progress" class="operation-progress" hidden>
     <span id="conversion-progress-label" role="status" aria-live="polite" aria-atomic="true">Converting structure…</span>
   </div>
@@ -114,6 +138,7 @@
       <button type="button" id="lib-close" class="panel-close" title="Close Library" aria-label="Close monomer library">✕</button>
     </div>
     <div id="lib-count" role="status" aria-live="polite"></div>
+    <div id="lib-status" class="statusbar warn" role="status" aria-live="polite" hidden></div>
     <div id="lib-list"><div class="placeholder">Loading…</div></div>
   </aside>
   <div id="lib-preview"></div>
@@ -166,6 +191,8 @@
 <!-- compare bar (verify mode only) -->
 <div id="compare-bar" style="display:none;" role="status" aria-live="polite" aria-atomic="true"></div>
 
+<script src="/static/project.js" defer></script>
+<script src="/static/document.js" defer></script>
 <script src="/static/builder.js" defer></script>
 </body>
 </html>

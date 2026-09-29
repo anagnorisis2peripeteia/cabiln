@@ -13,12 +13,15 @@ from pyPept.web.app import create_app
 
 
 @pytest.fixture
-def phosphate_library(tmp_path, monkeypatch):
+def connection_library(tmp_path, monkeypatch):
     path = tmp_path / "connection-sites.sdf"
     with Chem.SDWriter(str(path)) as writer:
-        for symbol, smiles, leaving in (
-            ("HydroxyCarrier", "CCO[4*]", "[H]"),
-            ("PhosphateUnit", "[4*]P(=O)(O)O", "[OH]"),
+        for symbol, smiles, slot, leaving in (
+            ("HydroxyCarrier", "CCO[4*]", 4, "[H]"),
+            ("PhosphateUnit", "[4*]P(=O)(O)O", 4, "[OH]"),
+            ("HighAmine", "CN[165*]", 165, "[H]"),
+            ("IsotopicAmine", "[1CH3]N[165*]", 165, "[H]"),
+            ("LowAcid", "CC(=O)[65*]", 65, "[OH]"),
         ):
             mol = Chem.MolFromSmiles(smiles)
             for key, value in {
@@ -26,9 +29,9 @@ def phosphate_library(tmp_path, monkeypatch):
                 "m_abbr": symbol,
                 "m_type": "chem",
                 "m_subtype": "undefined",
-                "m_Rgroups": f"None,None,None,{leaving}",
+                "m_Rgroups": ",".join(["None"] * (slot - 1) + [leaving]),
                 # Descriptive metadata must not determine compatibility.
-                "m_chem_types": "4:declared_label",
+                "m_chem_types": f"{slot}:declared_label",
             }.items():
                 mol.SetProp(key, value)
             writer.write(mol)
@@ -40,7 +43,7 @@ def phosphate_library(tmp_path, monkeypatch):
 
 @pytest.mark.parametrize("reverse", [False, True])
 def test_phosphorylation_from_http_sites_through_notation_to_product(
-    phosphate_library, reverse
+    connection_library, reverse
 ):
     symbols = ["HydroxyCarrier", "PhosphateUnit"]
     if reverse:
@@ -128,7 +131,7 @@ def test_slots_on_the_same_atom_keep_distinct_chemistry():
     assert modification.reaction["id"] == "imide_n_acylation"
 
 
-def test_wrong_slot_diagnostics_and_http_rejection(phosphate_library):
+def test_wrong_slot_diagnostics_and_http_rejection(connection_library):
     missing = Sequence.validate("HydroxyCarrier.!p(7,4)%PhosphateUnit.!p(4,7)")
     assert not missing.ok
     assert "Residue 0 has no R7 attachment point" in missing.errors[0]
@@ -150,6 +153,29 @@ def test_wrong_slot_diagnostics_and_http_rejection(phosphate_library):
     }
 
 
+@pytest.mark.parametrize(
+    "source, expected, ownership",
+    [
+        ("HighAmine%LowAcid", "CN.CC(=O)O", [2, 4]),
+        ("LowAcid%HighAmine", "CN.CC(=O)O", [4, 2]),
+        ("HighAmine.!a(165,65)%LowAcid.!a(65,165)", "CNC(C)=O", [2, 3]),
+        # A temporary dummy label must not consume an isotope-labeled real atom.
+        ("IsotopicAmine.!a(165,65)%LowAcid.!a(65,165)", "[1CH3]NC(C)=O", [2, 3]),
+    ],
+)
+def test_large_slots_keep_distinct_endpoints_and_restoration(
+    connection_library, source, expected, ownership
+):
+    assembled = Molecule(Sequence(source), depiction=None)
+    product = assembled.get_molecule(fmt="ROMol")
+    assert Chem.MolToSmiles(product) == Chem.MolToSmiles(Chem.MolFromSmiles(expected))
+    owners = assembled.get_residue_atom_map()
+    assert [len(owners[index]) for index in range(2)] == ownership
+    assert sorted(atom for indices in owners.values() for atom in indices) == list(
+        range(product.GetNumAtoms())
+    )
+
+
 def test_bare_molecule_compatibility_does_not_claim_numbered_site_support():
     oxygen = Chem.MolFromSmiles("CO")
     phosphorus = Chem.MolFromSmiles("OP(=O)(O)O")
@@ -166,11 +192,13 @@ def test_supported_exotic_warning_still_reaches_validation_report():
     assert Molecule(report.build()).get_molecule(fmt="ROMol") is not None
 
 
-def test_legacy_parseable_graph_does_not_claim_reaction_support():
-    report = Sequence.validate("K.!n(3,3)-A-K.!n(3,3)-am")
+@pytest.mark.parametrize("tag", ["1", "n"])
+def test_legacy_parseable_graph_does_not_claim_reaction_support(tag):
+    report = Sequence.validate(f"K.!{tag}(3,3)-A-K.!{tag}(3,3)-am")
     assert report.ok, report.errors
     assert any("N–N join" in warning for warning in report.warnings)
     sequence = report.build()
+    assert sequence.s_nmonomers == 4
     connection = attachments.resolve_connection(
         sequence.s_monomers[0]["m_romol"],
         3,

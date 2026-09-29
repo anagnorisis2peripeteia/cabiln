@@ -1,4 +1,4 @@
-const { test, expect, render, tile, site, selectChip, connect, capture } = require('./fixtures');
+const { test, expect, render, tile, site, selectChip, connect, capture, isCompletedResponse } = require('./fixtures');
 
 const tabCases = [
   { name: 'later segment', source: 'A%K.{G(4,2)}-A', occurrences: 4, markers: 0, groups: [[3]] },
@@ -72,7 +72,7 @@ test('all main input selectors convert through both output controls', async ({ p
       await page.locator('#cabiln-input').fill(source);
       await expect(page.locator('#render-inner svg')).toBeVisible();
       await expect(page.locator('#cabiln-input')).toHaveClass('ok');
-      const converted = page.waitForResponse(response => new URL(response.url()).pathname === '/to_cabiln');
+      const converted = page.waitForResponse(response => isCompletedResponse(response) && new URL(response.url()).pathname === '/to_cabiln');
       await page.locator(`#btn-to-cabiln-${output}`).click();
       const response = await converted;
       expect(response.status(), await response.text()).toBe(200);
@@ -99,7 +99,7 @@ test('Verify, MOL/SDF upload and both notation formatters preserve chemistry', a
     await expect(page.locator('#smiles-input')).not.toHaveValue('');
   }
   for (const target of ['branch', 'bracket']) {
-    const converted = page.waitForResponse(response => new URL(response.url()).pathname === '/convert_notation');
+    const converted = page.waitForResponse(response => isCompletedResponse(response) && new URL(response.url()).pathname === '/convert_notation');
     await page.locator(`#btn-to-${target}`).click();
     const response = await converted;
     expect(response.status(), await response.text()).toBe(200);
@@ -111,7 +111,7 @@ test('Verify, MOL/SDF upload and both notation formatters preserve chemistry', a
   await page.locator('#smiles-input').fill('NCC(=O)O');
   await expect(page.locator('#smiles-input')).toHaveClass('ok');
   for (const button of ['#btn-s2c', '#btn-s2c-bracket']) {
-    const converted = page.waitForResponse(response => new URL(response.url()).pathname === '/smiles_to_cabiln');
+    const converted = page.waitForResponse(response => isCompletedResponse(response) && new URL(response.url()).pathname === '/smiles_to_cabiln');
     await page.locator(button).click();
     expect((await converted).status()).toBe(200);
     await expect(page.locator('#cabiln-input')).toHaveValue('G');
@@ -161,7 +161,7 @@ test('registration refreshes the open library and supplies detected sites to bui
   await page.locator('#btn-verify').click();
   await page.locator('#mol-upload').setInputFiles(productPath);
   await expect(page.locator('#compare-bar .match')).toHaveText('✓ EXACT MATCH');
-  const converted = page.waitForResponse(response => new URL(response.url()).pathname === '/smiles_to_cabiln');
+  const converted = page.waitForResponse(response => isCompletedResponse(response) && new URL(response.url()).pathname === '/smiles_to_cabiln');
   await page.locator('#btn-s2c-bracket').click();
   const response = await converted;
   expect(response.status(), await response.text()).toBe(200);
@@ -178,7 +178,8 @@ test('a read-only instance exposes rendering while registration stays unavailabl
   await render(page, 'A-G');
   const response = await page.goto(`${readonlyApp.url}/register`);
   expect(response.status()).toBe(403);
-  await expect(page.locator('body')).toHaveText('This monomer library is read-only.');
+  expect(await response.json()).toEqual({ detail: 'This monomer library is read-only.' });
+  await expect(page.locator('body')).toContainText('This monomer library is read-only.');
 });
 
 test('attachment-form choices load the selected family member before its sites', async ({ page }, testInfo) => {
@@ -191,7 +192,7 @@ test('attachment-form choices load the selected family member before its sites',
     await expect(page.locator('#build-connect')).toBeDisabled();
     const sites = page.waitForResponse(response => {
       const url = new URL(response.url());
-      return url.pathname === '/monomer_rgroups' && url.searchParams.get('abbr') === symbol;
+      return isCompletedResponse(response) && url.pathname === '/monomer_rgroups' && url.searchParams.get('abbr') === symbol;
     });
     await page.locator('#build-right-rgroups').getByRole('button', { name: `${label}: ${symbol}`, exact: true }).click();
     const response = await sites;
@@ -208,7 +209,7 @@ test('partially recognized input retains warnings, selectable unknowns and backb
   await page.locator('#notation-select').selectOption('smiles');
   await page.locator('#cabiln-input').fill('CC(=O)N[C@@H](CCC(F)(F)F)C(=O)N');
   await expect(page.locator('#cabiln-input')).toHaveClass('ok');
-  const converted = page.waitForResponse(response => new URL(response.url()).pathname === '/to_cabiln');
+  const converted = page.waitForResponse(response => isCompletedResponse(response) && new URL(response.url()).pathname === '/to_cabiln');
   await page.locator('#btn-to-cabiln-bracket').click();
   const response = await converted;
   expect(response.status(), await response.text()).toBe(200);

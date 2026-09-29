@@ -1,4 +1,4 @@
-const { test, expect, render, selectChip, site, connect, capture } = require('./fixtures');
+const { test, expect, render, selectChip, site, connect, capture, isCompletedResponse } = require('./fixtures');
 
 test('invalid bracket syntax keeps the last valid drawing without accepting changed chemistry', async ({ page }) => {
   for (const source of [
@@ -202,7 +202,7 @@ test('new reference work resolves recovery and Verify uses the recovered referen
   await page.reload();
   await page.locator('#btn-restore-draft').click();
   await expect(page.locator('#cabiln-input')).toHaveClass('ok');
-  const verified = page.waitForResponse(response => new URL(response.url()).pathname === '/verify');
+  const verified = page.waitForResponse(response => isCompletedResponse(response) && new URL(response.url()).pathname === '/verify');
   await page.locator('#btn-verify').click();
   const response = await verified;
   expect(response.request().postDataJSON().smiles).toBe('CC(=O)O');
@@ -216,7 +216,7 @@ test('palette refresh preserves unchanged rows and invalidates changed-definitio
   await row.evaluate(el => { el.dataset.identity = 'retained'; });
   await row.hover();
   await expect(page.locator('#lib-preview svg').first()).toBeVisible();
-  const refresh = page.waitForResponse(response => new URL(response.url()).pathname === '/monomers');
+  const refresh = page.waitForResponse(response => isCompletedResponse(response) && new URL(response.url()).pathname === '/monomers');
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
   await refresh;
   await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));

@@ -2,7 +2,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 const net = require('node:net');
-const { spawn } = require('node:child_process');
+const { spawn, execFileSync } = require('node:child_process');
 const { once } = require('node:events');
 const { test: base, expect } = require('@playwright/test');
 
@@ -10,6 +10,10 @@ const repo = path.resolve(__dirname, '../..');
 const appRoot = path.resolve(process.env.CABILN_APP_ROOT || repo);
 const localPython = path.join(repo, '.venv', process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python');
 const python = process.env.CABILN_PYTHON || (fs.existsSync(localPython) ? localPython : 'python3');
+const installed = process.env.CABILN_BROWSER_INSTALLED === '1';
+const packageData = installed ? execFileSync(python, ['-I', '-c',
+  'from importlib.resources import files; print(files("pyPept.data"))'],
+{ encoding: 'utf8' }).trim() : path.join(appRoot, 'src/pyPept/data');
 
 async function freePort() {
   const server = net.createServer();
@@ -23,7 +27,7 @@ async function freePort() {
 async function startApp(workerInfo, registration) {
   const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'cabiln-browser-library-'));
   for (const name of ['monomers.sdf', 'monomers.csv']) {
-    fs.copyFileSync(path.join(appRoot, 'src/pyPept/data', name), path.join(temporary, name));
+    fs.copyFileSync(path.join(packageData, name), path.join(temporary, name));
   }
   const port = await freePort();
   const url = `http://127.0.0.1:${port}`;
@@ -31,17 +35,19 @@ async function startApp(workerInfo, registration) {
   fs.mkdirSync(path.dirname(logPath), { recursive: true });
   const log = fs.createWriteStream(logPath);
   fs.writeFileSync(path.join(workerInfo.project.outputDir, 'application.json'), JSON.stringify({
-    appRoot, python, browserChannel: process.env.CABILN_BROWSER_CHANNEL || 'chromium',
+    appRoot, python, installed, browserChannel: process.env.CABILN_BROWSER_CHANNEL || 'chromium',
     viewport: workerInfo.project.use.viewport,
   }, null, 2));
   const server = spawn(python, [
+    ...(installed ? ['-I'] : []),
     '-m', 'uvicorn', 'pyPept.web.app:app', '--host', '127.0.0.1', '--port', String(port),
+    '--no-access-log',
   ], {
     cwd: appRoot,
     env: {
       ...process.env,
       // Explicitly select the app source even when python belongs to another editable checkout.
-      PYTHONPATH: path.join(appRoot, 'src'),
+      ...(installed ? {} : { PYTHONPATH: path.join(appRoot, 'src') }),
       CABILN_MONOMER_LIBRARY: path.join(temporary, 'monomers.sdf'),
       CABILN_ENABLE_REGISTRATION: registration ? '1' : '0',
     },
@@ -68,7 +74,7 @@ async function startApp(workerInfo, registration) {
       if (spawnError) throw spawnError;
       if (server.exitCode !== null) throw new Error(`Application exited (${server.exitCode}); see ${logPath}`);
       try {
-        if ((await fetch(`${url}/health`, { signal: AbortSignal.timeout(1000) })).ok) break;
+        if ((await fetch(`${url}/ready`, { signal: AbortSignal.timeout(1000) })).ok) break;
       } catch { /* Wait for this process to bind its local socket. */ }
       if (Date.now() > deadline) throw new Error(`Application did not become healthy; see ${logPath}`);
       await new Promise(resolve => setTimeout(resolve, 100));
@@ -101,9 +107,17 @@ const test = base.extend({
   },
 });
 
+function isCompletedResponse(response) {
+  // Match the builder's bounded admission retry policy. Other errors must reach
+  // the existing assertions; exhausting 503 retries still fails the wait.
+  const retryAfter = Number(response.headers()['retry-after']);
+  return response.status() !== 503 || !Number.isFinite(retryAfter) ||
+    retryAfter <= 0 || retryAfter > 2;
+}
+
 async function render(page, source) {
   const received = page.waitForResponse(response =>
-    new URL(response.url()).pathname === '/render' &&
+    isCompletedResponse(response) && new URL(response.url()).pathname === '/render' &&
     response.request().postDataJSON()?.cabiln === source);
   await page.locator('#cabiln-input').fill(source);
   const response = await received;
@@ -136,7 +150,7 @@ async function selectChip(page, idx, side, abbr) {
 
 async function connect(page) {
   await expect(page.locator('#build-connect')).toBeEnabled();
-  const result = page.waitForResponse(response => new URL(response.url()).pathname === '/insert_bond');
+  const result = page.waitForResponse(response => isCompletedResponse(response) && new URL(response.url()).pathname === '/insert_bond');
   await page.locator('#build-connect').click();
   const response = await result;
   expect(response.status(), await response.text()).toBe(200);
@@ -178,4 +192,4 @@ async function capture(page, testInfo, name) {
   await testInfo.attach(`${name}.json`, { path: statePath, contentType: 'application/json' });
 }
 
-module.exports = { test, expect, render, tile, site, selectChip, connect, capture };
+module.exports = { test, expect, render, tile, site, selectChip, connect, capture, isCompletedResponse };

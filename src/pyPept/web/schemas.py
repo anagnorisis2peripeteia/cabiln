@@ -15,8 +15,12 @@ Symbol = Annotated[
         strip_whitespace=True, min_length=1, max_length=100, pattern=r"^[A-Za-z0-9_]+$"
     ),
 ]
-Slot = Annotated[int, Field(ge=1, le=64)]
+ExistingSymbol = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)
+]
+Slot = Annotated[int, Field(ge=1)]
 Label = Annotated[str, StringConstraints(min_length=1, max_length=100)]
+InputFormat = Literal["auto", "smiles", "biln", "helm", "cabiln"]
 
 
 class _ImageReq(BaseModel):
@@ -59,12 +63,13 @@ class _RegisterReq(BaseModel):
 class _ConvertReq(BaseModel):
     cabiln: Notation
     target: Literal["bracket", "branch"]
+    canonical: bool = False
 
 
 class _InsertBondReq(BaseModel):
     cabiln: str = Field(max_length=20000)
     host_residue_idx: int = Field(ge=0)
-    new_abbr: Symbol
+    new_abbr: ExistingSymbol
     r_host: Slot
     r_new: Slot
     target_residue_idx: int = Field(default=-1, ge=-1)
@@ -73,7 +78,7 @@ class _InsertBondReq(BaseModel):
 class _InsertBackboneReq(BaseModel):
     cabiln: str = Field(max_length=20000)
     after_idx: int = Field(ge=0)
-    new_abbr: Symbol
+    new_abbr: ExistingSymbol
 
 
 class _SmilesToCabilnReq(BaseModel):
@@ -83,6 +88,7 @@ class _SmilesToCabilnReq(BaseModel):
 
 class _ToCabilnReq(BaseModel):
     input: Notation
+    input_format: InputFormat = "auto"
     notation: Literal["percent", "bracket"] = "percent"
 
 
@@ -90,13 +96,14 @@ class _ValidateBondReq(BaseModel):
     chem_type_a: Label
     chem_type_b: Label
     abbr_a: str = Field(default="", max_length=100)
-    slot_a: int = Field(default=0, ge=0, le=64)
+    slot_a: int = Field(default=0, ge=0)
     abbr_b: str = Field(default="", max_length=100)
-    slot_b: int = Field(default=0, ge=0, le=64)
+    slot_b: int = Field(default=0, ge=0)
 
 
 class _ReferenceReq(_ImageReq):
     input: Notation
+    input_format: InputFormat = "auto"
 
 
 class _MolBlockReq(_ImageReq):

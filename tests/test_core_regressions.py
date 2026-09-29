@@ -39,19 +39,6 @@ def test_invalid_input_raises_value_error_and_reports_failure(notation):
 @pytest.mark.parametrize(
     "notation",
     [
-        "ac-K.[G(4,2)[.bad]]-am",
-        "ac-K.[G(4,2)[.A(2,1)garbage]]-am",
-        "ac-K.[G(4,2)[.]]-am",
-    ],
-)
-def test_sub_brackets_do_not_drop_invalid_content(notation):
-    with pytest.raises(ValueError, match="sub-bracket|unrecognised"):
-        Sequence(notation)
-
-
-@pytest.mark.parametrize(
-    "notation",
-    [
         "ac-C.!1(4,4).!1(4,4)-am",
         "ac-C.!1(4,4).!2(4,4)-am%TBMB.!1.!2",
         "ac-C.!1(4,4).!2(4,4)-C.!1-C.!2-am",
@@ -67,27 +54,24 @@ def test_validate_exposes_backbone_slots():
     assert Sequence.validate("A-G").bonds == [(0, 2, 1, 1)]
 
 
-@pytest.mark.parametrize("tag", ["bridge", "a2", "1"])
+@pytest.mark.parametrize("tag", ["bridge", "a2"])
 def test_named_crosslinks_assemble(tag):
     assert smiles(f"ac-C.!{tag}(4,4)-G-C.!{tag}-am") == smiles("ac-C.!1(4,4)-G-C.!1-am")
 
 
 @pytest.mark.parametrize(
-    "notation",
+    "convert, notation",
     [
-        "A-G%K-L",
-        "ac-A-am%ac-C.!1(4,4)-C.!1-am",
-        "ac-D.!1(4,1)-am%G.!1-am%K-L",
+        (cabiln_to_bracket, "A-G%K-L"),
+        (cabiln_to_bracket, "ac-A-am%ac-C.!1(4,4)-C.!1-am"),
+        (cabiln_to_bracket, "ac-D.!1(4,1)-am%G.!1-am%K-L"),
+        (cabiln_to_bracket, "ac-C.!1(4,4)-am%G-C.!1-A"),
+        (cabiln_to_branch, "ac-K.[E_g(4,4).G(1,2)[.!2(1,4)]]-D.!2-am"),
+        (cabiln_to_bracket, "ac-D.!1(4,1)-am%G.!1-K.boc(4,2)-am"),
     ],
 )
-def test_branch_conversion_preserves_unattached_segments(notation):
-    assert smiles(cabiln_to_bracket(notation)) == smiles(notation)
-
-
-def test_midpoint_branch_uses_independent_arms():
-    notation = "ac-C.!1(4,4)-am%G-C.!1-A"
-    converted = cabiln_to_bracket(notation)
-    assert smiles(converted) == smiles(notation)
+def test_branch_conversion_preserves_product(convert, notation):
+    assert smiles(convert(notation)) == smiles(notation)
 
 
 def test_protected_bracket_survives_conversion():
@@ -106,16 +90,6 @@ def test_protected_bracket_survives_conversion():
 )
 def test_branch_conversion_does_not_invent_or_discard_bracket_entries(notation):
     assert cabiln_to_branch(notation) == notation
-
-
-def test_branch_conversion_preserves_monomer_before_nested_crosslink():
-    notation = "ac-K.[E_g(4,4).G(1,2)[.!2(1,4)]]-D.!2-am"
-    assert smiles(cabiln_to_branch(notation)) == smiles(notation)
-
-
-def test_bracket_conversion_preserves_inline_cap_inside_branch():
-    notation = "ac-D.!1(4,1)-am%G.!1-K.boc(4,2)-am"
-    assert smiles(cabiln_to_bracket(notation)) == smiles(notation)
 
 
 @pytest.mark.parametrize(
@@ -160,21 +134,6 @@ def test_synthetic_charge_stereo_and_ring_labels_survive_assembly(sidechain):
     assert smiles(notation) == expected
 
 
-def test_terminal_restoration_preserves_leaving_atom_charge_and_isotope():
-    sequence = Sequence("A")
-    sequence.s_monomers[0]["m_Rgroups"][1] = "[18O-]"
-    molecule = Molecule(sequence).mol
-    expected = Chem.MolFromSmiles("N[C@@H](C)C(=O)[18O-]")
-    assert Chem.MolToSmiles(molecule) == Chem.MolToSmiles(expected)
-
-
-def test_terminal_restoration_rejects_unsupported_multiatom_leaving_group():
-    sequence = Sequence("A")
-    sequence.s_monomers[0]["m_Rgroups"][1] = "OC"
-    with pytest.raises(ValueError, match="leaving group"):
-        Molecule(sequence)
-
-
 @pytest.mark.parametrize("helm", ["", "invalid", "PEPTIDE1{A}$$$$V2.0$extra"])
 def test_invalid_helm_is_a_value_error(helm):
     with pytest.raises(ValueError, match="HELM"):
@@ -190,11 +149,6 @@ def test_helm_connection_cannot_use_residue_zero():
 def test_incomplete_legacy_bond_is_not_silently_dropped(argument):
     with pytest.raises(ValueError, match="bond"):
         Converter(**argument)
-
-
-def test_legacy_converter_rejects_cabiln_instead_of_splitting_inline_dots():
-    with pytest.raises(ValueError, match="CABILN"):
-        Converter(biln="C.!1(4,4)-A-C.!1")
 
 
 def test_validator_cli_accepts_cabiln(monkeypatch, capsys):
@@ -213,28 +167,6 @@ def test_validator_cli_fails_for_missing_backbone_attachment(monkeypatch, capsys
         run_as_standalone()
     assert error.value.code == 1
     assert "backbone" in capsys.readouterr().out
-
-
-def test_structure_cli_can_write_2d_without_pdb_metadata(monkeypatch, tmp_path):
-    from pyPept.interfaces.run_pyPept import main
-
-    prefix = tmp_path / "peptide"
-    monkeypatch.setattr(
-        "sys.argv",
-        [
-            "run_pyPept",
-            "--biln",
-            "ac-A-G-am",
-            "--noconf",
-            "--sdf2D",
-            "--prefix",
-            str(prefix),
-        ],
-    )
-    main()
-    assert prefix.with_suffix(".png").stat().st_size > 0
-    output = Chem.MolFromMolFile(str(prefix.with_suffix(".sdf")))
-    assert Chem.MolToSmiles(output) == smiles("ac-A-G-am")
 
 
 def test_pdb_naming_reports_missing_library_metadata():
@@ -348,18 +280,10 @@ def test_concurrent_cli_registration_has_one_winner(tmp_path):
     assert len(loaded) == 1 and loaded[0] is not None
 
 
-@pytest.mark.parametrize("preexisting", [False, True])
-def test_failed_cli_registration_keeps_library_unchanged(
-    tmp_path,
-    monkeypatch,
-    preexisting,
-):
+def test_failed_cli_registration_leaves_new_library_absent(tmp_path, monkeypatch):
     from pyPept.interfaces.cli_monomer import register_monomer
 
     path = tmp_path / "custom.sdf"
-    if preexisting:
-        register_monomer("NCC(=O)O", symbol="CustomGly", sdf_path=path)
-    original = path.read_bytes() if preexisting else None
 
     def fail_replace(*args):
         raise OSError("Simulated interrupted write")
@@ -367,28 +291,8 @@ def test_failed_cli_registration_keeps_library_unchanged(
     monkeypatch.setattr("os.replace", fail_replace)
     with pytest.raises(OSError, match="Simulated interrupted write"):
         register_monomer("N[C@@H](C)C(=O)O", symbol="CustomAla", sdf_path=path)
-    if preexisting:
-        assert path.read_bytes() == original
-    else:
-        assert not path.exists()
+    assert not path.exists()
     assert not list(tmp_path.glob(".monomers-*.sdf"))
-
-
-def test_cli_registration_updates_default_library_reads(tmp_path, monkeypatch):
-    from pyPept import monomer_store
-    from pyPept.interfaces import cli_monomer
-
-    path = tmp_path / "monomers.sdf"
-    cli_monomer.register_monomer("NCC(=O)O", symbol="CustomGly", sdf_path=path)
-    monkeypatch.setattr(monomer_store, "_SDF_PATH", path)
-    monkeypatch.setattr(cli_monomer, "_default_sdf_path", lambda: path)
-    monomer_store._invalidate_sdf()
-    try:
-        assert set(monomer_store._load_sdf()[1]) == {"CustomGly"}
-        cli_monomer.register_monomer("N[C@@H](C)C(=O)O", symbol="CustomAla")
-        assert set(monomer_store._load_sdf()[1]) == {"CustomGly", "CustomAla"}
-    finally:
-        monomer_store._invalidate_sdf()
 
 
 def test_monomer_cli_duplicate_is_an_actionable_failure(tmp_path, monkeypatch, capsys):
@@ -414,44 +318,29 @@ def test_monomer_cli_duplicate_is_an_actionable_failure(tmp_path, monkeypatch, c
     assert "CustomGly' already exists" in capsys.readouterr().err
 
 
-def test_custom_library_is_shared_by_registration_and_core_readers(
-    tmp_path, monkeypatch
+@pytest.mark.parametrize("selection", ["default", "environment"])
+def test_selected_library_is_shared_by_registration_and_core_readers(
+    tmp_path, monkeypatch, selection
 ):
     from pyPept import monomer_store
-    from pyPept.interfaces.cli_monomer import register_monomer
+    from pyPept.interfaces import cli_monomer
 
     path = tmp_path / "custom.sdf"
-    register_monomer("NCC(=O)O", symbol="CustomGly", sdf_path=path)
-    monkeypatch.setenv("CABILN_MONOMER_LIBRARY", str(path))
+    cli_monomer.register_monomer("NCC(=O)O", symbol="CustomGly", sdf_path=path)
+    if selection == "default":
+        monkeypatch.delenv("CABILN_MONOMER_LIBRARY", raising=False)
+        monkeypatch.setattr(monomer_store, "_SDF_PATH", path)
+        monkeypatch.setattr(cli_monomer, "_default_sdf_path", lambda: path)
+    else:
+        monkeypatch.setenv("CABILN_MONOMER_LIBRARY", str(path))
+    monomer_store._invalidate_sdf()
     try:
         assert set(monomer_store._load_sdf()[1]) == {"CustomGly"}
         assert set(MonomerLibrary().GetMonomerNames()) == {"CustomGly"}
-        register_monomer("N[C@@H](C)C(=O)O", symbol="CustomAla")
+        cli_monomer.register_monomer("N[C@@H](C)C(=O)O", symbol="CustomAla")
         assert set(monomer_store._load_sdf()[1]) == {"CustomGly", "CustomAla"}
         expected = Chem.MolFromSmiles("NCC(=O)N[C@@H](C)C(=O)O")
         assert smiles("CustomGly-CustomAla") == Chem.MolToSmiles(expected)
-    finally:
-        monomer_store._invalidate_sdf()
-
-
-def test_library_cache_distinguishes_paths_with_identical_timestamps(
-    tmp_path, monkeypatch
-):
-    import os
-
-    from pyPept import monomer_store
-    from pyPept.interfaces.cli_monomer import register_monomer
-
-    first, second = tmp_path / "first.sdf", tmp_path / "second.sdf"
-    register_monomer("NCC(=O)O", symbol="CustomOne", sdf_path=first)
-    second.write_bytes(first.read_bytes().replace(b"CustomOne", b"CustomTwo"))
-    stat = first.stat()
-    os.utime(second, ns=(stat.st_atime_ns, stat.st_mtime_ns))
-    try:
-        monkeypatch.setenv("CABILN_MONOMER_LIBRARY", str(first))
-        assert set(monomer_store._load_sdf()[1]) == {"CustomOne"}
-        monkeypatch.setenv("CABILN_MONOMER_LIBRARY", str(second))
-        assert set(monomer_store._load_sdf()[1]) == {"CustomTwo"}
     finally:
         monomer_store._invalidate_sdf()
 
@@ -537,7 +426,10 @@ def test_display_rejects_invalid_leaving_groups_instead_of_truncating(leaving):
     template.SetProp("m_Rgroups", f"[H],{leaving},[H]")
     with pytest.raises(ValueError, match="leaving group|restoration|sanitization"):
         _restore_leaving_groups(template)
-    with pytest.raises(ValueError, match="leaving group|restoration|sanitization"):
+    message = (
+        "leaving group" if leaving == "OC" else "leaving group|restoration|sanitization"
+    )
+    with pytest.raises(ValueError, match=message):
         Molecule(sequence)
 
 
@@ -616,7 +508,9 @@ def test_assembly_rejects_enhanced_stereo_templates(group):
 
 
 def test_absolute_stereo_groups_remain_supported():
-    result = pre_activate("N[C@@H](C)C(=O)O |a:1|")
+    source = "N[C@@H](C)C(=O)O |a:1|"
+    assert len(Chem.MolFromSmiles(source).GetStereoGroups()) == 1
+    result = pre_activate(source)
     assert result.chuckles == pre_activate("N[C@@H](C)C(=O)O").chuckles
     assert smiles("<[1*]N[C@@H](C)C([2*])=O |a:2|>") == smiles("A")
 

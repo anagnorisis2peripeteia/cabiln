@@ -20,6 +20,15 @@ class Span:
 
 @dataclass(frozen=True)
 class Occurrence:
+    """Original token and attachment ownership for one resolved occurrence.
+
+    ``scope`` is its actual containing scope, or a legacy entry's real span.
+    Flat continuations share that scope and name their preceding token in
+    ``host``. ``terminal`` is false if inserting a flat entry here would redirect
+    any following marker, continuation, or child. ``bracket``/``arm`` retain the
+    outermost/nearest-child locations expected by existing editing clients.
+    """
+
     token: Span
     entry: Span
     kind: Literal["explicit", "inline", "bracket"]
@@ -30,6 +39,23 @@ class Occurrence:
     protected: bool = False
     bracketable: bool = False
     legacy_arm: bool = False
+    host: Span | None = None
+    scope: Span | None = None
+    parent_scope: Span | None = None
+
+
+@dataclass(frozen=True)
+class SourceGroup:
+    """A parsed scope and the monomer that hosts it, before ID projection."""
+
+    span: Span
+    host: Span
+    parent: Span | None
+    kind: str
+    opening: str
+    closing: str
+    protected: bool
+    legacy: bool = False
 
 
 @dataclass(frozen=True)
@@ -40,6 +66,7 @@ class BondMarker:
     kind: Literal["inline", "terminal", "bracket"]
     bracket: Span | None = None
     arm: Span | None = None
+    scope: Span | None = None
 
 
 class Tracker:
@@ -50,13 +77,28 @@ class Tracker:
         self.segment = 0
         self.labels = set()
         self.markers = []
+        self.groups = []
 
     def root(self, text, segment):
         span = origin_span(text)
         if span is not None:
             self.roots.append((span, segment))
 
-    def entry(self, token, entry, kind, bracket=None, arm=None, terminal=True):
+    def entry(
+        self,
+        token,
+        entry,
+        kind,
+        bracket=None,
+        arm=None,
+        terminal=True,
+        *,
+        host=None,
+        scope=None,
+        parent_scope=None,
+        protected=None,
+        legacy_arm=None,
+    ):
         from pyPept.notation import supports_bracket_token
 
         span = origin_span(token)
@@ -70,10 +112,21 @@ class Tracker:
                 origin_span(bracket),
                 arm_span,
                 terminal,
-                bool(bracket is not None and str(bracket).startswith(".{")),
+                (
+                    bool(bracket is not None and str(bracket).startswith(".{"))
+                    if protected is None
+                    else protected
+                ),
                 supports_bracket_token(self.source[span.start : span.end]),
-                arm_span is not None
-                and not self.source[arm_span.start : arm_span.end].startswith("["),
+                (
+                    arm_span is not None
+                    and not self.source[arm_span.start : arm_span.end].startswith("[")
+                    if legacy_arm is None
+                    else legacy_arm
+                ),
+                origin_span(host),
+                origin_span(scope),
+                origin_span(parent_scope),
             )
 
     def occurrence(self, token):
@@ -186,12 +239,15 @@ def sub(pattern, replacement, value):
 def origin_span(text):
     if not isinstance(text, SourceText):
         return None
+    if hasattr(text, "_origin_span"):
+        return text._origin_span
     origins = [p for p in text.origins if p is not None]
-    return (
+    text._origin_span = (
         Span(min(p.start for p in origins), max(p.end for p in origins))
         if origins
         else None
     )
+    return text._origin_span
 
 
 def synthetic(match, symbol):
@@ -201,12 +257,44 @@ def synthetic(match, symbol):
     return SourceText(symbol, [origin_span(value)] * len(symbol), value.tracker)
 
 
-def record(token, entry, kind, bracket=None, arm=None, terminal=True):
+def record(token, entry, kind, bracket=None, arm=None, terminal=True, **ownership):
     if isinstance(token, SourceText):
-        token.tracker.entry(token, entry, kind, bracket, arm, terminal)
+        token.tracker.entry(token, entry, kind, bracket, arm, terminal, **ownership)
 
 
-def bond_marker(value, slot, *, owner=None, bracket=None, arm=None, terminal=False):
+def scope_group(
+    value,
+    *,
+    host,
+    parent=None,
+    kind="bracket",
+    opening="[",
+    closing="]",
+    protected=False,
+    legacy=False,
+):
+    if not isinstance(value, SourceText):
+        return
+    span, owner = origin_span(value), origin_span(host)
+    if span is None or owner is None:
+        raise ValueError("Sequential bracket lost its source group or host")
+    value.tracker.groups.append(
+        SourceGroup(
+            span,
+            owner,
+            origin_span(parent),
+            kind,
+            opening,
+            closing,
+            protected,
+            legacy,
+        )
+    )
+
+
+def bond_marker(
+    value, slot, *, owner=None, bracket=None, arm=None, terminal=False, scope=None
+):
     """Record an endpoint where the existing lowering resolves its owner/slot."""
     if not isinstance(value, SourceText):
         return
@@ -225,5 +313,13 @@ def bond_marker(value, slot, *, owner=None, bracket=None, arm=None, terminal=Fal
         raise ValueError("Crosslink endpoint has no original source owner")
     kind = "terminal" if terminal else "bracket" if bracket is not None else "inline"
     value.tracker.markers.append(
-        BondMarker(span, slot, owner_span, kind, origin_span(bracket), origin_span(arm))
+        BondMarker(
+            span,
+            slot,
+            owner_span,
+            kind,
+            origin_span(bracket),
+            origin_span(arm),
+            origin_span(scope),
+        )
     )

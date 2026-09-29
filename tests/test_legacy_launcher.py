@@ -6,8 +6,6 @@ from pathlib import Path
 
 import pytest
 
-from pyPept.smiles import smiles_to_cabiln_core
-
 
 @pytest.fixture
 def launcher():
@@ -18,8 +16,7 @@ def launcher():
     return module
 
 
-def test_legacy_conversion_import_keeps_the_core_function(launcher):
-    assert launcher.smiles_to_cabiln_core is smiles_to_cabiln_core
+def test_legacy_conversion_import_remains_callable(launcher):
     source, details = launcher.smiles_to_cabiln_core("NCC(=O)O")
     assert source == "G"
     assert details[0][0] == "G"

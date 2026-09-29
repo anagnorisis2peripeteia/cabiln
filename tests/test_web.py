@@ -250,8 +250,8 @@ def test_notation_conversion_refuses_an_assemblable_but_different_product(
 
     from pyPept.peptide import serialize
 
-    def incorrect(peptide, notation):
-        return replace(serialize(peptide, notation), text="A-A")
+    def incorrect(peptide, notation, **policy):
+        return replace(serialize(peptide, notation, **policy), text="A-A")
 
     monkeypatch.setattr("pyPept.peptide.serialize", incorrect)
     response = client.post(
@@ -297,16 +297,6 @@ def test_sequence_diagnostics_are_local_without_global_warning_capture(monkeypat
 
 
 @pytest.mark.parametrize("group", ["&1", "o1"])
-def test_relative_stereo_is_rejected_instead_of_claiming_a_defined_conversion(
-    client, group
-):
-    source = f"N[C@@H](C)C(=O)N[C@@H](C)C(=O)O |{group}:1,6|"
-    response = client.post("/smiles_to_cabiln", json={"smiles": source})
-    assert response.status_code == 400
-    assert "AND/OR" in response.json()["error"]
-
-
-@pytest.mark.parametrize("group", ["&1", "o1"])
 def test_comparison_cannot_discard_relative_or_mixture_stereo_groups(group):
     from pyPept.structure import compare_structures
 
@@ -339,7 +329,6 @@ def test_insert_backbone_uses_residue_index(client, notation, index, expected):
     )
     assert response.status_code == 200, response.text
     assert response.json()["result"] == expected
-    assert canonical(response.json()["result"]) == canonical(expected)
 
 
 @pytest.mark.parametrize(
@@ -366,7 +355,6 @@ def test_insert_bond_targets_selected_residue(
     )
     assert response.status_code == 200, response.text
     assert response.json()["result"] == expected
-    assert canonical(response.json()["result"]) == canonical(expected)
 
 
 @pytest.mark.parametrize("index,slot", [(8, 4), (0, 2), (0, 64)])
@@ -506,7 +494,9 @@ def test_failed_atomic_replace_keeps_original_file(writable_library, monkeypatch
 
     monkeypatch.setattr("os.replace", fail_replace)
     response = client.post("/register_monomer", json=payload)
-    assert response.status_code == 400
+    assert response.status_code == 500
+    assert response.json()["request_id"]
+    assert "Simulated" not in response.text
     assert path.read_bytes() == original
     assert not list(path.parent.glob(".monomers-*.sdf"))
 

@@ -1,5 +1,5 @@
 const fs = require('node:fs');
-const { test, expect, render, tile, site, selectChip, connect, capture } = require('./fixtures');
+const { test, expect, render, tile, site, selectChip, connect, capture, isCompletedResponse } = require('./fixtures');
 
 test('panels persist independently and the library starts a peptide', async ({ page }, testInfo) => {
   await expect(page.locator('#btn-mol')).toBeDisabled();
@@ -81,7 +81,7 @@ test('repeat occurrences, clear controls and insertion keep the selected positio
   await expect(page.locator('#build-insert-row')).toBeVisible();
   await page.locator('#build-insert-btn').click();
   await expect(page.locator('#build-insert-btn')).toHaveText('✕ Cancel');
-  const inserted = page.waitForResponse(response => new URL(response.url()).pathname === '/insert_backbone');
+  const inserted = page.waitForResponse(response => isCompletedResponse(response) && new URL(response.url()).pathname === '/insert_backbone');
   await tile(page, 'G');
   const response = await inserted;
   expect(response.request().postDataJSON()).toEqual({ cabiln: 'A-A', after_idx: 0, new_abbr: 'G' });
@@ -227,7 +227,7 @@ test('canvas toggles, zoom, pan, reset, reroll and downloads remain usable', asy
   await canvas.dblclick({ position: { x: 15, y: 15 } });
   await expect(page.locator('#render-inner')).toHaveCSS('transform', 'matrix(1, 0, 0, 1, 0, 0)');
   for (const [seed, label] of [[1, 'Indigo'], [2, 'CoordGen']]) {
-    const rendered = page.waitForResponse(response => new URL(response.url()).pathname === '/render');
+    const rendered = page.waitForResponse(response => isCompletedResponse(response) && new URL(response.url()).pathname === '/render');
     await page.locator('#btn-reroll').click();
     const response = await rendered;
     expect(response.request().postDataJSON().seed).toBe(seed);

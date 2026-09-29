@@ -28,9 +28,3 @@ def test_stereo_validation_observes_new_groups_on_the_same_molecule(group):
     molecule.SetStereoGroups([Chem.CreateStereoGroup(kind, molecule, [1])])
     with pytest.raises(ValueError, match="AND/OR stereochemistry"):
         require_supported_stereo(molecule)
-
-
-def test_absolute_stereo_group_remains_supported():
-    molecule = Chem.MolFromSmiles("N[C@@H](C)C(=O)O |a:1|")
-    assert len(molecule.GetStereoGroups()) == 1
-    require_supported_stereo(molecule)

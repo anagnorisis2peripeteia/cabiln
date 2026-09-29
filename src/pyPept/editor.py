@@ -1,4 +1,4 @@
-"""Source-preserving edits over the existing Sequence assembly model.
+"""Source-preserving edits verified against resolved peptide definitions.
 
 A selection belongs to one source revision. An edit changes only the selected
 source occurrences, reparses them, and verifies the requested change in slot
@@ -9,8 +9,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from hashlib import sha256
-
-from rdkit import Chem
 
 from pyPept.molecule import Molecule
 from pyPept.notation import normalize_legacy_brackets, supports_bracket_token
@@ -33,14 +31,6 @@ class _Edit:
 
 class EditError(ValueError):
     """An edit cannot preserve the requested source or assembly topology."""
-
-
-def _template(monomer):
-    return (
-        monomer["m_abbr"],
-        Chem.MolToSmiles(monomer["m_romol"]),
-        tuple(monomer["m_Rgroups"]),
-    )
 
 
 class PeptideDocument:
@@ -88,8 +78,8 @@ class PeptideDocument:
         if (
             updated.sequence.s_biln != self.sequence.s_biln
             or updated.peptide.connections != self.peptide.connections
-            or [_template(m) for m in updated.sequence.s_monomers]
-            != [_template(m) for m in self.sequence.s_monomers]
+            or [node.definition for node in updated.peptide.occurrences]
+            != [node.definition for node in self.peptide.occurrences]
         ):
             raise EditError("Legacy bracket normalization would change the sequence")
         return updated
@@ -104,11 +94,10 @@ class PeptideDocument:
             raise ValueError(f"Residue {index} R{slot} is already bonded")
 
     @staticmethod
-    def _new_monomer(symbol: str, *slots: int):
+    def _new_definition(symbol: str, *slots: int):
         sequence = Sequence(symbol)
         if len(sequence.s_monomers) != 1:
             raise ValueError("Choose a single monomer to insert")
-        monomer = sequence.s_monomers[0]
         peptide = Peptide.from_sequence(sequence)
         for slot in slots:
             try:
@@ -117,7 +106,7 @@ class PeptideDocument:
                 raise ValueError(
                     f"Monomer {symbol!r} has no R{slot} attachment"
                 ) from error
-        return monomer
+        return peptide.occurrences[0].definition
 
     def _tag(self):
         used = {edge.label for edge in self.peptide.connections}
@@ -194,7 +183,7 @@ class PeptideDocument:
         if editable is not self:
             return editable.attach(editable.select(index), host_slot, symbol, new_slot)
         self._free_slot(index, host_slot)
-        monomer = self._new_monomer(symbol, new_slot)
+        definition = self._new_definition(symbol, new_slot)
         occurrence = self.sequence.s_sources[index]
         chain = self.sequence.s_chains["s_monomerIDs"][
             self.sequence.s_monomers[index]["m_chainID"]
@@ -216,6 +205,12 @@ class PeptideDocument:
             edits = self._append_to_occurrence(
                 index, f".{symbol}({host_slot},{new_slot})"
             )
+        elif bracket_token:
+            # A child scope returns to this occurrence before any existing
+            # children or flat continuation, so their attachment host survives.
+            edits = self._append_to_occurrence(
+                index, f".{{{symbol}({host_slot},{new_slot})}}"
+            )
         else:
             # A crosslink annotation leaves the parser's current pointer intact,
             # preserving any following flat entries or nested arms. Put the new
@@ -233,7 +228,7 @@ class PeptideDocument:
         expected = set(self.peptide.connections) | {
             Connection(Endpoint(index, host_slot), Endpoint(new_index, new_slot))
         }
-        return self._apply(edits, expected, monomer)
+        return self._apply(edits, expected, definition)
 
     def insert_backbone(self, after: Selection, symbol: str) -> str:
         index = self._index(after)
@@ -248,7 +243,7 @@ class PeptideDocument:
             outgoing = self.peptide.connection_at(endpoint)
         except ValueError as error:
             raise ValueError(f"Residue {index} has no R2 attachment") from error
-        monomer = self._new_monomer(symbol, 1, *([2] if outgoing else []))
+        definition = self._new_definition(symbol, 1, *([2] if outgoing else []))
         new_index = len(self.sequence.s_monomers)
         if outgoing is not None:
             other = next(site for site in outgoing.endpoints if site != endpoint)
@@ -268,42 +263,70 @@ class PeptideDocument:
                 None,
             )
             if marker is not None:
-                removed, annotation = self._move_marker(marker)
-                edits.append(_Edit(removed, ""))
+                removal, annotation = self._move_marker(marker)
+                edits.append(removal)
                 suffix += annotation
         edits.append(_Edit(Span(end, end), suffix))
-        return self._apply(edits, expected, monomer)
+        return self._apply(edits, expected, definition)
 
     def _move_marker(self, marker):
         """Extract one endpoint, retaining the spelling of any surrounding bracket."""
         if marker.group is None:
-            return marker.span, self._text[marker.span.start : marker.span.end]
-        group = next(
-            group for group in self.peptide.layout.groups if group.id == marker.group
-        )
-        siblings = sorted(
-            (m for m in self.peptide.layout.markers if m.group == marker.group),
-            key=lambda m: m.span.start,
-        )
-        bracket = group.span
-        if len(siblings) == 1:
-            return bracket, self._text[bracket.start : bracket.end]
-        body = self._text[marker.span.start : marker.span.end]
-        if marker == siblings[0]:
-            # The first entry has no leading dot. Remove the separator before
-            # the next recorded entry so its name becomes the first entry.
-            removed = Span(marker.span.start, siblings[1].span.start + 1)
-        else:
-            removed = marker.span
-            body = body[1:]
-        annotation = (
-            self._text[bracket.start : bracket.start + 2]
-            + body
-            + self._text[bracket.end - 1 : bracket.end]
-        )
-        return removed, annotation
+            return (
+                _Edit(marker.span, ""),
+                self._text[marker.span.start : marker.span.end],
+            )
+        groups = {group.id: group for group in self.peptide.layout.groups}
+        group = groups[marker.group]
 
-    def _apply(self, edits, expected_edges, new_monomer=None):
+        def contains_only_marker(candidate):
+            return not candidate.members and all(
+                other == marker
+                for other in self.peptide.layout.markers
+                if candidate.span.start <= other.span.start
+                and other.span.end <= candidate.span.end
+            )
+
+        # Remove scopes made empty by the move, including marker-only ancestors.
+        # A group containing monomers or another endpoint must stay on its host.
+        empty = None
+        candidate = group
+        while candidate is not None and contains_only_marker(candidate):
+            empty = candidate
+            candidate = groups.get(candidate.parent)
+        if empty is not None:
+            body = self._text[empty.span.start : empty.span.end]
+            if empty.protected and empty.opening == "[":
+                # Protection inherited from a parent must travel with the
+                # endpoint when this child moves outside that parent.
+                offset = 2 if body.startswith(".[") else 1
+                if body.startswith((".[", "[")):
+                    body = ".{" + body[offset:-1] + "}"
+            if body.startswith((".[", ".{")):
+                return _Edit(empty.span, ""), body
+            if body.startswith(("[", "{")):
+                return _Edit(empty.span, ""), "." + body
+
+        # Only remove this marker, not everything before the next marker: that
+        # interval can also contain monomers or independently hosted children.
+        body = self._text[marker.span.start : marker.span.end]
+        removed, replacement = marker.span, ""
+        prefix = 2 if self.source[group.span.start] == "." else 1
+        if marker.span.start == group.span.start + prefix:
+            following = self.source[marker.span.end : marker.span.end + 2]
+            if following.startswith(".") and following[1:] not in ("[", "{"):
+                if not body.startswith("."):
+                    removed = Span(marker.span.start, marker.span.end + 1)
+            elif following.startswith(("[", "{")):
+                # A child newly at the start must not become a legacy hub wrapper.
+                replacement = "."
+        if body.startswith("."):
+            body = body[1:]
+        opening, closing = ("{", "}") if group.protected else ("[", "]")
+        annotation = "." + opening + body + closing
+        return _Edit(removed, replacement), annotation
+
+    def _apply(self, edits, expected_edges, new_definition=None):
         pieces, cursor = [], 0
         for edit in sorted(edits, key=lambda item: (item.span.start, item.span.end)):
             if edit.span.start < cursor:
@@ -324,30 +347,34 @@ class PeptideDocument:
                 mapped_result[occurrence.token.start : occurrence.token.end]
             )
             if old_span is None:
-                if new_monomer is None or len(self.sequence.s_monomers) in seen:
+                if new_definition is None or len(self.sequence.s_monomers) in seen:
                     raise EditError("Edit created an unexpected monomer")
                 identity = len(self.sequence.s_monomers)
-                template = new_monomer
             else:
                 identity = original_ids.get(old_span)
                 if identity is None or identity in seen:
                     raise EditError(
                         "Edit changed or duplicated an existing source occurrence"
                     )
-                template = self.sequence.s_monomers[identity]
-            if _template(updated.s_monomers[index]) != _template(template):
-                raise EditError("Edit changed the identity or attachments of a monomer")
             identities[index] = identity
             seen.add(identity)
-        expected_count = len(self.sequence.s_monomers) + (new_monomer is not None)
+        definitions = [node.definition for node in self.peptide.occurrences]
+        if new_definition is not None:
+            definitions.append(new_definition)
+        expected_count = len(definitions)
         if seen != set(range(expected_count)):
             raise EditError("Edit removed an existing monomer")
         updated_peptide = Peptide.from_sequence(
             updated, tuple(identities[i] for i in range(len(identities)))
         )
+        if any(
+            node.definition != definitions[node.id]
+            for node in updated_peptide.occurrences
+        ):
+            raise EditError("Edit changed the identity or attachments of a monomer")
         if set(updated_peptide.connections) != expected_edges:
             raise EditError(
                 "Edit would change connections beyond the selected attachment"
             )
-        Molecule(updated)
+        Molecule(updated_peptide)
         return result

@@ -29,6 +29,11 @@ let mainStale = false;
 let hasMainDrawing = false;
 let displayedSource = '';
 let displayedNotation = '';
+let projectContext = null;
+let projectRevision = 0;
+let draftCleared = false;
+let referenceOriginal = null;
+let referenceContext = null;
 
 // A response may already be queued when abort() runs. Only the current request
 // in each group may change the UI, even if a cancelled fetch still resolves.
@@ -55,6 +60,33 @@ function startRequest(key, onEnd = () => {}) {
       onEnd();
     },
   };
+}
+
+// Every route used here computes a result without writing library definitions.
+// A busy single-worker server may reject overlapping previews and renders.
+async function fetchCalculation(url, options = {}) {
+  for (let attempt = 0; ; attempt++) {
+    if (options.signal?.aborted) throw options.signal.reason || new Error('Request cancelled');
+    const response = await fetch(url, options);
+    const retryAfter = Number(response.headers?.get('Retry-After'));
+    if (response.status !== 503 || attempt >= 2 || !Number.isFinite(retryAfter) ||
+        retryAfter <= 0 || retryAfter > 2) return response;
+    await response.body?.cancel();
+    await new Promise((resolve, reject) => {
+      const signal = options.signal;
+      let timer;
+      const aborted = () => {
+        clearTimeout(timer);
+        reject(signal.reason || new Error('Request cancelled'));
+      };
+      if (signal?.aborted) { aborted(); return; }
+      signal?.addEventListener('abort', aborted, { once: true });
+      timer = setTimeout(() => {
+        signal?.removeEventListener('abort', aborted);
+        resolve();
+      }, Math.min(retryAfter * (attempt + 1), 2) * 1000);
+    });
+  }
 }
 
 async function readResponse(response) {
@@ -93,11 +125,13 @@ const btnPng        = document.getElementById('btn-png');
 const btnMol        = document.getElementById('btn-mol');
 const btnToBracket  = document.getElementById('btn-to-bracket');
 const btnToBranch   = document.getElementById('btn-to-branch');
+const notationPolicy = document.getElementById('notation-policy');
 const libPanel      = document.getElementById('lib-panel');
 const libSearch     = document.getElementById('lib-search');
 const libClose      = document.getElementById('lib-close');
 const libList       = document.getElementById('lib-list');
 const libCount      = document.getElementById('lib-count');
+const libStatus     = document.getElementById('lib-status');
 const libPreview    = document.getElementById('lib-preview');
 const btnExamples    = document.getElementById('btn-examples');
 const examplesPanel  = document.getElementById('examples-panel');
@@ -137,18 +171,39 @@ const renderProgress = document.getElementById('render-progress');
 const renderProgressLabel = document.getElementById('render-progress-label');
 const conversionProgress = document.getElementById('conversion-progress');
 const conversionProgressLabel = document.getElementById('conversion-progress-label');
+const btnProjectSave = document.getElementById('btn-project-save');
+const projectUpload = document.getElementById('project-upload');
+const projectStatus = document.getElementById('project-status');
+const importQuality = document.getElementById('import-quality');
+const qualitySummary = document.getElementById('quality-summary');
+const qualityDetails = document.getElementById('quality-details');
+const canonicalStatus = document.getElementById('canonical-status');
+const btnHelp = document.getElementById('btn-help');
+const helpPanel = document.getElementById('help-panel');
 
-// One document transition owns history, format drafts, saving, and rendering.
-// Atom indices are valid only for the last successfully rendered document.
+// Document data belongs to the editor; these timers belong to browser storage.
 const DRAFT_KEY = 'cabiln.draft.v1';
-const editor = {
-  present: { text: '', notation: 'cabiln', warning: '' },
-  past: [], future: [], drafts: {}, typedAt: 0, saveTimer: null, saved: null,
-};
+const editor = new CabilnDocument();
+let saveDraftTimer = null;
+let savedDraft = null;
 
-function documentSnapshot() {
-  return { text: cabilnInput.value, notation: notationSelect.value,
-    warning: conversionStatus.hidden ? '' : conversionStatus.textContent };
+function displayDocument() {
+  const state = editor.present;
+  if (cabilnInput.value !== state.text) cabilnInput.value = state.text;
+  notationSelect.value = state.notation;
+  updateNotationControls();
+  setConversionWarning(state.warning);
+  displayDocumentEvidence();
+}
+
+function replaceDocument(patch, drafts = editor.drafts) {
+  editor.replace(patch, drafts);
+  displayDocument();
+}
+
+function scheduleDraftSave() {
+  clearTimeout(saveDraftTimer);
+  saveDraftTimer = setTimeout(saveDraft, 200);
 }
 
 function updateHistoryControls() {
@@ -157,11 +212,13 @@ function updateHistoryControls() {
 }
 
 function saveDraft() {
-  clearTimeout(editor.saveTimer);
-  if (editor.saved) return; // Leave an offered recovery intact until it is handled.
+  clearTimeout(saveDraftTimer);
+  if (savedDraft || draftCleared) return; // Recovery and explicit clearing stay intact.
   try {
     window.localStorage.setItem(DRAFT_KEY, JSON.stringify({ version: 1,
-      document: editor.present, drafts: editor.drafts, reference: smilesInput.value }));
+      document: editor.present, drafts: editor.drafts, reference: smilesInput.value,
+      reference_original: referenceOriginal, reference_context: referenceContext,
+      context: projectContext || editor.present.context }));
     draftStatus.textContent = 'Draft saved in this browser';
   } catch (error) {
     draftStatus.textContent = 'Draft storage is unavailable; this session still supports Undo';
@@ -169,24 +226,14 @@ function saveDraft() {
   draftNotice.hidden = false;
 }
 
-function recordDocument(typing = false) {
-  const next = documentSnapshot();
-  if (next.text === editor.present.text && next.notation === editor.present.notation &&
-      next.warning === editor.present.warning) return;
-  if (next.text) beginDraftEdit();
-  const now = Date.now();
-  if (!typing || !editor.typedAt || now - editor.typedAt > 750 ||
-      next.notation !== editor.present.notation) {
-    editor.past.push(editor.present);
-    if (editor.past.length > 100) editor.past.shift();
+function recordDocument(next, typing = false) {
+  if (editor.commit(next, typing)) {
+    projectChanged();
+    if (next.text) beginDraftEdit();
+    scheduleDraftSave();
   }
-  editor.present = next;
-  editor.drafts[next.notation] = { text: next.text, warning: next.warning };
-  editor.future = [];
-  editor.typedAt = typing ? now : 0;
+  displayDocument();
   updateHistoryControls();
-  clearTimeout(editor.saveTimer);
-  editor.saveTimer = setTimeout(saveDraft, 200);
 }
 
 function updateNotationControls() {
@@ -195,6 +242,7 @@ function updateNotationControls() {
   btnToCabilnPct.style.display = mode === 'cabiln' ? 'none' : '';
   btnToCabilnBracket.style.display = mode === 'cabiln' ? 'none' : '';
   btnToBracket.disabled = btnToBranch.disabled = mode !== 'cabiln';
+  notationPolicy.disabled = mode !== 'cabiln';
 }
 
 function setConversionWarning(warning = '') {
@@ -203,28 +251,16 @@ function setConversionWarning(warning = '') {
   conversionStatus.hidden = !warning;
 }
 
-function commitDocument(text, notation = notationSelect.value, warning = '') {
-  cabilnInput.value = text;
-  notationSelect.value = notation;
-  updateNotationControls();
-  setConversionWarning(warning);
-  recordDocument();
+function commitDocument(text, notation = editor.present.notation, warning = '', evidence = {}) {
+  recordDocument({ text, notation, warning, quality: evidence.quality || null,
+    canonical: evidence.canonical || null, context: evidence.context || null });
   renderDocument(true);
 }
 
 function travelHistory(direction) {
-  const from = direction === 'undo' ? editor.past : editor.future;
-  const to = direction === 'undo' ? editor.future : editor.past;
-  if (!from.length) return;
-  to.push(editor.present);
-  editor.present = from.pop();
-  editor.typedAt = 0;
-  const { text, notation, warning } = editor.present;
-  editor.drafts[notation] = { text, warning };
-  cabilnInput.value = text;
-  notationSelect.value = notation;
-  updateNotationControls();
-  setConversionWarning(warning);
+  if (!editor.travel(direction)) return;
+  projectChanged();
+  displayDocument();
   updateHistoryControls();
   saveDraft();
   renderDocument(true);
@@ -244,27 +280,35 @@ window.addEventListener('keydown', event => {
 window.addEventListener('pagehide', saveDraft);
 
 function finishDraftRecovery() {
-  editor.saved = null;
+  savedDraft = null;
   btnRestoreDraft.hidden = btnDismissDraft.hidden = true;
 }
 function beginDraftEdit() {
-  if (!editor.saved) return;
+  draftCleared = false;
+  if (!savedDraft) return;
   finishDraftRecovery();
   draftStatus.textContent = 'New draft started in this browser';
 }
-btnRestoreDraft.addEventListener('click', () => {
-  if (!editor.saved) return;
-  const saved = editor.saved;
-  finishDraftRecovery();
-  editor.drafts = saved.drafts;
-  clearReference();
-  smilesInput.value = saved.reference;
-  setInner(smilesInner, '<div class="placeholder">Paste SMILES or upload .mol to compare…</div>');
-  commitDocument(saved.document.text, saved.document.notation, saved.document.warning);
-  saveDraft();
-  if (verifyMode && smilesInput.value.trim()) doRenderRef(smilesInput.value.trim());
+btnRestoreDraft.addEventListener('click', async () => {
+  if (!savedDraft) return;
+  const saved = savedDraft;
+  const project = projectSnapshot();
+  project.document = saved.document;
+  project.drafts = saved.drafts;
+  project.reference = saved.reference;
+  project.context = saved.context;
+  if (project.context) {
+    // Autosaved drafts can include edits since their last server signature.
+    // Preparation checks their stored binding before stamping the current text.
+    await restoreBoundDraft(project);
+  } else {
+    // Earlier releases did not bind drafts. Never imply their definitions were checked.
+    applyProject(project);
+    setProjectStatus('Older draft restored without a library binding. Check any custom monomer definitions before using it.', true);
+  }
 });
 btnDismissDraft.addEventListener('click', () => {
+  cancelRequests('project-open');
   finishDraftRecovery();
   saveDraft();
 });
@@ -276,28 +320,270 @@ function offerSavedDraft() {
     if (!saved || saved.version !== 1 || !saved.document ||
         typeof saved.document.text !== 'string' ||
         !Object.hasOwn(NOTATION_PLACEHOLDER, saved.document.notation)) return;
-    const drafts = {};
-    for (const mode of Object.keys(NOTATION_PLACEHOLDER)) {
-      const draft = saved.drafts?.[mode];
-      if (typeof draft === 'string') drafts[mode] = { text: draft, warning: '' };
-      else if (typeof draft?.text === 'string') drafts[mode] = {
-        text: draft.text, warning: typeof draft.warning === 'string' ? draft.warning : '',
-      };
-    }
-    if (!saved.document.text && !Object.values(drafts).some(draft => draft.text) && !saved.reference) return;
-    editor.saved = { document: { text: saved.document.text, notation: saved.document.notation,
-      warning: typeof saved.document.warning === 'string' ? saved.document.warning : '' },
-      drafts, reference: typeof saved.reference === 'string' ? saved.reference : '' };
+    const drafts = CabilnProject.drafts(saved.drafts);
+    const reference = CabilnProject.reference({ text: saved.reference,
+      original: saved.reference_original, context: saved.reference_context }, saved.context);
+    if (!saved.document.text && !Object.values(drafts).some(draft => draft.text) &&
+        !reference.text && !reference.original) return;
+    savedDraft = { document: CabilnProject.document(saved.document), drafts, reference,
+      context: saved.context || null };
     draftStatus.textContent = 'A saved draft is available in this browser';
     draftNotice.hidden = btnRestoreDraft.hidden = btnDismissDraft.hidden = false;
   } catch (error) { /* Storage can be disabled, full, or contain an older format. */ }
 }
 
+function contextHeader(context) {
+  return context ? CabilnProject.clone({ project_version: context.project_version,
+    library_binding: context.library_binding, canonical: context.canonical }) : null;
+}
+
+function displayDocumentEvidence() {
+  const quality = editor.present.quality;
+  importQuality.hidden = !quality;
+  qualitySummary.textContent = CabilnProject.qualitySummary(quality);
+  importQuality.dataset.status = quality && (quality.recognition_status !== 'complete' ||
+    quality.search_complete === false || quality.inferred_stereo === true) ? 'review' : 'complete';
+  if (quality) {
+    const notes = [...(quality.warnings || [])];
+    if (quality.search_complete === false) notes.push('The search reached a resource limit; another valid monomer interpretation may exist.');
+    if (quality.inferred_stereo === true) notes.push('Some stereochemistry was inferred from the library rather than specified by the input.');
+    if (quality.assignments?.some(item => item.recognized === false) || quality.recognition_status === 'unresolved') {
+      notes.push('Synthetic or opaque regions preserve input chemistry without claiming a library match. Available attachment sites remain editable.');
+    }
+    qualityDetails.innerHTML = '<p>Import evidence for this source. Editing or reordering the sequence clears this report; Undo restores it.</p>' +
+      (notes.length ? '<ul>' + [...new Set(notes)].map(note => `<li>${escHtml(note)}</li>`).join('') + '</ul>' :
+        '<p>All reported monomer assignments matched the library. Search completeness describes this recognition run, not a unique chemical interpretation.</p>');
+  } else qualityDetails.innerHTML = '';
+  const canonical = editor.present.canonical;
+  canonicalStatus.hidden = !canonical;
+  canonicalStatus.textContent = canonical
+    ? `Canonical export: ${canonical.format || 'recorded convention'} · RDKit ${canonical.rdkit || 'recorded version'} · library binding retained in projects`
+    : '';
+}
+
+function acceptDocumentContext(context) {
+  if (!context?.library_binding) return;
+  retainReferenceContext();
+  const current = editor.present;
+  const changed = !CabilnProject.sameContext(current.context, context);
+  const patch = { context: changed ? contextHeader(context) : current.context };
+  if (changed) projectChanged(false);
+  if (changed && (current.quality || current.canonical)) {
+    Object.assign(patch, { warning: '', quality: null, canonical: null });
+    setProjectStatus('The library binding or convention changed. Import evidence was cleared; convert the original input again to refresh it.', true);
+  }
+  if (!CabilnProject.sameContext(projectContext, context)) {
+    projectContext = contextHeader(context);
+  }
+  replaceDocument(patch);
+  saveDraft();
+}
+
+function retainReferenceContext() {
+  if (!referenceContext && (smilesInput.value || referenceOriginal) && projectContext) {
+    referenceContext = CabilnProject.clone(projectContext);
+  }
+}
+
+function acceptReferenceContext(context) {
+  if (!context?.library_binding) return;
+  if (!CabilnProject.sameContext(referenceContext, context)) {
+    projectChanged(false);
+    referenceContext = contextHeader(context);
+  }
+  if (!CabilnProject.sameContext(projectContext, context)) projectContext = contextHeader(context);
+  saveDraft();
+}
+
+function projectChanged(edited = true) {
+  projectRevision++;
+  if (edited) draftCleared = false;
+  if (activeRequests.has('project-open') || activeRequests.has('project-save')) {
+    setProjectStatus('The document changed during the project check. Save or open again when ready.', true);
+  }
+  cancelRequests('project-open', 'project-save');
+}
+
+function setProjectStatus(message, error = false) {
+  projectStatus.textContent = message;
+  projectStatus.className = error ? 'statusbar warn' : 'statusbar ok';
+  projectStatus.hidden = !message;
+}
+
+function projectSnapshot() {
+  return { format: CabilnProject.FORMAT, version: CabilnProject.VERSION,
+    document: CabilnProject.clone(editor.present), drafts: CabilnProject.clone(editor.drafts),
+    reference: { text: smilesInput.value, original: CabilnProject.clone(referenceOriginal),
+      context: CabilnProject.clone(referenceContext) },
+    context: CabilnProject.clone(projectContext || editor.present.context),
+    saved_at: new Date().toISOString() };
+}
+
+function downloadProject(project) {
+  const blob = new Blob([JSON.stringify(project)], { type: 'application/json' });
+  if (blob.size > CabilnProject.MAX_FILE_BYTES) {
+    throw new Error('The project exceeds 2 MiB. Shorten unused drafts or the reference before saving.');
+  }
+  const link = document.createElement('a');
+  const url = URL.createObjectURL(blob);
+  link.href = url;
+  link.download = 'peptide.cabiln.json';
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+async function restoreBoundDraft(project) {
+  const revision = projectRevision;
+  const request = startRequest('project-open');
+  setProjectStatus('Checking the saved draft library binding and definitions…');
+  try {
+    const response = await fetchCalculation('/prepare_project', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ project }), signal: request.signal,
+    });
+    const data = await readResponse(response);
+    if (!request.current() || revision !== projectRevision) return;
+    if (data.error) throw new Error(data.error);
+    const prepared = CabilnProject.read(data.project);
+    request.finish();
+    applyProject(prepared);
+    setProjectStatus('Saved draft restored with its source, reference and import details.');
+  } catch (error) {
+    if (request.current()) setProjectStatus((error.message || 'Could not restore the saved draft.') +
+      ' Your current work is unchanged.', true);
+  } finally { request.finish(); }
+}
+
+async function saveProject() {
+  const revision = projectRevision;
+  const project = projectSnapshot();
+  const request = startRequest('project-save', () => { btnProjectSave.disabled = false; });
+  btnProjectSave.disabled = true;
+  setProjectStatus('Checking project definitions before saving…');
+  try {
+    const response = await fetchCalculation('/prepare_project', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ project }), signal: request.signal,
+    });
+    const data = await readResponse(response);
+    if (!request.current() || revision !== projectRevision) return;
+    if (data.error) throw new Error(data.error);
+    const prepared = CabilnProject.read(data.project);
+    downloadProject(prepared);
+    request.finish();
+    projectContext = prepared.context;
+    referenceContext = prepared.reference.context || prepared.context;
+    replaceDocument({ context: prepared.document.context || prepared.context }, prepared.drafts);
+    saveDraft();
+    setProjectStatus('Project saved. It includes source, notation drafts, original reference and import details.');
+  } catch (error) {
+    if (request.current()) setProjectStatus(error.message || 'Could not save the project. Your work is unchanged.', true);
+  } finally { request.finish(); }
+}
+btnProjectSave.addEventListener('click', saveProject);
+
+async function validateAndOpenProject(project, successMessage = 'Project opened') {
+  const revision = projectRevision;
+  const request = startRequest('project-open');
+  setProjectStatus('Checking the project library binding and definitions…');
+  try {
+    const response = await fetchCalculation('/validate_project', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ project }), signal: request.signal,
+    });
+    const data = await readResponse(response);
+    if (!request.current() || revision !== projectRevision) return;
+    if (data.error || data.valid !== true) throw new Error(data.error || 'The project could not be validated.');
+    request.finish();
+    // Validation proves every saved document against these exact definitions.
+    const context = data.context || project.context;
+    applyProject({ ...project, context, reference: { ...project.reference, context },
+      document: { ...project.document, context },
+      drafts: Object.fromEntries(Object.entries(project.drafts).map(([mode, state]) =>
+        [mode, { ...state, context }])) });
+    setProjectStatus(successMessage + '. Source and reference are preserved; use Undo to return to the previous sequence.');
+  } catch (error) {
+    if (request.current()) setProjectStatus((error.message || 'Could not open the project.') + ' Your current work is unchanged.', true);
+  } finally { request.finish(); }
+}
+
+projectUpload.addEventListener('change', async event => {
+  const file = event.target.files?.[0];
+  projectUpload.value = '';
+  if (!file) return;
+  const revision = projectRevision;
+  const request = startRequest('project-open');
+  setProjectStatus('Reading project…');
+  try {
+    if (file.size > CabilnProject.MAX_FILE_BYTES) throw new Error('Project files must be no larger than 2 MiB.');
+    const text = await file.text();
+    if (!request.current() || revision !== projectRevision) return;
+    const project = CabilnProject.read(JSON.parse(text));
+    request.finish();
+    await validateAndOpenProject(project);
+  } catch (error) {
+    if (request.current()) setProjectStatus((error instanceof SyntaxError ? 'This file is not valid project JSON.' : error.message) +
+      ' Your current work is unchanged.', true);
+  } finally { request.finish(); }
+});
+
+function applyProject(project) {
+  finishDraftRecovery();
+  editor.restoreDrafts(CabilnProject.drafts(project.drafts));
+  projectContext = CabilnProject.clone(project.context);
+  clearReference();
+  const reference = CabilnProject.reference(project.reference, project.context);
+  smilesInput.value = reference.original?.kind === 'text' ? reference.original.content : reference.text;
+  referenceOriginal = reference.original;
+  referenceContext = reference.context;
+  setInner(smilesInner, '<div class="placeholder">Reference restored. Open Verify to compare.</div>');
+  const state = CabilnProject.document(project.document);
+  commitDocument(state.text, state.notation, state.warning, state);
+  saveDraft();
+  if (verifyMode) restoreReferenceDrawing();
+}
+
+function restoreReferenceDrawing() {
+  if (referenceOriginal?.kind === 'mol') {
+    renderMolReference(referenceOriginal.content, referenceOriginal.name);
+  } else {
+    if (referenceOriginal?.kind === 'text' && smilesInput.value !== referenceOriginal.content) {
+      projectChanged(false);
+      smilesInput.value = referenceOriginal.content;
+      referenceContext = contextHeader(referenceContext);
+      saveDraft();
+    }
+    if (smilesInput.value.trim()) doRenderRef(smilesInput.value.trim());
+  }
+}
+
+function showHelp(open) {
+  helpPanel.hidden = !open;
+  btnHelp.setAttribute('aria-expanded', String(open));
+  if (!open) btnHelp.focus();
+}
+btnHelp.addEventListener('click', () => showHelp(helpPanel.hidden));
+document.getElementById('help-close').addEventListener('click', () => showHelp(false));
+window.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && !helpPanel.hidden) showHelp(false);
+});
+document.getElementById('btn-clear-draft').addEventListener('click', () => {
+  cancelRequests('project-open');
+  clearTimeout(saveDraftTimer);
+  finishDraftRecovery();
+  draftCleared = true;
+  try {
+    window.localStorage.removeItem(DRAFT_KEY);
+    draftStatus.textContent = 'Saved browser draft cleared. Current work and Undo are unchanged; the next edit starts a new draft.';
+  } catch (error) { draftStatus.textContent = 'Browser storage is unavailable. No draft could be removed.'; }
+  draftNotice.hidden = false;
+});
+
 async function loadCapabilities() {
   const link = document.getElementById('register-link');
   link.hidden = true;
   try {
-    const response = await fetch('/capabilities');
+    const response = await fetchCalculation('/capabilities');
     const capabilities = await response.json();
     link.hidden = !response.ok || capabilities.registration !== true;
   } catch (error) {
@@ -339,7 +625,7 @@ btnVerify.addEventListener('click', () => {
   document.getElementById('verify-pane').style.display = verifyMode ? '' : 'none';
   compareBar.style.display = verifyMode ? '' : 'none';
   clearComparison();
-  if (verifyMode && smilesInput.value.trim() && !lastSmiles) doRenderRef(smilesInput.value.trim());
+  if (verifyMode && (smilesInput.value.trim() || referenceOriginal) && !lastSmiles) restoreReferenceDrawing();
   else if (verifyMode) triggerVerify();
 });
 
@@ -365,7 +651,11 @@ libClose.addEventListener('click', closeLib);
 
 libSearch.addEventListener('input', () => renderLibList(libSearch.value.trim().toLowerCase()));
 
-btnRxnFilter.addEventListener('click', () => {
+btnRxnFilter.addEventListener('click', async () => {
+  if (!Array.isArray(reactionPairs)) {
+    await loadReactions();
+    if (!Array.isArray(reactionPairs) || !buildLeft) return;
+  }
   rxnFilterActive = !rxnFilterActive;
   btnRxnFilter.classList.toggle('active', rxnFilterActive);
   btnRxnFilter.setAttribute('aria-pressed', String(rxnFilterActive));
@@ -393,7 +683,7 @@ examplesClose.addEventListener('click', closeExamples);
 
 async function loadExamples() {
   try {
-    const res = await fetch('/examples');
+    const res = await fetchCalculation('/examples');
     const data = await readResponse(res);
     renderExamples(data);
     examplesLoaded = true;
@@ -430,7 +720,7 @@ async function loadMonomers() {
   const request = startRequest('library');
   if (!libLoaded) libList.innerHTML = '<div class="placeholder">Loading…</div>';
   try {
-    const res = await fetch('/monomers', { signal: request.signal });
+    const res = await fetchCalculation('/monomers', { signal: request.signal });
     const data = await readResponse(res);
     if (!request.current()) return;
     if (!Array.isArray(data)) throw new Error(data.error || 'Invalid monomer library');
@@ -459,11 +749,21 @@ window.addEventListener('focus', () => {
 
 async function loadReactions() {
   if (reactionPairs !== null) return;
+  const request = startRequest('reactions');
+  libStatus.hidden = true;
   try {
-    const res = await fetch('/reactions');
-    reactionPairs = await res.json();
+    const res = await fetchCalculation('/reactions', { signal: request.signal });
+    const data = await readResponse(res);
+    if (!request.current()) return;
+    if (!Array.isArray(data)) throw new Error(data.error || 'Reaction data is unavailable');
+    reactionPairs = data;
     if (rxnFilterActive && libLoaded) renderLibList(libSearch.value.trim().toLowerCase());
-  } catch (e) { reactionPairs = []; }
+  } catch (error) {
+    if (!request.current()) return;
+    reactionPairs = null;
+    libStatus.textContent = 'Reaction filter unavailable. Reopen Library or click Filter to retry. ' + error.message;
+    libStatus.hidden = false;
+  } finally { request.finish(); }
 }
 
 function parseCts(cts) {
@@ -513,6 +813,8 @@ function renderLibList(q) {
       ? `<span class="lib-badge protect">cap</span>`
       : `<span class="lib-badge cap">${escHtml(m.type)}</span>`;
 
+    const issues = Array.isArray(m.quality?.issues) ? m.quality.issues : [];
+    const qualityText = issues.map(issue => issue.message).filter(Boolean).join(' · ');
     let lg = m.leaving ? `  LG: ${escHtml(m.leaving)}` : '';
     if (m.degenerate) {
       const parts = [];
@@ -520,11 +822,13 @@ function renderLibList(q) {
       if (m.cterm_abbr) parts.push(`C: ${escHtml(m.cterm_abbr)} (${escHtml(m.cterm_leaving)})`);
       lg = '  ' + parts.join(' | ');
     }
-    return `<div class="lib-row" data-abbr="${escAttr(m.abbr)}" tabindex="0" aria-label="${escAttr(m.abbr + ': ' + m.name)}">
+    const label = m.abbr + ': ' + m.name + (qualityText ? '. Library quality: ' + qualityText : '');
+    return `<div class="lib-row" data-abbr="${escAttr(m.abbr)}" tabindex="0" aria-label="${escAttr(label)}">
       <div class="lib-abbr">${escHtml(m.abbr)}</div>
       <div class="lib-info">
         <div class="lib-name" title="${escAttr(m.name)}">${escHtml(m.name)}</div>
         <div class="lib-meta">${escHtml(m.chem_types || '')}${lg}</div>
+        ${qualityText ? `<div class="lib-quality" title="${escAttr(qualityText)}">${escHtml(qualityText)}</div>` : ''}
       </div>
       ${badge}
       <button type="button" class="lib-use" aria-label="Use ${escAttr(m.abbr)} in builder" title="Choose this monomer in the builder">Use</button>
@@ -605,7 +909,7 @@ function startPreview(abbr, row) {
   const request = startRequest('monomer-preview');
   previewTimer = setTimeout(async () => {
     try {
-      const data = previewCache[abbr] || await readResponse(await fetch(
+      const data = previewCache[abbr] || await readResponse(await fetchCalculation(
         `/monomer_svg?abbr=${encodeURIComponent(abbr)}`, { signal: request.signal }
       ));
       if (!request.current()) return;
@@ -661,6 +965,9 @@ function showPreview(data, row) {
       <div class="prev-pane"><span class="prev-label">R-groups</span>${data.svg}</div>
     </div>${metaLine}`;
   }
+  const quality = data.quality || allMonomers.find(item => item.abbr === row.dataset?.abbr)?.quality;
+  const issues = Array.isArray(quality?.issues) ? quality.issues : [];
+  if (issues.length) html += `<div class="prev-meta prev-warn">Library quality: ${issues.map(issue => escHtml(issue.message || issue.code)).join(' · ')}</div>`;
   libPreview.innerHTML = html;
   const hasReagent = !!(data.svg_reagent || (data.variants && data.variants.some(v => v.svg_reagent)));
   libPreview.classList.toggle('has-reagent', hasReagent);
@@ -752,6 +1059,15 @@ function buildResidueUI(resMap, residues, layout, crosslinkGroups) {
     chip.textContent = r.abbr;
     chip.dataset.residue = r.idx;
     chip.title = `Select residue ${r.idx + 1}: ${r.abbr}`;
+    const assignment = editor.present.quality?.assignments?.find(item => item.residue_index === r.idx);
+    const kind = r.kind || r.quality_kind;
+    const preserved = ['opaque', 'synthetic'].includes(kind) ? kind :
+      !kind && (r.is_synthetic || assignment?.recognized === false) ? 'synthetic' : '';
+    if (preserved) {
+      chip.dataset.quality = preserved;
+      chip.title += ` · ${preserved === 'opaque' ? 'Opaque preserved fragment' : 'Synthetic preserved region'}; available sites remain editable`;
+      chip.setAttribute('aria-label', chip.title);
+    }
     chip.style.background = RES_COLORS[r.colorIdx % RES_COLORS.length];
     const xlinks = xlinkByMember[r.idx];
     if (!simpleHover && xlinks && xlinks.length) {
@@ -1140,7 +1456,7 @@ async function doInsertBetween(abbr) {
   const request = startRequest('sequence-edit');
   buildHint.textContent = 'Inserting…';
   try {
-    const res = await fetch('/insert_backbone', {
+    const res = await fetchCalculation('/insert_backbone', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({ cabiln: val, after_idx, new_abbr: abbr }),
@@ -1178,7 +1494,7 @@ async function loadBuildLeft(abbr, rIdx) {
   buildStatus.textContent = '';
 
   try {
-    const res = await fetch(`/monomer_rgroups?abbr=${encodeURIComponent(abbr)}&residue_idx=${rIdx}&cabiln=${encodeURIComponent(sequence)}`, { signal: request.signal });
+    const res = await fetchCalculation(`/monomer_rgroups?abbr=${encodeURIComponent(abbr)}&residue_idx=${rIdx}&cabiln=${encodeURIComponent(sequence)}`, { signal: request.signal });
     const data = await readResponse(res);
     if (!request.current() || cabilnInput.value.trim() !== sequence) return;
     if (data.error) {
@@ -1234,7 +1550,7 @@ async function loadBuildRight(abbr, rIdx) {
     if (rIdx !== undefined) {
       url += `&residue_idx=${rIdx}&cabiln=${encodeURIComponent(sequence)}`;
     }
-    const res = await fetch(url, { signal: request.signal });
+    const res = await fetchCalculation(url, { signal: request.signal });
     const data = await readResponse(res);
     if (!request.current() || cabilnInput.value.trim() !== sequence) return;
     if (data.error) {
@@ -1315,7 +1631,7 @@ async function checkBuildValidity() {
   buildStatus.className = 'build-status';
 
   try {
-    const res = await fetch('/validate_bond', {
+    const res = await fetchCalculation('/validate_bond', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({
@@ -1363,7 +1679,7 @@ buildConnect.addEventListener('click', async () => {
   buildStatus.className = 'build-status';
 
   try {
-    const res = await fetch('/insert_bond', {
+    const res = await fetchCalculation('/insert_bond', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({
@@ -1399,22 +1715,25 @@ buildConnect.addEventListener('click', async () => {
 async function convertNotation(target) {
   const val = cabilnInput.value.trim();
   if (!val) return;
+  const canonical = notationPolicy.value === 'canonical';
   const request = startRequest('sequence-edit');
   try {
-    const res = await fetch('/convert_notation', {
+    const res = await fetchCalculation('/convert_notation', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ cabiln: val, target }),
+      body: JSON.stringify({ cabiln: val, target, canonical }),
       signal: request.signal,
     });
     const data = await readResponse(res);
     if (!request.current() || cabilnInput.value.trim() !== val) return;
-    if (data.error) { console.error('convert error:', data.error); return; }
+    if (data.error) { replaceDocument({ warning: data.error }); return; }
     if (data.result) {
-      commitDocument(data.result, 'cabiln');
+      commitDocument(data.result, 'cabiln', editor.present.warning, {
+        canonical: data.canonical || null, context: data.context || editor.present.context,
+      });
     }
   } catch (e) {
-    if (request.current()) console.error('convertNotation error:', e);
+    if (request.current()) replaceDocument({ warning: 'Notation conversion failed. Try again.' });
   } finally {
     request.finish();
   }
@@ -1446,8 +1765,8 @@ function startConversion(button) {
   return request;
 }
 
-function useConvertedCabiln(sequence, warning = '') {
-  commitDocument(sequence, 'cabiln', warning);
+function useConvertedCabiln(sequence, warning = '', result = {}) {
+  commitDocument(sequence, 'cabiln', warning, CabilnProject.fromConversion(result));
 }
 
 async function doS2c(notation) {
@@ -1457,7 +1776,7 @@ async function doS2c(notation) {
   const btn = notation === 'bracket' ? btnS2cBracket : btnS2c;
   const request = startConversion(btn);
   try {
-    const res = await fetch('/smiles_to_cabiln', {
+    const res = await fetchCalculation('/smiles_to_cabiln', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ smiles, notation }),
@@ -1470,7 +1789,7 @@ async function doS2c(notation) {
       smilesStatus.textContent = 'S2C: ' + data.error;
       smilesStatus.className = 'statusbar';
     } else {
-      useConvertedCabiln(data.cabiln, data.warning);
+      useConvertedCabiln(data.cabiln, data.warning, data);
       if (data.warning) {
         smilesStatus.textContent = `⚠ ${data.warning}`;
         smilesStatus.className = 'statusbar warn';
@@ -1494,23 +1813,25 @@ btnS2cBracket.addEventListener('click', () => doS2c('bracket'));
 // ─── main input → CABILN convert buttons ─────────────────────────────────────
 async function doToCabiln(notation) {
   const txt = cabilnInput.value.trim();
+  const inputFormat = notationSelect.value;
   if (!txt) return;
   const btn = notation === 'bracket' ? btnToCabilnBracket : btnToCabilnPct;
   const request = startConversion(btn);
   try {
-    const res = await fetch('/to_cabiln', {
+    const res = await fetchCalculation('/to_cabiln', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ input: txt, notation }),
+      body: JSON.stringify({ input: txt, input_format: inputFormat, notation }),
       signal: request.signal,
     });
     const data = await readResponse(res);
-    if (!request.current() || cabilnInput.value.trim() !== txt) return;
+    if (!request.current() || cabilnInput.value.trim() !== txt ||
+        notationSelect.value !== inputFormat) return;
     if (data.error) {
       cabilnStatus.textContent = data.error;
       cabilnStatus.className = 'statusbar';
     } else {
-      useConvertedCabiln(data.cabiln, data.warning);
+      useConvertedCabiln(data.cabiln, data.warning, data);
       cabilnStatus.textContent = `Converted from ${data.from}: ${data.cabiln}`;
       cabilnStatus.className = 'statusbar ok';
     }
@@ -1562,13 +1883,13 @@ const NOTATION_PLACEHOLDER = {
 
 notationSelect.addEventListener('change', () => {
   const draft = editor.drafts[notationSelect.value];
-  commitDocument(draft?.text || '', notationSelect.value, draft?.warning || '');
+  commitDocument(draft?.text || '', notationSelect.value, draft?.warning || '', draft || {});
 });
 
 // ─── CABILN render ────────────────────────────────────────────────────────────
 cabilnInput.addEventListener('input', () => {
-  setConversionWarning();
-  recordDocument(true);
+  recordDocument({ ...editor.present, text: cabilnInput.value,
+    notation: notationSelect.value, warning: '', quality: null, canonical: null }, true);
   renderDocument();
 });
 
@@ -1644,10 +1965,10 @@ async function doRenderForeign(txt) {
   btnReroll.disabled = true;
   const { w, h } = canvasSize(renderCanvas);
   try {
-    const res = await fetch('/render_reference', {
+    const res = await fetchCalculation('/render_reference', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ input: txt, width: w, height: h }),
+      body: JSON.stringify({ input: txt, input_format: mode, width: w, height: h }),
       signal: request.signal,
     });
     const data = await readResponse(res);
@@ -1656,6 +1977,7 @@ async function doRenderForeign(txt) {
     if (data.error) {
       mainRenderError(data.error);
     } else {
+      acceptDocumentContext(data.context);
       acceptMainDrawing(data.svg, txt, mode);
       resChips.innerHTML = '';
       residueMap = {}; atomToRes = {}; residueList = [];
@@ -1699,7 +2021,7 @@ async function doRenderCabiln(seq) {
   if (buildMode && !sameDocument) clearBuild();
   const { w, h } = canvasSize(renderCanvas);
   try {
-    const res  = await fetch('/render', {
+    const res  = await fetchCalculation('/render', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ cabiln: seq, width: w, height: h, seed: rerollSeed }),
@@ -1715,11 +2037,11 @@ async function doRenderCabiln(seq) {
     } else {
       const displayedSequence = data.normalized_cabiln || seq;
       if (data.normalized_cabiln) {
-        cabilnInput.value = displayedSequence;
-        editor.present = { ...editor.present, text: displayedSequence };
-        editor.drafts.cabiln = { text: displayedSequence, warning: editor.present.warning };
+        projectChanged();
+        replaceDocument({ text: displayedSequence, quality: null, canonical: null });
         saveDraft();
       }
+      acceptDocumentContext(data.context);
       lastCabiln = displayedSequence;
       acceptMainDrawing(data.svg, displayedSequence, 'cabiln');
       cabilnStatus.textContent = [data.info, ...(data.warnings || [])].filter(Boolean).join(' · ');
@@ -1759,10 +2081,12 @@ function clearReference() {
 }
 
 smilesInput.addEventListener('input', () => {
+  projectChanged();
+  referenceContext = smilesInput.value ? contextHeader(referenceContext) : null;
+  referenceOriginal = smilesInput.value ? { kind: 'text', content: smilesInput.value, name: '' } : null;
   clearReference();
   if (smilesInput.value) beginDraftEdit();
-  clearTimeout(editor.saveTimer);
-  editor.saveTimer = setTimeout(saveDraft, 200);
+  scheduleDraftSave();
   const txt = smilesInput.value.trim();
   if (!txt) {
     setInner(smilesInner, '<div class="placeholder">Paste SMILES, BILN, or HELM…</div>');
@@ -1777,6 +2101,10 @@ molUpload.addEventListener('change', async (e) => {
   const file = e.target.files[0];
   if (!file) return;
   beginDraftEdit();
+  projectChanged();
+  referenceContext = contextHeader(referenceContext);
+  referenceOriginal = null;
+  smilesInput.value = '';
   // The selected File is retained locally; allow choosing it again after cancel.
   molUpload.value = '';
   clearReference();
@@ -1787,8 +2115,27 @@ molUpload.addEventListener('change', async (e) => {
   try {
     const text = await file.text();
     if (!request.current()) return;
+    await renderMolReference(text, file.name, request);
+  } catch (err) {
+    if (!request.current()) return;
+    smilesStatus.textContent = 'Could not read the MOL/SDF file. The previous document is unchanged.';
+    smilesStatus.className = 'statusbar';
+  } finally { request.finish(); }
+});
+
+async function renderMolReference(text, name, request = startRequest('reference-render')) {
+  if (referenceOriginal?.kind !== 'mol' || referenceOriginal.content !== text ||
+      referenceOriginal.name !== name) {
+    projectChanged(false);
+    referenceContext = contextHeader(referenceContext);
+  }
+  referenceOriginal = { kind: 'mol', content: text, name };
+  saveDraft();
+  showSpinner(smilesInner);
+  smilesStatus.textContent = `Reference: ${name || 'uploaded structure'}`;
+  try {
     const { w, h } = canvasSize(document.getElementById('smiles-canvas'));
-    const res = await fetch('/render_mol', {
+    const res = await fetchCalculation('/render_mol', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ mol_block: text, width: w, height: h }),
@@ -1803,19 +2150,19 @@ molUpload.addEventListener('change', async (e) => {
     } else {
       setInner(smilesInner, data.svg);
       lastSmiles = data.smiles || '';
+      if (smilesInput.value !== lastSmiles) projectChanged(false);
       smilesInput.value = lastSmiles;
+      acceptReferenceContext(data.context);
       saveDraft();
       smilesInput.className = 'ok';
       if (lastCabiln) triggerVerify();
     }
   } catch (err) {
     if (!request.current()) return;
-    smilesStatus.textContent = 'Failed to render .mol file';
+    smilesStatus.textContent = 'Failed to render the original MOL/SDF reference';
     smilesStatus.className = 'statusbar';
-  } finally {
-    request.finish();
-  }
-});
+  } finally { request.finish(); }
+}
 
 async function doRenderRef(txt) {
   const request = startRequest('reference-render');
@@ -1823,7 +2170,7 @@ async function doRenderRef(txt) {
   clearComparison();
   const { w, h } = canvasSize(document.getElementById('smiles-canvas'));
   try {
-    const res = await fetch('/render_reference', {
+    const res = await fetchCalculation('/render_reference', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ input: txt, width: w, height: h }),
@@ -1839,6 +2186,7 @@ async function doRenderRef(txt) {
     } else {
       setInner(smilesInner, data.svg);
       lastSmiles = data.smiles || '';
+      acceptReferenceContext(data.context);
       smilesStatus.textContent = `${data.format}: ${data.info || ''}`;
       smilesStatus.className = 'statusbar ok';
       smilesInput.className = 'ok';
@@ -1866,7 +2214,7 @@ async function triggerVerify() {
   const smiles = lastSmiles;
   const cabiln = lastCabiln;
   try {
-    const res  = await fetch('/verify', {
+    const res  = await fetchCalculation('/verify', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ smiles, cabiln }),
@@ -1904,19 +2252,6 @@ function escHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 function escAttr(s) { return escHtml(s); }
-
-// Auto-reload on server restart
-(function(){
-  let sid = null;
-  setInterval(async () => {
-    try {
-      const r = await fetch('/server_id');
-      const id = await r.text();
-      if (sid === null) { sid = id; return; }
-      if (id !== sid) location.reload();
-    } catch(e) {}
-  }, 5000);
-})();
 
 offerSavedDraft();
 updateHistoryControls();

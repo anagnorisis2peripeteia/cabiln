@@ -182,20 +182,14 @@ def test_coarse_fallback_does_not_claim_editable_residue_decomposition():
     )
 
 
-def test_unknown_capped_residue_retains_known_caps_and_own_boundaries():
-    source = "CC(=O)N[C@@H](CCC(F)(F)F)C(=O)N"
-    result = convert_smiles(source)
-    assert result.recognition_status == "partial"
-    assert [item.symbol for item in result.assignments][::2] == ["ac", "am"]
-    assert [item.recognized for item in result.assignments] == [True, False, True]
-    assert len(result.details) == 1 and result.details[0][1] == 0
-    assert Chem.MolToSmiles(Molecule(Sequence(result.cabiln)).mol) == Chem.MolToSmiles(
-        Chem.MolFromSmiles(source)
-    )
-
-
-def test_unknown_intramonomer_closure_retains_known_caps():
-    source = "CC(=O)N1C(=O)C[C@H]1C(N)=O"
+@pytest.mark.parametrize(
+    "source",
+    [
+        pytest.param("CC(=O)N[C@@H](CCC(F)(F)F)C(=O)N", id="linear"),
+        pytest.param("CC(=O)N1C(=O)C[C@H]1C(N)=O", id="intramonomer-closure"),
+    ],
+)
+def test_unknown_capped_residue_retains_known_caps_and_own_boundaries(source):
     result = convert_smiles(source)
     assert result.recognition_status == "partial"
     assert [item.symbol for item in result.assignments][::2] == ["ac", "am"]

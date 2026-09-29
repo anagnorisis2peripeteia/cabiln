@@ -28,15 +28,15 @@ import warnings
 from pyPept.source import (
     SourceText, bond_marker as _source_bond_marker, group as _source_group,
     join as _source_join, record as _source_record, sub as _source_sub,
-    synthetic as _source_synthetic,
+    synthetic as _source_synthetic, scope_group as _source_scope_group,
 )
 
 from pyPept.notation import (
-    BracketArm, bracket_chain, bracket_regions, parse_bracket_entries,
+    BracketArm, bracket_chain, bracket_regions, parse_bracket_group,
+    MAX_NOTATION_CHARACTERS,
     INLINE_BOND_RE as _INLINE_BOND_RE, parse_chain_entry, supports_bracket_token,
     crosslink_declarations, text_crosslink_declarations,
     validate_crosslink_declarations, legacy_attachment_slot,
-    normalize_legacy_brackets as _flatten_nested_brackets,
 )
 
 import string
@@ -373,18 +373,24 @@ def _expand_inline_caps(biln, peptide_branch_threshold=2, warning_sink=None):
     - .!1                  crosslink second endpoint — parens omitted, inverse inferred
     - !1-A-B-C             branch N-terminal marker — attaches via R1 of first residue
     - A-B-C-!1             branch C-terminal marker — attaches via R2 of last residue
-    - [.A(r,s).B(t,u)...]  sequential reaction bracket — left-to-right chain of named
+    - .[A(r,s).B(t,u)...]  sequential reaction bracket — left-to-right chain of named
                             cap attachments.  For each step after the first, the first
                             R-group number refers to the PRECEDING fragment (not the host
                             residue).  The host receives only the first bond annotation.
                             Auto bond IDs are assigned in left-to-right order.
+    - .[A(r,s).[B(t,u)]]   child scope attaches at A and returns to A on close;
+                            protected .{...} and legacy [.arm] scopes also nest.
 
     Returns (expanded_biln, branch_rgroup).  expanded_biln uses '.' as chain
     separator; branch_rgroup maps each !x to its partner rgroup from first occurrence.
     """
+    if len(biln) > MAX_NOTATION_CHARACTERS:
+        raise ValueError(
+            f'Notation exceeds {MAX_NOTATION_CHARACTERS:,} characters; '
+            'split it into smaller documents.')
     biln = _preprocess_cabiln(biln)
     original_segments = [s for s in biln.split('%') if s.strip()]
-    segments = [_flatten_nested_brackets(seg) for seg in original_segments]
+    segments = original_segments
 
     # Parse each bracket once, then collect declarations in source order from
     # those entries and the surrounding inline text. All endpoint spellings use
@@ -403,9 +409,13 @@ def _expand_inline_caps(biln, peptide_branch_threshold=2, warning_sink=None):
         previous_end = 0
         for start, end in bracket_regions(seg):
             declarations.extend(inline_declarations(seg[previous_end:start]))
-            entries = parse_bracket_entries('.' + seg[start + 2:end - 1])
-            declarations.extend(crosslink_declarations(entries))
-            groups.append(entries)
+            scope = parse_bracket_group(seg[start:end])
+            declarations.extend(crosslink_declarations(scope.entries))
+            root_start = seg.rfind('-', 0, start) + 1
+            host = seg[root_start:start].split('.', 1)[0]
+            if not host:
+                raise ValueError('Sequential bracket has no host monomer.')
+            groups.append((scope, host))
             previous_end = end
         declarations.extend(inline_declarations(seg[previous_end:]))
         parsed_brackets.append(groups)
@@ -415,13 +425,11 @@ def _expand_inline_caps(biln, peptide_branch_threshold=2, warning_sink=None):
     _ctr = [100]
     _count = {}
 
-    def _sub_bond(m):
-        tok, hr, cr = m.group(1), m.group(2), m.group(3)
+    def _marker_slot(tok, hr, cr):
         if _count.get(tok, 0) >= 2:
             raise ValueError(
                 f"Bond {tok!r}: 3rd endpoint found (max 2 allowed).")
         if hr is None:
-            # No parens — second occurrence; infer inverse from first
             if tok not in _seen:
                 raise ValueError(
                     f"Bond marker {tok!r} used without parens but no prior "
@@ -429,12 +437,26 @@ def _expand_inline_caps(biln, peptide_branch_threshold=2, warning_sink=None):
             fhr, fcr = _seen[tok]
             hr, cr = fcr, fhr
         _count[tok] = _count.get(tok, 0) + 1
+        return str(int(hr))
+
+    def _inline_owner(match):
+        root_start = match.string.rfind('-', 0, match.start()) + 1
+        host = match.string[root_start:match.start()].split('.', 1)[0]
+        return _source_sub(r'\((?:!\w+|\d+),\d+\)', '', host)
+
+    def _sub_bond(m):
+        tok = m.group(1)
+        hr = _marker_slot(tok, m.group(2), m.group(3))
         _source_bond_marker(_source_group(m), int(hr))
         return f'({tok},{hr})'
 
     def _sub_cap(m):
         tok, hr, cr = _source_group(m, 1), m.group(2), m.group(3)
-        _source_record(tok, _source_group(m), 'inline')
+        owner = _inline_owner(m)
+        _source_record(tok, _source_group(m), 'inline', host=owner)
+        _source_scope_group(
+            _source_group(m), host=owner, kind='inline', opening='', closing='',
+        )
         bid = _ctr[0]; _ctr[0] += 1
         appended.append(tok + f'({bid},{cr})')
         return f'({bid},{hr})'
@@ -443,110 +465,107 @@ def _expand_inline_caps(biln, peptide_branch_threshold=2, warning_sink=None):
     # set just before each call: (host_name, prefix_before_host, rest_of_seg)
     _bracket_ctx = [None]
 
-    def _sub_bracket(bracket, tokens):
-        first = tokens[0]
-        tok1, hr1, cr1 = first.token, first.previous_slot, first.own_slot
-        _source_record(tok1, first.text, 'bracket', bracket, terminal=len(tokens) == 1)
-
-        if tok1.startswith('!'):
-            # Pure crosslink bracket: .[!1(4,4)] or .[!1(4,4).!2(5,3)]
-            # Each entry is a crosslink bond on the host monomer — no pendant fragment.
-            host_bonds = []
-            for t in tokens:
-                if isinstance(t, BracketArm):
-                    raise ValueError(
-                        f"Sequential bracket {bracket!r}: sub-bracket arm cannot "
-                        f"appear in a pure-crosslink bracket.")
-                tok = t.token
-                if not tok.startswith('!'):
-                    raise ValueError(
-                        f"Sequential bracket {bracket!r}: monomer entry {tok!r} "
-                        f"cannot follow crosslink-first entries.")
-                prev_r, cur_r = t.previous_slot, t.own_slot
-                _count[tok] = _count.get(tok, 0) + 1
-                _source_bond_marker(t.text, int(prev_r), bracket=bracket)
-                host_bonds.append(f'({tok},{prev_r})')
-            return ''.join(host_bonds)
-
-        bid1 = _ctr[0]; _ctr[0] += 1
-        frag_tokens = [tok1]
-        frag_bond_parts = [f'({bid1},{cr1})']
-        _backbone_steps = []
-        pointer_idx = 0  # index into frag_bond_parts of the current chain tail
-
-        for token_position, t in enumerate(tokens[1:], 1):
-            if isinstance(t, BracketArm):
-                # Sub-bracket arm [.sub_content]: process its entries as a chain
-                # branching FROM the current pointer.  The arm does NOT advance
-                # pointer_idx — the next sibling arm or flat entry still bonds from
-                # the same host fragment.
-                sub_steps = t.entries
-                sub_ptr = pointer_idx
-                for step_position, step in enumerate(sub_steps):
-                    tok, prev_r, cur_r = step.token, step.previous_slot, step.own_slot
-                    _source_record(
-                        tok, step.text, 'bracket', bracket, t.text,
-                        step_position == len(sub_steps) - 1,
-                    )
-                    if tok.startswith('!'):
-                        _source_bond_marker(step.text, int(prev_r),
-                                            owner=frag_tokens[sub_ptr],
-                                            bracket=bracket, arm=t.text)
-                        frag_bond_parts[sub_ptr] += f'({tok},{prev_r})'
-                        _count[tok] = _count.get(tok, 0) + 1
-                    else:
-                        bid = _ctr[0]; _ctr[0] += 1
-                        frag_bond_parts[sub_ptr] += f'({bid},{prev_r})'
-                        frag_tokens.append(tok)
-                        frag_bond_parts.append(f'({bid},{cur_r})')
-                        sub_ptr = len(frag_bond_parts) - 1
-                # pointer_idx intentionally NOT updated: arm is a branch, not chain
-            else:
-                # Flat entry: crosslink annotates current host; monomer advances chain.
-                tok, prev_r, cur_r = t.token, t.previous_slot, t.own_slot
-                _source_record(
-                    tok, t.text, 'bracket', bracket,
-                    terminal=token_position == len(tokens) - 1,
+    def _sub_bracket(scope, host):
+        bracket = scope.text
+        frag_tokens, frag_bond_parts = [], []
+        host_bonds = []
+        protected = scope.opening == '{'
+        _source_scope_group(
+            bracket, host=host, opening=scope.opening, closing=scope.closing,
+            protected=protected,
+        )
+        # Each frame retains its own current monomer. Closing a child simply
+        # pops that frame, so following children resume at the parent's cursor.
+        stack = [{
+            'scope': scope, 'position': 0, 'current': -1, 'parent': None,
+            'protected': protected, 'first': None,
+        }]
+        while stack:
+            frame = stack[-1]
+            group = frame['scope']
+            position = frame['position']
+            if position == len(group.entries):
+                stack.pop()
+                if group.returns_anchor and stack:
+                    anchor = frame['first']
+                    if anchor is not None:
+                        stack[-1]['current'] = anchor
+                        if stack[-1]['first'] is None:
+                            stack[-1]['first'] = anchor
+                continue
+            step = group.entries[position]
+            frame['position'] += 1
+            current = frame['current']
+            owner = host if current == -1 else frag_tokens[current]
+            bonds = host_bonds if current == -1 else frag_bond_parts[current]
+            if isinstance(step, BracketArm):
+                protected = frame['protected'] or step.opening == '{'
+                _source_scope_group(
+                    step.text, host=owner, parent=group.text, kind='arm',
+                    opening=step.opening, closing=step.closing,
+                    protected=protected, legacy=step.legacy,
                 )
-                if tok.startswith('!'):
-                    _source_bond_marker(t.text, int(prev_r),
-                                        owner=frag_tokens[pointer_idx], bracket=bracket)
-                    frag_bond_parts[pointer_idx] += f'({tok},{prev_r})'
-                    _count[tok] = _count.get(tok, 0) + 1
-                else:
-                    bid = _ctr[0]; _ctr[0] += 1
-                    if prev_r == '2' and cur_r == '1':
-                        _backbone_steps.append(tok)
-                    frag_bond_parts[pointer_idx] += f'({bid},{prev_r})'
-                    frag_tokens.append(tok)
-                    frag_bond_parts.append(f'({bid},{cur_r})')
-                    pointer_idx = len(frag_bond_parts) - 1
+                stack.append({
+                    'scope': step, 'position': 0, 'current': current,
+                    'parent': group.text, 'protected': protected, 'first': None,
+                })
+                continue
+            tok, previous, own = step.token, step.previous_slot, step.own_slot
+            arm = group.text if group is not scope else None
+            if tok.startswith('!'):
+                slot = _marker_slot(tok, previous, own)
+                _source_bond_marker(
+                    step.text, int(slot), owner=owner, bracket=bracket, arm=arm,
+                    scope=group.text,
+                )
+                bonds.append(f'({tok},{slot})')
+                continue
+            _source_record(
+                tok, step.text, 'bracket', bracket, arm,
+                terminal=position == len(group.entries) - 1,
+                host=owner, scope=group.text, parent_scope=frame['parent'],
+                protected=frame['protected'], legacy_arm=group.legacy,
+            )
+            bid = _ctr[0]
+            _ctr[0] += 1
+            bonds.append(f'({bid},{previous})')
+            frag_tokens.append(tok)
+            frag_bond_parts.append([f'({bid},{own})'])
+            frame['current'] = len(frag_tokens) - 1
+            if frame['first'] is None:
+                frame['first'] = frame['current']
 
-        if (peptide_branch_threshold is not None
-                and len(_backbone_steps) >= peptide_branch_threshold):
-            flat_chain_toks = [
-                t.token for t in tokens
-                if not isinstance(t, BracketArm) and not t.token.startswith('!')
-            ]
-            frag_chain = '-'.join(flat_chain_toks)
-            branch_seg = f'!n-{frag_chain}' if cr1 == '1' else f'{frag_chain}-!n'
+        flat = [
+            step for step in scope.entries
+            if not isinstance(step, BracketArm) and not step.token.startswith('!')
+        ]
+        backbone_steps = sum(
+            (step.previous_slot, step.own_slot) == ('2', '1') for step in flat[1:]
+        )
+        if (flat and peptide_branch_threshold is not None
+                and backbone_steps >= peptide_branch_threshold):
+            first = flat[0]
+            frag_chain = '-'.join(step.token for step in flat)
+            branch_seg = (f'!n-{frag_chain}' if first.own_slot == '1'
+                          else f'{frag_chain}-!n')
             ctx = _bracket_ctx[0]
             if ctx:
                 host_name, pre, rest = ctx
-                suggestion = f"{pre}{host_name}.!n({hr1},{cr1}){rest}%%{branch_seg}"
+                suggestion = (
+                    f"{pre}{host_name}.!n({first.previous_slot},"
+                    f"{first.own_slot}){rest}%%{branch_seg}"
+                )
             else:
-                suggestion = f"host.!n({hr1},{cr1})-[chain]%%{branch_seg}"
+                suggestion = f"host.!n-[chain]%%{branch_seg}"
             _emit_warning(
-                f"Sequential bracket {bracket!r} contains {len(_backbone_steps)} "
+                f"Sequential bracket {bracket!r} contains {backbone_steps} "
                 f"R2->R1 connections: backbone amide pattern detected — this creates "
                 f"a peptide branch inside [...].  Did you mean:\n"
                 f"  {suggestion}",
                 UserWarning, stacklevel=6, warning_sink=warning_sink)
-
         for tok, bonds in zip(frag_tokens, frag_bond_parts):
-            appended.append(tok + bonds)
-
-        return f'({bid1},{hr1})'
+            appended.append(tok + ''.join(bonds))
+        return ''.join(host_bonds)
 
     processed_segments = []
     for segment_number, seg in enumerate(segments):
@@ -559,7 +578,7 @@ def _expand_inline_caps(biln, peptide_branch_threshold=2, warning_sink=None):
         # groups again after that edit, reusing their already parsed entries.
         parts = []
         last_end = 0
-        for (start, end), entries in zip(
+        for (start, end), (scope, host) in zip(
                 bracket_regions(seg), parsed_brackets[segment_number]):
             prefix = seg[last_end:start]
             parts.append(prefix)
@@ -570,7 +589,7 @@ def _expand_inline_caps(biln, peptide_branch_threshold=2, warning_sink=None):
                 pre_host, host_token = '', prefix
             host_name = re.split(r'[(\[{]', host_token)[0].strip()
             _bracket_ctx[0] = (host_name, pre_host, seg[end:])
-            parts.append(_sub_bracket(seg[start:end], entries))
+            parts.append(_sub_bracket(scope, host))
             last_end = end
         parts.append(seg[last_end:])
         seg = _source_join('', parts)
@@ -1340,6 +1359,10 @@ class Sequence:
         """
         if not isinstance(input_biln, str) or not input_biln.strip():
             raise ValueError("CABILN must be a non-empty string.")
+        if len(input_biln) > MAX_NOTATION_CHARACTERS:
+            raise ValueError(
+                f'Notation exceeds {MAX_NOTATION_CHARACTERS:,} characters; '
+                'split it into smaller documents.')
         if fmt not in (None, 'cabiln', 'biln'):
             raise ValueError(f"Unknown sequence format: {fmt!r}")
 
@@ -2037,55 +2060,30 @@ def split_outside(string, by_element, outside, keep_marker=True):
 
     :return splitChains: split string as list
     """
-    # by can be more than 1 character
-    by_element = list(by_element)
-
-    # if outside is only one character (e.g. ', "), double it for start and end
+    delimiters = set(by_element)
     if len(outside) == 1:
-        outside = outside + outside
-
-    # Special character
-    grpsep = chr(29)
-
-    openers = {outside[0]}
-    closers = {outside[1]}
+        outside += outside
+    pairs = {outside[0]: outside[1]}
     if outside == '[]':
-        openers.add('{')
-        closers.add('}')
-
-    out = []
-    inside = False
-    for char_position in range(len(string)):
-        i = string[char_position:char_position+1]
-        if i in openers:
-            if inside:
-                if keep_marker:
-                    j = i
-                else:
-                    j = ''
-                inside = False
-            else:
-                inside = True
-                if keep_marker:
-                    j = i
-                else:
-                    j = ''
-        elif i in closers:
-            inside = False
+        pairs['{'] = '}'
+    stack, pieces, result = [], [], []
+    for position in range(len(string)):
+        character = string[position]
+        if stack and character == stack[-1]:
+            stack.pop()
             if keep_marker:
-                j = i
-            else:
-                j = ''
+                pieces.append(character)
+        elif character in pairs:
+            stack.append(pairs[character])
+            if keep_marker:
+                pieces.append(character)
+        elif not stack and character in delimiters:
+            result.append(_source_join('', pieces))
+            pieces = []
         else:
-            if not inside and i in by_element:
-                j = grpsep
-            else:
-                j = i
-        out.append(j)
-
-    # Do the final split
-    split_chains = _source_join('', out).split(grpsep)
-    return split_chains
+            pieces.append(character)
+    result.append(_source_join('', pieces))
+    return result
 
 
 ############################################################

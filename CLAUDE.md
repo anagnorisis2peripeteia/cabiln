@@ -22,8 +22,8 @@ node --test tests/test_frontend.js
 python -m pytest tests/test_distribution.py
 
 # Run a single test class or test
-pytest tests/test_bond_validation_and_assembly.py::TestDisulfide -v
-pytest tests/test_bond_validation_and_assembly.py::TestRoundTrips::test_round_trip_library -v
+pytest tests/test_bond_validation_and_assembly.py::TestAssembly -v
+pytest tests/test_notation_conversion.py::TestRoundTrips -v
 
 # Verify every Sequence() call in README produces a valid molecule
 python tools/_test_readme_examples.py
@@ -56,14 +56,14 @@ CABILN string
   │  ├─ _check_bond_chemistry()     validates each bond's element-pair chemistry
   │  └─ stores s_monomers[], s_bonds[]
   ↓
-  ↓  Molecule.__init__(sequence)    [molecule.py]
-  │  ├─ __combine_all_monomers()    CombineMols into one RWMol
-  │  ├─ __add_bonds_to_mol()        SMIRKS reactions via reaction_library
-  │  │   ├─ relabel all dummies to globally unique isotopes
-  │  │   ├─ infer_chem_type() for each attachment atom
-  │  │   ├─ REACTION_INDEX[(type_a, type_b)] → YAML entry
-  │  │   └─ run_bond_smirks() with inter/intramolecular handling
-  │  └─ __restore_and_remove_rgroups()  cap unbound sites, Kekulize-first
+  ↓  Peptide.from_sequence()        [peptide.py]
+  │  └─ resolved definitions, occurrence IDs and numbered endpoints
+  ↓  Molecule(sequence_or_peptide)  [molecule.py]
+  │  ├─ Sequence inputs adapt to the same resolved Peptide
+  │  ├─ __assemble() assigns unique temporary labels to attachment dummies
+  │  │   ├─ reaction_for_types() selects the shared reaction rule
+  │  │   └─ run_bond_smirks() handles inter/intramolecular bonds
+  │  └─ restore_leaving_groups() uses the same labels for unconsumed sites
   ↓
 RDKit ROMol
 ```
@@ -73,7 +73,7 @@ RDKit ROMol
 | Module | Role |
 |--------|------|
 | `sequence.py` | CABILN/BILN parser, bond validation, monomer library loading from SDF |
-| `molecule.py` | RDKit molecule assembly via SMIRKS reactions, R-group restoration |
+| `molecule.py` | Assemble resolved peptide endpoints; retain Sequence compatibility |
 | `interfaces/reaction_library.py` | YAML-driven reaction routing, `_CHEM_TYPE_REGISTRY` (SMARTS patterns), `infer_chem_type()`, `run_bond_smirks()` |
 | `interfaces/monomer_pipeline.py` | `pre_activate()` (SMILES → CHUCKLES), `find_sidechain_slots()`, `build_library_from_csv()` |
 | `interfaces/cli_monomer.py` | `register_monomer()` function and CLI entry point |
@@ -96,7 +96,7 @@ Isotope-labelled dummy atoms encode attachment slots: `[1*]`=R1 (backbone N), `[
 
 Reactions are defined in `reactions.yaml` with `reactant_pairs` that map `(chem_type_a, chem_type_b)` tuples to SMIRKS steps. The `REACTION_INDEX` dict is built at import time — adding a new reaction to the YAML file automatically makes it available without code changes.
 
-Intramolecular ring closure uses RDKit's grouped-reactant syntax: `([A].[B]) >> [P]` called with `RunReactants((single_mol,))`. The isotope-swap fallback (lines ~273-285 of reaction_library.py) handles cases where the two dummies appear in swapped order within the assembled molecule.
+Intramolecular ring closure uses RDKit's grouped-reactant syntax: `([A].[B]) >> [P]` called with `RunReactants((single_mol,))`. The isotope-swap fallback in `reaction_library.py` handles swapped dummy order. Targeted reaction labels explicitly match atomic-number-zero dummies, preserving isotopes on ordinary atoms.
 
 ### Monomer pre-activation
 

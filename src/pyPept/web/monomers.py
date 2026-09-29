@@ -17,8 +17,10 @@ from pyPept.monomer_store import (
 
 from .cache import _rc_get, _rc_put, library_version
 from .drawing import _draw_mol
+from .execution import error_response
 from .monomer_display import _restore_leaving_groups, _restore_reagent_form
 from .schemas import _PreviewReq, _RegisterReq
+from .security import require_registration
 
 router = APIRouter()
 
@@ -36,6 +38,7 @@ def list_monomers(response: Response = None):
             return cached
         all_mols, mol_by_abbr = _load_sdf()
         from pyPept.sequence import get_monomer_info
+        from pyPept.library_quality import quality_for_monomer
 
         aliases = get_monomer_info(str(library_path())).attrs.get("_degen_aliases", {})
         monomers = []
@@ -65,6 +68,7 @@ def list_monomers(response: Response = None):
                 "declared_chem_types": p.get("m_chem_types", ""),
                 "backbone_insertable": {1, 2}.issubset({s["slot"] for s in sites}),
                 "leaving": ", ".join(lg_parts),
+                "quality": quality_for_monomer(mol),
             }
             # Collect degenerate cap pairs for merging
             if abbr.endswith("_") and abbr[:-1] in aliases:
@@ -91,6 +95,7 @@ def list_monomers(response: Response = None):
                 "backbone_insertable": False,
                 "leaving": primary["leaving"],
                 "degenerate": True,
+                "quality": _merged_quality(nt, ct),
             }
             if nt:
                 merged["nterm_abbr"] = nt["abbr"]
@@ -108,7 +113,27 @@ def list_monomers(response: Response = None):
                 response.headers["X-Library-Version"] = token
         return monomers
     except Exception as exc:
-        return JSONResponse({"error": str(exc)}, status_code=500)
+        return error_response(exc)
+
+
+def _merged_quality(*entries):
+    quality = [entry for entry in entries if entry]
+    statuses = {entry["quality"]["status"] for entry in quality}
+    status = (
+        "unreviewed"
+        if "unreviewed" in statuses
+        else (
+            "review_required" if "review_required" in statuses else "no_known_exception"
+        )
+    )
+    return {
+        "status": status,
+        "issues": [
+            {"code": issue["code"], "message": f"{entry['abbr']}: {issue['message']}"}
+            for entry in quality
+            for issue in entry["quality"]["issues"]
+        ],
+    }
 
 
 @router.get("/monomer_svg")
@@ -180,7 +205,7 @@ def monomer_svg(
 
         return JSONResponse({"error": f"Monomer '{abbr}' not found"}, status_code=404)
     except Exception as exc:
-        return JSONResponse({"error": str(exc).split("\n")[0]}, status_code=500)
+        return error_response(exc)
 
 
 @router.post("/preview_monomer")
@@ -208,15 +233,12 @@ def preview_monomer(req: _PreviewReq):
         }
 
     except Exception as exc:
-        return JSONResponse({"error": str(exc).split("\n")[0]}, status_code=400)
+        return error_response(exc)
 
 
 @router.post("/register_monomer")
 def register_monomer(req: _RegisterReq, request: Request):
-    if not request.app.state.allow_registration:
-        return JSONResponse(
-            {"error": "This monomer library is read-only."}, status_code=403
-        )
+    require_registration(request)
     try:
         from rdkit.Chem import rdDepictor
 
@@ -245,4 +267,4 @@ def register_monomer(req: _RegisterReq, request: Request):
         return {"ok": True, "total": register_molecule(mol)}
 
     except Exception as exc:
-        return JSONResponse({"error": str(exc).split("\n")[0]}, status_code=400)
+        return error_response(exc)
