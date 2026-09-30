@@ -21,6 +21,7 @@ let buildLeft    = null;  // { abbr, rgroups: [{slot, chem_type, used}], selecte
 let buildRight   = null;  // { abbr, rgroups: [{slot, chem_type, used}], selectedSlot }
 let buildLeftRIdx = null;
 let buildRightRIdx = null;
+let buildReaction = '';
 let insertBetweenActive = false;
 let rerollSeed   = 0;
 let reactionPairs = null;  // lazy-loaded list of [ct_a, ct_b] pairs
@@ -130,14 +131,23 @@ const buildPanel    = document.getElementById('build-panel');
 const btnBuild      = document.getElementById('btn-build');
 const buildClose    = document.getElementById('build-close');
 const buildConnect  = document.getElementById('build-connect');
+const buildPreviewButton = document.getElementById('build-preview-button');
+const buildPreviewPanel = document.getElementById('build-preview');
+const buildPreviewStatus = document.getElementById('build-preview-status');
+const buildPreviewReaction = document.getElementById('build-preview-reaction');
+const buildPreviewInner = document.getElementById('build-preview-inner');
+const buildPreviewSource = document.getElementById('build-preview-source');
+const buildPreviewNotation = document.getElementById('build-preview-notation');
 const buildStatus   = document.getElementById('build-status');
 const buildHint     = document.getElementById('build-hint');
 const buildLeftAbbr = document.getElementById('build-left-abbr');
 const buildLeftSvg  = document.getElementById('build-left-svg');
 const buildLeftRg   = document.getElementById('build-left-rgroups');
+const buildLeftSite = document.getElementById('build-left-site');
 const buildRightAbbr= document.getElementById('build-right-abbr');
 const buildRightSvg = document.getElementById('build-right-svg');
 const buildRightRg  = document.getElementById('build-right-rgroups');
+const buildRightSite = document.getElementById('build-right-site');
 const buildInsertRow = document.getElementById('build-insert-row');
 const buildInsertInfo = document.getElementById('build-insert-info');
 const buildInsertBtn = document.getElementById('build-insert-btn');
@@ -714,6 +724,7 @@ async function loadMonomers() {
     if (!Array.isArray(data)) throw new Error(data.error || 'Invalid monomer library');
     const version = res.headers?.get('X-Library-Version') || null;
     if (libLoaded && version && version === libraryVersion) return;
+    if (libLoaded && buildMode) clearBuild();
     libraryVersion = version;
     allMonomers = data.map(monomer => ({ ...monomer,
       searchText: [monomer.abbr, monomer.name, monomer.type, monomer.chem_types].join(' ').toLowerCase(),
@@ -1294,6 +1305,7 @@ function makeZoomable(canvas, inner) {
 
 const mainViewport = makeZoomable(renderCanvas, renderInner);
 makeZoomable(document.getElementById('smiles-canvas'), smilesInner);
+const buildPreviewViewport = makeZoomable(document.getElementById('build-preview-canvas'), buildPreviewInner);
 
 // ─── PNG download (client-side SVG → canvas → PNG) ────────────────────────────
 btnPng.addEventListener('click', () => {
@@ -1364,18 +1376,23 @@ function closeBuild() {
   clearBuild();
 }
 function clearBuild() {
+  clearBuildPreview();
   cancelRequests('build-left', 'build-right', 'bond-check', 'sequence-edit');
   buildLeft = null; buildRight = null; buildLeftRIdx = null; buildRightRIdx = null;
+  buildReaction = '';
   insertBetweenActive = false;
   buildInsertRow.style.display = 'none';
   buildInsertBtn.textContent = '⊕ Insert Between';
   buildLeftAbbr.textContent = '—';
   buildLeftSvg.innerHTML = '<div class="box-placeholder">Click a chip above</div>';
   buildLeftRg.innerHTML = '';
+  buildLeftSite.hidden = true;
   buildRightAbbr.textContent = '—';
+  document.getElementById('build-right-label').textContent = 'New monomer';
   buildRightSvg.innerHTML = '<div class="box-placeholder">Choose Use in the library</div>';
   buildRightRg.innerHTML = '';
-  buildConnect.disabled = true;
+  buildRightSite.hidden = true;
+  setBuildReady(false);
   buildStatus.textContent = 'Choose a residue and a monomer to connect';
   buildStatus.className = 'build-status';
   buildHint.textContent = cabilnInput.value.trim()
@@ -1428,6 +1445,7 @@ function updateInsertBetweenUI() {
 }
 
 buildInsertBtn.addEventListener('click', () => {
+  clearBuildPreview();
   cancelRequests('sequence-edit');
   if (insertBetweenActive) {
     insertBetweenActive = false;
@@ -1445,6 +1463,7 @@ buildInsertBtn.addEventListener('click', () => {
 });
 
 async function doInsertBetween(abbr) {
+  clearBuildPreview();
   const main = selectedBackbone();
   if (!main) return;
   const posL = main.indexOf(buildLeftRIdx);
@@ -1480,6 +1499,7 @@ document.getElementById('build-left-change').addEventListener('click', clearBuil
 document.getElementById('build-right-change').addEventListener('click', clearBuild);
 
 async function loadBuildLeft(abbr, rIdx) {
+  clearBuildPreview();
   cancelRequests('bond-check', 'sequence-edit');
   const request = startRequest('build-left');
   const sequence = cabilnInput.value.trim();
@@ -1487,8 +1507,9 @@ async function loadBuildLeft(abbr, rIdx) {
   buildLeftAbbr.textContent = abbr;
   buildLeftSvg.innerHTML = '<div class="spinner"></div>';
   buildLeftRg.innerHTML = '';
+  buildLeftSite.hidden = true;
   buildLeft = null;
-  buildConnect.disabled = true;
+  setBuildReady(false);
   buildStatus.textContent = '';
 
   try {
@@ -1516,15 +1537,18 @@ async function loadBuildLeft(abbr, rIdx) {
 }
 
 async function loadBuildRight(abbr, rIdx) {
+  clearBuildPreview();
   cancelRequests('bond-check', 'sequence-edit');
   const request = startRequest('build-right');
   const sequence = cabilnInput.value.trim();
   buildRightRIdx = rIdx !== undefined ? rIdx : null;
   buildRightAbbr.textContent = abbr;
+  document.getElementById('build-right-label').textContent = rIdx !== undefined ? 'Current residue' : 'New monomer';
   buildRightSvg.innerHTML = '<div class="spinner"></div>';
   buildRightRg.innerHTML = '';
+  buildRightSite.hidden = true;
   buildRight = null;
-  buildConnect.disabled = true;
+  setBuildReady(false);
   buildStatus.textContent = '';
 
   const family = rIdx === undefined && allMonomers.find(m => m.abbr === abbr && m.degenerate);
@@ -1579,7 +1603,7 @@ function renderRgroupButtons(container, state, side) {
     btn.setAttribute('aria-pressed', String(state.selectedSlot === rg.slot));
     if (state.selectedSlot === rg.slot) btn.classList.add('selected');
     btn.textContent = `R${rg.slot} ${(rg.chem_type || '').replaceAll('_', ' ')}${rg.used ? ' · used' : ''}`;
-    btn.title = `R${rg.slot}: ${rg.chem_type || 'unknown'}${rg.leaving ? ' (LG: ' + rg.leaving + ')' : ''}${rg.used ? ' — already connected' : ''}`;
+    btn.title = `R${rg.slot}: ${rg.chem_type || 'unknown'} · Free-site group: ${rg.leaving || '[H] (implicit)'}${rg.used ? ' — already connected' : ''}`;
     if (!rg.used) {
       btn.addEventListener('click', () => selectRgroup(side, rg.slot));
     }
@@ -1588,6 +1612,12 @@ function renderRgroupButtons(container, state, side) {
   const drawing = side === 'left' ? buildLeftSvg : buildRightSvg;
   drawing.querySelectorAll('.site-selected').forEach(path => path.classList.remove('site-selected'));
   const selected = state.rgroups.find(rg => rg.slot === state.selectedSlot);
+  const detail = side === 'left' ? buildLeftSite : buildRightSite;
+  detail.hidden = !selected;
+  if (selected) {
+    detail.textContent = `R${selected.slot} · Free-site group: ${selected.leaving || '[H] (implicit)'}`;
+    detail.title = 'Group present at this site when it is unconnected. The product preview shows the selected reaction.';
+  }
   if (Number.isInteger(selected?.atom_idx)) {
     drawing.querySelectorAll(`.atom-${selected.atom_idx}`).forEach(path => path.classList.add('site-selected'));
   }
@@ -1607,10 +1637,11 @@ function selectRgroup(side, slot) {
 }
 
 async function checkBuildValidity() {
+  clearBuildPreview();
   cancelRequests('bond-check');
-  buildConnect.disabled = true;
+  buildReaction = '';
+  setBuildReady(false);
   if (!buildLeft?.selectedSlot || !buildRight?.selectedSlot) {
-    buildConnect.disabled = true;
     buildStatus.textContent = !buildLeft ? 'Select a residue in the sequence'
       : !buildRight ? 'Choose a monomer from the library'
       : !buildLeft.selectedSlot ? 'Choose a site on the current residue'
@@ -1645,34 +1676,129 @@ async function checkBuildValidity() {
     const data = await readResponse(res);
     if (!request.current()) return;
     if (data.valid) {
+      buildReaction = data.reaction ? `Reaction: ${data.reaction.replaceAll('_', ' ')}` : 'Bond formation';
       buildStatus.textContent = `Valid: ${data.reaction || 'bond'} (R${buildLeft.selectedSlot}↔R${buildRight.selectedSlot})`;
       buildStatus.className = 'build-status valid';
-      buildConnect.disabled = false;
+      setBuildReady(true);
     } else {
       buildStatus.textContent = data.error || data.reason || 'No compatible reaction found';
       buildStatus.className = 'build-status invalid';
-      buildConnect.disabled = true;
+      setBuildReady(false);
     }
   } catch (e) {
     if (!request.current()) return;
     buildStatus.textContent = 'Validation error';
     buildStatus.className = 'build-status invalid';
-    buildConnect.disabled = true;
+    setBuildReady(false);
   } finally {
     request.finish();
   }
 }
 
-buildConnect.addEventListener('click', async () => {
-  if (!buildLeft || !buildRight || !buildLeft.selectedSlot || !buildRight.selectedSlot) return;
+function setBuildReady(ready) {
+  buildConnect.disabled = !ready;
+  buildPreviewButton.disabled = !ready;
+}
 
-  const val = cabilnInput.value.trim();
-  const rHost = buildLeft.selectedSlot;
-  const rNew = buildRight.selectedSlot;
-  const newAbbr = buildRight.abbr;
+function buildConnection() {
+  if (!buildLeft?.selectedSlot || !buildRight?.selectedSlot) return null;
+  return {
+    cabiln: cabilnInput.value.trim(),
+    host_residue_idx: buildLeftRIdx ?? 0,
+    new_abbr: buildRight.abbr,
+    r_host: buildLeft.selectedSlot,
+    r_new: buildRight.selectedSlot,
+    target_residue_idx: (buildRightRIdx !== null && buildRightRIdx !== buildLeftRIdx)
+      ? buildRightRIdx : -1,
+  };
+}
+
+function clearBuildPreview() {
+  const pending = activeRequests.has('build-preview');
+  cancelRequests('build-preview');
+  if (pending) setBuildReady(true);
+  buildPreviewPanel.hidden = true;
+  buildPreviewInner.innerHTML = '';
+  buildPreviewStatus.textContent = '';
+  buildPreviewReaction.textContent = '';
+  buildPreviewSource.textContent = '';
+  buildPreviewNotation.hidden = true;
+  buildPreviewButton.setAttribute('aria-expanded', 'false');
+}
+
+document.getElementById('build-preview-close').addEventListener('click', () => {
+  clearBuildPreview();
+  buildPreviewButton.focus();
+});
+buildPreviewButton.addEventListener('click', async () => {
+  const connection = buildConnection();
+  if (!connection || buildPreviewButton.disabled) return;
+  clearBuildPreview();
+  const request = startRequest('build-preview', () => buildPreviewPanel.setAttribute('aria-busy', 'false'));
+  const left = `${buildLeft.abbr} (residue ${connection.host_residue_idx + 1}) R${connection.r_host}`;
+  const right = `${buildRight.abbr} (${connection.target_residue_idx < 0 ? 'new' : `residue ${connection.target_residue_idx + 1}`}) R${connection.r_new}`;
+  const pair = `${left} ↔ ${right}`;
+  setBuildReady(false);
+  buildPreviewPanel.hidden = false;
+  buildPreviewPanel.setAttribute('aria-busy', 'true');
+  buildPreviewButton.setAttribute('aria-expanded', 'true');
+  buildPreviewStatus.textContent = `${pair} · Preparing preview…`;
+  buildPreviewStatus.className = '';
+  buildPreviewReaction.textContent = buildReaction;
+  buildPreviewInner.innerHTML = '<div class="spinner"></div>';
+  buildPreviewViewport.reset();
+  buildPreviewPanel.scrollIntoView({ block: 'nearest' });
+  try {
+    // Drawing and verification share one worker. Do not spend preview retries
+    // competing with work that is already running for this page.
+    while (request.current()) {
+      const pending = ['main-render', 'reference-render', 'verify']
+        .map(key => activeRequests.get(key)).find(Boolean);
+      if (!pending) break;
+      buildPreviewStatus.textContent = `${pair} · Waiting for the current drawing or verification…`;
+      await Promise.race([pending.done, request.done]);
+    }
+    if (!request.current()) return;
+    buildPreviewStatus.textContent = `${pair} · Preparing preview…`;
+    // These endpoints calculate a candidate; only Connect commits the document.
+    const proposal = await readResponse(await fetchCalculation('/insert_bond', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(connection), signal: request.signal,
+    }));
+    if (!request.current()) return;
+    if (proposal.error) throw new Error(proposal.error);
+    const drawing = await readResponse(await fetchCalculation('/render', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cabiln: proposal.result, width: 1000, height: 320 }),
+      signal: request.signal,
+    }));
+    if (!request.current()) return;
+    if (drawing.error) throw new Error(drawing.error);
+    const changedLibrary = editor.present.context?.library_binding && drawing.context?.library_binding
+      && !CabilnProject.sameContext(editor.present.context, drawing.context);
+    const notice = changedLibrary ? 'Library changed since the current drawing; preview uses current definitions.' : '';
+    buildPreviewInner.innerHTML = drawing.svg;
+    buildPreviewStatus.textContent = [pair, drawing.info, notice, drawing.normalization_note, ...(drawing.warnings || [])].filter(Boolean).join(' · ');
+    buildPreviewSource.textContent = proposal.result;
+    buildPreviewNotation.hidden = false;
+  } catch (error) {
+    if (!request.current()) return;
+    buildPreviewInner.innerHTML = '';
+    buildPreviewStatus.textContent = `Preview unavailable: ${error.message}. Your sequence is unchanged.`;
+    buildPreviewStatus.className = 'error';
+  } finally {
+    if (request.current()) setBuildReady(true);
+    request.finish();
+  }
+});
+
+buildConnect.addEventListener('click', async () => {
+  const connection = buildConnection();
+  if (!connection) return;
+  clearBuildPreview();
   const request = startRequest('sequence-edit');
 
-  buildConnect.disabled = true;
+  setBuildReady(false);
   buildStatus.textContent = 'Inserting...';
   buildStatus.className = 'build-status';
 
@@ -1680,19 +1806,11 @@ buildConnect.addEventListener('click', async () => {
     const res = await fetchCalculation('/insert_bond', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({
-        cabiln: val,
-        host_residue_idx: buildLeftRIdx ?? 0,
-        new_abbr: newAbbr,
-        r_host: rHost,
-        r_new: rNew,
-        target_residue_idx: (buildRightRIdx !== null && buildRightRIdx !== buildLeftRIdx)
-                             ? buildRightRIdx : -1
-      }),
+      body: JSON.stringify(connection),
       signal: request.signal,
     });
     const data = await readResponse(res);
-    if (!request.current() || cabilnInput.value.trim() !== val) return;
+    if (!request.current() || cabilnInput.value.trim() !== connection.cabiln) return;
     if (data.error) {
       buildStatus.textContent = data.error;
       buildStatus.className = 'build-status invalid';

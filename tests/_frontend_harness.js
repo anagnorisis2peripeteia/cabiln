@@ -42,6 +42,7 @@ class Element {
   appendChild(element) { this.children.push(element); }
   click() { return this.dispatchEvent({ type: 'click' }); }
   focus() {}
+  scrollIntoView() {}
 }
 
 function page(script, { registration = false, storedDraft = null, now = Date.now } = {}) {

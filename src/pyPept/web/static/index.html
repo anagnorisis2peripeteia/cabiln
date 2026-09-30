@@ -44,7 +44,7 @@
 
 <section id="help-panel" class="help-panel" aria-labelledby="help-title" hidden>
   <div class="help-heading"><h2 id="help-title">Working with CABILN</h2><button type="button" id="help-close" class="panel-close" aria-label="Close help">✕</button></div>
-  <p>Type a sequence, or choose SMILES, BILN or HELM and convert it. Open Build, select a residue, then choose Use in the library and connect free numbered sites. Nested brackets keep their own attachment parent. Undo and Redo restore sequence edits.</p>
+  <p>Type a sequence, or choose SMILES, BILN or HELM and convert it. Open Build, select a residue, then choose Use in the library and choose free numbered sites. Preview shows the proposed molecule; Connect applies it. Nested brackets keep their own attachment parent. Undo and Redo restore sequence edits.</p>
   <p>Keep layout preserves your grouping. Canonical exports order the resolved monomer graph under a recorded convention and library binding. Imported structures can include inferred stereochemistry or preserved synthetic regions; open Import quality for details. Valid synthetic sites remain editable.</p>
   <p>Save project downloads your source, notation drafts, original reference and conversion details. Opening checks the definitions and reaction rules before loading. PNG and MOL export the current drawing and molecule.</p>
   <p>Your inputs and uploaded structures are sent to the server hosting this page for chemistry processing. Browser drafts stay in this browser's local storage; project files download to your device. Clearing a draft removes that browser copy only. Avoid putting private structures in public feedback.</p>
@@ -105,9 +105,11 @@
         <div class="box-placeholder">Click a chip above</div>
       </div>
       <div class="rgroup-buttons" id="build-left-rgroups" role="group" aria-labelledby="build-left-label"></div>
+      <p class="site-detail" id="build-left-site" hidden></p>
     </div>
     <div class="build-arrow">
       <div class="arrow-icon" aria-hidden="true">⟷</div>
+      <button type="button" class="hbtn" id="build-preview-button" aria-controls="build-preview" aria-expanded="false" disabled>Preview</button>
       <button type="button" class="build-connect-btn" id="build-connect" disabled>Connect</button>
       <div class="build-status" id="build-status" role="status" aria-live="polite" aria-atomic="true"></div>
     </div>
@@ -118,8 +120,26 @@
         <div class="box-placeholder">Choose Use in the library</div>
       </div>
       <div class="rgroup-buttons" id="build-right-rgroups" role="group" aria-labelledby="build-right-label"></div>
+      <p class="site-detail" id="build-right-site" hidden></p>
     </div>
   </div>
+  <section id="build-preview" aria-label="Connection preview" aria-busy="false" hidden>
+    <div class="build-header">
+      <h3 class="panel-title">Connection preview</h3>
+      <span class="build-hint">Not applied · Connect adds it to your sequence</span>
+      <button type="button" class="box-clear-btn" id="build-preview-close">Hide preview</button>
+    </div>
+    <p id="build-preview-status" role="status" aria-live="polite" aria-atomic="true"></p>
+    <p id="build-preview-reaction"></p>
+    <p class="site-explanation">Free-site groups describe the unconnected sites; the reaction can replace or rearrange them.</p>
+    <div id="build-preview-canvas" class="canvas-wrap" title="Scroll to zoom; drag to pan; double-click to reset">
+      <div id="build-preview-inner" class="canvas-inner"></div>
+    </div>
+    <details id="build-preview-notation" hidden>
+      <summary>Proposed CABILN</summary>
+      <code id="build-preview-source"></code>
+    </details>
+  </section>
   <div id="build-insert-row" style="display:none;">
     <span id="build-insert-info"></span>
     <button type="button" id="build-insert-btn" class="hbtn green">⊕ Insert Between</button>

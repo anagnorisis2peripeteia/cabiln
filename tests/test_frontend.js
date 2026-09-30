@@ -615,6 +615,92 @@ test('a cleared R-group selection cannot be enabled by old bond validation', asy
   assert.equal(ui.element('build-status').textContent, 'Choose a site on the current residue');
 });
 
+test('superseded connection previews cannot publish either a queued proposal or drawing', async () => {
+  for (const stage of ['proposal', 'drawing']) {
+    for (const action of ['site', 'residue', 'close', 'edit', 'library', 'hide']) {
+      const ui = page('builder.js');
+      ui.element('cabiln-input').value = 'G';
+      ui.run(`
+        buildMode = true; buildLeftRIdx = 0;
+        buildLeft = {abbr: 'G', selectedSlot: 2, rgroups: [{slot: 2, chem_type: 'backbone_c'}]};
+        buildRight = {abbr: 'A', selectedSlot: 1, rgroups: [{slot: 1, chem_type: 'backbone_n'}]};
+        libLoaded = true; libraryVersion = 'old';
+      `);
+      const validity = ui.run('checkBuildValidity()');
+      ui.requests[0].resolve({ valid: true, reaction: 'amide' });
+      await validity;
+      const pending = ui.element('build-preview-button').click();
+      let response = ui.requests[1];
+      if (stage === 'drawing') {
+        response.resolve({ result: 'G-A' });
+        await new Promise(setImmediate);
+        response = ui.requests[2];
+      }
+      if (action === 'site') ui.run('selectRgroup("left", 2)');
+      if (action === 'residue') ui.run('loadBuildRight("C")');
+      if (action === 'close') await ui.element('build-close').click();
+      if (action === 'edit') await ui.input('cabiln-input', 'G-K');
+      if (action === 'hide') await ui.element('build-preview-close').click();
+      if (action === 'library') {
+        const refresh = ui.run('loadMonomers()');
+        ui.requests.at(-1).resolve([], true, 200, { 'X-Library-Version': 'new' });
+        await refresh;
+      }
+      const count = ui.requests.length;
+      response.resolve(stage === 'proposal' ? { result: 'G-A' } : { ...rendered, svg: '<svg>STALE PREVIEW</svg>' });
+      await pending;
+      assert.equal(ui.requests.length, count, `${stage}/${action}: no follow-up render`);
+      assert.equal(ui.element('build-preview').hidden, true, `${stage}/${action}`);
+      assert.equal(ui.element('build-preview-inner').innerHTML, '');
+      assert.equal(ui.element('build-preview').getAttribute('aria-busy'), 'false');
+      assert.equal(ui.element('build-connect').disabled, action !== 'hide');
+      assert.equal(ui.element('cabiln-input').value, action === 'edit' ? 'G-K' : 'G');
+    }
+  }
+});
+
+test('preview waits for active drawings without cancelling them or accepting their library context', async () => {
+  for (const dismiss of [false, true]) {
+    const ui = page('builder.js');
+    ui.element('cabiln-input').value = 'G';
+    ui.run(`
+      buildMode = true; buildLeftRIdx = 0;
+      buildLeft = {abbr: 'G', selectedSlot: 2, rgroups: [{slot: 2, chem_type: 'backbone_c'}]};
+      buildRight = {abbr: 'A', selectedSlot: 1, rgroups: [{slot: 1, chem_type: 'backbone_n'}]};
+      replaceDocument({context: {project_version: 1, library_binding: 'original', canonical: {version: 1}}});
+    `);
+    const validity = ui.run('checkBuildValidity()');
+    ui.requests[0].resolve({ valid: true, reaction: 'amide' });
+    await validity;
+    await ui.input('smiles-input', 'NCC(=O)O');
+    await ui.timers();
+    const reference = ui.requests[1];
+    assert.equal(reference.url, '/render_reference');
+    const pending = ui.element('build-preview-button').click();
+    assert.equal(ui.requests.length, 2);
+    assert.match(ui.element('build-preview-status').textContent, /Waiting/);
+    if (dismiss) await ui.element('build-preview-close').click();
+    assert.equal(reference.options.signal.aborted, false);
+    reference.resolve(glycineDrawing);
+    await new Promise(setImmediate);
+    if (!dismiss) {
+      assert.equal(ui.requests[2].url, '/insert_bond');
+      ui.requests[2].resolve({ result: 'G-A' });
+      await new Promise(setImmediate);
+      ui.requests[3].resolve({ ...rendered, context: {
+        project_version: 1, library_binding: 'changed', canonical: {version: 1},
+      }, warnings: ['Preview warning'] });
+    }
+    await pending;
+    if (dismiss) assert.equal(ui.requests.length, 2);
+    else {
+      assert.match(ui.element('build-preview-status').textContent, /Library changed.*Preview warning/);
+      assert.equal(ui.run('editor.present.context.library_binding'), 'original');
+    }
+    assert.equal(ui.element('build-connect').disabled, false);
+  }
+});
+
 test('cancelled SMILES conversion restores the button without replacing main input', async () => {
   const ui = page('builder.js');
   ui.element('btn-s2c').textContent = '→ %';

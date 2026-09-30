@@ -202,6 +202,49 @@ test('library insertion replaces selected text and restores the input caret', as
   await capture(page, testInfo, 'tile-insert-caret');
 });
 
+test('atom and stereo glyphs and carbon joins retain highlighting under the pointer', async ({ page }, testInfo) => {
+  const rendered = await render(page, 'A');
+  const nitrogen = rendered.mol_block.split('\n').slice(4).findIndex(line => line.slice(31, 34).trim() === 'N');
+  expect(nitrogen).toBeGreaterThanOrEqual(0);
+  const svg = page.locator('#render-inner svg');
+  const chip = page.locator('#residue-chips [data-residue="0"]');
+  const targets = await svg.evaluate((drawing, nitrogen) => {
+    return [...drawing.querySelectorAll('path')].flatMap((path, index) => {
+      const kind = path.classList.contains('CIP_Code') ? 'stereo glyph'
+        : path.classList.contains(`atom-${nitrogen}`)
+        && !/\bbond-\d+\b/.test(path.getAttribute('class') || '') ? 'NH2 glyph'
+        : (path.getAttribute('d').match(/[a-z]/gi) || []).join('') === 'MLL' ? 'carbon join' : null;
+      if (!kind) return [];
+      const box = path.getBoundingClientRect();
+      for (let x = 0; x < 15; x++) for (let y = 0; y < 15; y++) {
+        const px = box.x + box.width * (x + 0.5) / 15;
+        const py = box.y + box.height * (y + 0.5) / 15;
+        if (document.elementFromPoint(px, py) === path) return [{ index, kind, x: px, y: py }];
+      }
+      throw new Error(`No painted point found for ${kind} path ${index}`);
+    });
+  }, nitrogen);
+  expect(targets.filter(target => target.kind === 'NH2 glyph').length).toBeGreaterThanOrEqual(3);
+  expect(targets.filter(target => target.kind === 'stereo glyph').length).toBe(3);
+  expect(targets.filter(target => target.kind === 'carbon join').length).toBeGreaterThan(0);
+
+  await chip.hover();
+  await expect(svg).toHaveClass(/has-highlight/);
+  expect.soft(await svg.locator('path:not(.res-hl)').count(), 'Every alanine path belongs to its selected residue').toBe(0);
+  const observed = [];
+  for (const target of targets) {
+    await page.mouse.move(target.x, target.y);
+    await expect.soft(chip, `${target.kind} hover selects alanine`).toHaveClass(/hover/, { timeout: 500 });
+    const path = svg.locator('path').nth(target.index);
+    await expect.soft(path, `${target.kind} remains visible`).toHaveCSS('opacity', '1', { timeout: 500 });
+    observed.push({ ...target, ...await path.evaluate(element => ({
+      classes: element.getAttribute('class'), opacity: getComputedStyle(element).opacity,
+      highlighted: element.closest('svg').classList.contains('has-highlight'),
+    })) });
+  }
+  await testInfo.attach('painted-highlight-targets', { body: JSON.stringify(observed, null, 2), contentType: 'application/json' });
+});
+
 test('canvas toggles, zoom, pan, reset, reroll and downloads remain usable', async ({ page }, testInfo) => {
   await render(page, 'ac-K-G-am');
   const canvas = page.locator('#render-canvas');

@@ -3,6 +3,72 @@
 from __future__ import annotations
 
 
+def _tag_atom_joins(svg, drawer, atom_count):
+    """Give RDKit's untagged bond-join paths the identity of their exact vertex."""
+    import re
+
+    # RDKit smoothBondJoins draws a three-point path around an unlabelled atom.
+    # Its middle point is that atom, rounded to one decimal place in the SVG.
+    # Coincident positions are ambiguous, so do not assign those paths an owner.
+    positions = {}
+    for index in range(atom_count):
+        point = drawer.GetDrawCoords(index)
+        position = (round(point.x, 1), round(point.y, 1))
+        positions[position] = index if position not in positions else None
+
+    number = r"-?\d+\.\d+"
+    join = (
+        rf"<path d='M {number},{number} L ({number}),({number})"
+        rf" L {number},{number}' style='fill:none;[^']*stroke-miterlimit:10;[^']*' />"
+    )
+
+    def tag(match):
+        index = positions.get((float(match[1]), float(match[2])))
+        if index is None:
+            return match[0]
+        return match[0].replace("<path ", f"<path class='atom-{index}' ", 1)
+
+    return re.sub(join, tag, svg)
+
+
+def _tag_stereo_annotations(svg, molecule):
+    """Attach stereo glyphs to their atoms using RDKit's annotation draw order."""
+    import re
+
+    from rdkit import Chem
+
+    marker = "class='CIP_Code'"
+    if marker not in svg:
+        return svg
+    relative_groups = [
+        group for group in molecule.GetStereoGroups()
+        if group.GetGroupType() != Chem.StereoGroupType.STEREO_ABSOLUTE
+    ]
+    hidden_atoms = {atom.GetIdx() for group in relative_groups for atom in group.GetAtoms()}
+    hidden_bonds = {bond.GetIdx() for group in relative_groups for bond in group.GetBonds()}
+    owners = []
+    # RDKit extractCIPCodes emits atom annotations, then bond annotations, in
+    # index order. Both SVG text backends emit one element per character.
+    for atom in molecule.GetAtoms():
+        if atom.HasProp("_CIPCode") and atom.GetIdx() not in hidden_atoms:
+            owners.extend([f"atom-{atom.GetIdx()}"] * (len(atom.GetProp("_CIPCode")) + 2))
+    for bond in molecule.GetBonds():
+        if bond.GetIdx() in hidden_bonds:
+            continue
+        code = bond.GetProp("_CIPCode") if bond.HasProp("_CIPCode") else {
+            Chem.BondStereo.STEREOE: "E", Chem.BondStereo.STEREOZ: "Z",
+        }.get(bond.GetStereo(), "")
+        if code:
+            owner = f"bond-{bond.GetIdx()} atom-{bond.GetBeginAtomIdx()} atom-{bond.GetEndAtomIdx()}"
+            owners.extend([owner] * (len(code) + 2))
+    # An unfamiliar RDKit output must not silently shift annotation ownership.
+    # Generic atomNote/bondNote elements have class 'note' and remain untouched.
+    if svg.count(marker) != len(owners):
+        return svg
+    owners = iter(owners)
+    return re.sub(marker, lambda _: f"class='CIP_Code {next(owners)}'", svg)
+
+
 def _indigo_layout(romol):
     """Lay out romol using Indigo's algorithm; copy coords back preserving atom indices."""
     from rdkit import Chem
@@ -164,7 +230,8 @@ def _draw_mol(
         opts.bondLineWidth = 1.0
     drawer.DrawMolecule(romol)
     drawer.FinishDrawing()
-    svg = drawer.GetDrawingText()
+    svg = _tag_atom_joins(drawer.GetDrawingText(), drawer, natoms)
+    svg = _tag_stereo_annotations(svg, romol)
 
     if used_slots is not None:
         dummy_slot = {}

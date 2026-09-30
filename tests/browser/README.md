@@ -13,8 +13,9 @@ npm test
 ```
 
 The suite covers building chains, caps, branches, disulfides, cycles and
-scaffolds; panels; tile families; chip/SVG selection; insertion; nested atom
-highlights; input formats; verification/uploads; registration; unknown-region
+scaffolds; connection previews and selected attachment sites; panels; tile
+families; chip/SVG selection; insertion; nested atom highlights; input formats;
+verification/uploads; registration; unknown-region
 editing; canvas controls; exports; and delayed/failed responses.
 
 The UX journeys also cover retained drawings and zoom, disabled stale selections,
