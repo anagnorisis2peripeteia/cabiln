@@ -16,7 +16,7 @@ assert.ok(seed === undefined || (/^-?\d+$/.test(process.env.CABILN_FUZZ_SEED) &&
 assert.ok(!process.env.CABILN_FUZZ_PATH || /^\d+(?::\d+)*$/.test(process.env.CABILN_FUZZ_PATH), 'CABILN_FUZZ_PATH must contain colon-separated non-negative integers');
 const artifacts = process.env.CABILN_FUZZ_ARTIFACTS || path.join(os.tmpdir(), 'cabiln-browser-fuzz');
 fs.mkdirSync(artifacts, { recursive: true });
-assert.ok(!process.env.CABILN_FUZZ_CASE || ['browser-branch-graphs', 'browser-editable-history', 'browser-delayed-ownership'].includes(process.env.CABILN_FUZZ_CASE), 'Unknown CABILN_FUZZ_CASE');
+assert.ok(!process.env.CABILN_FUZZ_CASE || ['browser-branch-graphs', 'browser-editable-history', 'browser-delayed-ownership', 'browser-cache-revalidation'].includes(process.env.CABILN_FUZZ_CASE), 'Unknown CABILN_FUZZ_CASE');
 const observedApplications = new Map();
 const root = path.resolve(__dirname, '../..');
 const sourceFiles = ['builder.js', 'document.js', 'project.js', 'requests.js', 'register.js'].map(name => `src/pyPept/web/static/${name}`).concat(['tests/browser/fixtures.js', 'tests/browser/fuzz.spec.cjs', 'tests/browser/fuzz.config.js', 'tests/browser/package-lock.json']);
@@ -28,14 +28,36 @@ async function freshPage(browser, app, name, body) {
   await context.tracing.start({ screenshots: true, snapshots: true, sources: true });
   const page = await context.newPage();
   const errors = [];
-  let failed = false;
+  let failure;
   const assetHashes = {};
+  const cacheValidations = {};
+  const assetBodies = new Map();
   const assets = [];
   page.on('response', response => {
-    const asset = new URL(response.url()).pathname;
-    if (/\/(builder|document|project|requests|register)\.js$/.test(asset)) {
-      assets.push(response.body().then(body => { assetHashes[asset] = crypto.createHash('sha256').update(body).digest('hex'); }));
-    }
+    const url = response.url();
+    const asset = new URL(url).pathname;
+    if (!/\/(builder|document|project|requests|register)\.js$/.test(asset)) return;
+    const status = response.status();
+    const captured = (async () => {
+      if (status === 304) {
+        // A revalidated script runs the previously loaded bytes; 304 has no body.
+        const previous = await assetBodies.get(url);
+        assert.ok(previous?.hash, `No captured 200 body for revalidated asset ${url}`);
+        assert.equal(response.headers().etag, previous.etag, `Revalidated asset ETag changed: ${url}`);
+        cacheValidations[asset] = (cacheValidations[asset] || 0) + 1;
+        return previous;
+      }
+      assert.equal(status, 200, `Unexpected asset response for ${url}`);
+      const body = await response.body();
+      return { hash: crypto.createHash('sha256').update(body).digest('hex'), etag: response.headers().etag };
+    })().then(value => {
+      assetHashes[asset] = value.hash;
+      return value;
+    }, error => ({ error }));
+    // Attach rejection handling during the response event. A delayed catch can
+    // abort Playwright before the owning history records or shrinks its failure.
+    if (status === 200) assetBodies.set(url, captured);
+    assets.push(captured);
   });
   page.on('pageerror', error => errors.push(error.message));
   try {
@@ -43,27 +65,38 @@ async function freshPage(browser, app, name, body) {
     await body(page);
     expect(errors).toEqual([]);
   } catch (error) {
-    failed = true;
-    // Every failing shrink replaces this capture; the final file is the last
-    // failing concrete browser state, alongside fast-check's minimized case.
-    await page.screenshot({ path: path.join(artifacts, `${name}-failure.png`) }).catch(() => {});
-    fs.writeFileSync(path.join(artifacts, `${name}-failure.html`), await page.content().catch(() => ''));
-    throw error;
-  } finally {
-    await Promise.all(assets);
+    failure = error;
+  }
+  const captureErrors = (await Promise.all(assets)).filter(result => result.error).map(result => result.error);
+  if (captureErrors.length) {
+    const allErrors = [...(failure ? [failure] : []), ...captureErrors];
+    failure = new AggregateError(allErrors, `Browser history or asset provenance failed:\n${allErrors.map(error => error.stack || error).join('\n')}`);
+  }
+  try {
+    if (failure) {
+      // Every failing shrink replaces this capture; the final file is the last
+      // failing concrete browser state, alongside fast-check's minimized case.
+      await page.screenshot({ path: path.join(artifacts, `${name}-failure.png`) }).catch(() => {});
+      fs.writeFileSync(path.join(artifacts, `${name}-failure.html`), await page.content().catch(() => ''));
+    }
     const binding = await page.evaluate(() => typeof projectSnapshot === 'function' ? projectSnapshot().context : null).catch(() => null);
     if (!observedApplications.has(name)) observedApplications.set(name, { appRoot: app.appRoot,
       installed: process.env.CABILN_BROWSER_INSTALLED === '1', python: process.env.CABILN_PYTHON || 'python3',
       execution: process.env.CABILN_EXECUTION || 'default', workerMemoryMb: process.env.CABILN_WORKER_MEMORY_MB || 'default',
       librarySha256: Object.fromEntries(['monomers.sdf', 'monomers.csv'].map(file => [file,
         crypto.createHash('sha256').update(fs.readFileSync(path.join(app.temporary, file))).digest('hex')])),
-      servedAssetsSha256: {}, libraryBindings: [] });
+      servedAssetsSha256: {}, assetCacheValidations: {}, libraryBindings: [] });
     const observed = observedApplications.get(name);
     Object.assign(observed.servedAssetsSha256, assetHashes);
+    for (const [asset, count] of Object.entries(cacheValidations)) {
+      observed.assetCacheValidations[asset] = (observed.assetCacheValidations[asset] || 0) + count;
+    }
     if (binding && !observed.libraryBindings.some(item => JSON.stringify(item) === JSON.stringify(binding))) observed.libraryBindings.push(binding);
-    await context.tracing.stop(failed ? { path: path.join(artifacts, `${name}-failure.trace.zip`) } : {});
-    await context.close();
+  } finally {
+    try { await context.tracing.stop(failure ? { path: path.join(artifacts, `${name}-failure.trace.zip`) } : {}); }
+    finally { await context.close(); }
   }
+  if (failure) throw failure;
 }
 
 async function campaign(name, arbitrary, body, browser) {
@@ -326,4 +359,29 @@ test('generated delayed completions preserve immediate conversion and current so
       expect(reference.content).toBe(originalMol);
     }
   }), browser);
+});
+
+// A conditional fetch exposes the body's absence deterministically on every OS;
+// Chromium can otherwise normalize a cached reload's 304 into a 200 response.
+test('asset provenance survives conditional 304 responses and page reload', async ({ browser, app }) => {
+  const name = 'browser-cache-revalidation';
+  test.skip(process.env.CABILN_FUZZ_CASE && process.env.CABILN_FUZZ_CASE !== name);
+  await freshPage(browser, app, name, async page => {
+    const validation = await page.evaluate(async () => {
+      const initial = await fetch('/static/requests.js');
+      const etag = initial.headers.get('etag');
+      await initial.arrayBuffer();
+      const response = await fetch('/static/requests.js', { headers: { 'If-None-Match': etag }, cache: 'no-store' });
+      return { etag, status: response.status };
+    });
+    expect(validation.etag).toBeTruthy();
+    expect(validation.status).toBe(304);
+    await page.reload();
+    await expect(page.locator('#cabiln-input')).toBeVisible();
+  });
+  const application = observedApplications.get(name);
+  expect(application.servedAssetsSha256['/static/requests.js'])
+    .toBe(source.sha256['src/pyPept/web/static/requests.js']);
+  expect(application.assetCacheValidations['/static/requests.js']).toBeGreaterThan(0);
+  fs.writeFileSync(path.join(artifacts, `${name}.json`), JSON.stringify({ source, application }, null, 2) + '\n');
 });
