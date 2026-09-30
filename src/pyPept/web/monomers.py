@@ -129,7 +129,7 @@ def _merged_quality(*entries):
     return {
         "status": status,
         "issues": [
-            {"code": issue["code"], "message": f"{entry['abbr']}: {issue['message']}"}
+            {**issue, "message": f"{entry['abbr']}: {issue['message']}"}
             for entry in quality
             for issue in entry["quality"]["issues"]
         ],
@@ -233,6 +233,16 @@ def preview_monomer(req: _PreviewReq):
         }
 
     except Exception as exc:
+        if isinstance(exc, ValueError) and str(exc).startswith(
+            "Cannot identify backbone (N + COOH) or a single cap terminus."
+        ):
+            return JSONResponse(
+                {"error": (
+                    "No supported attachment sites were detected. Preview a "
+                    "monomer with a supported backbone, cap or sidechain site."
+                )},
+                status_code=400,
+            )
         return error_response(exc)
 
 

@@ -416,6 +416,56 @@ def test_grouped_assignment_budget_does_not_claim_exhaustive_slot_validation(
     )
 
 
+def _mixed_connection_problem(*, max_states=100):
+    from pyPept.attachments import reaction_for_types
+    from pyPept.recognition import Candidate, _RecognitionProblem
+
+    # Eight early names have the same ownership but incompatible site chemistry.
+    # Both later alkyl-halide aliases must remain eligible for the thiol partner.
+    choices = tuple(
+        Candidate(
+            name, frozenset({0}), ((0, 1, 4),), ((0, 4),), False, "chem", 1,
+            ((4, chemistry),),
+        )
+        for name, chemistry in (
+            *((f"A{index}", "carbon") for index in range(8)),
+            ("ZValid0", "alkyl_halide_c"), ("ZValid1", "alkyl_halide_c"),
+        )
+    )
+    partner = Candidate(
+        "Cap", frozenset({1}), ((1, 0, 4),), ((1, 4),), False, "chem", 1,
+        ((4, "thiol"),),
+    )
+    return _RecognitionProblem(
+        Chem.MolFromSmiles("CS"),
+        RecognitionBudgets(max_states=max_states, max_assignments_per_partition=2),
+        (*choices, partner), False, (), connection_policy=reaction_for_types,
+    )
+
+
+def test_connection_policy_keeps_later_supported_aliases_in_ownership_group():
+    problem = _mixed_connection_problem()
+    result = problem.search(lambda cover: sum(len(c.atoms) for c in cover) == 2)
+    assert {c.symbol for cover in result.covers for c in cover} == {
+        "ZValid0", "ZValid1", "Cap",
+    }
+    for cover in result.covers:
+        _assert_partition(problem.molecule, cover, complete=True)
+    # Raw recognition retains its structural proposal contract when no policy
+    # is requested, even for connections outside the reaction library.
+    structural = replace(problem, connection_policy=None).search()
+    assert any(c.symbol.startswith("A") for cover in structural.covers for c in cover)
+
+
+def test_connection_policy_rejections_consume_existing_state_budget():
+    problem = _mixed_connection_problem(max_states=8)
+    result = problem.search(lambda cover: sum(len(c.atoms) for c in cover) == 2)
+    assert result.states == 8
+    assert not result.covers
+    assert result.exhausted
+    assert any("Search state limit (8)" in message for message in result.warnings)
+
+
 def test_hereditary_unknown_region_proof_prunes_a_partial_sidechain_match(
     select_library,
 ):

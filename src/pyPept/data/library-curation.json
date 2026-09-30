@@ -1,0 +1,114 @@
+{
+  "D_b3hTrp": {
+    "definition_hash": "aefa7b7287fe81d1f52c5f11def587b0cb1101b93435f76ad5b9a6c70ed35348",
+    "issues": [
+      {
+        "code": "identity_review",
+        "message": "Identity needs review: the stored ring is hydrogenated, unlike the indole ring named by D-beta3-homotryptophan.",
+        "observed_standalone": "N[C@@H](CC(=O)O)CC1CNC2CCCCC12",
+        "reviewed_against": "D-beta3-Homotryptophan",
+        "severity": "warning",
+        "sources": []
+      }
+    ]
+  },
+  "Hpic": {
+    "definition_hash": "aebea6eaad7b556673bced7608c901905069ae192be6ab0de5c02d618a088b56",
+    "issues": [
+      {
+        "code": "identity_review",
+        "message": "Identity needs review: the stored structure has no carboxyl group, although the name specifies hydroxypicolinate.",
+        "observed_standalone": "Oc1ccccn1",
+        "reviewed_against": "3-Hydroxypyridine-2-carboxylate (NRP cap)",
+        "severity": "warning",
+        "sources": [
+          "https://www.ncbi.nlm.nih.gov/mesh/68010848"
+        ]
+      }
+    ]
+  },
+  "Pca": {
+    "definition_hash": "9393034e5672127e16eb1e263f2e70e13a8e008269817ede8d465e550063fff7",
+    "issues": [
+      {
+        "code": "identity_review",
+        "message": "Identity needs review: the stored structure is pyridine-3-carboxylic acid; the name specifies the 2-isomer.",
+        "observed_standalone": "O=C(O)c1cccnc1",
+        "reviewed_against": "Pyridine-2-carboxylate (NRP N-terminal acyl cap)",
+        "severity": "warning",
+        "sources": [
+          "https://webbook.nist.gov/cgi/cbook.cgi?ID=98-98-6"
+        ]
+      }
+    ]
+  },
+  "PhosOxScaffold": {
+    "definition_hash": "8d011316975e8174b2935c62cb9704f6dda1ea88c50164f6352045c1efc90394",
+    "issues": [
+      {
+        "code": "identity_review",
+        "message": "Identity needs review: the stored carboxyl groups are meta to phosphorus; the name specifies ortho groups.",
+        "observed_standalone": "O=C(O)c1cccc(P(=O)(c2cccc(C(=O)O)c2)c2cccc(C(=O)O)c2)c1",
+        "reviewed_against": "tris(2-carboxyphenyl)-phosphine oxide (3-arm scaffold)",
+        "severity": "warning",
+        "sources": []
+      }
+    ]
+  },
+  "TATA": {
+    "definition_hash": "74ab772ef5dc682ac0e929cea5b6c4e93a8d10b6aa8e2e0845448df49af9a86c",
+    "issues": [
+      {
+        "code": "identity_review",
+        "message": "Unreacted arms need review: standalone rendering produces propionyl arms, although the name specifies acryloyl arms.",
+        "observed_standalone": "CCC(=O)N1CN(C(=O)CC)CN(C(=O)CC)C1",
+        "reviewed_against": "1,3,5-Triacryloyl-1,3,5-triazinane",
+        "severity": "warning",
+        "sources": []
+      }
+    ]
+  },
+  "bOH_Lys": {
+    "definition_hash": "dc8df0e2cad9a4cb4242ceb9a70b05ff62f8ca24e26a75244929c8c68ed7b14f",
+    "issues": [
+      {
+        "code": "identity_review",
+        "message": "Identity needs review: the stored structure has five carbon atoms; beta-hydroxylysine requires six.",
+        "observed_standalone": "NCC[C@@H](O)[C@@H](N)C(=O)O",
+        "reviewed_against": "beta-Hydroxylysine",
+        "severity": "warning",
+        "sources": [
+          "https://pubchem.ncbi.nlm.nih.gov/compound/3-Hydroxylysine"
+        ]
+      }
+    ]
+  },
+  "bOH_Val": {
+    "definition_hash": "878673fe5197740a87b80f565acbd9d6e59cfe287625fa0a4b52911e795b5b38",
+    "issues": [
+      {
+        "code": "identity_review",
+        "message": "Identity needs review: the stored structure has six carbon atoms; beta-hydroxyvaline requires five.",
+        "observed_standalone": "CC(C)[C@@H](O)[C@@H](N)C(=O)O",
+        "reviewed_against": "beta-Hydroxyvaline",
+        "severity": "warning",
+        "sources": [
+          "https://pubmed.ncbi.nlm.nih.gov/7557542/"
+        ]
+      }
+    ]
+  },
+  "hArg": {
+    "definition_hash": "edd930ef16793eb38b8847774040bfeabe601c4239f195ce84cb43eeeb759df5",
+    "issues": [
+      {
+        "code": "identity_review",
+        "message": "Identity needs review: this hArg definition has a saturated diaminomethyl group rather than a homoarginine guanidine.",
+        "observed_standalone": "NC(N)NCCCC[C@H](N)C(=O)O",
+        "reviewed_against": "(2S)-2-amino-6-[(diaminomethyl)amino]hexanoic acid",
+        "severity": "warning",
+        "sources": []
+      }
+    ]
+  }
+}

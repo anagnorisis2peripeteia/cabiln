@@ -46,6 +46,19 @@ class TestMonomerpipeline:
         assert err is None
         assert Chem.MolFromSmiles(smi) is not None
 
+    @pytest.mark.parametrize(
+        'token,expected',
+        [('T', 'C[C@@H](O)[C@H](N)C(=O)O'),
+         ('DThr', 'C[C@H](O)[C@@H](N)C(=O)O')],
+    )
+    def test_threonine_tokens_preserve_both_stereocenters(self, token, expected):
+        from pyPept.interfaces.monomer_pipeline import normalize_input
+
+        smiles, is_template, error = normalize_input(token)
+        assert error is None and not is_template
+        assert Chem.MolToSmiles(Chem.MolFromSmiles(smiles)) == Chem.MolToSmiles(
+            Chem.MolFromSmiles(expected))
+
     def test_normalize_unknown_returns_error(self):
         """Unrecognisable input returns a non-None error string."""
         from pyPept.interfaces.monomer_pipeline import normalize_input
@@ -296,9 +309,9 @@ class TestMonomerPreActivate:
             pytest.param('N[C@@H](Cc1ccc(O)cc1)C(=O)O', {1: 7, 2: 6, 3: 7, 4: 8},
                 None, {4: 'hydroxyl_phenolic'}, id='tyr_phenolic_oh'),
             pytest.param('N[C@@H](CC(=O)N)C(=O)O', {1: 7, 2: 6, 3: 7, 4: 7, 5: 7},
-                None, {4: 'amine_primary', 5: 'amine_secondary'}, id='asn_amide_nh2'),
+                None, {4: 'amide_nh', 5: 'amide_nh'}, id='asn_amide_nh2'),
             pytest.param('N[C@@H](CCC(=O)N)C(=O)O', {1: 7, 2: 6, 3: 7, 4: 7, 5: 7},
-                None, {4: 'amine_primary', 5: 'amine_secondary'}, id='gln_amide_nh2'),
+                None, {4: 'amide_nh', 5: 'amide_nh'}, id='gln_amide_nh2'),
             pytest.param('N[C@@H](C)C(=O)O', {1: 7, 2: 6, 3: 7},
                 {1: '[H]', 2: '[OH]', 3: '[H]'},
                 {1: 'backbone_n', 2: 'backbone_c', 3: 'backbone_n_mod'},
@@ -511,20 +524,45 @@ class TestMonomerPreActivate:
         assert smap[4] == 7
 
     def test_arg_guanidinium_slots(self):
-        """Arg: guanidinium label_only + terminal amine_primary."""
+        """All guanidine nitrogens retain their slots and actual functionality."""
         r = self._check('N[C@@H](CCCNC(=N)N)C(=O)O')
-        assert 'guanidinium' in r.chem_types.values()
-        assert 'amine_primary' in r.chem_types.values()
+        assert r.chem_types == {1: 'backbone_n', 2: 'backbone_c',
+                               3: 'backbone_n_mod', 4: 'guanidinium',
+                               5: 'guanidinium', 6: 'guanidinium_imine',
+                               7: 'guanidinium'}
         smap = self._slot_map(r.chuckles)
         guan_slot = [s for s, ct in r.chem_types.items() if ct == 'guanidinium'][0]
         assert smap[guan_slot] == 7
         assert r.leaving[guan_slot] == '[H]'
 
     def test_d_arg_guanidinium(self):
-        """D-Arg: same guanidinium + amine_primary slots."""
+        """D-Arg has guanidine rather than sidechain primary amine sites."""
         r = self._check('N[C@H](CCCNC(=N)N)C(=O)O')
         assert 'guanidinium' in r.chem_types.values()
-        assert 'amine_primary' in r.chem_types.values()
+        assert 'amine_primary' not in r.chem_types.values()
+
+    @pytest.mark.parametrize(
+        'smiles,expected,r1_type',
+        [
+            ('O=C(O)[C@@H]1CCC(=O)N1',
+             '[1*]N1C(=O)CC[C@H]1C([2*])=O', 'amide_nh'),
+            ('O[C@@H](CC(N)=O)C(=O)O',
+             '[1*]O[C@@H](CC(=O)N([4*])[5*])C([2*])=O', 'backbone_o'),
+            ('N[C@@H](CCCNC(=N)N)C(=O)O',
+             '[1*]N([3*])[C@@H](CCCN([5*])C(=N[6*])N([4*])[7*])C([2*])=O',
+             'backbone_n'),
+        ],
+    )
+    def test_backbone_roles_and_conjugated_n_preserve_selected_atoms(
+            self, smiles, expected, r1_type):
+        from pyPept.leaving_groups import restore_leaving_groups
+
+        result = self._check(smiles)
+        assert result.chuckles == Chem.MolToSmiles(Chem.MolFromSmiles(expected))
+        assert result.chem_types[1] == r1_type
+        restored = restore_leaving_groups(Chem.MolFromSmiles(result.chuckles),
+                                         result.leaving)
+        assert Chem.MolToSmiles(restored) == Chem.MolToSmiles(Chem.MolFromSmiles(smiles))
 
     def test_homoarg_guanidinium(self):
         """Homoarginine: longer chain to guanidinium."""

@@ -221,7 +221,6 @@ def parse_source(cabiln: str, warning_sink=None, *, track_source=False):
         sequence = Sequence(
             parsed_source, warning_sink=messages.append, track_source=track_source
         )
-        messages.insert(0, "Converted legacy positional notation to bracket form.")
     if warning_sink is not None:
         for message in messages:
             warning_sink(message)

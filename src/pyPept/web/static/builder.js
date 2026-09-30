@@ -49,15 +49,20 @@ function cancelRequests(...keys) {
 }
 function startRequest(key, onEnd = () => {}) {
   cancelRequests(key);
-  const pending = { controller: new AbortController(), onEnd };
+  let settle;
+  const done = new Promise(resolve => { settle = resolve; });
+  const pending = { controller: new AbortController(), done,
+    onEnd() { try { onEnd(); } finally { settle(); } },
+  };
   activeRequests.set(key, pending);
   return {
     signal: pending.controller.signal,
+    done,
     current: () => activeRequests.get(key) === pending,
     finish() {
       if (activeRequests.get(key) !== pending) return;
       activeRequests.delete(key);
-      onEnd();
+      pending.onEnd();
     },
   };
 }
@@ -71,6 +76,16 @@ async function readResponse(response) {
       : detail || 'The request could not be completed.';
   }
   return data;
+}
+
+function setStatus(element, message, kind = '') {
+  element.textContent = message;
+  element.title = message;
+  element.className = kind ? `statusbar ${kind}` : 'statusbar';
+}
+
+function invalidInputResponse(response) {
+  return response.status === 400 || response.status === 422;
 }
 
 const RES_COLORS = [
@@ -787,7 +802,8 @@ function renderLibList(q) {
       : `<span class="lib-badge cap">${escHtml(m.type)}</span>`;
 
     const issues = Array.isArray(m.quality?.issues) ? m.quality.issues : [];
-    const qualityText = issues.map(issue => issue.message).filter(Boolean).join(' · ');
+    const qualityText = issues.filter(issue => issue.severity !== 'info')
+      .map(issue => issue.message || issue.code).filter(Boolean).join(' · ');
     let lg = m.leaving ? `  LG: ${escHtml(m.leaving)}` : '';
     if (m.degenerate) {
       const parts = [];
@@ -940,7 +956,10 @@ function showPreview(data, row) {
   }
   const quality = data.quality || allMonomers.find(item => item.abbr === row.dataset?.abbr)?.quality;
   const issues = Array.isArray(quality?.issues) ? quality.issues : [];
-  if (issues.length) html += `<div class="prev-meta prev-warn">Library quality: ${issues.map(issue => escHtml(issue.message || issue.code)).join(' · ')}</div>`;
+  const notes = issues.filter(issue => issue.severity === 'info');
+  const warnings = issues.filter(issue => issue.severity !== 'info');
+  if (notes.length) html += `<div class="prev-meta">Library notes: ${notes.map(issue => escHtml(issue.message || issue.code)).join(' · ')}</div>`;
+  if (warnings.length) html += `<div class="prev-meta prev-warn">Library quality: ${warnings.map(issue => escHtml(issue.message || issue.code)).join(' · ')}</div>`;
   libPreview.innerHTML = html;
   const hasReagent = !!(data.svg_reagent || (data.variants && data.variants.some(v => v.svg_reagent)));
   libPreview.classList.toggle('has-reagent', hasReagent);
@@ -1685,12 +1704,46 @@ buildConnect.addEventListener('click', async () => {
 });
 
 // ─── notation conversion ──────────────────────────────────────────────────────
+async function settleDrawingsForConversion(request) {
+  // Aborting a running drawing retires the server's chemistry worker. Let the
+  // current drawing (and its automatic Verify) finish before competing with it.
+  while (request.current()) {
+    const pending = ['main-render', 'reference-render', 'verify']
+      .map(key => activeRequests.get(key)).find(Boolean);
+    if (pending) {
+      await Promise.race([pending.done, request.done]);
+      continue;
+    }
+    if (cabilnTimer !== null) {
+      clearTimeout(cabilnTimer);
+      cabilnTimer = null;
+      const text = cabilnInput.value.trim();
+      if (text) {
+        if (notationSelect.value === 'cabiln') doRenderCabiln(text);
+        else doRenderForeign(text);
+      }
+      continue;
+    }
+    if (smilesTimer !== null) {
+      clearTimeout(smilesTimer);
+      smilesTimer = null;
+      const text = smilesInput.value.trim();
+      if (text) doRenderRef(text);
+      continue;
+    }
+    return;
+  }
+}
+
 async function convertNotation(target) {
-  const val = cabilnInput.value.trim();
-  if (!val) return;
+  if (!cabilnInput.value.trim()) return;
   const canonical = notationPolicy.value === 'canonical';
   const request = startRequest('sequence-edit');
+  setStatus(cabilnStatus, '');
   try {
+    await settleDrawingsForConversion(request);
+    if (!request.current()) return;
+    const val = cabilnInput.value.trim();
     const res = await fetchCalculation('/convert_notation', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
@@ -1699,14 +1752,14 @@ async function convertNotation(target) {
     });
     const data = await readResponse(res);
     if (!request.current() || cabilnInput.value.trim() !== val) return;
-    if (data.error) { replaceDocument({ warning: data.error }); return; }
+    if (data.error) { setStatus(cabilnStatus, data.error); return; }
     if (data.result) {
       commitDocument(data.result, 'cabiln', editor.present.warning, {
         canonical: data.canonical || null, context: data.context || editor.present.context,
       });
     }
   } catch (e) {
-    if (request.current()) replaceDocument({ warning: 'Notation conversion failed. Try again.' });
+    if (request.current()) setStatus(cabilnStatus, 'Notation conversion failed. Try again.');
   } finally {
     request.finish();
   }
@@ -1743,12 +1796,16 @@ function useConvertedCabiln(sequence, warning = '', result = {}) {
 }
 
 async function doS2c(notation) {
-  const smiles = smilesInput.value.trim();
-  if (!smiles) return;
-  const originalMain = cabilnInput.value.trim();
+  if (!smilesInput.value.trim() && !activeRequests.has('reference-render')) return;
   const btn = notation === 'bracket' ? btnS2cBracket : btnS2c;
   const request = startConversion(btn);
+  setStatus(smilesStatus, '');
   try {
+    await settleDrawingsForConversion(request);
+    if (!request.current()) return;
+    const smiles = smilesInput.value.trim();
+    if (!smiles) return;
+    const originalMain = cabilnInput.value.trim();
     const res = await fetchCalculation('/smiles_to_cabiln', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1759,23 +1816,19 @@ async function doS2c(notation) {
     if (!request.current() || smilesInput.value.trim() !== smiles ||
         cabilnInput.value.trim() !== originalMain) return;
     if (data.error) {
-      smilesStatus.textContent = 'S2C: ' + data.error;
-      smilesStatus.className = 'statusbar';
+      setStatus(smilesStatus, 'S2C: ' + data.error);
     } else {
       useConvertedCabiln(data.cabiln, data.warning, data);
       if (data.warning) {
-        smilesStatus.textContent = `⚠ ${data.warning}`;
-        smilesStatus.className = 'statusbar warn';
+        setStatus(smilesStatus, `⚠ ${data.warning}`, 'warn');
       } else {
         const count = data.assignments?.length ?? data.details.length;
-        smilesStatus.textContent = `Converted (${notation}): ${count} monomer(s)`;
-        smilesStatus.className = 'statusbar ok';
+        setStatus(smilesStatus, `Converted (${notation}): ${count} monomer(s)`, 'ok');
       }
     }
   } catch (e) {
     if (!request.current()) return;
-    smilesStatus.textContent = 'S2C error — is server running?';
-    smilesStatus.className = 'statusbar';
+    setStatus(smilesStatus, 'Could not convert the reference. Try again.');
   } finally {
     request.finish();
   }
@@ -1785,12 +1838,15 @@ btnS2cBracket.addEventListener('click', () => doS2c('bracket'));
 
 // ─── main input → CABILN convert buttons ─────────────────────────────────────
 async function doToCabiln(notation) {
-  const txt = cabilnInput.value.trim();
-  const inputFormat = notationSelect.value;
-  if (!txt) return;
+  if (!cabilnInput.value.trim()) return;
   const btn = notation === 'bracket' ? btnToCabilnBracket : btnToCabilnPct;
   const request = startConversion(btn);
+  setStatus(cabilnStatus, '');
   try {
+    await settleDrawingsForConversion(request);
+    if (!request.current()) return;
+    const txt = cabilnInput.value.trim();
+    const inputFormat = notationSelect.value;
     const res = await fetchCalculation('/to_cabiln', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1801,17 +1857,14 @@ async function doToCabiln(notation) {
     if (!request.current() || cabilnInput.value.trim() !== txt ||
         notationSelect.value !== inputFormat) return;
     if (data.error) {
-      cabilnStatus.textContent = data.error;
-      cabilnStatus.className = 'statusbar';
+      setStatus(cabilnStatus, data.error);
     } else {
       useConvertedCabiln(data.cabiln, data.warning, data);
-      cabilnStatus.textContent = `Converted from ${data.from}: ${data.cabiln}`;
-      cabilnStatus.className = 'statusbar ok';
+      setStatus(cabilnStatus, `Converted from ${data.from}: ${data.cabiln}`, 'ok');
     }
   } catch (e) {
     if (!request.current()) return;
-    cabilnStatus.textContent = '→ CABILN error — is server running?';
-    cabilnStatus.className = 'statusbar';
+    setStatus(cabilnStatus, 'Could not convert the input. Try again.');
   } finally {
     request.finish();
   }
@@ -1871,11 +1924,14 @@ function setMainProgress(pending) {
   renderProgress.hidden = !pending && !(mainStale && hasMainDrawing);
   renderProgressLabel.textContent = pending
     ? (hasMainDrawing ? 'Updating — previous drawing shown' : 'Drawing structure…')
-    : 'Previous drawing — correct the input to update';
+    : cabilnInput.className === 'err'
+      ? 'Previous drawing — correct the input to update'
+      : 'Previous drawing — drawing unavailable; try again';
 }
 
 function invalidateDocument() {
   clearTimeout(cabilnTimer);
+  cabilnTimer = null;
   cancelRequests('main-render', 'sequence-edit');
   clearComparison();
   clearBuild();
@@ -1891,8 +1947,7 @@ function invalidateDocument() {
   btnReroll.disabled = true;
   btnReroll.textContent = '⟳ Layout';
   cabilnInput.className = '';
-  cabilnStatus.textContent = '';
-  cabilnStatus.className = 'statusbar';
+  setStatus(cabilnStatus, '');
 }
 
 function renderDocument(immediate = false) {
@@ -1905,7 +1960,10 @@ function renderDocument(immediate = false) {
   invalidateDocument();
   if (!hasMainDrawing) showSpinner(renderInner);
   setMainProgress(true);
-  const render = () => mode === 'cabiln' ? doRenderCabiln(seq) : doRenderForeign(seq);
+  const render = () => {
+    cabilnTimer = null;
+    return mode === 'cabiln' ? doRenderCabiln(seq) : doRenderForeign(seq);
+  };
   if (immediate) render();
   else cabilnTimer = setTimeout(render, 180);
 }
@@ -1921,12 +1979,11 @@ function acceptMainDrawing(svg, source, notation) {
   resChips.setAttribute('aria-disabled', 'false');
 }
 
-function mainRenderError(message) {
+function mainRenderError(message, invalidInput = false) {
   mainStale = true;
   if (!hasMainDrawing) setInner(renderInner, `<div class="placeholder err">${escHtml(message)}</div>`);
-  cabilnStatus.textContent = message;
-  cabilnStatus.className = 'statusbar';
-  cabilnInput.className = 'err';
+  setStatus(cabilnStatus, message);
+  cabilnInput.className = invalidInput ? 'err' : '';
 }
 
 async function doRenderForeign(txt) {
@@ -1948,14 +2005,13 @@ async function doRenderForeign(txt) {
     if (!request.current() || cabilnInput.value.trim() !== txt ||
         notationSelect.value !== mode) return;
     if (data.error) {
-      mainRenderError(data.error);
+      mainRenderError(data.error, invalidInputResponse(res));
     } else {
       acceptDocumentContext(data.context);
       acceptMainDrawing(data.svg, txt, mode);
       resChips.innerHTML = '';
       residueMap = {}; atomToRes = {}; residueList = [];
-      cabilnStatus.textContent = `${data.format}: ${data.info || ''}`;
-      cabilnStatus.className = 'statusbar ok';
+      setStatus(cabilnStatus, `${data.format}: ${data.info || ''}`, 'ok');
       cabilnInput.className = 'ok';
     }
   } catch (e) {
@@ -2004,7 +2060,7 @@ async function doRenderCabiln(seq) {
     if (!request.current() || cabilnInput.value.trim() !== seq ||
         notationSelect.value !== 'cabiln') return;
     if (data.error) {
-      mainRenderError(data.error);
+      mainRenderError(data.error, invalidInputResponse(res));
       clearExports();
       btnReroll.disabled = true;
     } else {
@@ -2017,9 +2073,8 @@ async function doRenderCabiln(seq) {
       acceptDocumentContext(data.context);
       lastCabiln = displayedSequence;
       acceptMainDrawing(data.svg, displayedSequence, 'cabiln');
-      cabilnStatus.textContent = [data.info, ...(data.warnings || [])].filter(Boolean).join(' · ');
-      cabilnStatus.title = cabilnStatus.textContent;
-      cabilnStatus.className = data.warnings?.length ? 'statusbar warn' : 'statusbar ok';
+      setStatus(cabilnStatus, [data.info, data.normalization_note, ...(data.warnings || [])].filter(Boolean).join(' · '),
+        data.warnings?.length ? 'warn' : 'ok');
       cabilnInput.className = 'ok';
       btnReroll.disabled = false;
       setExportReady(data.svg, data.mol_block);
@@ -2045,11 +2100,11 @@ async function doRenderCabiln(seq) {
 // ─── reference render (verify mode) — auto-detects SMILES / BILN / HELM ─────
 function clearReference() {
   clearTimeout(smilesTimer);
+  smilesTimer = null;
   cancelRequests('reference-render', 'sequence-edit');
   lastSmiles = '';
   smilesInput.className = '';
-  smilesStatus.textContent = '';
-  smilesStatus.className = 'statusbar';
+  setStatus(smilesStatus, '');
   clearComparison();
 }
 
@@ -2066,8 +2121,11 @@ smilesInput.addEventListener('input', () => {
     compareBar.innerHTML = '';
     return;
   }
-  smilesStatus.textContent = 'Updating reference…';
-  smilesTimer = setTimeout(() => doRenderRef(txt), 180);
+  setStatus(smilesStatus, 'Updating reference…');
+  smilesTimer = setTimeout(() => {
+    smilesTimer = null;
+    doRenderRef(txt);
+  }, 180);
 });
 
 molUpload.addEventListener('change', async (e) => {
@@ -2083,16 +2141,14 @@ molUpload.addEventListener('change', async (e) => {
   clearReference();
   const request = startRequest('reference-render');
   showSpinner(smilesInner);
-  smilesStatus.textContent = `Loaded: ${file.name}`;
-  smilesStatus.className = 'statusbar ok';
+  setStatus(smilesStatus, `Loaded: ${file.name}`, 'ok');
   try {
     const text = await file.text();
     if (!request.current()) return;
     await renderMolReference(text, file.name, request);
   } catch (err) {
     if (!request.current()) return;
-    smilesStatus.textContent = 'Could not read the MOL/SDF file. The previous document is unchanged.';
-    smilesStatus.className = 'statusbar';
+    setStatus(smilesStatus, 'Could not read the MOL/SDF file. Your peptide input is preserved.');
   } finally { request.finish(); }
 });
 
@@ -2105,7 +2161,7 @@ async function renderMolReference(text, name, request = startRequest('reference-
   referenceOriginal = { kind: 'mol', content: text, name };
   saveDraft();
   showSpinner(smilesInner);
-  smilesStatus.textContent = `Reference: ${name || 'uploaded structure'}`;
+  setStatus(smilesStatus, `Reference: ${name || 'uploaded structure'}`);
   try {
     const { w, h } = canvasSize(document.getElementById('smiles-canvas'));
     const res = await fetchCalculation('/render_mol', {
@@ -2118,8 +2174,7 @@ async function renderMolReference(text, name, request = startRequest('reference-
     if (!request.current()) return;
     if (data.error) {
       setInner(smilesInner, `<div class="placeholder err">${escHtml(data.error)}</div>`);
-      smilesStatus.textContent = data.error;
-      smilesStatus.className = 'statusbar';
+      setStatus(smilesStatus, data.error);
     } else {
       setInner(smilesInner, data.svg);
       lastSmiles = data.smiles || '';
@@ -2132,8 +2187,7 @@ async function renderMolReference(text, name, request = startRequest('reference-
     }
   } catch (err) {
     if (!request.current()) return;
-    smilesStatus.textContent = 'Failed to render the original MOL/SDF reference';
-    smilesStatus.className = 'statusbar';
+    setStatus(smilesStatus, 'Failed to render the original MOL/SDF reference');
   } finally { request.finish(); }
 }
 
@@ -2153,22 +2207,20 @@ async function doRenderRef(txt) {
     if (!request.current() || smilesInput.value.trim() !== txt) return;
     if (data.error) {
       setInner(smilesInner, `<div class="placeholder err">${escHtml(data.error)}</div>`);
-      smilesStatus.textContent = data.error;
-      smilesStatus.className = 'statusbar';
-      smilesInput.className = 'err';
+      setStatus(smilesStatus, data.error);
+      smilesInput.className = invalidInputResponse(res) ? 'err' : '';
     } else {
       setInner(smilesInner, data.svg);
       lastSmiles = data.smiles || '';
       acceptReferenceContext(data.context);
-      smilesStatus.textContent = `${data.format}: ${data.info || ''}`;
-      smilesStatus.className = 'statusbar ok';
+      setStatus(smilesStatus, `${data.format}: ${data.info || ''}`, 'ok');
       smilesInput.className = 'ok';
       if (lastCabiln) triggerVerify();
     }
   } catch (e) {
     if (!request.current()) return;
-    smilesStatus.textContent = 'Server error';
-    smilesStatus.className = 'statusbar';
+    setStatus(smilesStatus, 'Could not reach the renderer. Your reference input is preserved.');
+    smilesInput.className = '';
   } finally {
     request.finish();
   }

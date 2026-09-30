@@ -153,6 +153,15 @@ class TestActivatedSiteInference:
             pytest.param('[4*]N(N)C=O', 'hydrazide', id='hydrazide'),
             pytest.param('C([4*])1=CC(=O)NC1=O', 'maleimide_c', id='maleimide'),
             pytest.param('C([4*])C(=O)ON1C(=O)CCC1=O', 'nhs_ester', id='nhs-ester'),
+            pytest.param('c1ccc2n([4*])ccc2c1', 'aromatic_nh', id='indole-n'),
+            pytest.param('CC(=O)N([4*])[5*]', 'amide_nh', id='primary-amide-two-sites'),
+            pytest.param('CC(=O)N([4*])C', 'amide_nh', id='secondary-amide'),
+            pytest.param('NC(=N)N([4*])C', 'guanidinium', id='guanidine-chain-n'),
+            pytest.param('N=C(N([4*])[5*])NC', 'guanidinium', id='guanidine-terminal-n'),
+            pytest.param('COP([4*])(=O)O', 'phosphate_p', id='activated-phosphate'),
+            pytest.param('CN([5*])C([4*])=O', 'formamide_c', id='formamide-not-aldehyde'),
+            pytest.param('C[N+]([4*])(C)C', 'element_7', id='quaternary-n-not-primary-amine'),
+            pytest.param('[4*]N=CC', 'element_7', id='imine-not-primary-amine'),
         ],
     )
     def test_activated_site_type(self, smiles, expected):
@@ -164,6 +173,102 @@ class TestActivatedSiteInference:
                      if atom.GetAtomicNum() == 0 and atom.GetIsotope() == 4)
         attachment = dummy.GetNeighbors()[0].GetIdx()
         assert infer_chem_type(molecule, attachment, slot=3) == expected
+
+    @pytest.mark.parametrize(
+        'template,slot,declaration,leaving,expected',
+        [
+            ('[1*]Cc1ccc(C[2*])cc1', 1, '1:backbone_c_red', '[H]', 'backbone_c_red'),
+            ('[1*]N([3*])[C@@H]([2*])C(C)C', 2, '2:sp3_c_anchor', '[H]', 'sp3_c_anchor'),
+            ('[4*]C(=O)c1ccccc1', 4, '', '[OH]', 'aryl_amide_c'),
+            ('[4*]N1C=CC=C1', 4, '4:amine_primary', '[H]', 'aromatic_nh'),
+            ('CC(=O)N([4*])[5*]', 4, '4:backbone_n', '[H]', 'amide_nh'),
+            ('[4*]OC', 4, '4:backbone_c_red', '[H]', 'hydroxyl'),
+        ],
+    )
+    def test_structurally_checked_declarations(self, template, slot, declaration,
+                                               leaving, expected):
+        from pyPept.attachments import attachment_site
+
+        molecule = Chem.MolFromSmiles(template)
+        molecule.SetProp('m_chem_types', declaration)
+        groups = [None] * slot
+        groups[slot - 1] = leaving
+        assert attachment_site(molecule, slot, groups)['chem_type'] == expected
+
+    @pytest.mark.parametrize(
+        'notation,expected',
+        [
+            ('N.Ac(4,2)', 'CC(=O)NC(=O)C[C@H](N)C(=O)O'),
+            ('R.Ac(5,2)', 'CC(=O)N(CCC[C@H](N)C(=O)O)C(=N)N'),
+            ('N.D(4,4)', 'N[C@@H](CC(=O)NC(=O)C[C@H](N)C(=O)O)C(=O)O'),
+            ('R.D(5,4)', 'N=C(N)N(CCC[C@H](N)C(=O)O)C(=O)C[C@H](N)C(=O)O'),
+            ('ac-Pyr-am', 'CC(=O)N1C(=O)CC[C@H]1C(N)=O'),
+            ('K.Ac(5,2)', 'CC(=O)NCCCC[C@H](N)C(=O)O'),
+            ('pXyl.A(1,1)', 'Cc1ccc(CN[C@@H](C)C(=O)O)cc1'),
+            ('pXyl.A(2,1)', 'Cc1ccc(CN[C@@H](C)C(=O)O)cc1'),
+            ('ValAryl.ImzScaffold(2,4)', 'N[C@@H](c1ncn(C)c1)C(C)C'),
+            ('Ser_PO3H2.S(4,4)', 'N[C@@H](COP(=O)(O)OC[C@H](N)C(=O)O)C(=O)O'),
+        ],
+    )
+    def test_corrected_types_preserve_explicit_products(self, notation, expected):
+        assert Chem.MolToSmiles(_romol(notation)) == Chem.MolToSmiles(
+            Chem.MolFromSmiles(expected))
+
+    @pytest.mark.parametrize('notation', ['W.Ac(4,2)', 'H.Ac(4,2)'])
+    def test_aromatic_n_does_not_advertise_aliphatic_amine_reaction(self, notation):
+        with pytest.raises(ValueError, match='aromatic_nh') as error:
+            _romol(notation)
+        assert 'produced no products' not in str(error.value)
+
+    @pytest.mark.parametrize(
+        'template,slot,declaration,compatible',
+        [
+            ('[4*]Oc1ccccc1', 4, '4:hydroxyl_phenolic', True),
+            ('CN([4*])[5*]', 5, '5:amine_secondary', True),
+            ('CN([4*])[5*]', 4, '4:amine_secondary', False),
+            ('CC(=O)N([4*])[5*]', 5, '5:amine_secondary', False),
+            ('N=C(N([4*])[5*])NC', 5, '5:amine_secondary', False),
+            ('CCO[2*]', 2, '2:backbone_o', True),
+            ('CCO[4*]', 4, '4:backbone_o', False),
+        ],
+    )
+    def test_legacy_role_aliases_require_their_structural_context(
+            self, template, slot, declaration, compatible):
+        from pyPept.attachments import attachment_site, declaration_is_compatible
+
+        molecule = Chem.MolFromSmiles(template)
+        molecule.SetProp('m_chem_types', declaration)
+        site = attachment_site(molecule, slot, ['[H]'] * slot)
+        assert declaration_is_compatible(molecule, site) is compatible
+
+    @pytest.mark.parametrize(
+        'template,leaving,expected',
+        [('C[4*]', '[Cl]', 'CSC'),
+         ('C([4*])Cl', '[Cl]', 'CSCCl'),
+         ('C([4*])Cl', '[H]', None),
+         ('C([4*])Cl', None, None)],
+    )
+    def test_halide_substitution_uses_selected_leaving_group(
+            self, template, leaving, expected):
+        from pyPept.attachments import resolve_connection
+        from pyPept.interfaces.reaction_library import run_bond_smirks
+
+        thiol = Chem.MolFromSmiles('CS[3*]')
+        electrophile = Chem.MolFromSmiles(template)
+        electrophile.SetProp('m_chem_types', '4:alkyl_halide_c')
+        connection = resolve_connection(
+            thiol, 3, electrophile, 4,
+            leaving_groups1=[None, None, '[H]'],
+            leaving_groups2=[None, None, None, leaving])
+        if expected is None:
+            assert connection.chem_type2 != 'alkyl_halide_c'
+            assert connection.reaction is None
+        else:
+            assert connection.chem_type2 == 'alkyl_halide_c'
+            product = run_bond_smirks(thiol, electrophile, 3, 4,
+                                     connection.reaction, intramolecular=False)
+            assert Chem.MolToSmiles(product) == Chem.MolToSmiles(
+                Chem.MolFromSmiles(expected))
 
 
 class TestOxime:
@@ -389,9 +494,9 @@ class TestThioetherHalide:
         assert entry['id'] == 'thioether_halide'
 
     def test_alkyl_halide_chem_type(self):
-        """infer_chem_type returns alkyl_halide_c for C bonded to [4*] and Cl."""
+        """One chloride is selected for substitution on a dichloromethyl group."""
         from pyPept.interfaces.reaction_library import infer_chem_type
-        # After pre_activate: CH2Cl → C([4*])HCl; C is bonded to [400*], chain, Cl, H
+        # CH2Cl2 -> [400*]CH2Cl, with the displaced chloride in metadata.
         mol = Chem.MolFromSmiles('[400*]CCl')
         assert mol is not None
         attach_idx = next(
@@ -399,7 +504,7 @@ class TestThioetherHalide:
             for a in mol.GetAtoms() if a.GetAtomicNum() == 0 and a.GetIsotope() == 400
             for nb in a.GetNeighbors()
         )
-        ct = infer_chem_type(mol, attach_idx, slot=3)
+        ct = infer_chem_type(mol, attach_idx, slot=400, leaving='[Cl]')
         assert ct == 'alkyl_halide_c', f"Expected alkyl_halide_c, got {ct}"
 
     def test_thioether_halide_smirks_direct(self):

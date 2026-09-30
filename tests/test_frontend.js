@@ -125,6 +125,9 @@ const rendered = {
   svg: '<svg>OLD STRUCTURE</svg>', mol_block: 'OLD MOL', info: 'old',
   residue_map: {}, residues: [], chains: [], bracket_groups: [], crosslink_groups: [],
 };
+const glycineDrawing = {
+  svg: '<svg>GLYCINE</svg>', format: 'SMILES', smiles: 'NCC(=O)O', info: '5 atoms',
+};
 const preview = {
   svg: '<svg>PREVIEW</svg>', chuckles: '[1*]NCC([2*])=O',
   chem_types: { 1: 'backbone_n', 2: 'backbone_c' },
@@ -335,10 +338,15 @@ test('legacy normalization updates the source before exposing selectable residue
   ui.element('cabiln-input').value = 'D.(4,1)-G%G-A';
   const pending = ui.run("doRenderCabiln(cabilnInput.value)");
   const normalized = 'D.[G(4,1).A(2,1)]-G';
-  ui.requests[0].resolve({ ...rendered, normalized_cabiln: normalized, cabiln_echo: normalized });
+  const note = 'Converted legacy positional notation to bracket form.';
+  ui.requests[0].resolve({ ...rendered, normalized_cabiln: normalized, cabiln_echo: normalized,
+    normalization_note: note, warnings: [] });
   await pending;
   assert.equal(ui.element('cabiln-input').value, normalized);
   assert.equal(ui.run('lastCabiln'), normalized);
+  assert.equal(ui.element('cabiln-status').textContent, 'old · ' + note);
+  assert.equal(ui.element('cabiln-status').className, 'statusbar ok');
+  assert.equal(ui.element('cabiln-status').title, ui.element('cabiln-status').textContent);
 });
 
 test('clearing the main input discards an already pending render and exports', async () => {
@@ -389,6 +397,7 @@ test('notation conversion cannot replace an input edited during the request', as
   const ui = page('builder.js');
   ui.element('cabiln-input').value = 'A-G';
   const pending = ui.run('convertNotation("bracket")');
+  await new Promise(setImmediate);
   await ui.input('cabiln-input', 'K-C');
   ui.requests[0].resolve({ result: 'OLD CONVERSION' });
   await pending;
@@ -400,6 +409,8 @@ test('canonical formatting is explicit and the original spelling remains undoabl
   await ui.input('cabiln-input', 'Ala-Gly');
   ui.element('notation-policy').value = 'canonical';
   const pending = ui.run('convertNotation("bracket")');
+  latestRequest(ui, '/render').resolve(rendered);
+  await new Promise(setImmediate);
   const request = ui.requests.find(request => request.url === '/convert_notation');
   assert.deepEqual(JSON.parse(request.options.body), {
     cabiln: 'Ala-Gly', target: 'bracket', canonical: true,
@@ -442,25 +453,120 @@ test('typing coalesces Undo while server normalization preserves Redo', async ()
   assert.equal(ui.element('btn-redo').disabled, true);
 });
 
-test('layout formatting stays the default and errors retain the document', async () => {
+test('layout errors retain the document without persisting as scientific warnings', async () => {
   const ui = page('builder.js');
   const original = 'K.{G(4,2).ac(1,2)}-A';
   await ui.input('cabiln-input', original);
-  const rendering = ui.run('doRenderCabiln(cabilnInput.value)');
-  const pending = ui.run('convertNotation("branch")');
+  await ui.timers();
+  const history = ui.run('editor.past.length');
+  let pending = ui.element('btn-to-branch').click();
+  assert.equal(latestRequest(ui, '/convert_notation'), undefined);
+  latestRequest(ui, '/render').resolve({ ...rendered, context: binding });
+  await new Promise(setImmediate);
   const request = ui.requests.find(request => request.url === '/convert_notation');
   assert.equal(JSON.parse(request.options.body).canonical, false);
   request.resolve({ error: 'Cannot preserve the requested attachment' }, false);
   await pending;
   assert.equal(ui.element('cabiln-input').value, original);
-  assert.equal(ui.element('conversion-status').hidden, false);
-  assert.equal(ui.element('conversion-status').textContent, 'Cannot preserve the requested attachment');
+  assert.equal(ui.element('cabiln-status').textContent, 'Cannot preserve the requested attachment');
+  assert.equal(ui.element('cabiln-status').title, 'Cannot preserve the requested attachment');
+  assert.equal(ui.element('conversion-status').hidden, true);
+  assert.equal(ui.run('editor.past.length'), history);
+  ui.run('saveDraft()');
+  const saved = JSON.parse(ui.storage.get('cabiln.draft.v1'));
+  assert.equal(saved.document.warning, '');
+  assert.equal(ui.run('projectSnapshot().document.warning'), '');
+  const restored = page('builder.js', { storedDraft: saved });
+  const restoring = restored.element('btn-restore-draft').click();
+  const validation = latestRequest(restored, '/prepare_project');
+  validation.resolve({ project: JSON.parse(validation.options.body).project });
+  await restoring;
+  assert.equal(restored.element('cabiln-input').value, original);
+  assert.equal(restored.element('conversion-status').hidden, true);
+  assert.doesNotMatch(restored.element('cabiln-status').textContent, /Cannot preserve/);
+
+  pending = ui.element('btn-to-branch').click();
+  await new Promise(setImmediate);
+  latestRequest(ui, '/convert_notation').resolve({ result: original, context: binding });
+  await pending;
   latestRequest(ui, '/render').resolve({ ...rendered, context: binding });
-  await rendering;
-  assert.equal(ui.element('conversion-status').hidden, false);
-  assert.equal(ui.element('conversion-status').textContent, 'Cannot preserve the requested attachment');
-  assert.equal(JSON.parse(ui.storage.get('cabiln.draft.v1')).document.warning,
-    'Cannot preserve the requested attachment');
+  await new Promise(setImmediate);
+  assert.doesNotMatch(ui.element('cabiln-status').textContent, /Cannot preserve/);
+  assert.doesNotMatch(ui.element('cabiln-status').title, /Cannot preserve/);
+  assert.equal(ui.element('conversion-status').hidden, true);
+  ui.run('saveDraft()');
+  assert.equal(JSON.parse(ui.storage.get('cabiln.draft.v1')).document.warning, '');
+});
+
+test('format conversion uses a source normalized by its pending drawing', async () => {
+  const ui = page('builder.js');
+  await ui.input('cabiln-input', 'Ala-Gly');
+  const history = ui.run('editor.past.length');
+  const converting = ui.element('btn-to-bracket').click();
+  assert.equal(latestRequest(ui, '/convert_notation'), undefined);
+  latestRequest(ui, '/render').resolve({ ...rendered, normalized_cabiln: 'A-G' });
+  await new Promise(setImmediate);
+  const request = latestRequest(ui, '/convert_notation');
+  assert.deepEqual(JSON.parse(request.options.body), { cabiln: 'A-G', target: 'bracket', canonical: false });
+  request.resolve({ result: 'A-G' });
+  await converting;
+  assert.equal(ui.element('cabiln-input').value, 'A-G');
+  assert.equal(ui.run('editor.past.length'), history);
+});
+
+test('a failed format request preserves scientific warnings and recognition evidence', async () => {
+  const ui = page('builder.js');
+  setImported(ui);
+  const converting = ui.element('btn-to-bracket').click();
+  latestRequest(ui, '/render').resolve({ ...rendered, context: binding });
+  await new Promise(setImmediate);
+  const before = ui.run('JSON.stringify(editor.present)');
+  const history = ui.run('editor.past.length');
+  latestRequest(ui, '/convert_notation').reject(new Error('Connection lost'));
+  await converting;
+  assert.equal(ui.element('cabiln-status').textContent, 'Notation conversion failed. Try again.');
+  assert.equal(ui.element('conversion-status').textContent, imported.warnings[0]);
+  assert.equal(ui.run('JSON.stringify(editor.present)'), before);
+  assert.equal(ui.run('editor.past.length'), history);
+  ui.run('saveDraft()');
+  assert.equal(JSON.parse(ui.storage.get('cabiln.draft.v1')).document.warning, imported.warnings[0]);
+});
+
+test('render transport failures preserve source without reporting invalid syntax', async () => {
+  for (const mode of ['cabiln', 'smiles', 'reference']) {
+    for (const failure of ['network', 503, 400]) {
+      const ui = page('builder.js');
+      const reference = mode === 'reference';
+      const input = reference ? 'smiles-input' : 'cabiln-input';
+      const status = reference ? 'smiles-status' : 'cabiln-status';
+      const url = mode === 'cabiln' ? '/render' : '/render_reference';
+      if (mode === 'smiles') ui.element('notation-select').value = 'smiles';
+      await ui.input(input, mode === 'cabiln' ? 'A-G' : 'NCC(=O)O');
+      await ui.timers();
+      latestRequest(ui, url).resolve(mode === 'cabiln' ? rendered : glycineDrawing);
+      await new Promise(setImmediate);
+      const drawing = ui.element('render-inner').innerHTML;
+      const source = mode === 'cabiln' ? 'G-A' : 'CC(=O)O';
+      await ui.input(input, source);
+      await ui.timers();
+      const request = latestRequest(ui, url);
+      if (failure === 'network') request.reject(new Error('Connection closed'));
+      else request.resolve({ error: failure === 400 ? 'Unsupported input' : 'Chemistry capacity is busy' }, false, failure);
+      await new Promise(setImmediate);
+      const label = `${mode}/${failure}`;
+      assert.equal(ui.element(input).value, source, label);
+      assert.equal(ui.element(input).className, failure === 400 ? 'err' : '', label);
+      assert.match(ui.element(status).textContent, failure === 'network' ? /input is preserved/ : failure === 400 ? /Unsupported input/ : /capacity is busy/, label);
+      assert.equal(ui.element(status).title, ui.element(status).textContent, label);
+      if (!reference) {
+        assert.equal(ui.element('render-inner').innerHTML, drawing, label);
+        assert.equal(ui.element('render-pane').getAttribute('aria-busy'), 'false', label);
+        assert.match(ui.element('render-progress-label').textContent,
+          failure === 400 ? /correct the input/ : /drawing unavailable; try again/, label);
+        assert.equal(ui.element('btn-mol').disabled, true, label);
+      }
+    }
+  }
 });
 
 test('recursive sibling tabs return to their parent and highlight exact descendants', async () => {
@@ -609,6 +715,7 @@ test('cancelled SMILES conversion restores the button without replacing main inp
   ui.element('smiles-input').value = 'NCC(=O)O';
   ui.element('cabiln-input').value = 'A-G';
   const pending = ui.run('doS2c("percent")');
+  await new Promise(setImmediate);
   await ui.input('smiles-input', 'CC(=O)O');
   assert.equal(ui.element('btn-s2c').disabled, false);
   assert.equal(ui.element('btn-s2c').textContent, '→ %');
@@ -622,6 +729,7 @@ test('conversion results cannot override a notation switch', async () => {
   ui.element('notation-select').value = 'smiles';
   ui.element('cabiln-input').value = 'NCC(=O)O';
   const pending = ui.run('doToCabiln("bracket")');
+  await new Promise(setImmediate);
   assert.deepEqual(JSON.parse(ui.requests[0].options.body), {
     input: 'NCC(=O)O', input_format: 'smiles', notation: 'bracket',
   });
@@ -631,6 +739,180 @@ test('conversion results cannot override a notation switch', async () => {
   await pending;
   assert.equal(ui.element('notation-select').value, 'helm');
   assert.equal(ui.element('cabiln-input').value, '');
+});
+
+test('an immediate conversion waits for a restored draft drawing and preserves its history', async () => {
+  const ui = page('builder.js');
+  await ui.input('cabiln-input', 'K-G');
+  await ui.timers();
+  latestRequest(ui, '/render').resolve({ ...rendered, context: binding });
+  await new Promise(setImmediate);
+  ui.element('notation-select').value = 'smiles';
+  await ui.element('notation-select').dispatchEvent({ type: 'change' });
+  await ui.input('cabiln-input', 'NCC(=O)O');
+  await ui.timers();
+  latestRequest(ui, '/render_reference').resolve({ ...glycineDrawing, context: binding });
+  await new Promise(setImmediate);
+  ui.element('notation-select').value = 'cabiln';
+  await ui.element('notation-select').dispatchEvent({ type: 'change' });
+  const obsolete = latestRequest(ui, '/render');
+  ui.element('notation-select').value = 'smiles';
+  await ui.element('notation-select').dispatchEvent({ type: 'change' });
+  const history = ui.run('editor.past.length');
+  const converting = ui.element('btn-to-cabiln-pct').click();
+  assert.equal(ui.element('conversion-progress').hidden, false);
+  for (let attempt = 0; attempt < 2; attempt++) {
+    latestRequest(ui, '/render_reference').resolve({ error: 'Chemistry capacity is busy' }, false, 503, { 'Retry-After': '1' });
+    await new Promise(setImmediate);
+    assert.equal(latestRequest(ui, '/to_cabiln'), undefined);
+    assert.equal(ui.element('cabiln-input').value, 'NCC(=O)O');
+    await ui.timers();
+  }
+  latestRequest(ui, '/render_reference').resolve({ ...glycineDrawing, context: binding });
+  await new Promise(setImmediate);
+  const request = latestRequest(ui, '/to_cabiln');
+  assert.deepEqual(JSON.parse(request.options.body), {
+    input: 'NCC(=O)O', input_format: 'smiles', notation: 'percent',
+  });
+  request.resolve(recognizedGlycine);
+  await converting;
+  latestRequest(ui, '/render').resolve({ ...rendered, context: binding });
+  obsolete.resolve({ ...rendered, info: 'OBSOLETE DRAWING' });
+  await new Promise(setImmediate);
+  assert.equal(ui.element('cabiln-input').value, 'G');
+  assert.equal(ui.element('notation-select').value, 'cabiln');
+  assert.equal(ui.element('conversion-progress').hidden, true);
+  assert.equal(ui.element('btn-to-cabiln-pct').disabled, false);
+  assert.equal(ui.run('editor.present.quality.recognition_status'), 'complete');
+  assert.equal(ui.run('editor.past.length'), history + 1);
+  assert.doesNotMatch(ui.element('cabiln-status').textContent, /busy|OBSOLETE/);
+  await ui.element('btn-undo').click();
+  assert.equal(ui.element('cabiln-input').value, 'NCC(=O)O');
+  assert.equal(ui.element('notation-select').value, 'smiles');
+  await ui.element('btn-redo').click();
+  assert.equal(ui.element('cabiln-input').value, 'G');
+  assert.equal(ui.run('editor.present.quality.recognition_status'), 'complete');
+});
+
+test('editing cancels a conversion waiting for an independent reference drawing', async () => {
+  const ui = page('builder.js');
+  ui.element('notation-select').value = 'smiles';
+  await ui.input('cabiln-input', 'NCC(=O)O');
+  await ui.input('smiles-input', 'CC(=O)O');
+  const converting = ui.element('btn-to-cabiln-pct').click();
+  latestRequest(ui, '/render_reference').resolve(glycineDrawing);
+  await new Promise(setImmediate);
+  const reference = latestRequest(ui, '/render_reference');
+  assert.equal(JSON.parse(reference.options.body).input, 'CC(=O)O');
+  assert.equal(latestRequest(ui, '/to_cabiln'), undefined);
+  await ui.input('cabiln-input', 'CC');
+  await converting;
+  assert.equal(ui.element('conversion-progress').hidden, true);
+  assert.equal(ui.element('btn-to-cabiln-pct').disabled, false);
+  assert.equal(reference.options.signal.aborted, false);
+  reference.resolve({ svg: '<svg>REFERENCE</svg>', smiles: 'CC(=O)O', format: 'SMILES' });
+  await new Promise(setImmediate);
+  await ui.timers();
+  assert.equal(latestRequest(ui, '/to_cabiln'), undefined);
+  assert.equal(ui.element('cabiln-input').value, 'CC');
+});
+
+test('a terminal conversion error stays visible after its drawing has settled', async () => {
+  const ui = page('builder.js');
+  ui.element('notation-select').value = 'smiles';
+  await ui.input('cabiln-input', 'NCC(=O)O');
+  const converting = ui.element('btn-to-cabiln-bracket').click();
+  latestRequest(ui, '/render_reference').resolve({ ...glycineDrawing, context: binding });
+  await new Promise(setImmediate);
+  for (let attempt = 0; attempt < 3; attempt++) {
+    latestRequest(ui, '/to_cabiln').resolve({ error: 'Chemistry capacity is busy; retry shortly' }, false, 503, { 'Retry-After': '1' });
+    await new Promise(setImmediate);
+    if (attempt < 2) await ui.timers();
+  }
+  await converting;
+  ui.run(`acceptDocumentContext(${JSON.stringify(binding)}); saveDraft()`);
+  assert.match(ui.element('cabiln-status').textContent, /capacity is busy/);
+  assert.equal(ui.element('cabiln-status').className, 'statusbar');
+  assert.equal(ui.element('cabiln-status').title, ui.element('cabiln-status').textContent);
+  assert.equal(ui.element('cabiln-input').className, 'ok');
+  assert.equal(ui.element('cabiln-input').value, 'NCC(=O)O');
+  assert.equal(ui.element('notation-select').value, 'smiles');
+  assert.equal(ui.element('conversion-progress').hidden, true);
+  assert.equal(ui.element('btn-to-cabiln-bracket').disabled, false);
+  assert.equal(JSON.parse(ui.storage.get('cabiln.draft.v1')).document.warning, '');
+});
+
+test('reference conversion waits for original MOL rendering and its automatic Verify', async () => {
+  const ui = page('builder.js');
+  await ui.input('cabiln-input', 'G');
+  await ui.timers();
+  latestRequest(ui, '/render').resolve({ ...rendered, context: binding });
+  await new Promise(setImmediate);
+  ui.run('verifyMode = true');
+  const original = 'ORIGINAL MOL\r\nwith exact newlines\n';
+  const uploading = ui.element('mol-upload').dispatchEvent({ type: 'change', target: { files: [{
+    name: 'original.mol', text: async () => original,
+  }] } });
+  await new Promise(setImmediate);
+  const converting = ui.element('btn-s2c').click();
+  assert.equal(latestRequest(ui, '/smiles_to_cabiln'), undefined);
+  latestRequest(ui, '/render_mol').resolve({ ...glycineDrawing, context: binding });
+  await uploading;
+  await new Promise(setImmediate);
+  assert.equal(latestRequest(ui, '/smiles_to_cabiln'), undefined);
+  const verification = latestRequest(ui, '/verify');
+  assert.deepEqual(JSON.parse(verification.options.body), { smiles: 'NCC(=O)O', cabiln: 'G' });
+  verification.resolve({ match: true });
+  await new Promise(setImmediate);
+  const request = latestRequest(ui, '/smiles_to_cabiln');
+  assert.deepEqual(JSON.parse(request.options.body), { smiles: 'NCC(=O)O', notation: 'percent' });
+  request.resolve(recognizedGlycine);
+  await converting;
+  latestRequest(ui, '/render').resolve({ ...rendered, context: binding });
+  await new Promise(setImmediate);
+  latestRequest(ui, '/verify').resolve({ match: true });
+  await new Promise(setImmediate);
+  assert.equal(ui.element('cabiln-input').value, 'G');
+  assert.equal(ui.run('referenceOriginal.content'), original);
+  assert.equal(ui.run('referenceOriginal.name'), 'original.mol');
+  assert.equal(ui.run('referenceContext.library_binding.monomers'), 'library-one');
+  ui.run('saveDraft()');
+  assert.equal(JSON.parse(ui.storage.get('cabiln.draft.v1')).reference_original.content, original);
+  assert.equal(ui.run('editor.present.quality.recognition_status'), 'complete');
+});
+
+test('conversion transport errors offer retry and preserve the current sources', async () => {
+  for (const reference of [false, true]) {
+    const ui = page('builder.js');
+    ui.element('notation-select').value = 'smiles';
+    ui.element('cabiln-input').value = 'NCC(=O)O';
+    ui.element('smiles-input').value = 'CC(=O)O';
+    const button = reference ? 'btn-s2c' : 'btn-to-cabiln-pct';
+    const converting = ui.element(button).click();
+    await new Promise(setImmediate);
+    latestRequest(ui, reference ? '/smiles_to_cabiln' : '/to_cabiln').reject(new Error('Connection lost'));
+    await converting;
+    assert.equal(ui.element(reference ? 'smiles-status' : 'cabiln-status').textContent,
+      reference ? 'Could not convert the reference. Try again.' : 'Could not convert the input. Try again.');
+    assert.equal(ui.element('cabiln-input').value, 'NCC(=O)O');
+    assert.equal(ui.element('smiles-input').value, 'CC(=O)O');
+    assert.equal(ui.element(button).disabled, false);
+    assert.equal(ui.element('conversion-progress').hidden, true);
+    assert.equal(ui.run('editor.present.warning'), '');
+  }
+});
+
+test('an unreadable MOL reports that peptide input is preserved', async () => {
+  const ui = page('builder.js');
+  await ui.input('cabiln-input', 'A-G');
+  const before = ui.run('JSON.stringify(editor.present)');
+  await ui.element('mol-upload').dispatchEvent({ type: 'change', target: { files: [{
+    name: 'unreadable.mol', text: async () => { throw new Error('File unavailable'); },
+  }] } });
+  assert.equal(ui.run('JSON.stringify(editor.present)'), before);
+  assert.equal(ui.element('cabiln-input').value, 'A-G');
+  assert.equal(ui.element('smiles-status').textContent,
+    'Could not read the MOL/SDF file. Your peptide input is preserved.');
 });
 
 test('a pending connection cannot overwrite manual sequence edits', async () => {
@@ -730,6 +1012,12 @@ const binding = {
   library_binding: { monomers: 'library-one', aliases: 'aliases', reactions: 'rules', caps: 'caps' },
   canonical: { format: 'cabiln-graph-v1', labeling: 'rdkit-colored-port-graph-v1', rdkit: '2026.03.1' },
 };
+const recognizedGlycine = {
+  cabiln: 'G', from: 'SMILES', context: binding, recognition_status: 'complete',
+  search_complete: true, inferred_stereo: false, synthetic_components: [], warnings: [],
+  assignments: [{ symbol: 'G', recognized: true, residue_index: 0,
+    source_atoms: [0, 1, 2, 3, 4], attachments: [] }],
+};
 const imported = {
   cabiln: 'G-<NCC(=O)O>', context: binding, recognition_status: 'partial',
   search_complete: false, inferred_stereo: true, synthetic_components: [0],
@@ -768,6 +1056,8 @@ test('conversion records structured quality through rendering, notation drafts, 
   ui.element('notation-select').value = 'smiles';
   await ui.input('cabiln-input', 'NCC(=O)O');
   const converting = ui.run('doToCabiln("bracket")');
+  latestRequest(ui, '/render_reference').resolve({ ...rendered, format: 'SMILES' });
+  await new Promise(setImmediate);
   latestRequest(ui, '/to_cabiln').resolve({ ...imported, from: 'SMILES', warning: imported.warnings[0] });
   await converting;
   latestRequest(ui, '/render').resolve({ ...rendered, context: binding });
@@ -800,6 +1090,8 @@ test('formatting clears occurrence assignments while preserving warning and cano
   setImported(ui);
   ui.element('notation-policy').value = 'canonical';
   const pending = ui.run('convertNotation("bracket")');
+  latestRequest(ui, '/render').resolve({ ...rendered, context: binding });
+  await new Promise(setImmediate);
   latestRequest(ui, '/convert_notation').resolve({ result: '<NCC(=O)O>-G', context: binding,
     canonical: { ...binding.canonical, binding: binding.library_binding } });
   await pending;
@@ -866,6 +1158,32 @@ test('palette and preview show library quality issues as escaped text', async ()
   ui.run(`showPreview(${JSON.stringify({ ...preview, quality: monomer.quality })}, previewRow)`);
   assert.match(ui.element('lib-preview').innerHTML, /Library quality: Review &lt;atom&gt; mapping/);
   assert.doesNotMatch(ui.element('lib-preview').innerHTML, /<atom>/);
+});
+
+test('informational library notes remain escaped and separate from amber warnings', async () => {
+  const ui = page('builder.js');
+  const monomer = { abbr: 'G', name: 'Glycine', type: 'aa', subtype: 'natural', chem_types: '',
+    quality: { issues: [{ severity: 'info', code: 'legacy_numbering', message: 'Legacy <atom> numbering & labels' }] } };
+  const pending = ui.run('loadMonomers()');
+  latestRequest(ui, '/monomers').resolve([monomer]);
+  await pending;
+  assert.doesNotMatch(ui.element('lib-list').innerHTML, /lib-quality|Library quality:/);
+  assert.match(ui.element('lib-list').innerHTML, /aria-label="G: Glycine"/);
+  previewRow(ui);
+  ui.run(`showPreview(${JSON.stringify({ ...preview, quality: monomer.quality })}, previewRow)`);
+  assert.match(ui.element('lib-preview').innerHTML,
+    /class="prev-meta">Library notes: Legacy &lt;atom&gt; numbering &amp; labels/);
+  assert.doesNotMatch(ui.element('lib-preview').innerHTML, /prev-warn|<atom>/);
+
+  monomer.quality.issues.push({ severity: 'warning', code: 'uncertain_stereo', message: 'Review <stereo> assignment' });
+  ui.run(`allMonomers = ${JSON.stringify([monomer])}; renderLibList('')`);
+  assert.match(ui.element('lib-list').innerHTML, /lib-quality.*Review &lt;stereo&gt; assignment/);
+  assert.match(ui.element('lib-list').innerHTML, /aria-label="G: Glycine. Library quality: Review &lt;stereo&gt; assignment"/);
+  assert.doesNotMatch(ui.element('lib-list').innerHTML, /Legacy/);
+  ui.run(`showPreview(${JSON.stringify({ ...preview, quality: monomer.quality })}, previewRow)`);
+  assert.match(ui.element('lib-preview').innerHTML, /class="prev-meta">Library notes: Legacy &lt;atom&gt; numbering &amp; labels/);
+  assert.match(ui.element('lib-preview').innerHTML, /class="prev-meta prev-warn">Library quality: Review &lt;stereo&gt; assignment/);
+  assert.doesNotMatch(ui.element('lib-preview').innerHTML, /<atom>|<stereo>/);
 });
 
 test('project save downloads only server-prepared source, drafts, evidence and exact reference', async () => {

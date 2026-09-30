@@ -87,7 +87,13 @@ def error_response(exc):
         return JSONResponse({"error": str(exc.detail)}, status_code=exc.status_code,
                             headers=exc.headers)
     if isinstance(exc, ValueError):
-        return JSONResponse({"error": str(exc).split("\n")[0]}, status_code=400)
+        message = str(exc).split("\n")[0]
+        if message.startswith("Old BILN crosslink notation detected:"):
+            message = (
+                "This input uses legacy BILN crosslinks. Select BILN as the "
+                "input notation, then use Convert to CABILN."
+            )
+        return JSONResponse({"error": message}, status_code=400)
     _internal_error(exc)
     return JSONResponse(
         {"error": "An internal error occurred.", "request_id": _request_id.get()},

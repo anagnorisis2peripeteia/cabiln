@@ -22,7 +22,7 @@ from rdkit import Chem, rdBase
 from pyPept.leaving_groups import restore_leaving_groups
 from pyPept.structure import require_supported_stereo
 
-AUDIT_VERSION = "cabiln-library-quality-v1"
+AUDIT_VERSION = "cabiln-library-quality-v2"
 
 
 def _property(molecule, name):
@@ -56,7 +56,7 @@ def definition_hash(molecule):
             "template": Chem.MolToSmiles(molecule, isomericSmiles=True),
             "identity": {
                 key: _property(molecule, key)
-                for key in ("symbol", "m_abbr", "m_type", "m_subtype")
+                for key in ("symbol", "m_abbr", "m_name", "m_type", "m_subtype")
             },
             "leaving": _leaving(molecule),
             "declared_chemistry": sorted(
@@ -79,6 +79,12 @@ def quality_manifest():
     return deepcopy(_manifest())
 
 
+@lru_cache(maxsize=1)
+def _curation():
+    resource = files("pyPept.data").joinpath("library-curation.json")
+    return json.loads(resource.read_text(encoding="utf-8"))
+
+
 def quality_for_monomer(molecule):
     """Return JSON-safe facts only for an exactly matching reviewed definition.
 
@@ -96,7 +102,11 @@ def quality_for_monomer(molecule):
     issues = deepcopy(record["issues"]) if matched else []
     return {
         "status": (
-            ("review_required" if issues else "no_known_exception")
+            (
+                "review_required"
+                if any(issue.get("severity", "warning") == "warning" for issue in issues)
+                else "no_known_exception"
+            )
             if matched
             else "unreviewed"
         ),
@@ -107,13 +117,13 @@ def quality_for_monomer(molecule):
     }
 
 
-def _issue(code, message, **facts):
-    return {"code": code, "message": message, **facts}
+def _issue(code, message, *, severity="warning", **facts):
+    return {"code": code, "message": message, "severity": severity, **facts}
 
 
 def audit_monomer(molecule):
     """Measure one definition without altering its stored structure or slots."""
-    from pyPept.attachments import attachment_sites
+    from pyPept.attachments import attachment_sites, declaration_is_compatible
     from pyPept.interfaces.monomer_pipeline import pre_activate
 
     mol = Chem.Mol(molecule)
@@ -123,13 +133,19 @@ def audit_monomer(molecule):
         for atom in mol.GetAtoms()
         if atom.GetAtomicNum() == 0 and atom.GetDegree() == 1
     }
-    legacy = all(slot in slots for slot in (1, 2, 3)) and slots[3] != slots[1]
+    legacy = (
+        all(slot in slots for slot in (1, 2, 3)) and slots[3] != slots[1]
+    ) or (
+        2 in slots and 3 in slots and 1 not in slots
+        and mol.GetAtomWithIdx(slots[3]).GetAtomicNum() == 16
+    )
     issues = []
     if legacy:
         issues.append(
             _issue(
                 "legacy_r3_sidechain",
                 "Stored R3 is a sidechain site; existing slot numbers are preserved.",
+                severity="info",
                 slots=sorted(slot for slot in slots if slot >= 3),
             )
         )
@@ -142,6 +158,21 @@ def audit_monomer(molecule):
                 slots=missing,
             )
         )
+    declared_slots = {
+        int(field.partition(":")[0].strip())
+        for field in _property(mol, "m_chem_types").split(",")
+        if ":" in field and field.partition(":")[0].strip().isdigit()
+    }
+    orphaned = sorted((declared_slots | set(leaving)) - set(slots))
+    if orphaned:
+        issues.append(
+            _issue(
+                "orphan_attachment_metadata",
+                "Metadata refers to missing attachment sites: "
+                + ", ".join(f"R{slot}" for slot in orphaned) + ".",
+                slots=orphaned,
+            )
+        )
     groups = [leaving.get(slot) for slot in range(1, max(slots, default=0) + 1)]
     differences = [
         {
@@ -151,14 +182,18 @@ def audit_monomer(molecule):
         }
         for site in attachment_sites(mol, groups)
         if site["declared_chem_type"]
-        and site["declared_chem_type"] != site["chem_type"]
+        and not declaration_is_compatible(mol, site)
     ]
     if differences:
         issues.append(
             _issue(
                 "chemistry_declaration_difference",
-                "Declared and effective site chemistry differ; "
-                "this is not proof of error.",
+                "Site metadata needs review: "
+                + "; ".join(
+                    f"R{site['slot']} uses {site['effective']} "
+                    f"(declared {site['declared']})"
+                    for site in differences
+                ) + ".",
                 sites=differences,
             )
         )
@@ -215,21 +250,40 @@ def audit_monomer(molecule):
             differences=changes,
             observed_template=actual_template,
             observed_leaving={str(k): v for k, v in sorted(activated.leaving.items())},
+            preserves_standalone=(
+                Chem.MolToSmiles(
+                    restore_leaving_groups(actual, activated.leaving),
+                    isomericSmiles=True,
+                ) == Chem.MolToSmiles(restored, isomericSmiles=True)
+            ),
         )
     except (ValueError, RuntimeError) as error:
         # The exact error text is useful to review but not a portable API contract.
         activation["error_type"] = type(error).__name__
     if activation["status"] in ("restoration_failed", "activation_failed", "mismatch"):
+        preserved = activation.get("preserves_standalone", False)
         issues.append(
             _issue(
                 "activation_exception",
-                "Automatic reactivation does not reproduce this stored definition.",
+                (
+                    "The stored attachment sites are preserved; automatic detection "
+                    "chooses different sites or numbers."
+                    if preserved
+                    else "Automatic activation cannot recreate this stored definition; "
+                    "review its attachment sites before re-registering it."
+                ),
+                severity="info" if preserved else "warning",
                 status=activation["status"],
                 differences=activation.get("differences", []),
             )
         )
+    fingerprint = definition_hash(mol)
+    symbol = _property(mol, "symbol") or _property(mol, "m_abbr")
+    review = _curation().get(symbol)
+    if review and review["definition_hash"] == fingerprint:
+        issues.extend(deepcopy(review["issues"]))
     return {
-        "definition_hash": definition_hash(mol),
+        "definition_hash": fingerprint,
         "issues": issues,
         "activation": activation,
     }

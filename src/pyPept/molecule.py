@@ -130,8 +130,8 @@ class Molecule:
                     f"No reaction defined for chem_type pair ({type1!r}, {type2!r}) "
                     f"between monomer {left.occurrence_id} (slot {left.slot}) "
                     f"and monomer {right.occurrence_id} (slot {right.slot}). "
-                    "Check the slot indices in your CABILN — "
-                    "this is most likely a wrong R-group index."
+                    "This attachment chemistry is not supported by the "
+                    "current reaction library."
                 )
             intramolecular = root1 == root2
             try:

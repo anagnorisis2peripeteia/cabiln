@@ -90,6 +90,7 @@ def render(req: _CabilnReq):
         }
         if parsed_source != req.cabiln:
             result["normalized_cabiln"] = parsed_source
+            result["normalization_note"] = "Converted legacy positional notation to bracket form."
         if library_binding() != binding:
             raise ValueError("The monomer library changed; retry the render")
         _rc_put(_ck, result)

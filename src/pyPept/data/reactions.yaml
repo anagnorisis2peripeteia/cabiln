@@ -87,6 +87,7 @@
   description: N-S sulfonamide protecting group bond (e.g. pbf on Arg) — unusual chemistry
   reactant_pairs:
     - [amine_primary, element_16]
+    - [guanidinium, element_16]
   slot_a: 4
   slot_b: 2
   steps:
@@ -283,10 +284,22 @@
     intermediate and a constrained pharmacophore.
   reactant_pairs:
     - [backbone_n_mod, carboxyl]
+    - [amide_nh, backbone_c]
+    - [amide_nh, carboxyl]
   slot_a: 3
   slot_b: 4
   steps:
     - "[3*][N:1].[4*][C:2](=[O:3]) >> [N:1][C:2](=[O:3])"
+
+- id: guanidine_n_acylation
+  description: N-acylguanidine from a guanidine amino nitrogen and an acyl donor
+  reactant_pairs:
+    - [guanidinium, backbone_c]
+    - [guanidinium, carboxyl]
+  slot_a: 4
+  slot_b: 2
+  steps:
+    - "[4*][N:1].[2*][C:2](=[O:3]) >> [N:1][C:2](=[O:3])"
 
 - id: backbone_n_alkylation
   description: >

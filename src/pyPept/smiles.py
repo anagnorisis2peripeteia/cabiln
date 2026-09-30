@@ -13,6 +13,7 @@ from dataclasses import dataclass, replace
 
 from rdkit import Chem
 
+from pyPept.attachments import reaction_for_types
 from pyPept.monomer_store import library_version
 from pyPept.recognition import RecognitionBudgets, RejectedRegion, _prepare_recognition
 from pyPept.recognition_notation import (
@@ -134,7 +135,9 @@ def _recognize_component(source, origins, budgets, output_notation):
             # usual single-proposal import reuses both phases; switching proposals
             # drops the old state so memory cannot multiply by proposal count.
             if active_variant != variant_index:
-                problem = _prepare_recognition(variant.molecule, budgets)
+                problem = _prepare_recognition(
+                    variant.molecule, budgets, connection_policy=reaction_for_types
+                )
                 checked = {}
                 active_variant = variant_index
 

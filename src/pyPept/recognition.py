@@ -9,10 +9,12 @@ validate emitted notation by independent forward assembly.
 from __future__ import annotations
 
 import heapq
+import logging
 import threading
 from collections import OrderedDict
 from collections.abc import Callable
 from dataclasses import dataclass
+from functools import lru_cache
 
 from rdkit import Chem, rdBase
 from rdkit.Chem import rdqueries
@@ -23,6 +25,7 @@ from pyPept.leaving_groups import restore_leaving_groups
 from pyPept.structure import require_supported_stereo
 
 _bit_count = getattr(int, "bit_count", lambda value: bin(value).count("1"))
+_logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -282,15 +285,20 @@ def _compile_patterns(molecules, limit):
                 diagnostics.append(f"Template {symbol}, slot mask {mask}: {error}")
         if truncated:
             break
+    # Skipped library templates are maintenance diagnostics, not evidence that
+    # the user's successfully recognized structure needs correction.
+    for diagnostic in diagnostics[:5]:
+        _logger.debug("Recognition template diagnostic: %s", diagnostic)
+    if len(diagnostics) > 5:
+        _logger.debug(
+            "%s further template compilation diagnostics", len(diagnostics) - 5
+        )
+    warnings = []
     if truncated:
-        diagnostics.append(
+        warnings.append(
             f"Pattern limit ({limit}) reached; library states are incomplete"
         )
-    if len(diagnostics) > 6:
-        diagnostics = diagnostics[:5] + [
-            f"{len(diagnostics) - 5} further template compilation diagnostics"
-        ]
-    return tuple(patterns), truncated, tuple(diagnostics)
+    return tuple(patterns), truncated, tuple(warnings)
 
 
 def _template_core(molecule):
@@ -455,11 +463,47 @@ def _cover_key(cover):
     return -len(owners), -backbone_edges, tuple(_candidate_key(item) for item in cover)
 
 
-def _compatible_boundary(index, chosen, owner, atoms, boundaries):
-    """A connection crossing owners must have reciprocal ports on both sides."""
+def _connection_compatibility(choices, policy):
+    """Check known endpoint types, retaining every slot/name alternative.
+
+    Missing types are not evidence of incompatibility. In particular, local
+    unknown regions and reaction-adapter edges still need final assembly.
+    """
+    if policy is None:
+        return None
+    ports = tuple(
+        tuple(
+            {(a, b): dict(choice.attachment_types).get(slot)
+             for a, b, slot in choice.ports}
+            for choice in domain
+        )
+        for domain in choices
+    )
+
+    @lru_cache(maxsize=None)
+    def compatible(index, other, left_choice=None, right_choice=None):
+        left = ports[index] if left_choice is None else (ports[index][left_choice],)
+        right = ports[other] if right_choice is None else (ports[other][right_choice],)
+        return any(
+            all(
+                not kind or not second.get((b, a))
+                or policy(kind, second[b, a])
+                for (a, b), kind in first.items()
+            )
+            for first in left for second in right
+        )
+
+    return compatible
+
+
+def _compatible_boundary(index, chosen, owner, atoms, boundaries, compatible=None):
+    """Require reciprocal ports and any caller-supplied connection policy."""
     for inside, outside in boundaries[index]:
         other = owner.get(outside)
         if other is not None and (outside, inside) not in boundaries[other]:
+            return False
+        if (other is not None and compatible is not None
+                and not compatible(index, other)):
             return False
     return all(
         (outside, inside) in boundaries[index]
@@ -493,12 +537,14 @@ def _trim_covers(results, limit):
     return True
 
 
-def _search(molecule, candidates, budgets, accept_cover=None):
+def _search(molecule, candidates, budgets, accept_cover=None, connection_policy=None):
     # Fast proposals avoid chemistry callbacks while retaining source ownership.
     # If none assembles acceptably, admitted search must explore different atom
     # partitions before exhausting their interchangeable slot/name assignments.
     if accept_cover is not None:
-        return _search_admissible(molecule, candidates, budgets, accept_cover)
+        return _search_admissible(
+            molecule, candidates, budgets, accept_cover, connection_policy
+        )
     atom_count = molecule.GetNumAtoms()
     all_atoms = (1 << atom_count) - 1
     masks = tuple(
@@ -514,6 +560,9 @@ def _search(molecule, candidates, budgets, accept_cover=None):
         for candidate in candidates
     )
     atoms = tuple(candidate.atoms for candidate in candidates)
+    compatible = _connection_compatibility(
+        tuple((candidate,) for candidate in candidates), connection_policy
+    )
     backbone_out = tuple(
         frozenset(
             (inside, outside)
@@ -572,7 +621,7 @@ def _search(molecule, candidates, budgets, accept_cover=None):
             index
             for index, mask in enumerate(masks)
             if not mask & (used | excluded)
-            and _compatible_boundary(index, chosen, owner, atoms, port_pairs)
+            and _compatible_boundary(index, chosen, owner, atoms, port_pairs, compatible)
         }
         remaining = all_atoms & ~(used | excluded)
         options_by_atom, forced_unknown = _unclaimed_options(
@@ -663,13 +712,16 @@ def _ownership_groups(candidates):
     )
 
 
-def _assignments(groups, limit):
+def _assignments(groups, limit, connection_policy=None, max_states=None):
     """Keep slot/name alternatives separate from the owned-atom partition.
 
     Best-first enumeration of an assignment grid is bounded, not a proof of a
     global optimum: coupled slot choices may become useful together. Its cutoff
     is reported separately so an invalid assignment cannot monopolize ownership
     search through a combinatorial product of unrelated aliases.
+
+    Policy-rejected assignments do not consume the returned-alternative limit,
+    but every examined assignment consumes the caller's existing state budget.
     """
     possible_out = {
         (a, b)
@@ -696,6 +748,13 @@ def _assignments(groups, limit):
         return -len(edges & possible_edges), _candidate_key(choice)
 
     domains = tuple(tuple(sorted(group.choices, key=choice_key)) for group in groups)
+    compatible = _connection_compatibility(domains, connection_policy)
+    owner = {atom: index for index, group in enumerate(groups) for atom in group.atoms}
+    pairs = {
+        tuple(sorted((index, owner[outside])))
+        for index, group in enumerate(groups)
+        for _, outside in group.boundary if outside in owner
+    } if compatible is not None else ()
 
     def cover_at(indices):
         return tuple(
@@ -710,9 +769,16 @@ def _assignments(groups, limit):
     pending = [(_cover_key(first_cover), first, first_cover)]
     seen = {first}
     results = []
-    while pending and len(results) < limit:
+    examined = 0
+    while (pending and len(results) < limit
+           and (max_states is None or examined < max_states)):
         _, indices, cover = heapq.heappop(pending)
-        results.append(cover)
+        examined += 1
+        if compatible is None or all(
+            compatible(left, right, indices[left], indices[right])
+            for left, right in pairs
+        ):
+            results.append(cover)
         for axis, domain in enumerate(domains):
             if indices[axis] + 1 >= len(domain):
                 continue
@@ -722,14 +788,17 @@ def _assignments(groups, limit):
             seen.add(neighbor)
             other = cover_at(neighbor)
             heapq.heappush(pending, (_cover_key(other), neighbor, other))
-    return tuple(results), bool(pending)
+    return tuple(results), bool(pending), examined
 
 
-def _search_admissible(molecule, candidates, budgets, accept_cover):
+def _search_admissible(molecule, candidates, budgets, accept_cover, connection_policy=None):
     """Search ownership before interpreting each partition's slots and names."""
     groups = _ownership_groups(candidates)
     atoms = tuple(group.atoms for group in groups)
     boundaries = tuple(group.boundary for group in groups)
+    compatible = _connection_compatibility(
+        tuple(group.choices for group in groups), connection_policy
+    )
     all_atoms = (1 << molecule.GetNumAtoms()) - 1
     by_atom = [[] for _ in range(molecule.GetNumAtoms())]
     for index, group in enumerate(groups):
@@ -807,7 +876,7 @@ def _search_admissible(molecule, candidates, budgets, accept_cover):
             for index, group in enumerate(groups)
             if not group.mask & (used | excluded)
             and not violates_conflict(chosen + (index,))
-            and _compatible_boundary(index, chosen, owner, atoms, boundaries)
+            and _compatible_boundary(index, chosen, owner, atoms, boundaries, compatible)
         )
         possible = used
         available_mask = 0
@@ -887,12 +956,13 @@ def _search_admissible(molecule, candidates, budgets, accept_cover):
                 (negative_upper, 0, serial, chosen, used, excluded, available_mask)
             )
             break
-        assignments, truncated = _assignments(
-            tuple(groups[index] for index in chosen), allowance
+        assignments, truncated, examined = _assignments(
+            tuple(groups[index] for index in chosen), allowance,
+            connection_policy, budgets.max_states - states,
         )
+        states += examined
         partition_rejected = False
         for cover in assignments:
-            states += 1
             if cover not in decisions:
                 decisions[cover] = accept_cover(cover)
             decision = decisions[cover]
@@ -911,7 +981,17 @@ def _search_admissible(molecule, candidates, budgets, accept_cover):
             results[cover] = cover
             admitted_solutions.add(cover)
             alternatives_truncated |= _trim_covers(results, budgets.max_covers)
-        assignments_truncated |= truncated and not partition_rejected
+        assignments_truncated |= (
+            truncated and not partition_rejected
+            and len(assignments) >= budgets.max_assignments_per_partition
+        )
+        if truncated and states >= budgets.max_states:
+            # The remaining assignment grid is unfinished work even if this was
+            # the final ownership partition. Do not claim an exhaustive search.
+            pending.append(
+                (negative_upper, 0, serial, chosen, used, excluded, available_mask)
+            )
+            break
         if (
             len(admitted_solutions) >= budgets.max_solutions
             and pending
@@ -960,17 +1040,19 @@ class _RecognitionProblem:
     candidates: tuple[Candidate, ...]
     match_truncated: bool
     warnings: tuple[str, ...]
+    connection_policy: Callable[[str, str], object] | None = None
 
     def search(self, accept_cover=None):
         covers, exhausted, states, warnings = _search(
-            self.molecule, self.candidates, self.budgets, accept_cover
+            self.molecule, self.candidates, self.budgets, accept_cover,
+            self.connection_policy,
         )
         return RecognitionSearchResult(
             covers, exhausted, self.match_truncated, states, self.warnings + warnings
         )
 
 
-def _prepare_recognition(molecule, budgets=None):
+def _prepare_recognition(molecule, budgets=None, *, connection_policy=None):
     if molecule is None or molecule.GetNumAtoms() == 0:
         raise ValueError("Recognition requires a non-empty molecule")
     require_supported_stereo(molecule)
@@ -985,6 +1067,7 @@ def _prepare_recognition(molecule, budgets=None):
         candidates,
         compile_truncated or match_truncated,
         compile_warnings + match_warnings,
+        connection_policy,
     )
 
 

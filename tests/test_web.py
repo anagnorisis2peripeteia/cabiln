@@ -184,7 +184,8 @@ def test_legacy_render_returns_the_source_that_its_residue_ids_describe(client):
     assert [r["abbr"] for r in data["residues"]] == [
         m["m_abbr"] for m in Sequence(normalized).s_monomers
     ]
-    assert any("legacy positional" in message for message in data["warnings"])
+    assert data["warnings"] == []
+    assert "legacy positional" in data["normalization_note"]
     conversion = client.post(
         "/convert_notation", json={"cabiln": raw, "target": "bracket"}
     )
@@ -289,11 +290,26 @@ def test_sequence_diagnostics_are_local_without_global_warning_capture(monkeypat
 
     monkeypatch.setattr("warnings.warn", unexpected_warning)
     messages = []
-    Sequence("C.trt(4,2)", warning_sink=messages.append)
-    assert any("thioether" in message for message in messages)
-    report = Sequence.validate("E.[G(4,1).A(2,1).G(2,1)]")
+    # This parse-only N–N connection has no registered assembly reaction.
+    Sequence("A.A(1,1)", warning_sink=messages.append)
+    assert any("N–N join" in message for message in messages)
+    report = Sequence.validate("A.A(1,1)")
     assert report.ok
-    assert any("bracket" in message for message in report.warnings)
+    assert any("N–N join" in message for message in report.warnings)
+
+
+def test_sequential_peptide_branch_renders_without_a_layout_warning(client):
+    source = "ac-G-D.[R(4,1).G(2,1).D(2,1).am(2,1)]-S-am"
+    response = client.post("/render", json={"cabiln": source})
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["warnings"] == []
+    assert data["info"] == "45 atoms · MW 645.28"
+    assert data["cabiln_echo"] == source
+    molecule = Chem.MolFromMolBlock(data["mol_block"])
+    assert Chem.MolToSmiles(molecule) == canonical(
+        "ac-G-D.!1(4,1)-S-am%R.!1(1,4)-G-D-am"
+    )
 
 
 @pytest.mark.parametrize("group", ["&1", "o1"])

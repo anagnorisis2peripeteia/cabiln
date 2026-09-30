@@ -60,7 +60,9 @@ for _entry in REACTIONS.values():
 # infer_smarts — used in _EXOTIC_SMARTS; run against CHUCKLES (dummy present).
 #               May accept H = 0 because the dummy already replaced the H.
 #
-# label_only=True: slot reserved in pre_activate but no bond-table reaction.
+# label_only=True preserves the activation scanner's historical non-protecting
+# match: other atoms in that match may have their own sites. Supported bonds are
+# determined by REACTION_INDEX, independently of whether a type has reactions.
 # Ordering determines priority — first match per atom wins in both derived lists.
 #
 # (chem_type, pre_smarts, pre_lg, infer_smarts, label_only)
@@ -68,15 +70,16 @@ _CHEM_TYPE_REGISTRY = [
     # ── Sulfur / selenium ────────────────────────────────────────────────────
     ('thiol',             '[SX2H1:1]',                              '[H]',  '[SX2;H0,H1:1]',                          False),
     ('selenol',           '[SeX2H1:1]',                             '[H]',  '[SeX2;H0,H1:1]',                         False),
-    # ── Alkyl halide — !H0 covers CH2 (pre) and CH1 after dummy took one H ──
-    ('alkyl_halide_c',    '[CX4;!H0:1][Cl,Br,I]',                  None,   '[CX4;!H0:1][Cl,Br,I]',                  False),
+    # The precursor contains halide; an activated substitution handle replaces
+    # that halide. A retained C-halogen bond does not identify the selected site.
+    ('alkyl_halide_c',    '[CX4;!H0:1][Cl,Br,I]',                  None,   None,                                    False),
     # ── Nitrogen nucleophiles — most-specific first ───────────────────────────
     # aminooxy:  NH2 (pre) → NH1 after dummy
-    ('aminooxy',          '[NH2:1][OX2H0]',                         '[H]',  '[NH1:1][OX2H0]',                         False),
+    ('aminooxy',          '[NH2:1][OX2H0]',                         '[H]',  '[NX3;H0,H1,H2:1][OX2H0]',                False),
     # hydrazide: NH1 (pre) → NH0 after dummy; C(=O) guard vs plain hydrazine
-    ('hydrazide',         '[NX3H1:1][NX3H2]',                      '[H]',  '[NX3H0:1]([NX3H2])C(=O)',                False),
+    ('hydrazide',         '[NX3H1:1][NX3H2]',                      '[H]',  '[NX3;H0,H1:1]([NX3H2])C(=O)',            False),
     ('amine_primary',     '[NX3;H2:1]',                             '[H]',  '[NX3;H2:1]',                             False),
-    ('guanidinium',       '[NX3;H1:1][CX3](=N)',                   '[H]',  '[NX3;H1:1][CX3](=N)',                    True),
+    ('guanidinium',       '[NX3;H1:1][CX3](=N)',                   '[H]',  '[NX3:1][CX3](=[#7])',                    True),
     ('guanidinium_imine', '[NX2H1:1]=[CX3]([NX3])[NX3]',           '[H]',  '[NX2;H0,H1:1]=[CX3]([NX3])[NX3]',       False),
     # ── Carboxyl / oxygen ────────────────────────────────────────────────────
     # Sidechain COOH: dummy on carbonyl C (same convention as backbone R2).
@@ -116,10 +119,10 @@ _CHEM_TYPE_REGISTRY = [
     # infer_chem_type heuristic (SMARTS can't disambiguate from generic methyls).
     ('backbone_c_red',    '[CX4;H2,H3:1][NX3;!$(N-C=O)]',         '[H]',  '[CX4;H1,H2,H3:1][NX3;!$(N-C=O)]',        False),
     # ── Aromatic / amide N-H (label-only) ────────────────────────────────────
-    ('aromatic_nh',       '[nH:1]',                                 '[H]',  '[nH:1]',                                 True),
-    ('amide_nh',          '[NX3;H1:1][CX3]=O',                     '[H]',  '[NX3;H1:1][CX3]=O',                     True),
+    ('aromatic_nh',       '[nH:1]',                                 '[H]',  '[n:1]',                                  True),
+    ('amide_nh',          '[NX3;H1:1][CX3]=O',                     '[H]',  '[NX3:1][CX3]=[O,S]',                    True),
     # ── Phosphate (P(V) electrophile) ────────────────────────────────────────
-    ('phosphate_p',       '[P:1](=O)([OH])[OH]',                  '[OH]',  '[P:1](=O)([OH])[OH]',                   False),
+    ('phosphate_p',       '[P:1](=O)([OH])[OH]',                  '[OH]',  '[PX4:1](=[OX1])([O])([O])[#0]',          False),
     # ── Bioorthogonal click ───────────────────────────────────────────────────
     ('cyclooctyne_c',     '[CX4;!H0:1][C;r]#[C;r]',               '[H]',  '[CX4;!H0:1][C;r]#[C;r]',                False),
     ('alkyne_c',          '[CX4;!H0:1]C#[CH]',                    '[H]',  '[CX4;!H0:1]C#[CH]',                     False),
@@ -131,7 +134,7 @@ _CHEM_TYPE_REGISTRY = [
     ('tco_c',             '[CX4;!H0;!r:1][C;r]=[C;r]',           '[H]',  '[CX4;!H0;!r:1][C;r]=[C;r]',             False),
     # ── Condensation bioorthogonal ────────────────────────────────────────────
     # aldehyde: CH1 (pre, requires H to distinguish from ketone) → CH0 after dummy + chain + O
-    ('aldehyde',          '[CX3H1:1](=O)[!#7;!#1]',                '[H]',  '[CX3;H0,H1:1](=O)[!#7;!#1]',            False),
+    ('aldehyde',          '[CX3H1:1](=O)[!#7;!#1;!#0]',           '[H]',  '[CX3;H0,H1:1](=O)[!#7;!#1;!#0]',        False),
     # formamide_c: formyl (N-CHO) — distinct from amide (N-CO-C, no H)
     ('formamide_c',       '[CX3H1:1](=O)[#7X3]',                  '[H]',  '[CX3;H0,H1:1](=O)[#7X3]',               False),
     ('nhs_ester',         '[CX4;!H0:1]C(=O)ON1C(=O)CCC1=O',      '[H]',  '[CX4;!H0:1]C(=O)ON1C(=O)CCC1=O',       False),
@@ -143,9 +146,14 @@ _CHEM_TYPE_REGISTRY = [
 ]
 
 # Derived detection lists — do not edit directly.
-# _EXOTIC_SMARTS: infer_chem_type at assembly time (label_only excluded, infer_smarts column).
+# Nitrogen context is shared by raw activation and activated-site inference.
+# Keeping the candidate-H scan separate preserves established slot ordering.
+_INFERENCE_SMARTS = {
+    ct: Chem.MolFromSmarts(infer_smarts) if infer_smarts else None
+    for ct, _pre, _lg, infer_smarts, _label_only in _CHEM_TYPE_REGISTRY
+}
 _EXOTIC_SMARTS = [
-    (Chem.MolFromSmarts(infer_smarts) if infer_smarts else None, ct)
+    (_INFERENCE_SMARTS[ct], ct)
     for ct, _pre, _lg, infer_smarts, label_only in _CHEM_TYPE_REGISTRY
     if not label_only
 ]
@@ -153,7 +161,7 @@ _EXOTIC_SMARTS = [
 # Enforce every _BOND_TABLE chem_type has SMARTS detection or a known element heuristic.
 _HEURISTIC_TYPES = frozenset({
     'backbone_n', 'backbone_c', 'backbone_o', 'backbone_n_mod',
-    'amine_secondary',  # falls through to amine_primary element heuristic
+    'amine_secondary',  # nitrogen context counts non-dummy substituents
     'carbon',           # plain sp3 C without carbonyl; heuristic fallback at end of infer_chem_type
     'carboxyl',         # C-attachment COOH; infer_smarts=None, disambiguated via LG in heuristic
     'element_16',       # sulfonyl/sulfonate S; detected by element number heuristic (element_{sym})
@@ -179,10 +187,44 @@ _HEURISTIC_TYPES = frozenset({
     # to a polyamine chain via benzylamine C-N bond.
     'reduced_n',
 })
-_registry_types = {ct for ct, *_, lo in _CHEM_TYPE_REGISTRY if not lo}
+_registry_types = {ct for ct, *_ in _CHEM_TYPE_REGISTRY}
 _bond_types = {ct for e in REACTIONS.values() for pair in e.get('reactant_pairs', []) for ct in pair}
 _missing = _bond_types - _registry_types - _HEURISTIC_TYPES
 assert not _missing, f"chem_types in _BOND_TABLE without SMARTS detection: {_missing}"
+
+
+def nitrogen_chem_type(mol, attach_idx):
+    """Recognize N functionality before assigning an amine or backbone role.
+
+    Patterns accept both the free N-H and its dummy-substituted form. An
+    unsupported aromatic N remains aromatic; the reaction index decides which
+    connections exist. The dummy count is not an amine substitution count.
+    """
+    atom = mol.GetAtomWithIdx(attach_idx)
+    if atom.GetAtomicNum() != 7:
+        raise ValueError("Nitrogen chemistry requires a nitrogen atom")
+    for kind in ('aromatic_nh', 'aminooxy', 'hydrazide', 'amide_nh',
+                 'guanidinium_imine', 'guanidinium'):
+        if any(match[0] == attach_idx
+               for match in mol.GetSubstructMatches(_INFERENCE_SMARTS[kind])):
+            return kind
+    if any(bond.GetBondTypeAsDouble() != 1.0 for bond in atom.GetBonds()):
+        return 'element_7'
+    real_neighbors = sum(nb.GetAtomicNum() not in (0, 1)
+                         for nb in atom.GetNeighbors())
+    if real_neighbors <= 1:
+        return 'amine_primary'
+    return 'amine_secondary' if real_neighbors == 2 else 'element_7'
+
+
+def _declared_site_type(mol, slot):
+    if not mol.HasProp('m_chem_types'):
+        return None
+    for item in mol.GetProp('m_chem_types').split(','):
+        key, separator, value = item.partition(':')
+        if separator and key.strip() == str(slot):
+            return value.strip()
+    return None
 
 
 def infer_chem_type(mol, attach_idx: int, slot: int = None,
@@ -190,12 +232,13 @@ def infer_chem_type(mol, attach_idx: int, slot: int = None,
     """
     Infer the chemistry type of an attachment atom from the original monomer mol.
 
-    First tries SMARTS-based exotic pattern matching, then falls back to
-    element + slot heuristics.
+    Recognizes nitrogen functionality and validated attachment roles before
+    functional-group SMARTS and element fallbacks. Slot roles never turn an
+    aromatic or conjugated nitrogen into a primary amine.
 
     :param mol: original monomer ROMol (with isotope-labelled [n*] dummies).
     :param attach_idx: local atom index of the attachment atom.
-    :param slot: 0-based R-group slot override.  When provided, avoids calling
+    :param slot: 1-based R-group slot override.  When provided, avoids calling
                  _slot_for_attachment (which is ambiguous for atoms bonded to
                  multiple dummies, e.g. backbone N with [1*] and [3*]).
     :param leaving: leaving-group SMILES (e.g. '[OH]', '[H]') from m_Rgroups.
@@ -208,35 +251,47 @@ def infer_chem_type(mol, attach_idx: int, slot: int = None,
     atom = mol.GetAtomWithIdx(attach_idx)
     sym = atom.GetAtomicNum()
     if slot is None:
-        slot = _slot_for_attachment(mol, attach_idx)  # 0-based
+        slot = _slot_for_attachment(mol, attach_idx)
+    declared = _declared_site_type(mol, slot)
+
+    if sym == 7:
+        kind = nitrogen_chem_type(mol, attach_idx)
+        if kind not in ('amine_primary', 'amine_secondary'):
+            return kind
+        if slot == 1 or declared == 'backbone_n':
+            return 'backbone_n'
+        if slot == 3 and any(nb.GetAtomicNum() == 0 and nb.GetIsotope() == 1
+                             for nb in atom.GetNeighbors()):
+            return 'backbone_n_mod'
+        return kind
+
+    # These roles describe the intended partner, which is absent from the free
+    # monomer. Accept only declarations on an actual saturated carbon site with
+    # an H leaving group, never a declaration contradicting its atom/valence.
+    if (sym == 6 and not atom.GetIsAromatic()
+            and atom.GetHybridization() == Chem.HybridizationType.SP3
+            and leaving in (None, '', '[H]')
+            and any(nb.GetAtomicNum() == 0 and nb.GetIsotope() == slot
+                    for nb in atom.GetNeighbors())):
+        if declared == 'backbone_c_red':
+            return declared
+        if declared == 'sp3_c_anchor' and any(
+                nb.GetAtomicNum() == 7 for nb in atom.GetNeighbors()):
+            return declared
 
     # ── Backbone slots (1-indexed: slot 1 = R1, slot 2 = R2, slot 3 = R3) ────
     if slot == 1:
-        if sym == 7: return 'backbone_n'
         if sym == 8: return 'backbone_o'
     if slot == 2:
         if sym == 6:
             # Only classify as backbone_c (carbonyl) if the carbon has a =O neighbor.
-            # Non-carbonyl carbons at slot 2 (e.g. benzyl caps) fall through to
-            # 'carbon' — UNLESS the SDF explicitly tags the slot as
-            # 'backbone_c_red' (reduced-amide peptidomimetic, no C=O).
-            # SMARTS can't reliably distinguish reduced-amide CH2 from benzyl
-            # caps without knowing the residue context, so we trust the SDF.
+            # Saturated carbon roles were validated above; other non-carbonyl
+            # sites continue to functional-group detection.
             for nb in atom.GetNeighbors():
                 if nb.GetAtomicNum() == 8:
                     bond = mol.GetBondBetweenAtoms(attach_idx, nb.GetIdx())
                     if bond and bond.GetBondTypeAsDouble() == 2.0:
                         return 'backbone_c'
-            try:
-                ct_str = mol.GetProp('m_chem_types')
-                for item in ct_str.split(','):
-                    item = item.strip()
-                    if ':' in item:
-                        k, v = item.split(':', 1)
-                        if k.strip() == '2' and v.strip() == 'backbone_c_red':
-                            return 'backbone_c_red'
-            except (KeyError, AttributeError):
-                pass
 
     # ── Early carboxyl guard — must precede SMARTS loop ─────────────────────
     # Carboxyl C ([4*]C(=O)...) and aldehyde C ([4*]C(=O)...) are
@@ -248,7 +303,14 @@ def infer_chem_type(mol, attach_idx: int, slot: int = None,
             if _nb.GetAtomicNum() == 8:
                 _b = mol.GetBondBetweenAtoms(attach_idx, _nb.GetIdx())
                 if _b and _b.GetBondTypeAsDouble() == 2.0:
+                    if any(nb.GetAtomicNum() == 6 and nb.GetIsAromatic()
+                           for nb in atom.GetNeighbors()):
+                        return 'aryl_amide_c'
                     return 'carboxyl'
+
+    if (sym == 6 and atom.GetHybridization() == Chem.HybridizationType.SP3
+            and leaving in ('[Cl]', '[Br]', '[I]', 'Cl', 'Br', 'I')):
+        return 'alkyl_halide_c'
 
     # ── SMARTS-based detection (covers thiol, selenol, and all exotic types) ───
     for patt, ct in _EXOTIC_SMARTS:
@@ -262,20 +324,8 @@ def infer_chem_type(mol, attach_idx: int, slot: int = None,
             if match[0] == attach_idx:
                 return ct
 
-    # ── Heuristic fallbacks for C, N, O ──────────────────────────────────────
-    if sym == 7:
-        has_r1_dummy = any(
-            nb.GetAtomicNum() == 0 and nb.GetIsotope() == 1
-            for nb in atom.GetNeighbors()
-        )
-        if slot == 3 and has_r1_dummy:
-            return 'backbone_n_mod'
-        return 'amine_primary'
-
+    # ── Heuristic fallbacks for C and O ─────────────────────────────────────
     if sym == 6:
-        # pre_activate strips the halide into m_Rgroups; detect via leaving group
-        if leaving in ('[Cl]', '[Br]', '[I]', 'Cl', 'Br', 'I'):
-            return 'alkyl_halide_c'
         has_carbonyl = False
         for nb in atom.GetNeighbors():
             if nb.GetAtomicNum() == 8:
@@ -286,7 +336,7 @@ def infer_chem_type(mol, attach_idx: int, slot: int = None,
         if has_carbonyl:
             if leaving == '[OH]':
                 return 'carboxyl'
-            if leaving == '[H]':
+            if leaving == '[H]' or (leaving is None and atom.GetTotalNumHs()):
                 return 'aldehyde'
             return 'carboxyl'
         return 'carbon'

@@ -4,7 +4,7 @@ import os
 import sys
 
 import pytest
-from rdkit import RDLogger
+from rdkit import Chem, RDLogger
 
 RDLogger.DisableLog('rdApp.*')
 
@@ -187,6 +187,44 @@ class TestSynonymResolution:
     def test_phe_4ome_resolves_to_tyr_me(self):
         """Phe_4OMe resolves to Tyr_Me."""
         assert self._smi('ac-Phe_4OMe-am') == self._smi('ac-Tyr_Me-am')
+
+
+@pytest.mark.parametrize(
+    "symbol,halide,standalone,thioether",
+    [
+        ("Ala_3Br", "[Br]", "N[C@@H](CBr)C(=O)O",
+         "N[C@@H](CSC[C@H](N)C(=O)O)C(=O)O"),
+        ("Ala_3Cl", "[Cl]", "N[C@@H](CCl)C(=O)O",
+         "N[C@@H](CSC[C@H](N)C(=O)O)C(=O)O"),
+        ("ClAcAla", "[Cl]", "N[C@@H](CCl)C(=O)O",
+         "N[C@@H](CSC[C@H](N)C(=O)O)C(=O)O"),
+        ("D_Ala_3Br", "[Br]", "N[C@H](CBr)C(=O)O",
+         "N[C@H](CSC[C@H](N)C(=O)O)C(=O)O"),
+        ("D_Ala_3Cl", "[Cl]", "N[C@H](CCl)C(=O)O",
+         "N[C@H](CSC[C@H](N)C(=O)O)C(=O)O"),
+    ],
+)
+def test_bundled_halide_substitution_preserves_named_stereo(
+    symbol, halide, standalone, thioether
+):
+    from pyPept.attachments import attachment_site
+    from pyPept.monomer_store import _load_sdf
+
+    assert _smiles(symbol) == Chem.MolToSmiles(Chem.MolFromSmiles(standalone))
+    template = _load_sdf()[1][symbol]
+    assert sorted(
+        atom.GetIsotope() for atom in template.GetAtoms()
+        if atom.GetAtomicNum() == 0
+    ) == [1, 2, 3, 4]
+    site = attachment_site(template, 4)
+    assert site["chem_type"] == "alkyl_halide_c"
+    assert site["leaving"] == halide
+    product = _romol(f"{symbol}.!s(4,4)%C.!s(4,4)")
+    assert Chem.MolToSmiles(product) == Chem.MolToSmiles(
+        Chem.MolFromSmiles(thioether)
+    )
+    assert not any(atom.GetAtomicNum() in (0, 17, 35, 53)
+                   for atom in product.GetAtoms())
 
 
 class TestLibraryRoundTrip:

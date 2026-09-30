@@ -25,9 +25,10 @@ def product(source):
 def test_quality_lookup_is_bound_to_definition_and_returns_detached_facts():
     original = definition("meC")
     actual = quality_for_monomer(original)
-    assert actual["status"] == "review_required"
+    assert actual["status"] == "no_known_exception"
     assert actual["activation_status"] == "legacy_slot_match"
     assert "legacy_r3_sidechain" in {issue["code"] for issue in actual["issues"]}
+    assert all(issue["severity"] == "info" for issue in actual["issues"])
     actual["issues"].clear()
     assert quality_for_monomer(original)["issues"]
     changed = Chem.Mol(original)
@@ -41,6 +42,7 @@ def test_quality_lookup_is_bound_to_definition_and_returns_detached_facts():
     [
         ("symbol", "RegisteredMeC"),
         ("m_abbr", "DifferentAlias"),
+        ("m_name", "Different named identity"),
         ("m_Rgroups", "[H],[OH],[Cl]"),
         ("m_chem_types", "1:backbone_n,2:backbone_c,3:alcohol"),
     ],
@@ -100,14 +102,10 @@ def test_legacy_r3_has_its_original_thiol_product_and_connection():
     assert slots == {1, 2, 3}
 
 
-def test_sparse_terminal_metadata_is_visible_without_changing_restoration():
+def test_completed_terminal_metadata_preserves_restoration_and_connection():
     result = quality_for_monomer(definition("Mpa"))
-    sparse = next(
-        issue
-        for issue in result["issues"]
-        if issue["code"] == "missing_leaving_metadata"
-    )
-    assert sparse["slots"] == [3]
+    assert not any(issue["code"] == "missing_leaving_metadata" for issue in result["issues"])
+    assert definition("Mpa").GetProp("m_Rgroups").split(",")[2].strip() == "[H]"
     expected = Chem.MolFromSmiles("OC(=O)[C@H](C)S")
     assert product("Mpa") == Chem.MolToSmiles(expected)
     disulfide = Chem.MolFromSmiles("OC(=O)[C@H](C)SSC[C@H](N)C(=O)O")
@@ -126,6 +124,25 @@ def test_unspecified_stereo_is_disclosed_without_inventing_a_configuration():
     assert product("aMeLeu") != Chem.MolToSmiles(assigned)
 
 
+def test_identity_review_is_bound_to_the_reviewed_structure_and_name():
+    original = definition("Pca")
+    issue = next(i for i in audit_monomer(original)["issues"] if i["code"] == "identity_review")
+    assert issue["severity"] == "warning"
+    assert "3-carboxylic" in issue["message"]
+    renamed = Chem.Mol(original)
+    renamed.SetProp("m_name", "Pyridine-3-carboxylate")
+    assert not any(i["code"] == "identity_review" for i in audit_monomer(renamed)["issues"])
+    assert quality_for_monomer(renamed)["status"] == "unreviewed"
+
+
+def test_metadata_cannot_claim_a_site_missing_from_the_structure():
+    molecule = definition("A")
+    molecule.SetProp("m_chem_types", molecule.GetProp("m_chem_types") + ",9:amine_primary")
+    issue = next(i for i in audit_monomer(molecule)["issues"] if i["code"] == "orphan_attachment_metadata")
+    assert issue["severity"] == "warning"
+    assert issue["slots"] == [9]
+
+
 @pytest.mark.parametrize(
     "symbol,expected_smiles",
     [
@@ -142,15 +159,16 @@ def test_activation_failures_keep_the_existing_standalone_product(
     assert product(symbol) == Chem.MolToSmiles(Chem.MolFromSmiles(expected_smiles))
 
 
-def test_declared_chemistry_difference_does_not_change_lysine_acylation():
+def test_second_hydrogen_role_is_not_a_lysine_chemistry_conflict():
     result = quality_for_monomer(definition("K"))
-    issue = next(
-        item
-        for item in result["issues"]
-        if item["code"] == "chemistry_declaration_difference"
-    )
-    assert issue["sites"] == [
-        {"slot": 5, "declared": "amine_secondary", "effective": "amine_primary"}
-    ]
+    assert not any(item["code"] == "chemistry_declaration_difference" for item in result["issues"])
     expected = Chem.MolFromSmiles("N[C@@H](CCCCNC(C)=O)C(=O)O")
     assert product("K.Ac(4,2)") == Chem.MolToSmiles(expected)
+    assert product("K.Ac(5,2)") == Chem.MolToSmiles(expected)
+
+
+@pytest.mark.parametrize("symbol", list("ARNDCEQGHILKMFPSTWYV"))
+def test_standard_amino_acids_have_no_library_warnings(symbol):
+    result = quality_for_monomer(definition(symbol))
+    assert result["status"] == "no_known_exception"
+    assert not any(issue["severity"] == "warning" for issue in result["issues"])

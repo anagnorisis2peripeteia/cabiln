@@ -363,7 +363,7 @@ def _emit_warning(message, category=UserWarning, stacklevel=1, *, warning_sink=N
         warning_sink(str(message))
 
 
-def _expand_inline_caps(biln, peptide_branch_threshold=2, warning_sink=None):
+def _expand_inline_caps(biln):
     """Pre-process CABILN notation before chain/residue splitting.
 
     Supported forms:
@@ -461,10 +461,6 @@ def _expand_inline_caps(biln, peptide_branch_threshold=2, warning_sink=None):
         appended.append(tok + f'({bid},{cr})')
         return f'({bid},{hr})'
 
-    # Shared container so _sub_bracket can read surrounding segment context
-    # set just before each call: (host_name, prefix_before_host, rest_of_seg)
-    _bracket_ctx = [None]
-
     def _sub_bracket(scope, host):
         bracket = scope.text
         frag_tokens, frag_bond_parts = [], []
@@ -535,34 +531,6 @@ def _expand_inline_caps(biln, peptide_branch_threshold=2, warning_sink=None):
             if frame['first'] is None:
                 frame['first'] = frame['current']
 
-        flat = [
-            step for step in scope.entries
-            if not isinstance(step, BracketArm) and not step.token.startswith('!')
-        ]
-        backbone_steps = sum(
-            (step.previous_slot, step.own_slot) == ('2', '1') for step in flat[1:]
-        )
-        if (flat and peptide_branch_threshold is not None
-                and backbone_steps >= peptide_branch_threshold):
-            first = flat[0]
-            frag_chain = '-'.join(step.token for step in flat)
-            branch_seg = (f'!n-{frag_chain}' if first.own_slot == '1'
-                          else f'{frag_chain}-!n')
-            ctx = _bracket_ctx[0]
-            if ctx:
-                host_name, pre, rest = ctx
-                suggestion = (
-                    f"{pre}{host_name}.!n({first.previous_slot},"
-                    f"{first.own_slot}){rest}%%{branch_seg}"
-                )
-            else:
-                suggestion = f"host.!n-[chain]%%{branch_seg}"
-            _emit_warning(
-                f"Sequential bracket {bracket!r} contains {backbone_steps} "
-                f"R2->R1 connections: backbone amide pattern detected — this creates "
-                f"a peptide branch inside [...].  Did you mean:\n"
-                f"  {suggestion}",
-                UserWarning, stacklevel=6, warning_sink=warning_sink)
         for tok, bonds in zip(frag_tokens, frag_bond_parts):
             appended.append(tok + ''.join(bonds))
         return ''.join(host_bonds)
@@ -580,15 +548,7 @@ def _expand_inline_caps(biln, peptide_branch_threshold=2, warning_sink=None):
         last_end = 0
         for (start, end), (scope, host) in zip(
                 bracket_regions(seg), parsed_brackets[segment_number]):
-            prefix = seg[last_end:start]
-            parts.append(prefix)
-            if '-' in prefix:
-                pre_host, host_token = prefix.rsplit('-', 1)
-                pre_host += '-'
-            else:
-                pre_host, host_token = '', prefix
-            host_name = re.split(r'[(\[{]', host_token)[0].strip()
-            _bracket_ctx[0] = (host_name, pre_host, seg[end:])
+            parts.append(seg[last_end:start])
             parts.append(_sub_bracket(scope, host))
             last_end = end
         parts.append(seg[last_end:])
@@ -1278,7 +1238,7 @@ def _check_bond_chemistry(mol1, at1, mol2, at2, bond_label='', warning_sink=None
 def _check_parsed_connection(mol1, at1, slot1, mol2, at2, slot2, *,
                                 leaving_groups1, leaving_groups2,
                                 bond_label='', warning_sink=None):
-    """Keep parse diagnostics without vetoing a supported numbered reaction.
+    """Use registered reactions before legacy atom-pair diagnostics.
 
     Sequence historically also accepts some graphs without an assembly reaction.
     The legacy diagnostic preserves that parse-only contract; reaction support
@@ -1289,9 +1249,11 @@ def _check_parsed_connection(mol1, at1, slot1, mol2, at2, slot2, *,
     connection = resolve_connection(
         mol1, slot1, mol2, slot2,
         leaving_groups1=leaving_groups1, leaving_groups2=leaving_groups2)
+    if connection.reaction is not None:
+        return
     diagnostic = _bond_chemistry_diagnostic(
         mol1, at1, mol2, at2, bond_label, warning_sink)
-    if connection.reaction is None and diagnostic:
+    if diagnostic:
         raise ValueError(diagnostic)
 
 
@@ -1421,7 +1383,7 @@ class Sequence:
         expanded = _source_sub(_SYN_NCAP_RE, _ncap_repl, expanded)
         expanded = _source_sub(_SYN_CCAP_RE, _ccap_repl, expanded)
         expanded = _source_sub(_SYN_AA_RE, _syn_repl, expanded)
-        expanded, _branch_rgroup = _expand_inline_caps(expanded, warning_sink=warning_sink)
+        expanded, _branch_rgroup = _expand_inline_caps(expanded)
 
         seq = split_outside(expanded,
                             by_element=SequenceConstants.monomer_join,

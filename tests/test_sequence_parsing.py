@@ -462,27 +462,22 @@ class TestBracketNotation:
         with pytest.raises(ValueError, match='no valid'):
             _expand_inline_caps('C.[trt]-am')
 
-    # --- Backbone peptide branch guard ---
+    # --- Sequential peptide branches ---
 
-    def test_backbone_r2_r1_pattern_warns_when_two_steps(self):
-        """Two or more R2->R1 steps in a bracket emit UserWarning (peptide branch)."""
-        with pytest.warns(UserWarning, match='R2->R1|backbone amide|peptide branch'):
-            _expand_inline_caps('K.[G(4,1).A(2,1).am(2,1)]')
-
-    def test_single_r2_r1_step_no_warn(self):
-        """A single R2->R1 step (e.g. Mal->DBCO style) does NOT warn — ambiguous."""
+    def test_backbone_branch_expands_without_a_layout_warning(self):
+        """Backbone attachments are valid within a sequential bracket."""
         with warnings.catch_warnings():
             warnings.simplefilter('error')
-            _expand_inline_caps('C.[Mal(4,1).DBCO(2,1)]')
-
-    def test_backbone_pattern_expansion_still_works(self):
-        """Warning does not prevent expansion — structure still returned correctly."""
-        with warnings.catch_warnings():
-            warnings.simplefilter('always')
             result, _ = _expand_inline_caps('K.[G(4,1).A(2,1).am(2,1)]')
         assert 'G(100,1)(101,2)' in result
         assert 'A(101,1)(102,2)' in result
         assert 'am(102,1)' in result
+
+    def test_single_r2_r1_step_no_warn(self):
+        """A single R2->R1 attachment is also valid inside brackets."""
+        with warnings.catch_warnings():
+            warnings.simplefilter('error')
+            _expand_inline_caps('C.[Mal(4,1).DBCO(2,1)]')
 
     def test_non_backbone_r_groups_no_warn(self):
         """R4->R1 (sidechain->cap) inside bracket does NOT warn."""

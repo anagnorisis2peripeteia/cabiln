@@ -1,5 +1,6 @@
 """Reverse recognition preserves chemistry and editable atom partitions."""
 
+import logging
 import os
 import sys
 
@@ -14,6 +15,94 @@ from pyPept.molecule import Molecule
 from pyPept.sequence import Sequence
 
 from _chemistry_oracles import _assert_same_monomer_partition
+
+
+@pytest.mark.parametrize("template,leaving,diagnostic", [
+    pytest.param("[1*]C[1*]", "[H]", "attachment slot numbers must be unique",
+                 id="invalid-template"),
+    pytest.param("[1*]C", "[Cl]C", "slot mask 0", id="invalid-template-state"),
+])
+def test_skipped_library_template_diagnostics_are_not_import_warnings(
+    monkeypatch, caplog, template, leaving, diagnostic,
+):
+    from pyPept import recognition
+    from pyPept.smiles import convert_smiles
+
+    stamp, molecules = recognition._snapshot()
+    broken = Chem.MolFromSmiles(template)
+    broken.SetProp("symbol", "InvalidUnusedTemplate")
+    broken.SetProp("m_Rgroups", leaving)
+    monkeypatch.setattr(
+        recognition, "_snapshot",
+        lambda: ((stamp, "invalid-unused-template", template), (*molecules, broken)),
+    )
+
+    with caplog.at_level(logging.DEBUG, logger="pyPept.recognition"):
+        result = convert_smiles("NCC(=O)O")
+
+    assert result.cabiln == "G"
+    assert result.recognition_status == "complete"
+    assert result.search_complete
+    assert result.warnings == ()
+    assert "InvalidUnusedTemplate" in caplog.text
+    assert diagnostic in caplog.text
+
+
+@pytest.mark.parametrize("symbol,source", [
+    ("Ala_3Br", "N[C@@H](CSC[C@H](N)C(=O)O)C(=O)O"),
+    ("Ala_3Cl", "N[C@@H](CSC[C@H](N)C(=O)O)C(=O)O"),
+    ("ClAcAla", "N[C@@H](CSC[C@H](N)C(=O)O)C(=O)O"),
+    ("D_Ala_3Br", "N[C@H](CSC[C@H](N)C(=O)O)C(=O)O"),
+    ("D_Ala_3Cl", "N[C@H](CSC[C@H](N)C(=O)O)C(=O)O"),
+])
+def test_corrected_halide_substitution_is_recognized_with_exact_ownership(
+    tmp_path, monkeypatch, symbol, source,
+):
+    from pyPept.monomer_store import _load_sdf
+    from pyPept.smiles import convert_smiles
+
+    library = _load_sdf()[1]
+    path = tmp_path / "halide-cysteine.sdf"
+    with Chem.SDWriter(str(path)) as writer:
+        for name in (symbol, "C"):
+            writer.write(library[name])
+    monkeypatch.setenv("CABILN_MONOMER_LIBRARY", str(path))
+    result = convert_smiles(source)
+    assert result.recognition_status == "complete"
+    assert result.synthetic_components == ()
+    assert {item.symbol for item in result.assignments} == {symbol, "C"}
+    rebuilt = Molecule(Sequence(result.cabiln)).get_molecule(fmt="ROMol")
+    assert Chem.MolToSmiles(rebuilt) == Chem.MolToSmiles(Chem.MolFromSmiles(source))
+    _assert_same_monomer_partition(f"{symbol}.!s(4,4)%C.!s(4,4)", result.cabiln)
+
+
+def test_partial_peptide_does_not_exhaust_search_on_unsupported_boundaries(monkeypatch):
+    from pyPept import recognition
+    from pyPept.smiles import convert_smiles
+
+    # A source-specific histidine tautomer plus eight ordinary glutamates. The
+    # complete library includes haloalanine cores that also match pieces of E;
+    # their unsupported C-C connections must not swamp the useful partition.
+    source = (
+        "N[C@@H](Cc1c[nH]cn1)C(=O)"
+        + "N[C@@H](CCC(=O)O)C(=O)" * 8 + "O"
+    )
+    original_search = recognition._search
+    states = []
+
+    def search(*args, **kwargs):
+        result = original_search(*args, **kwargs)
+        states.append(result[2])
+        return result
+
+    monkeypatch.setattr(recognition, "_search", search)
+    result = convert_smiles(source, budgets=recognition.RecognitionBudgets(max_states=5000))
+    assert [symbol for symbol, _, _ in result.details[1:]] == ["E"] * 8
+    assert result.details[0][0].startswith("<")
+    assert result.synthetic_components == (0,)
+    rebuilt = Molecule(Sequence(result.cabiln)).get_molecule(fmt="ROMol")
+    assert Chem.MolToSmiles(rebuilt) == Chem.MolToSmiles(Chem.MolFromSmiles(source))
+    assert states and max(states) < 5000
 
 
 def _s2c_roundtrip(biln: str):

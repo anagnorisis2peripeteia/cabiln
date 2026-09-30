@@ -64,6 +64,36 @@ def attachment_site(mol, slot, leaving_groups=None):
     return _describe_site(mol, atoms[0], *_site_metadata(mol, leaving_groups))
 
 
+def declaration_is_compatible(mol, site):
+    """Compare a declaration with resolved chemistry and documented site roles.
+
+    Historical role labels are equivalent only in the corresponding structural
+    context. In particular, an amide or guanidine never acquires the primary-
+    amine second-H alias just because its old declaration says ``secondary``.
+    """
+    declared = site['declared_chem_type']
+    effective = site['chem_type']
+    if declared == effective:
+        return True
+    dummy = next(atom for atom in mol.GetAtoms()
+                 if atom.GetAtomicNum() == 0 and atom.GetIsotope() == site['slot'])
+    atom = dummy.GetNeighbors()[0]
+    if (declared == 'hydroxyl_phenolic' and effective == 'aryl_phenol_o'
+            and atom.GetAtomicNum() == 8):
+        return any(nb.GetAtomicNum() == 6 and nb.GetIsAromatic()
+                   for nb in atom.GetNeighbors())
+    if (declared == 'amine_secondary' and effective == 'amine_primary'
+            and atom.GetAtomicNum() == 7):
+        slots = sorted(nb.GetIsotope() for nb in atom.GetNeighbors()
+                       if nb.GetAtomicNum() == 0)
+        return len(slots) == 2 and site['slot'] == slots[1]
+    if (declared == 'backbone_o' and effective == 'hydroxyl'
+            and site['slot'] == 2 and atom.GetAtomicNum() == 8):
+        return any(nb.GetAtomicNum() == 6 and not nb.GetIsAromatic()
+                   for nb in atom.GetNeighbors())
+    return False
+
+
 def resolve_connection(
     mol1, slot1, mol2, slot2, *, leaving_groups1=None, leaving_groups2=None
 ):

@@ -183,13 +183,13 @@ def test_bare_molecule_compatibility_does_not_claim_numbered_site_support():
         _check_bond_chemistry(oxygen, 1, phosphorus, 1)
 
 
-def test_supported_exotic_warning_still_reaches_validation_report():
+def test_supported_numbered_reaction_does_not_create_an_atom_pair_warning():
     report = Sequence.validate("K.!n(4,4)%K.!n(4,4)")
     assert report.ok, report.errors
-    assert len(report.warnings) == 1
-    assert "N–N join (hydrazide/hydrazone)" in report.warnings[0]
-    assert "R4 of residue 0 <-> R4 of residue 1" in report.warnings[0]
-    assert Molecule(report.build()).get_molecule(fmt="ROMol") is not None
+    assert report.warnings == []
+    product = Molecule(report.build()).get_molecule(fmt="ROMol")
+    assert len(product.GetSubstructMatches(Chem.MolFromSmarts("[N]-[N]"))) == 1
+    assert not any(atom.GetAtomicNum() == 0 for atom in product.GetAtoms())
 
 
 @pytest.mark.parametrize("tag", ["1", "n"])
@@ -216,5 +216,5 @@ def test_legacy_parseable_graph_does_not_claim_reaction_support(tag):
             },
         )
     assert response.json()["valid"] is False
-    with pytest.raises(ValueError, match="No reaction defined.*wrong R-group index"):
+    with pytest.raises(ValueError, match="No reaction defined.*backbone_n_mod.*slot 3.*not supported"):
         Molecule(sequence)

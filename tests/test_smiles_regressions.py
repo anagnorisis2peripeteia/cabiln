@@ -137,7 +137,7 @@ def test_conversion_status_is_local_to_each_concurrent_call(monkeypatch):
     assert all("unspecified" not in message for message in synthetic.warnings)
 
 
-def test_accepted_assembly_diagnostics_are_returned_without_warning_side_effects(
+def test_supported_thioether_import_preserves_chemistry_without_warning_side_effects(
     monkeypatch,
 ):
     import warnings
@@ -147,7 +147,7 @@ def test_accepted_assembly_diagnostics_are_returned_without_warning_side_effects
     ).get_molecule(fmt="ROMol")
 
     def unexpected_warning(*_args, **_kwargs):
-        pytest.fail("assembly diagnostics must use the request-local sink")
+        pytest.fail("conversion must not emit global warnings")
 
     monkeypatch.setattr(warnings, "warn", unexpected_warning)
     result = convert_smiles(Chem.MolToSmiles(molecule))
@@ -155,7 +155,7 @@ def test_accepted_assembly_diagnostics_are_returned_without_warning_side_effects
     assert Chem.MolToSmiles(rebuilt.mol) == Chem.MolToSmiles(molecule)
     assert [item.symbol for item in result.assignments] == ["ac", "C", "G", "am", "acm"]
     assert result.recognition_status == "complete"
-    assert any("thioether" in message for message in result.warnings)
+    assert result.warnings == ()
     assert result.synthetic_components == ()
 
 

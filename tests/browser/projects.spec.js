@@ -112,7 +112,7 @@ test('quality clears on edits and canonical reordering, and Undo restores the or
   await expect(page.locator('#import-quality')).toBeVisible();
 });
 
-test('synthetic regions stay editable and audited library exceptions appear in tiles and previews', async ({ page }) => {
+test('synthetic regions stay editable and library notes are distinct from chemistry warnings', async ({ page }) => {
   const data = await render(page, 'A-<[1*]NCC([2*])=O>');
   const synthetic = page.locator('#residue-chips [data-quality="synthetic"]');
   await expect(synthetic).toHaveCount(1);
@@ -124,9 +124,14 @@ test('synthetic regions stay editable and audited library exceptions appear in t
   await expect(page.locator('#lib-panel')).toHaveClass('open');
   await page.locator('#lib-search').fill('meC');
   const row = page.locator('.lib-row[data-abbr="meC"]');
-  await expect(row.locator('.lib-quality')).toBeVisible();
+  await expect(row.locator('.lib-quality')).toHaveCount(0);
   await row.hover();
-  await expect(page.locator('#lib-preview')).toContainText('Library quality:');
+  await expect(page.locator('#lib-preview')).toContainText('Library notes:');
+  await page.locator('#lib-search').fill('aMeLeu');
+  const uncertain = page.locator('.lib-row[data-abbr="aMeLeu"]');
+  await expect(uncertain.locator('.lib-quality')).toContainText('stereo unspecified');
+  await uncertain.hover();
+  await expect(page.locator('#lib-preview .prev-warn')).toContainText('stereo unspecified');
 });
 
 test('help explains data handling and clearing a browser draft preserves the current session only', async ({ page }) => {

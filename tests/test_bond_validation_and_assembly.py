@@ -288,75 +288,21 @@ class TestAssembly:
 
 
 class TestCapMonomers:
-    """Assembly tests for thioether and sulfonyl protecting group caps."""
+    """Supported protecting groups retain their chemistry without false alerts."""
 
-    def test_trt_on_cys_warns_thioether(self):
-        """trt cap on Cys R4 (thiol) forms S-C thioether — UserWarning, assembles OK.
-
-        R3 = backbone-N mod; R4 = thiol in CABILN convention.
-        """
-        with pytest.warns(UserWarning, match='thioether'):
-            mol = _romol('fmoc-C.trt(4,2)-am')
-        assert mol is not None
-        dummies = [a for a in mol.GetAtoms() if a.GetAtomicNum() == 0]
-        assert dummies == [], f"Dummy atoms leaked: {len(dummies)}"
-
-    def test_trt_cys_has_sc_bond(self):
-        """trt-protected Cys should contain an S-C bond to a trisubstituted carbon."""
+    @pytest.mark.parametrize('source,expected_bond', [
+        ('fmoc-C.trt(4,2)-am', '[S][C](c1ccccc1)(c1ccccc1)c1ccccc1'),
+        ('fmoc-C.acm(4,2)-am', '[S]CNC(C)=O'),
+        ('fmoc-R.pbf(4,2)-am', '[N]S(=O)=O'),
+        ('G.OBn_(1,1)-am', 'c1ccccc1CONCC(N)=O'),
+        ('G.OMe_(1,1)-am', 'CONCC(N)=O'),
+    ])
+    def test_supported_cap_assembles_without_a_chemistry_warning(self, source, expected_bond):
         with warnings.catch_warnings():
-            warnings.simplefilter('always')
-            mol = _romol('fmoc-C.trt(4,2)-am')
-        sc_trt = Chem.MolFromSmarts('[S][C](c1ccccc1)(c1ccccc1)c1ccccc1')
-        assert mol.HasSubstructMatch(sc_trt), "trt S-C bond pattern not found"
-
-    def test_acm_on_cys_warns_thioether(self):
-        """acm cap on Cys R4 (thiol) forms S-C thioether — UserWarning, assembles OK."""
-        with pytest.warns(UserWarning, match='thioether'):
-            mol = _romol('fmoc-C.acm(4,2)-am')
-        assert mol is not None
-        dummies = [a for a in mol.GetAtoms() if a.GetAtomicNum() == 0]
-        assert dummies == [], f"Dummy atoms leaked: {len(dummies)}"
-
-    def test_acm_cys_has_acetamide(self):
-        """acm-protected Cys should contain the S-CH2-NH-C(=O) acetamidomethyl group."""
-        with warnings.catch_warnings():
-            warnings.simplefilter('always')
-            mol = _romol('fmoc-C.acm(4,2)-am')
-        acm_pat = Chem.MolFromSmarts('[S]CNC(C)=O')
-        assert mol.HasSubstructMatch(acm_pat), "acm S-CH2-NH-C(=O) pattern not found"
-
-    def test_pbf_on_arg_warns_sulfenamide(self):
-        """pbf cap on Arg R4 (guanidinium NH2) forms S-N bond — UserWarning, assembles OK.
-
-        R3 = backbone-N mod; R4 = guanidinium terminal NH2 in CABILN convention.
-        """
-        with pytest.warns(UserWarning, match='sulfenamide|S.N'):
-            mol = _romol('fmoc-R.pbf(4,2)-am')
-        assert mol is not None
-        dummies = [a for a in mol.GetAtoms() if a.GetAtomicNum() == 0]
-        assert dummies == [], f"Dummy atoms leaked: {len(dummies)}"
-
-    def test_pbf_arg_has_sulfonyl(self):
-        """pbf-protected Arg should contain an N-S(=O)(=O) sulfonamide substructure."""
-        with warnings.catch_warnings():
-            warnings.simplefilter('always')
-            mol = _romol('fmoc-R.pbf(4,2)-am')
-        sulf_pat = Chem.MolFromSmarts('[N]S(=O)=O')
-        assert mol.HasSubstructMatch(sulf_pat), "N-S(=O)2 sulfonamide pattern not found"
-
-    def test_obn_cap_warns_hydroxylamine(self):
-        """OBn_ cap on Gly forms O-N bond — warns hydroxylamine, assembles OK."""
-        with pytest.warns(UserWarning, match='hydroxylamine|hydroxamic'):
-            mol = _romol('G.OBn_(1,1)-am')
-        assert mol is not None
-        dummies = [a for a in mol.GetAtoms() if a.GetAtomicNum() == 0]
-        assert dummies == [], f"Dummy atoms leaked: {len(dummies)}"
-
-    def test_ome_cap_warns_hydroxylamine(self):
-        """OMe_ cap on Gly forms O-N bond — warns hydroxylamine, assembles OK."""
-        with pytest.warns(UserWarning, match='hydroxylamine|hydroxamic'):
-            mol = _romol('G.OMe_(1,1)-am')
-        assert mol is not None
+            warnings.simplefilter('error')
+            mol = _romol(source)
+        assert not any(atom.GetAtomicNum() == 0 for atom in mol.GetAtoms())
+        assert mol.HasSubstructMatch(Chem.MolFromSmarts(expected_bond))
 
 
 class TestIntramolecularRingClosure:
