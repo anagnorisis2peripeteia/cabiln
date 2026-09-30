@@ -1860,9 +1860,25 @@ async function settleDrawingsForConversion(request) {
 }
 
 async function convertNotation(target) {
-  if (!cabilnInput.value.trim()) return;
+  const original = cabilnInput.value.trim();
+  if (!original) return;
   const canonical = notationPolicy.value === 'canonical';
-  const request = startRequest('sequence-edit');
+  let deferredDrawing = false;
+  const request = startRequest('sequence-edit', () => {
+    // Let the cancelling action schedule its own drawing or formatter first.
+    Promise.resolve().then(() => {
+      if (deferredDrawing && mainStale && cabilnTimer === null &&
+          !activeRequests.has('main-render') && !activeRequests.has('sequence-edit') &&
+          notationSelect.value === 'cabiln' && cabilnInput.value.trim() === original) renderDocument();
+    });
+  });
+  // The formatter validates and normalizes unsent input. Draw its result once,
+  // or draw the original input if formatting fails. Stale input also covers a
+  // second formatter click taking over the first click's deferred drawing.
+  deferredDrawing = cabilnTimer !== null || (mainStale && !activeRequests.has('main-render'));
+  clearTimeout(cabilnTimer);
+  cabilnTimer = null;
+  let conversionError = '';
   setStatus(cabilnStatus, '');
   try {
     await settleDrawingsForConversion(request);
@@ -1876,15 +1892,21 @@ async function convertNotation(target) {
     });
     const data = await readResponse(res);
     if (!request.current() || cabilnInput.value.trim() !== val) return;
-    if (data.error) { setStatus(cabilnStatus, data.error); return; }
+    if (data.error) { conversionError = data.error; return; }
     if (data.result) {
+      deferredDrawing = false;
       commitDocument(data.result, 'cabiln', editor.present.warning, {
         canonical: data.canonical || null, context: data.context || editor.present.context,
       });
     }
   } catch (e) {
-    if (request.current()) setStatus(cabilnStatus, 'Notation conversion failed. Try again.');
+    conversionError = 'Notation conversion failed. Try again.';
   } finally {
+    if (request.current() && deferredDrawing) {
+      deferredDrawing = false;
+      await doRenderCabiln(cabilnInput.value.trim());
+    }
+    if (request.current() && conversionError) setStatus(cabilnStatus, conversionError);
     request.finish();
   }
 }

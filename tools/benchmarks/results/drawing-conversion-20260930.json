@@ -1,0 +1,3545 @@
+{
+  "baseline": "6c4ed239c50269fb851ab034cecb14089d7bcbf0",
+  "environment": {
+    "host": "Apple M4 Pro, macOS arm64",
+    "python": "3.11.15",
+    "rdkit": "2026.03.6",
+    "date": "2026-09-30"
+  },
+  "method": "Sequential frozen baseline and implemented candidate; same inputs and environment; clear render cache before misses. Small local samples, not production percentiles.",
+  "source_hashes": {
+    "baseline": {
+      "src/pyPept/inputs.py": "a74cd8040e674dd2c1eb9feb71578152717cf8ba8cd92f4f13e41858ddbf0398",
+      "src/pyPept/web/rendering.py": "2ff1d53b8bf1334fda804afd67bf6cdbf08d991d55877e2217d6cea1554a622c"
+    },
+    "candidate": {
+      "src/pyPept/inputs.py": "54445d1646a08ca1106064613d998aefb94fdb43a77356d22afb24ea3ff60a98",
+      "src/pyPept/web/rendering.py": "3238b8dc5ca8952eae98e790081114dc838e4ec8cab9226fe7e39579f6cec2d6",
+      "src/pyPept/web/static/builder.js": "a5285e3d12e52b1b10cefc55387d51e88f0e7105d37be66458fe75f9df2b344c"
+    }
+  },
+  "backend": {
+    "G/render/default": {
+      "baseline": {
+        "n": 3,
+        "median_ms": 9.645833051763475,
+        "min_ms": 9.066583006642759,
+        "max_ms": 10.25624998146668,
+        "samples_ms": [
+          10.25624998146668,
+          9.066583006642759,
+          9.645833051763475
+        ]
+      },
+      "candidate": {
+        "n": 3,
+        "median_ms": 16.06520899804309,
+        "min_ms": 11.054750008042902,
+        "max_ms": 19.388124987017363,
+        "samples_ms": [
+          11.054750008042902,
+          16.06520899804309,
+          19.388124987017363
+        ]
+      },
+      "identical_response": true,
+      "response_sha256": "54ac343633f98e568e16405e8c841e136bb8266ecd29e78a2003368634ef13e1"
+    },
+    "A-G/render/default": {
+      "baseline": {
+        "n": 3,
+        "median_ms": 11.377042043022811,
+        "min_ms": 10.337832965888083,
+        "max_ms": 11.492792051285505,
+        "samples_ms": [
+          11.492792051285505,
+          11.377042043022811,
+          10.337832965888083
+        ]
+      },
+      "candidate": {
+        "n": 3,
+        "median_ms": 12.298916990403086,
+        "min_ms": 12.002792034763843,
+        "max_ms": 17.177333997096866,
+        "samples_ms": [
+          17.177333997096866,
+          12.298916990403086,
+          12.002792034763843
+        ]
+      },
+      "identical_response": true,
+      "response_sha256": "e118ae00daac5bcd603c3cfa7e8fd3d14786a6df8fb759aeab85b897931a04a5"
+    },
+    "Semaglutide/render/default": {
+      "baseline": {
+        "n": 3,
+        "median_ms": 1103.6981249926612,
+        "min_ms": 1097.150249988772,
+        "max_ms": 1127.3689169902354,
+        "samples_ms": [
+          1127.3689169902354,
+          1103.6981249926612,
+          1097.150249988772
+        ]
+      },
+      "candidate": {
+        "n": 3,
+        "median_ms": 581.3337079598568,
+        "min_ms": 581.2610000139102,
+        "max_ms": 618.8965000328608,
+        "samples_ms": [
+          618.8965000328608,
+          581.3337079598568,
+          581.2610000139102
+        ]
+      },
+      "identical_response": true,
+      "response_sha256": "b5bff36e3be4c54d27e32d23aeb0e18f87e9b2fdb86adf7a3734d6653db7fbb6"
+    },
+    "Liraglutide/render/default": {
+      "baseline": {
+        "n": 1,
+        "median_ms": 435.45516702579334,
+        "min_ms": 435.45516702579334,
+        "max_ms": 435.45516702579334,
+        "samples_ms": [
+          435.45516702579334
+        ]
+      },
+      "candidate": {
+        "n": 1,
+        "median_ms": 241.61029100650921,
+        "min_ms": 241.61029100650921,
+        "max_ms": 241.61029100650921,
+        "samples_ms": [
+          241.61029100650921
+        ]
+      },
+      "identical_response": true,
+      "response_sha256": "4d9e3fc6b04e69b0c940abba2eb72aff641d3fdabb7ea35113bc79978762e676"
+    },
+    "Tirzepatide/render/default": {
+      "baseline": {
+        "n": 1,
+        "median_ms": 795.5012079910375,
+        "min_ms": 795.5012079910375,
+        "max_ms": 795.5012079910375,
+        "samples_ms": [
+          795.5012079910375
+        ]
+      },
+      "candidate": {
+        "n": 1,
+        "median_ms": 417.561000038404,
+        "min_ms": 417.561000038404,
+        "max_ms": 417.561000038404,
+        "samples_ms": [
+          417.561000038404
+        ]
+      },
+      "identical_response": true,
+      "response_sha256": "2083099888ba4ea36da28c87501df12ab52c8532e547f91e1611b070801c0940"
+    },
+    "Retatrutide/render/default": {
+      "baseline": {
+        "n": 1,
+        "median_ms": 849.7021250077523,
+        "min_ms": 849.7021250077523,
+        "max_ms": 849.7021250077523,
+        "samples_ms": [
+          849.7021250077523
+        ]
+      },
+      "candidate": {
+        "n": 1,
+        "median_ms": 433.1364170066081,
+        "min_ms": 433.1364170066081,
+        "max_ms": 433.1364170066081,
+        "samples_ms": [
+          433.1364170066081
+        ]
+      },
+      "identical_response": true,
+      "response_sha256": "c616cec3321be7c14012114b8dee2d8c2c8b5614758d370758ff64d5e2b0aeb4"
+    },
+    "Exenatide/render/default": {
+      "baseline": {
+        "n": 1,
+        "median_ms": 670.9307089913636,
+        "min_ms": 670.9307089913636,
+        "max_ms": 670.9307089913636,
+        "samples_ms": [
+          670.9307089913636
+        ]
+      },
+      "candidate": {
+        "n": 1,
+        "median_ms": 360.7450830168091,
+        "min_ms": 360.7450830168091,
+        "max_ms": 360.7450830168091,
+        "samples_ms": [
+          360.7450830168091
+        ]
+      },
+      "identical_response": true,
+      "response_sha256": "da401df19e605dd17d9b256c1637a33741febbe6ea8bdd8a9e7ea7119773c0bb"
+    },
+    "Lixisenatide/render/default": {
+      "baseline": {
+        "n": 3,
+        "median_ms": 855.1810419885442,
+        "min_ms": 854.2327500181273,
+        "max_ms": 860.4475420434028,
+        "samples_ms": [
+          854.2327500181273,
+          855.1810419885442,
+          860.4475420434028
+        ]
+      },
+      "candidate": {
+        "n": 3,
+        "median_ms": 445.5281659611501,
+        "min_ms": 440.9060000325553,
+        "max_ms": 446.50520803406835,
+        "samples_ms": [
+          445.5281659611501,
+          446.50520803406835,
+          440.9060000325553
+        ]
+      },
+      "identical_response": true,
+      "response_sha256": "97f8056ed74629b1959bbf0df71d0c89dd7979ee38f22c5fe8ac1e012bc4473b"
+    },
+    "TBMB Bicycle \u2014 minimal/render/default": {
+      "baseline": {
+        "n": 1,
+        "median_ms": 74.77554096840322,
+        "min_ms": 74.77554096840322,
+        "max_ms": 74.77554096840322,
+        "samples_ms": [
+          74.77554096840322
+        ]
+      },
+      "candidate": {
+        "n": 1,
+        "median_ms": 39.34404201572761,
+        "min_ms": 39.34404201572761,
+        "max_ms": 39.34404201572761,
+        "samples_ms": [
+          39.34404201572761
+        ]
+      },
+      "identical_response": true,
+      "response_sha256": "a0f56dd7cc680a73bf51f6b480d1e5ccf370b143ca71b1f9bd508d22ad8194a6"
+    },
+    "TBMB Bicycle \u2014 asymmetric loops/render/default": {
+      "baseline": {
+        "n": 1,
+        "median_ms": 142.7956250263378,
+        "min_ms": 142.7956250263378,
+        "max_ms": 142.7956250263378,
+        "samples_ms": [
+          142.7956250263378
+        ]
+      },
+      "candidate": {
+        "n": 1,
+        "median_ms": 74.48216696502641,
+        "min_ms": 74.48216696502641,
+        "max_ms": 74.48216696502641,
+        "samples_ms": [
+          74.48216696502641
+        ]
+      },
+      "identical_response": true,
+      "response_sha256": "aa99049200a79b0f5c94a98111d32288ebba709d607f60e2877536f4fabe48cc"
+    },
+    "Head-to-tail cyclic with lipid/render/default": {
+      "baseline": {
+        "n": 3,
+        "median_ms": 28.876291995402426,
+        "min_ms": 28.79712503636256,
+        "max_ms": 29.4932919787243,
+        "samples_ms": [
+          28.79712503636256,
+          29.4932919787243,
+          28.876291995402426
+        ]
+      },
+      "candidate": {
+        "n": 3,
+        "median_ms": 17.906917026266456,
+        "min_ms": 17.786207958124578,
+        "max_ms": 18.094166996888816,
+        "samples_ms": [
+          17.906917026266456,
+          17.786207958124578,
+          18.094166996888816
+        ]
+      },
+      "identical_response": true,
+      "response_sha256": "fd75a8f8f92a82bcdbaac6c02a9793e9d5290d32f5883ffcaa49f674918a562d"
+    },
+    "Head-to-tail cyclic/render/default": {
+      "baseline": {
+        "n": 1,
+        "median_ms": 32.79370901873335,
+        "min_ms": 32.79370901873335,
+        "max_ms": 32.79370901873335,
+        "samples_ms": [
+          32.79370901873335
+        ]
+      },
+      "candidate": {
+        "n": 1,
+        "median_ms": 17.9449170245789,
+        "min_ms": 17.9449170245789,
+        "max_ms": 17.9449170245789,
+        "samples_ms": [
+          17.9449170245789
+        ]
+      },
+      "identical_response": true,
+      "response_sha256": "dfdc593a108e2ed0f1653497fb00fc196de7e9d12c5f4874325e62b92d703d6b"
+    },
+    "Dual-lipid backbone/render/default": {
+      "baseline": {
+        "n": 1,
+        "median_ms": 39.70787499565631,
+        "min_ms": 39.70787499565631,
+        "max_ms": 39.70787499565631,
+        "samples_ms": [
+          39.70787499565631
+        ]
+      },
+      "candidate": {
+        "n": 1,
+        "median_ms": 29.57524999510497,
+        "min_ms": 29.57524999510497,
+        "max_ms": 29.57524999510497,
+        "samples_ms": [
+          29.57524999510497
+        ]
+      },
+      "identical_response": true,
+      "response_sha256": "7403e2850cb1cfee34ddff034845c2bb4aab477224e5b55df5051a5817353a66"
+    },
+    "AEEA PEG spacer/render/default": {
+      "baseline": {
+        "n": 1,
+        "median_ms": 15.022874984424561,
+        "min_ms": 15.022874984424561,
+        "max_ms": 15.022874984424561,
+        "samples_ms": [
+          15.022874984424561
+        ]
+      },
+      "candidate": {
+        "n": 1,
+        "median_ms": 13.775542029179633,
+        "min_ms": 13.775542029179633,
+        "max_ms": 13.775542029179633,
+        "samples_ms": [
+          13.775542029179633
+        ]
+      },
+      "identical_response": true,
+      "response_sha256": "073aa63ac690dbc5575b5b549f097e1c08fc9796a03528f2a1e8cd1d965f965d"
+    },
+    "RGD pendant arm/render/default": {
+      "baseline": {
+        "n": 1,
+        "median_ms": 19.307957962155342,
+        "min_ms": 19.307957962155342,
+        "max_ms": 19.307957962155342,
+        "samples_ms": [
+          19.307957962155342
+        ]
+      },
+      "candidate": {
+        "n": 1,
+        "median_ms": 16.948082949966192,
+        "min_ms": 16.948082949966192,
+        "max_ms": 16.948082949966192,
+        "samples_ms": [
+          16.948082949966192
+        ]
+      },
+      "identical_response": true,
+      "response_sha256": "b54c7036fcf53ee41b0504c67995cbed2c2cb42793596d70d2872aa8e9ffa54e"
+    },
+    "Dual-E isopeptide scaffold/render/default": {
+      "baseline": {
+        "n": 1,
+        "median_ms": 20.067041972652078,
+        "min_ms": 20.067041972652078,
+        "max_ms": 20.067041972652078,
+        "samples_ms": [
+          20.067041972652078
+        ]
+      },
+      "candidate": {
+        "n": 1,
+        "median_ms": 17.270166019443423,
+        "min_ms": 17.270166019443423,
+        "max_ms": 17.270166019443423,
+        "samples_ms": [
+          17.270166019443423
+        ]
+      },
+      "identical_response": true,
+      "response_sha256": "769110ea157265a21a49065a5e82195c1a45a33b2e19383cb7e2689733abfa67"
+    },
+    "G/render/seed=1": {
+      "baseline": {
+        "n": 1,
+        "median_ms": 63.68779198965058,
+        "min_ms": 63.68779198965058,
+        "max_ms": 63.68779198965058,
+        "samples_ms": [
+          63.68779198965058
+        ]
+      },
+      "candidate": {
+        "n": 1,
+        "median_ms": 20.807458029594272,
+        "min_ms": 20.807458029594272,
+        "max_ms": 20.807458029594272,
+        "samples_ms": [
+          20.807458029594272
+        ]
+      },
+      "identical_response": true,
+      "response_sha256": "c2c2bce9bbdc3b1880660985d2f26aaa149b1b85df53c512a5e6b0536eaa57d6"
+    },
+    "G/render/seed=2": {
+      "baseline": {
+        "n": 1,
+        "median_ms": 9.484415990300477,
+        "min_ms": 9.484415990300477,
+        "max_ms": 9.484415990300477,
+        "samples_ms": [
+          9.484415990300477
+        ]
+      },
+      "candidate": {
+        "n": 1,
+        "median_ms": 8.907750016078353,
+        "min_ms": 8.907750016078353,
+        "max_ms": 8.907750016078353,
+        "samples_ms": [
+          8.907750016078353
+        ]
+      },
+      "identical_response": true,
+      "response_sha256": "54ac343633f98e568e16405e8c841e136bb8266ecd29e78a2003368634ef13e1"
+    },
+    "A-G/render/seed=1": {
+      "baseline": {
+        "n": 1,
+        "median_ms": 11.61966600921005,
+        "min_ms": 11.61966600921005,
+        "max_ms": 11.61966600921005,
+        "samples_ms": [
+          11.61966600921005
+        ]
+      },
+      "candidate": {
+        "n": 1,
+        "median_ms": 11.844624998047948,
+        "min_ms": 11.844624998047948,
+        "max_ms": 11.844624998047948,
+        "samples_ms": [
+          11.844624998047948
+        ]
+      },
+      "identical_response": true,
+      "response_sha256": "58fd9a8cc8dd21e052184add3dd199426f2cd8d3e9ea65c69e48390997a4c798"
+    },
+    "A-G/render/seed=2": {
+      "baseline": {
+        "n": 1,
+        "median_ms": 11.388624960090965,
+        "min_ms": 11.388624960090965,
+        "max_ms": 11.388624960090965,
+        "samples_ms": [
+          11.388624960090965
+        ]
+      },
+      "candidate": {
+        "n": 1,
+        "median_ms": 13.744625030085444,
+        "min_ms": 13.744625030085444,
+        "max_ms": 13.744625030085444,
+        "samples_ms": [
+          13.744625030085444
+        ]
+      },
+      "identical_response": true,
+      "response_sha256": "e118ae00daac5bcd603c3cfa7e8fd3d14786a6df8fb759aeab85b897931a04a5"
+    },
+    "cyclic-lipid/render/seed=1": {
+      "baseline": {
+        "n": 1,
+        "median_ms": 26.74237499013543,
+        "min_ms": 26.74237499013543,
+        "max_ms": 26.74237499013543,
+        "samples_ms": [
+          26.74237499013543
+        ]
+      },
+      "candidate": {
+        "n": 1,
+        "median_ms": 16.491749964188784,
+        "min_ms": 16.491749964188784,
+        "max_ms": 16.491749964188784,
+        "samples_ms": [
+          16.491749964188784
+        ]
+      },
+      "identical_response": true,
+      "response_sha256": "dd503572edd6736a1ea721401467d1bdf27616f178b89e9d3221448daa3c0d65"
+    },
+    "cyclic-lipid/render/seed=2": {
+      "baseline": {
+        "n": 1,
+        "median_ms": 52.6812500320375,
+        "min_ms": 52.6812500320375,
+        "max_ms": 52.6812500320375,
+        "samples_ms": [
+          52.6812500320375
+        ]
+      },
+      "candidate": {
+        "n": 1,
+        "median_ms": 42.03683300875127,
+        "min_ms": 42.03683300875127,
+        "max_ms": 42.03683300875127,
+        "samples_ms": [
+          42.03683300875127
+        ]
+      },
+      "identical_response": true,
+      "response_sha256": "fd75a8f8f92a82bcdbaac6c02a9793e9d5290d32f5883ffcaa49f674918a562d"
+    },
+    "Semaglutide/render/seed=1": {
+      "baseline": {
+        "n": 1,
+        "median_ms": 597.0467909937724,
+        "min_ms": 597.0467909937724,
+        "max_ms": 597.0467909937724,
+        "samples_ms": [
+          597.0467909937724
+        ]
+      },
+      "candidate": {
+        "n": 1,
+        "median_ms": 56.82420899393037,
+        "min_ms": 56.82420899393037,
+        "max_ms": 56.82420899393037,
+        "samples_ms": [
+          56.82420899393037
+        ]
+      },
+      "identical_response": true,
+      "response_sha256": "0dad552db5d64f88b1b0f6eff6120a075716825865d3bd016d2dc58545d4bab6"
+    },
+    "Semaglutide/render/seed=2": {
+      "baseline": {
+        "n": 3,
+        "median_ms": 4643.830791988876,
+        "min_ms": 4430.686915991828,
+        "max_ms": 7863.87762503,
+        "samples_ms": [
+          7863.87762503,
+          4430.686915991828,
+          4643.830791988876
+        ]
+      },
+      "candidate": {
+        "n": 3,
+        "median_ms": 3850.644792022649,
+        "min_ms": 3832.5945410178974,
+        "max_ms": 3873.63191699842,
+        "samples_ms": [
+          3832.5945410178974,
+          3850.644792022649,
+          3873.63191699842
+        ]
+      },
+      "identical_response": true,
+      "response_sha256": "b5bff36e3be4c54d27e32d23aeb0e18f87e9b2fdb86adf7a3734d6653db7fbb6"
+    },
+    "Lixisenatide/render/seed=1": {
+      "baseline": {
+        "n": 1,
+        "median_ms": 475.31891701510176,
+        "min_ms": 475.31891701510176,
+        "max_ms": 475.31891701510176,
+        "samples_ms": [
+          475.31891701510176
+        ]
+      },
+      "candidate": {
+        "n": 1,
+        "median_ms": 77.80974998604506,
+        "min_ms": 77.80974998604506,
+        "max_ms": 77.80974998604506,
+        "samples_ms": [
+          77.80974998604506
+        ]
+      },
+      "identical_response": true,
+      "response_sha256": "c7c39767d36edc603be10f194513ce5aa247a456fdc9241b9133ca3cf160719b"
+    },
+    "Lixisenatide/render/seed=2": {
+      "baseline": {
+        "n": 1,
+        "median_ms": 4704.65674996376,
+        "min_ms": 4704.65674996376,
+        "max_ms": 4704.65674996376,
+        "samples_ms": [
+          4704.65674996376
+        ]
+      },
+      "candidate": {
+        "n": 1,
+        "median_ms": 2793.138083012309,
+        "min_ms": 2793.138083012309,
+        "max_ms": 2793.138083012309,
+        "samples_ms": [
+          2793.138083012309
+        ]
+      },
+      "identical_response": true,
+      "response_sha256": "97f8056ed74629b1959bbf0df71d0c89dd7979ee38f22c5fe8ac1e012bc4473b"
+    },
+    "A-G/reference/cabiln": {
+      "baseline": {
+        "n": 1,
+        "median_ms": 12.214000045787543,
+        "min_ms": 12.214000045787543,
+        "max_ms": 12.214000045787543,
+        "samples_ms": [
+          12.214000045787543
+        ]
+      },
+      "candidate": {
+        "n": 1,
+        "median_ms": 10.115457989741117,
+        "min_ms": 10.115457989741117,
+        "max_ms": 10.115457989741117,
+        "samples_ms": [
+          10.115457989741117
+        ]
+      },
+      "identical_response": true,
+      "response_sha256": "b731083c248ac1eccc1b4d2f9dbdd769662a497c54e9a2bc0814f52ca6a403b6"
+    },
+    "A-G/reference/auto": {
+      "baseline": {
+        "n": 1,
+        "median_ms": 10.572833998594433,
+        "min_ms": 10.572833998594433,
+        "max_ms": 10.572833998594433,
+        "samples_ms": [
+          10.572833998594433
+        ]
+      },
+      "candidate": {
+        "n": 1,
+        "median_ms": 10.055958002340049,
+        "min_ms": 10.055958002340049,
+        "max_ms": 10.055958002340049,
+        "samples_ms": [
+          10.055958002340049
+        ]
+      },
+      "identical_response": true,
+      "response_sha256": "167c210f1f61dc1126b8774479da802ba150e652da9ca3c0b1884a8894ee192b"
+    },
+    "A-G/reference/smiles": {
+      "baseline": {
+        "n": 1,
+        "median_ms": 2.7548749931156635,
+        "min_ms": 2.7548749931156635,
+        "max_ms": 2.7548749931156635,
+        "samples_ms": [
+          2.7548749931156635
+        ]
+      },
+      "candidate": {
+        "n": 1,
+        "median_ms": 2.7898330008611083,
+        "min_ms": 2.7898330008611083,
+        "max_ms": 2.7898330008611083,
+        "samples_ms": [
+          2.7898330008611083
+        ]
+      },
+      "identical_response": true,
+      "response_sha256": "52ef111167b8fab5b78c7e109cf2a68cb56c1cbd5e3ea030a35835f66a86b3ea"
+    },
+    "A-G/reference/mol": {
+      "baseline": {
+        "n": 1,
+        "median_ms": 2.846167015377432,
+        "min_ms": 2.846167015377432,
+        "max_ms": 2.846167015377432,
+        "samples_ms": [
+          2.846167015377432
+        ]
+      },
+      "candidate": {
+        "n": 1,
+        "median_ms": 2.7322499663569033,
+        "min_ms": 2.7322499663569033,
+        "max_ms": 2.7322499663569033,
+        "samples_ms": [
+          2.7322499663569033
+        ]
+      },
+      "identical_response": true,
+      "response_sha256": "c1c2244c4d9d54e5eb43a56de24cf4c188362b96f5c337715eba83565c0637a3"
+    },
+    "A-G/reference/biln": {
+      "baseline": {
+        "n": 1,
+        "median_ms": 11.678709008265287,
+        "min_ms": 11.678709008265287,
+        "max_ms": 11.678709008265287,
+        "samples_ms": [
+          11.678709008265287
+        ]
+      },
+      "candidate": {
+        "n": 1,
+        "median_ms": 10.152500006370246,
+        "min_ms": 10.152500006370246,
+        "max_ms": 10.152500006370246,
+        "samples_ms": [
+          10.152500006370246
+        ]
+      },
+      "identical_response": true,
+      "response_sha256": "167c210f1f61dc1126b8774479da802ba150e652da9ca3c0b1884a8894ee192b"
+    },
+    "A-G/reference/helm": {
+      "baseline": {
+        "n": 1,
+        "median_ms": 12.041917012538761,
+        "min_ms": 12.041917012538761,
+        "max_ms": 12.041917012538761,
+        "samples_ms": [
+          12.041917012538761
+        ]
+      },
+      "candidate": {
+        "n": 1,
+        "median_ms": 9.761291032191366,
+        "min_ms": 9.761291032191366,
+        "max_ms": 9.761291032191366,
+        "samples_ms": [
+          9.761291032191366
+        ]
+      },
+      "identical_response": true,
+      "response_sha256": "4fc1b4cb6dd9cd07a2888c00245c019a2b75eadec26874739e33577042a316a5"
+    },
+    "A-G/verify/exact": {
+      "baseline": {
+        "n": 3,
+        "median_ms": 9.303290979005396,
+        "min_ms": 8.896958024706692,
+        "max_ms": 10.158332996070385,
+        "samples_ms": [
+          10.158332996070385,
+          9.303290979005396,
+          8.896958024706692
+        ]
+      },
+      "candidate": {
+        "n": 3,
+        "median_ms": 8.337999985087663,
+        "min_ms": 7.946208002977073,
+        "max_ms": 8.693041978403926,
+        "samples_ms": [
+          8.693041978403926,
+          7.946208002977073,
+          8.337999985087663
+        ]
+      },
+      "identical_response": true,
+      "response_sha256": "c0b14c2e215fc7def825637ac7e79e2250bc33f48eab73db3bf07c3bf7407b7c"
+    },
+    "A-G/verify/unspecified": {
+      "baseline": {
+        "n": 1,
+        "median_ms": 9.724500006996095,
+        "min_ms": 9.724500006996095,
+        "max_ms": 9.724500006996095,
+        "samples_ms": [
+          9.724500006996095
+        ]
+      },
+      "candidate": {
+        "n": 1,
+        "median_ms": 8.588000026065856,
+        "min_ms": 8.588000026065856,
+        "max_ms": 8.588000026065856,
+        "samples_ms": [
+          8.588000026065856
+        ]
+      },
+      "identical_response": true,
+      "response_sha256": "4999dfe82d7d5f4d564001b4fde248d259dac345e64e50840cee0ee0184d0806"
+    },
+    "A-G/verify/mismatch": {
+      "baseline": {
+        "n": 1,
+        "median_ms": 9.475375001784414,
+        "min_ms": 9.475375001784414,
+        "max_ms": 9.475375001784414,
+        "samples_ms": [
+          9.475375001784414
+        ]
+      },
+      "candidate": {
+        "n": 1,
+        "median_ms": 7.711249985732138,
+        "min_ms": 7.711249985732138,
+        "max_ms": 7.711249985732138,
+        "samples_ms": [
+          7.711249985732138
+        ]
+      },
+      "identical_response": true,
+      "response_sha256": "5673dc646b934a747244b1ae3895841bd5227ddbd2239405ed6117116d539001"
+    },
+    "Semaglutide/reference/cabiln": {
+      "baseline": {
+        "n": 3,
+        "median_ms": 1196.6302919900045,
+        "min_ms": 1148.129749984946,
+        "max_ms": 1413.2044999860227,
+        "samples_ms": [
+          1413.2044999860227,
+          1196.6302919900045,
+          1148.129749984946
+        ]
+      },
+      "candidate": {
+        "n": 3,
+        "median_ms": 579.1321250144392,
+        "min_ms": 574.4392920169048,
+        "max_ms": 583.664542005863,
+        "samples_ms": [
+          574.4392920169048,
+          579.1321250144392,
+          583.664542005863
+        ]
+      },
+      "identical_response": true,
+      "response_sha256": "de8bfb0b18d0fdbdc4be83766ed2fe78abcc68b7fe6024a9af5f0c43e9f1ae5f"
+    },
+    "Semaglutide/reference/auto": {
+      "baseline": {
+        "n": 3,
+        "median_ms": 1149.862333026249,
+        "min_ms": 1114.7239999845624,
+        "max_ms": 1154.2782919714227,
+        "samples_ms": [
+          1154.2782919714227,
+          1149.862333026249,
+          1114.7239999845624
+        ]
+      },
+      "candidate": {
+        "n": 3,
+        "median_ms": 579.7891250113025,
+        "min_ms": 576.2923749862239,
+        "max_ms": 624.8584580025636,
+        "samples_ms": [
+          624.8584580025636,
+          579.7891250113025,
+          576.2923749862239
+        ]
+      },
+      "identical_response": true,
+      "response_sha256": "61013fd31558d7c11080b5b74f0d3223dc18a00089ff2bcb5b1219ee6bda8ecb"
+    },
+    "Semaglutide/reference/smiles": {
+      "baseline": {
+        "n": 1,
+        "median_ms": 227.53316699527204,
+        "min_ms": 227.53316699527204,
+        "max_ms": 227.53316699527204,
+        "samples_ms": [
+          227.53316699527204
+        ]
+      },
+      "candidate": {
+        "n": 1,
+        "median_ms": 230.28920800425112,
+        "min_ms": 230.28920800425112,
+        "max_ms": 230.28920800425112,
+        "samples_ms": [
+          230.28920800425112
+        ]
+      },
+      "identical_response": true,
+      "response_sha256": "8c6e4612b57411cd96956568c4a416e2b4c071233fbf427cc44d23877c0f753b"
+    },
+    "Semaglutide/reference/mol": {
+      "baseline": {
+        "n": 1,
+        "median_ms": 545.2697920263745,
+        "min_ms": 545.2697920263745,
+        "max_ms": 545.2697920263745,
+        "samples_ms": [
+          545.2697920263745
+        ]
+      },
+      "candidate": {
+        "n": 1,
+        "median_ms": 558.6586669669487,
+        "min_ms": 558.6586669669487,
+        "max_ms": 558.6586669669487,
+        "samples_ms": [
+          558.6586669669487
+        ]
+      },
+      "identical_response": true,
+      "response_sha256": "dcce8dbfd1794c30497fb7f855454c8d757b028186b6b00eb5951bbe85024cd4"
+    },
+    "Semaglutide/verify/exact": {
+      "baseline": {
+        "n": 3,
+        "median_ms": 560.2770000114106,
+        "min_ms": 556.7332499776967,
+        "max_ms": 565.9520839690231,
+        "samples_ms": [
+          556.7332499776967,
+          565.9520839690231,
+          560.2770000114106
+        ]
+      },
+      "candidate": {
+        "n": 3,
+        "median_ms": 28.474290971644223,
+        "min_ms": 27.145874977577478,
+        "max_ms": 46.07379203662276,
+        "samples_ms": [
+          28.474290971644223,
+          27.145874977577478,
+          46.07379203662276
+        ]
+      },
+      "identical_response": true,
+      "response_sha256": "1e9895e6fbd3947aa09fb32dd49ede5edb779bb46389ecd73d5719fd336f3d84"
+    },
+    "Semaglutide/verify/unspecified": {
+      "baseline": {
+        "n": 1,
+        "median_ms": 559.8370410152711,
+        "min_ms": 559.8370410152711,
+        "max_ms": 559.8370410152711,
+        "samples_ms": [
+          559.8370410152711
+        ]
+      },
+      "candidate": {
+        "n": 1,
+        "median_ms": 27.906499977689236,
+        "min_ms": 27.906499977689236,
+        "max_ms": 27.906499977689236,
+        "samples_ms": [
+          27.906499977689236
+        ]
+      },
+      "identical_response": true,
+      "response_sha256": "2b6126ee03ed55e184ab6499a891d79b6e127558c9fcfa518b38eea651335944"
+    },
+    "Semaglutide/verify/mismatch": {
+      "baseline": {
+        "n": 1,
+        "median_ms": 580.8644169592299,
+        "min_ms": 580.8644169592299,
+        "max_ms": 580.8644169592299,
+        "samples_ms": [
+          580.8644169592299
+        ]
+      },
+      "candidate": {
+        "n": 1,
+        "median_ms": 26.8367090029642,
+        "min_ms": 26.8367090029642,
+        "max_ms": 26.8367090029642,
+        "samples_ms": [
+          26.8367090029642
+        ]
+      },
+      "identical_response": true,
+      "response_sha256": "34a1cff822dc4cf22c04b5a6506576ff0c976a24e3418ba7207622b9f5c6d956"
+    }
+  },
+  "identical_error_and_detection_responses": {
+    "auto/bogus": {
+      "status": 400,
+      "response": {
+        "error": "Could not parse as SMILES, BILN, HELM, or CABILN"
+      }
+    },
+    "auto/C": {
+      "status": 200,
+      "response": {
+        "svg": "<?xml version='1.0' encoding='iso-8859-1'?>\n<svg version='1.1' baseProfile='full'\n              xmlns='http://www.w3.org/2000/svg'\n                      xmlns:rdkit='http://www.rdkit.org/xml'\n                      xmlns:xlink='http://www.w3.org/1999/xlink'\n                  xml:space='preserve'\nwidth='960px' height='680px' viewBox='0 0 960 680'>\n<!-- END OF HEADER -->\n<rect style='opacity:1.0;fill:#FFFFFF;stroke:none' width='960.0' height='680.0' x='0.0' y='0.0'> </rect>\n<path class='atom-0' d='M 445.8 332.6\nQ 445.8 325.6, 449.1 321.9\nQ 452.4 318.2, 458.7 318.2\nQ 464.5 318.2, 467.7 322.3\nL 465.0 324.5\nQ 462.7 321.5, 458.7 321.5\nQ 454.4 321.5, 452.1 324.4\nQ 449.9 327.2, 449.9 332.6\nQ 449.9 338.2, 452.2 341.1\nQ 454.6 344.0, 459.1 344.0\nQ 462.3 344.0, 465.9 342.1\nL 467.0 345.1\nQ 465.5 346.1, 463.3 346.6\nQ 461.1 347.2, 458.6 347.2\nQ 452.4 347.2, 449.1 343.4\nQ 445.8 339.7, 445.8 332.6\n' fill='#000000'/>\n<path class='atom-0' d='M 471.4 318.5\nL 475.3 318.5\nL 475.3 330.6\nL 489.8 330.6\nL 489.8 318.5\nL 493.6 318.5\nL 493.6 346.8\nL 489.8 346.8\nL 489.8 333.8\nL 475.3 333.8\nL 475.3 346.8\nL 471.4 346.8\nL 471.4 318.5\n' fill='#000000'/>\n<path class='atom-0' d='M 511.3 354.6\nL 513.6 354.6\nL 513.6 356.7\nL 511.3 356.7\nL 511.3 361.0\nL 508.9 361.0\nL 508.9 356.7\nL 499.2 356.7\nL 499.2 355.0\nL 507.4 342.3\nL 511.3 342.3\nL 511.3 354.6\nM 502.3 354.6\nL 508.9 354.6\nL 508.9 344.0\nL 502.3 354.6\n' fill='#000000'/>\n</svg>\n",
+        "smiles": "C",
+        "format": "SMILES",
+        "context": {
+          "project_version": 1,
+          "library_binding": {
+            "monomers": "b74f799bfcf03cfcb54ebb65cdf2ed81077e95cb50621773c0d0c0a6a2b286a5",
+            "aliases": "8968afe4bfc477021a2d3f3379b3d469e6f423bc46abfd5c72e44722048f6891",
+            "reactions": "711cf05180386698dba5164314053833ea653b2f8aa1f5a7692c123099be278f",
+            "caps": "530a2b3dda397d2f22768f205efe7df489720e65355f921e3ab037196901297e"
+          },
+          "canonical": {
+            "format": "cabiln-graph-v1",
+            "labeling": "rdkit-colored-port-graph-v1",
+            "rdkit": "2026.03.6"
+          }
+        },
+        "info": "1 atoms \u00b7 MW 16.03"
+      }
+    },
+    "cabiln/bogus": {
+      "status": 400,
+      "response": {
+        "error": "Monomer 'bogus' is not in the monomer library."
+      }
+    },
+    "helm/PEPTIDE1{A.??}$$$$": {
+      "status": 400,
+      "response": {
+        "error": "Monomer '??' is not in the monomer library."
+      }
+    },
+    "biln/A-bogus": {
+      "status": 400,
+      "response": {
+        "error": "Monomer 'bogus' is not in the monomer library."
+      }
+    },
+    "smiles/bogus": {
+      "status": 400,
+      "response": {
+        "error": "Invalid SMILES"
+      }
+    },
+    "mol/bad mol block": {
+      "status": 400,
+      "response": {
+        "error": "Invalid .mol data"
+      }
+    }
+  },
+  "browser": {
+    "method": "Single retained baseline and candidate runs of 54 real UI operations each; event through updated SVG/tabs and two animation frames. Dedicated local process-mode workers. All 54 displayed structures independently compared with assembly outside timing. Canonical outliers retained.",
+    "baseline": {
+      "operation_count": 54,
+      "structures_preserved": 54,
+      "long_task_count": 0,
+      "json_to_dom_ms": {
+        "median": 0.800000011920929,
+        "max": 2.900000035762787
+      },
+      "dom_to_two_frames_ms": {
+        "median": 18.100000023841858,
+        "max": 31.5
+      },
+      "rows": [
+        {
+          "case": "G",
+          "label": "cold first molecular edit after fresh server /ready",
+          "kind": "render",
+          "target": null,
+          "policy": null,
+          "total_ms": 283.5999999642372,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 71.10000002384186,
+              "server_ms": 68.73
+            }
+          ]
+        },
+        {
+          "case": "G",
+          "label": "identical source repeat",
+          "kind": "render",
+          "target": null,
+          "policy": null,
+          "total_ms": 218.19999998807907,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 13.299999952316284,
+              "server_ms": 12.15
+            }
+          ]
+        },
+        {
+          "case": "A-G",
+          "label": "first source in warm worker",
+          "kind": "render",
+          "target": null,
+          "policy": null,
+          "total_ms": 211.0,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 15.100000023841858,
+              "server_ms": 13.85
+            }
+          ]
+        },
+        {
+          "case": "A-G",
+          "label": "changed source in warm worker",
+          "kind": "render",
+          "target": null,
+          "policy": null,
+          "total_ms": 207.0999999642372,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 16.900000035762787,
+              "server_ms": 15.43
+            }
+          ]
+        },
+        {
+          "case": "A-G",
+          "label": "return to previously rendered source",
+          "kind": "render",
+          "target": null,
+          "policy": null,
+          "total_ms": 196,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 4.300000011920929,
+              "server_ms": 2.86
+            }
+          ]
+        },
+        {
+          "case": "A-G",
+          "label": "first \u2192%",
+          "kind": "conversion",
+          "target": "branch",
+          "policy": "layout",
+          "total_ms": 58.30000001192093,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/convert_notation",
+              "status": 200,
+              "client_ms": 20.80000001192093,
+              "server_ms": 19.64
+            },
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 5.5,
+              "server_ms": 4.16
+            }
+          ]
+        },
+        {
+          "case": "A-G",
+          "label": "first \u2192[ ] after \u2192%",
+          "kind": "conversion",
+          "target": "bracket",
+          "policy": "layout",
+          "total_ms": 46.89999997615814,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/convert_notation",
+              "status": 200,
+              "client_ms": 19.100000023841858,
+              "server_ms": 17.54
+            },
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 3.899999976158142,
+              "server_ms": 2.67
+            }
+          ]
+        },
+        {
+          "case": "A-G",
+          "label": "repeat \u2192%",
+          "kind": "conversion",
+          "target": "branch",
+          "policy": "layout",
+          "total_ms": 47.19999998807907,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/convert_notation",
+              "status": 200,
+              "client_ms": 21.599999964237213,
+              "server_ms": 20.18
+            },
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 3.699999988079071,
+              "server_ms": 2.57
+            }
+          ]
+        },
+        {
+          "case": "A-G",
+          "label": "repeat \u2192[ ]",
+          "kind": "conversion",
+          "target": "bracket",
+          "policy": "layout",
+          "total_ms": 47.5,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/convert_notation",
+              "status": 200,
+              "client_ms": 21.600000023841858,
+              "server_ms": 20.34
+            },
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 4.699999988079071,
+              "server_ms": 3.22
+            }
+          ]
+        },
+        {
+          "case": "A-G",
+          "label": "canonical \u2192%",
+          "kind": "conversion",
+          "target": "branch",
+          "policy": "canonical",
+          "total_ms": 63,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/convert_notation",
+              "status": 200,
+              "client_ms": 28.900000035762787,
+              "server_ms": 27.45
+            },
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 15.800000011920929,
+              "server_ms": 14.48
+            }
+          ]
+        },
+        {
+          "case": "A-G",
+          "label": "canonical \u2192[ ]",
+          "kind": "conversion",
+          "target": "bracket",
+          "policy": "canonical",
+          "total_ms": 63.39999997615814,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/convert_notation",
+              "status": 200,
+              "client_ms": 27.0,
+              "server_ms": 25.52
+            },
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 4.300000011920929,
+              "server_ms": 3.1
+            }
+          ]
+        },
+        {
+          "case": "nested arm crosslink",
+          "label": "first source in warm worker",
+          "kind": "render",
+          "target": null,
+          "policy": null,
+          "total_ms": 238.60000002384186,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 29.900000035762787,
+              "server_ms": 28.51
+            }
+          ]
+        },
+        {
+          "case": "nested arm crosslink",
+          "label": "changed source in warm worker",
+          "kind": "render",
+          "target": null,
+          "policy": null,
+          "total_ms": 235.19999998807907,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 31.80000001192093,
+              "server_ms": 30.5
+            }
+          ]
+        },
+        {
+          "case": "nested arm crosslink",
+          "label": "return to previously rendered source",
+          "kind": "render",
+          "target": null,
+          "policy": null,
+          "total_ms": 203.89999997615814,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 4.5,
+              "server_ms": 3.1
+            }
+          ]
+        },
+        {
+          "case": "nested arm crosslink",
+          "label": "first \u2192%",
+          "kind": "conversion",
+          "target": "branch",
+          "policy": "layout",
+          "total_ms": 63.59999996423721,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/convert_notation",
+              "status": 200,
+              "client_ms": 39.40000003576279,
+              "server_ms": 37.84
+            },
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 4.399999976158142,
+              "server_ms": 2.96
+            }
+          ]
+        },
+        {
+          "case": "nested arm crosslink",
+          "label": "first \u2192[ ] after \u2192%",
+          "kind": "conversion",
+          "target": "bracket",
+          "policy": "layout",
+          "total_ms": 47.80000001192093,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/convert_notation",
+              "status": 200,
+              "client_ms": 25.400000035762787,
+              "server_ms": 24.06
+            },
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 4.199999988079071,
+              "server_ms": 2.86
+            }
+          ]
+        },
+        {
+          "case": "nested arm crosslink",
+          "label": "repeat \u2192%",
+          "kind": "conversion",
+          "target": "branch",
+          "policy": "layout",
+          "total_ms": 63.40000003576279,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/convert_notation",
+              "status": 200,
+              "client_ms": 24.30000001192093,
+              "server_ms": 22.88
+            },
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 6.199999988079071,
+              "server_ms": 4.75
+            }
+          ]
+        },
+        {
+          "case": "nested arm crosslink",
+          "label": "repeat \u2192[ ]",
+          "kind": "conversion",
+          "target": "bracket",
+          "policy": "layout",
+          "total_ms": 46.40000003576279,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/convert_notation",
+              "status": 200,
+              "client_ms": 23.099999964237213,
+              "server_ms": 21.83
+            },
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 4.399999976158142,
+              "server_ms": 3.23
+            }
+          ]
+        },
+        {
+          "case": "nested arm crosslink",
+          "label": "canonical \u2192%",
+          "kind": "conversion",
+          "target": "branch",
+          "policy": "canonical",
+          "total_ms": 81.70000004768372,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/convert_notation",
+              "status": 200,
+              "client_ms": 29.399999976158142,
+              "server_ms": 28.32
+            },
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 28.5,
+              "server_ms": 27.35
+            }
+          ]
+        },
+        {
+          "case": "nested arm crosslink",
+          "label": "canonical \u2192[ ]",
+          "kind": "conversion",
+          "target": "bracket",
+          "policy": "canonical",
+          "total_ms": 79.89999997615814,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/convert_notation",
+              "status": 200,
+              "client_ms": 32.80000001192093,
+              "server_ms": 31.12
+            },
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 28.0,
+              "server_ms": 26.7
+            }
+          ]
+        },
+        {
+          "case": "Head-to-tail cyclic with lipid",
+          "label": "first source in warm worker",
+          "kind": "render",
+          "target": null,
+          "policy": null,
+          "total_ms": 237.19999998807907,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 32.10000002384186,
+              "server_ms": 30.69
+            }
+          ]
+        },
+        {
+          "case": "Head-to-tail cyclic with lipid",
+          "label": "changed source in warm worker",
+          "kind": "render",
+          "target": null,
+          "policy": null,
+          "total_ms": 235.9000000357628,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 33.30000001192093,
+              "server_ms": 31.85
+            }
+          ]
+        },
+        {
+          "case": "Head-to-tail cyclic with lipid",
+          "label": "return to previously rendered source",
+          "kind": "render",
+          "target": null,
+          "policy": null,
+          "total_ms": 202.0,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 4.099999964237213,
+              "server_ms": 2.83
+            }
+          ]
+        },
+        {
+          "case": "Head-to-tail cyclic with lipid",
+          "label": "first \u2192%",
+          "kind": "conversion",
+          "target": "branch",
+          "policy": "layout",
+          "total_ms": 81.70000004768372,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/convert_notation",
+              "status": 200,
+              "client_ms": 21.69999998807907,
+              "server_ms": 20.66
+            },
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 29.69999998807907,
+              "server_ms": 28.66
+            }
+          ]
+        },
+        {
+          "case": "Head-to-tail cyclic with lipid",
+          "label": "first \u2192[ ] after \u2192%",
+          "kind": "conversion",
+          "target": "bracket",
+          "policy": "layout",
+          "total_ms": 81.60000002384186,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/convert_notation",
+              "status": 200,
+              "client_ms": 22.5,
+              "server_ms": 21.34
+            },
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 30.700000047683716,
+              "server_ms": 29.56
+            }
+          ]
+        },
+        {
+          "case": "Head-to-tail cyclic with lipid",
+          "label": "repeat \u2192%",
+          "kind": "conversion",
+          "target": "branch",
+          "policy": "layout",
+          "total_ms": 80.30000001192093,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/convert_notation",
+              "status": 200,
+              "client_ms": 23.400000035762787,
+              "server_ms": 22.15
+            },
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 30.19999998807907,
+              "server_ms": 29.09
+            }
+          ]
+        },
+        {
+          "case": "Head-to-tail cyclic with lipid",
+          "label": "repeat \u2192[ ]",
+          "kind": "conversion",
+          "target": "bracket",
+          "policy": "layout",
+          "total_ms": 48.80000001192093,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/convert_notation",
+              "status": 200,
+              "client_ms": 23.799999952316284,
+              "server_ms": 22.64
+            },
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 3.900000035762787,
+              "server_ms": 2.84
+            }
+          ]
+        },
+        {
+          "case": "Head-to-tail cyclic with lipid",
+          "label": "canonical \u2192%",
+          "kind": "conversion",
+          "target": "branch",
+          "policy": "canonical",
+          "total_ms": 98.60000002384186,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/convert_notation",
+              "status": 200,
+              "client_ms": 32.69999998807907,
+              "server_ms": 31.46
+            },
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 33.5,
+              "server_ms": 31.86
+            }
+          ]
+        },
+        {
+          "case": "Head-to-tail cyclic with lipid",
+          "label": "canonical \u2192[ ]",
+          "kind": "conversion",
+          "target": "bracket",
+          "policy": "canonical",
+          "total_ms": 96.89999997615814,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/convert_notation",
+              "status": 200,
+              "client_ms": 32.69999998807907,
+              "server_ms": 31.33
+            },
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 33.39999997615814,
+              "server_ms": 32.08
+            }
+          ]
+        },
+        {
+          "case": "Semaglutide",
+          "label": "first source in warm worker",
+          "kind": "render",
+          "target": null,
+          "policy": null,
+          "total_ms": 1336.199999988079,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 1143.2000000476837,
+              "server_ms": 1141.32
+            }
+          ]
+        },
+        {
+          "case": "Semaglutide",
+          "label": "changed source in warm worker",
+          "kind": "render",
+          "target": null,
+          "policy": null,
+          "total_ms": 1352.7000000476837,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 1163.8999999761581,
+              "server_ms": 1161.99
+            }
+          ]
+        },
+        {
+          "case": "Semaglutide",
+          "label": "return to previously rendered source",
+          "kind": "render",
+          "target": null,
+          "policy": null,
+          "total_ms": 202.69999998807907,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 8.600000023841858,
+              "server_ms": 7.01
+            }
+          ]
+        },
+        {
+          "case": "Semaglutide",
+          "label": "first \u2192%",
+          "kind": "conversion",
+          "target": "branch",
+          "policy": "layout",
+          "total_ms": 1196.800000011921,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/convert_notation",
+              "status": 200,
+              "client_ms": 62.40000003576279,
+              "server_ms": 61.3
+            },
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 1122.300000011921,
+              "server_ms": 1120.68
+            }
+          ]
+        },
+        {
+          "case": "Semaglutide",
+          "label": "first \u2192[ ] after \u2192%",
+          "kind": "conversion",
+          "target": "bracket",
+          "policy": "layout",
+          "total_ms": 95.90000003576279,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/convert_notation",
+              "status": 200,
+              "client_ms": 65.19999998807907,
+              "server_ms": 63.64
+            },
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 8.5,
+              "server_ms": 6.82
+            }
+          ]
+        },
+        {
+          "case": "Semaglutide",
+          "label": "repeat \u2192%",
+          "kind": "conversion",
+          "target": "branch",
+          "policy": "layout",
+          "total_ms": 93.89999997615814,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/convert_notation",
+              "status": 200,
+              "client_ms": 67.30000001192093,
+              "server_ms": 65.82
+            },
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 8.399999976158142,
+              "server_ms": 6.85
+            }
+          ]
+        },
+        {
+          "case": "Semaglutide",
+          "label": "repeat \u2192[ ]",
+          "kind": "conversion",
+          "target": "bracket",
+          "policy": "layout",
+          "total_ms": 97.30000001192093,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/convert_notation",
+              "status": 200,
+              "client_ms": 61.19999998807907,
+              "server_ms": 59.99
+            },
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 8.799999952316284,
+              "server_ms": 7.28
+            }
+          ]
+        },
+        {
+          "case": "Semaglutide",
+          "label": "canonical \u2192%",
+          "kind": "conversion",
+          "target": "branch",
+          "policy": "canonical",
+          "total_ms": 1213,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/convert_notation",
+              "status": 200,
+              "client_ms": 75.59999996423721,
+              "server_ms": 74.33
+            },
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 1118.5,
+              "server_ms": 1116.77
+            }
+          ]
+        },
+        {
+          "case": "Semaglutide",
+          "label": "canonical \u2192[ ]",
+          "kind": "conversion",
+          "target": "bracket",
+          "policy": "canonical",
+          "total_ms": 1201.6000000238419,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/convert_notation",
+              "status": 200,
+              "client_ms": 76.39999997615814,
+              "server_ms": 75.08
+            },
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 1118.3999999761581,
+              "server_ms": 1116.78
+            }
+          ]
+        },
+        {
+          "case": "Lixisenatide",
+          "label": "first source in warm worker",
+          "kind": "render",
+          "target": null,
+          "policy": null,
+          "total_ms": 1048.699999988079,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 858.0,
+              "server_ms": 856.1
+            }
+          ]
+        },
+        {
+          "case": "Lixisenatide",
+          "label": "changed source in warm worker",
+          "kind": "render",
+          "target": null,
+          "policy": null,
+          "total_ms": 1085.699999988079,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 891.8000000119209,
+              "server_ms": 889.71
+            }
+          ]
+        },
+        {
+          "case": "Lixisenatide",
+          "label": "return to previously rendered source",
+          "kind": "render",
+          "target": null,
+          "policy": null,
+          "total_ms": 198.9000000357628,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 10.099999964237213,
+              "server_ms": 8.32
+            }
+          ]
+        },
+        {
+          "case": "Lixisenatide",
+          "label": "first \u2192%",
+          "kind": "conversion",
+          "target": "branch",
+          "policy": "layout",
+          "total_ms": 129.30000001192093,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/convert_notation",
+              "status": 200,
+              "client_ms": 91.5,
+              "server_ms": 90.2
+            },
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 11.600000023841858,
+              "server_ms": 9.87
+            }
+          ]
+        },
+        {
+          "case": "Lixisenatide",
+          "label": "first \u2192[ ] after \u2192%",
+          "kind": "conversion",
+          "target": "bracket",
+          "policy": "layout",
+          "total_ms": 131.30000001192093,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/convert_notation",
+              "status": 200,
+              "client_ms": 90.5,
+              "server_ms": 88.93
+            },
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 10.699999988079071,
+              "server_ms": 9.0
+            }
+          ]
+        },
+        {
+          "case": "Lixisenatide",
+          "label": "repeat \u2192%",
+          "kind": "conversion",
+          "target": "branch",
+          "policy": "layout",
+          "total_ms": 130.5999999642372,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/convert_notation",
+              "status": 200,
+              "client_ms": 88.0,
+              "server_ms": 86.81
+            },
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 10.599999964237213,
+              "server_ms": 8.69
+            }
+          ]
+        },
+        {
+          "case": "Lixisenatide",
+          "label": "repeat \u2192[ ]",
+          "kind": "conversion",
+          "target": "bracket",
+          "policy": "layout",
+          "total_ms": 113.90000003576279,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/convert_notation",
+              "status": 200,
+              "client_ms": 84.69999998807907,
+              "server_ms": 83.36
+            },
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 9.900000035762787,
+              "server_ms": 8.17
+            }
+          ]
+        },
+        {
+          "case": "Lixisenatide",
+          "label": "canonical \u2192%",
+          "kind": "conversion",
+          "target": "branch",
+          "policy": "canonical",
+          "total_ms": 999.1999999880791,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/convert_notation",
+              "status": 200,
+              "client_ms": 117.0,
+              "server_ms": 115.68
+            },
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 869.0,
+              "server_ms": 867.19
+            }
+          ]
+        },
+        {
+          "case": "Lixisenatide",
+          "label": "canonical \u2192[ ]",
+          "kind": "conversion",
+          "target": "bracket",
+          "policy": "canonical",
+          "total_ms": 129.80000001192093,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/convert_notation",
+              "status": 200,
+              "client_ms": 102,
+              "server_ms": 100.82
+            },
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 9.300000011920929,
+              "server_ms": 7.64
+            }
+          ]
+        },
+        {
+          "case": "Semaglutide",
+          "label": "click \u2192% immediately after changed input",
+          "kind": "conversion",
+          "target": "branch",
+          "policy": "layout",
+          "total_ms": 2595.800000011921,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 1264.1000000238419,
+              "server_ms": 1261.9
+            },
+            {
+              "path": "/convert_notation",
+              "status": 200,
+              "client_ms": 98.10000002384186,
+              "server_ms": 96.55
+            },
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 1215.1000000238419,
+              "server_ms": 1213.47
+            }
+          ]
+        },
+        {
+          "case": "A-G",
+          "label": "prepare reference-overlap control",
+          "kind": "render",
+          "target": null,
+          "policy": null,
+          "total_ms": 186.29999995231628,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 3.400000035762787,
+              "server_ms": 2.22
+            }
+          ]
+        },
+        {
+          "case": "A-G",
+          "label": "click \u2192% while large reference is drawing",
+          "kind": "conversion",
+          "target": "branch",
+          "policy": "layout",
+          "total_ms": 7730.5,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/verify",
+              "status": 200,
+              "client_ms": 112.0,
+              "server_ms": 110.85
+            },
+            {
+              "path": "/convert_notation",
+              "status": 200,
+              "client_ms": 33.60000002384186,
+              "server_ms": 32.01
+            },
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 14.199999988079071,
+              "server_ms": 13.01
+            },
+            {
+              "path": "/verify",
+              "status": 200,
+              "client_ms": 107.59999996423721,
+              "server_ms": 106.09
+            }
+          ]
+        },
+        {
+          "case": "A-G",
+          "label": "warm idle render before cancellation",
+          "kind": "render",
+          "target": null,
+          "policy": null,
+          "total_ms": 212.69999998807907,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 14.300000011920929,
+              "server_ms": 12.92
+            }
+          ]
+        },
+        {
+          "case": "A-G",
+          "label": "warm idle \u2192% before cancellation",
+          "kind": "conversion",
+          "target": "branch",
+          "policy": "layout",
+          "total_ms": 42.80000001192093,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/convert_notation",
+              "status": 200,
+              "client_ms": 19.600000023841858,
+              "server_ms": 18.67
+            },
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 3.099999964237213,
+              "server_ms": 2.02
+            }
+          ]
+        },
+        {
+          "case": "A-G",
+          "label": "replace active 200-G drawing with A-G",
+          "kind": "render",
+          "target": null,
+          "policy": null,
+          "total_ms": 3248.400000035763,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/render",
+              "status": 503,
+              "client_ms": 5.0,
+              "server_ms": 3.41
+            },
+            {
+              "path": "/render",
+              "status": 503,
+              "client_ms": 1.300000011920929,
+              "server_ms": 0.13
+            },
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 48.69999998807907,
+              "server_ms": 47.37
+            }
+          ]
+        },
+        {
+          "case": "A-G",
+          "label": "idle \u2192% after drawing cancellation",
+          "kind": "conversion",
+          "target": "branch",
+          "policy": "layout",
+          "total_ms": 42.5,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/convert_notation",
+              "status": 200,
+              "client_ms": 19.80000001192093,
+              "server_ms": 18.75
+            },
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 3.600000023841858,
+              "server_ms": 2.56
+            }
+          ]
+        }
+      ]
+    },
+    "candidate": {
+      "operation_count": 54,
+      "structures_preserved": 54,
+      "long_task_count": 0,
+      "json_to_dom_ms": {
+        "median": 0.800000011920929,
+        "max": 3.100000023841858
+      },
+      "dom_to_two_frames_ms": {
+        "median": 20.150000005960464,
+        "max": 32.39999997615814
+      },
+      "rows": [
+        {
+          "case": "G",
+          "label": "cold first molecular edit after fresh server /ready",
+          "kind": "render",
+          "target": null,
+          "policy": null,
+          "total_ms": 294.80000001192093,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 92.5,
+              "server_ms": 88.28
+            }
+          ]
+        },
+        {
+          "case": "G",
+          "label": "identical source repeat",
+          "kind": "render",
+          "target": null,
+          "policy": null,
+          "total_ms": 227.10000002384186,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 13.399999976158142,
+              "server_ms": 12.06
+            }
+          ]
+        },
+        {
+          "case": "A-G",
+          "label": "first source in warm worker",
+          "kind": "render",
+          "target": null,
+          "policy": null,
+          "total_ms": 207.80000001192093,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 14.399999976158142,
+              "server_ms": 12.98
+            }
+          ]
+        },
+        {
+          "case": "A-G",
+          "label": "changed source in warm worker",
+          "kind": "render",
+          "target": null,
+          "policy": null,
+          "total_ms": 204.70000004768372,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 15.199999988079071,
+              "server_ms": 13.85
+            }
+          ]
+        },
+        {
+          "case": "A-G",
+          "label": "return to previously rendered source",
+          "kind": "render",
+          "target": null,
+          "policy": null,
+          "total_ms": 192.79999995231628,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 3.399999976158142,
+              "server_ms": 2.1
+            }
+          ]
+        },
+        {
+          "case": "A-G",
+          "label": "first \u2192%",
+          "kind": "conversion",
+          "target": "branch",
+          "policy": "layout",
+          "total_ms": 69.90000003576279,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/convert_notation",
+              "status": 200,
+              "client_ms": 23.299999952316284,
+              "server_ms": 22.04
+            },
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 16.399999976158142,
+              "server_ms": 15.29
+            }
+          ]
+        },
+        {
+          "case": "A-G",
+          "label": "first \u2192[ ] after \u2192%",
+          "kind": "conversion",
+          "target": "bracket",
+          "policy": "layout",
+          "total_ms": 46.5,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/convert_notation",
+              "status": 200,
+              "client_ms": 20.69999998807907,
+              "server_ms": 19.24
+            },
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 4,
+              "server_ms": 2.6
+            }
+          ]
+        },
+        {
+          "case": "A-G",
+          "label": "repeat \u2192%",
+          "kind": "conversion",
+          "target": "branch",
+          "policy": "layout",
+          "total_ms": 62.10000002384186,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/convert_notation",
+              "status": 200,
+              "client_ms": 26.600000023841858,
+              "server_ms": 25.03
+            },
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 3.600000023841858,
+              "server_ms": 2.4
+            }
+          ]
+        },
+        {
+          "case": "A-G",
+          "label": "repeat \u2192[ ]",
+          "kind": "conversion",
+          "target": "bracket",
+          "policy": "layout",
+          "total_ms": 46.80000001192093,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/convert_notation",
+              "status": 200,
+              "client_ms": 22.399999976158142,
+              "server_ms": 20.86
+            },
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 4.300000011920929,
+              "server_ms": 3.38
+            }
+          ]
+        },
+        {
+          "case": "A-G",
+          "label": "canonical \u2192%",
+          "kind": "conversion",
+          "target": "branch",
+          "policy": "canonical",
+          "total_ms": 81.60000002384186,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/convert_notation",
+              "status": 200,
+              "client_ms": 33.80000001192093,
+              "server_ms": 32.49
+            },
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 14.300000011920929,
+              "server_ms": 12.65
+            }
+          ]
+        },
+        {
+          "case": "A-G",
+          "label": "canonical \u2192[ ]",
+          "kind": "conversion",
+          "target": "bracket",
+          "policy": "canonical",
+          "total_ms": 63.69999998807907,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/convert_notation",
+              "status": 200,
+              "client_ms": 32.10000002384186,
+              "server_ms": 30.58
+            },
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 5.300000011920929,
+              "server_ms": 4.01
+            }
+          ]
+        },
+        {
+          "case": "nested arm crosslink",
+          "label": "first source in warm worker",
+          "kind": "render",
+          "target": null,
+          "policy": null,
+          "total_ms": 236.39999997615814,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 21.899999976158142,
+              "server_ms": 20.16
+            }
+          ]
+        },
+        {
+          "case": "nested arm crosslink",
+          "label": "changed source in warm worker",
+          "kind": "render",
+          "target": null,
+          "policy": null,
+          "total_ms": 218.89999997615814,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 19.80000001192093,
+              "server_ms": 17.85
+            }
+          ]
+        },
+        {
+          "case": "nested arm crosslink",
+          "label": "return to previously rendered source",
+          "kind": "render",
+          "target": null,
+          "policy": null,
+          "total_ms": 187.4000000357628,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 4.300000011920929,
+              "server_ms": 2.99
+            }
+          ]
+        },
+        {
+          "case": "nested arm crosslink",
+          "label": "first \u2192%",
+          "kind": "conversion",
+          "target": "branch",
+          "policy": "layout",
+          "total_ms": 79.29999995231628,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/convert_notation",
+              "status": 200,
+              "client_ms": 44.60000002384186,
+              "server_ms": 43.43
+            },
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 4.699999988079071,
+              "server_ms": 3.47
+            }
+          ]
+        },
+        {
+          "case": "nested arm crosslink",
+          "label": "first \u2192[ ] after \u2192%",
+          "kind": "conversion",
+          "target": "bracket",
+          "policy": "layout",
+          "total_ms": 47.40000003576279,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/convert_notation",
+              "status": 200,
+              "client_ms": 23.400000035762787,
+              "server_ms": 22.07
+            },
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 3.300000011920929,
+              "server_ms": 2.32
+            }
+          ]
+        },
+        {
+          "case": "nested arm crosslink",
+          "label": "repeat \u2192%",
+          "kind": "conversion",
+          "target": "branch",
+          "policy": "layout",
+          "total_ms": 47.59999996423721,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/convert_notation",
+              "status": 200,
+              "client_ms": 23.0,
+              "server_ms": 21.64
+            },
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 3.600000023841858,
+              "server_ms": 2.32
+            }
+          ]
+        },
+        {
+          "case": "nested arm crosslink",
+          "label": "repeat \u2192[ ]",
+          "kind": "conversion",
+          "target": "bracket",
+          "policy": "layout",
+          "total_ms": 46.30000001192093,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/convert_notation",
+              "status": 200,
+              "client_ms": 24.30000001192093,
+              "server_ms": 23.11
+            },
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 4.5,
+              "server_ms": 3.16
+            }
+          ]
+        },
+        {
+          "case": "nested arm crosslink",
+          "label": "canonical \u2192%",
+          "kind": "conversion",
+          "target": "branch",
+          "policy": "canonical",
+          "total_ms": 80.89999997615814,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/convert_notation",
+              "status": 200,
+              "client_ms": 32.19999998807907,
+              "server_ms": 30.73
+            },
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 18.899999976158142,
+              "server_ms": 17.79
+            }
+          ]
+        },
+        {
+          "case": "nested arm crosslink",
+          "label": "canonical \u2192[ ]",
+          "kind": "conversion",
+          "target": "bracket",
+          "policy": "canonical",
+          "total_ms": 80.59999996423721,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/convert_notation",
+              "status": 200,
+              "client_ms": 34.39999997615814,
+              "server_ms": 33.09
+            },
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 22.899999976158142,
+              "server_ms": 20.82
+            }
+          ]
+        },
+        {
+          "case": "Head-to-tail cyclic with lipid",
+          "label": "first source in warm worker",
+          "kind": "render",
+          "target": null,
+          "policy": null,
+          "total_ms": 235.10000002384186,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 21.900000035762787,
+              "server_ms": 20.65
+            }
+          ]
+        },
+        {
+          "case": "Head-to-tail cyclic with lipid",
+          "label": "changed source in warm worker",
+          "kind": "render",
+          "target": null,
+          "policy": null,
+          "total_ms": 236.5,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 21.5,
+              "server_ms": 20.24
+            }
+          ]
+        },
+        {
+          "case": "Head-to-tail cyclic with lipid",
+          "label": "return to previously rendered source",
+          "kind": "render",
+          "target": null,
+          "policy": null,
+          "total_ms": 204.0,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 4.5,
+              "server_ms": 2.96
+            }
+          ]
+        },
+        {
+          "case": "Head-to-tail cyclic with lipid",
+          "label": "first \u2192%",
+          "kind": "conversion",
+          "target": "branch",
+          "policy": "layout",
+          "total_ms": 81.30000001192093,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/convert_notation",
+              "status": 200,
+              "client_ms": 25.399999976158142,
+              "server_ms": 24.02
+            },
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 22.600000023841858,
+              "server_ms": 21.49
+            }
+          ]
+        },
+        {
+          "case": "Head-to-tail cyclic with lipid",
+          "label": "first \u2192[ ] after \u2192%",
+          "kind": "conversion",
+          "target": "bracket",
+          "policy": "layout",
+          "total_ms": 79.60000002384186,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/convert_notation",
+              "status": 200,
+              "client_ms": 24.899999976158142,
+              "server_ms": 23.6
+            },
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 22.69999998807907,
+              "server_ms": 21.35
+            }
+          ]
+        },
+        {
+          "case": "Head-to-tail cyclic with lipid",
+          "label": "repeat \u2192%",
+          "kind": "conversion",
+          "target": "branch",
+          "policy": "layout",
+          "total_ms": 80.39999997615814,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/convert_notation",
+              "status": 200,
+              "client_ms": 26.899999976158142,
+              "server_ms": 25.47
+            },
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 25.19999998807907,
+              "server_ms": 24.01
+            }
+          ]
+        },
+        {
+          "case": "Head-to-tail cyclic with lipid",
+          "label": "repeat \u2192[ ]",
+          "kind": "conversion",
+          "target": "bracket",
+          "policy": "layout",
+          "total_ms": 63.59999996423721,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/convert_notation",
+              "status": 200,
+              "client_ms": 25.5,
+              "server_ms": 24.3
+            },
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 6.100000023841858,
+              "server_ms": 4.63
+            }
+          ]
+        },
+        {
+          "case": "Head-to-tail cyclic with lipid",
+          "label": "canonical \u2192%",
+          "kind": "conversion",
+          "target": "branch",
+          "policy": "canonical",
+          "total_ms": 80.10000002384186,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/convert_notation",
+              "status": 200,
+              "client_ms": 34.39999997615814,
+              "server_ms": 32.97
+            },
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 23.30000001192093,
+              "server_ms": 21.92
+            }
+          ]
+        },
+        {
+          "case": "Head-to-tail cyclic with lipid",
+          "label": "canonical \u2192[ ]",
+          "kind": "conversion",
+          "target": "bracket",
+          "policy": "canonical",
+          "total_ms": 81.0,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/convert_notation",
+              "status": 200,
+              "client_ms": 34.60000002384186,
+              "server_ms": 33.25
+            },
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 23.100000023841858,
+              "server_ms": 21.82
+            }
+          ]
+        },
+        {
+          "case": "Semaglutide",
+          "label": "first source in warm worker",
+          "kind": "render",
+          "target": null,
+          "policy": null,
+          "total_ms": 801.6999999880791,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 605.0999999642372,
+              "server_ms": 603.4
+            }
+          ]
+        },
+        {
+          "case": "Semaglutide",
+          "label": "changed source in warm worker",
+          "kind": "render",
+          "target": null,
+          "policy": null,
+          "total_ms": 803.3999999761581,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 606.1999999880791,
+              "server_ms": 604.53
+            }
+          ]
+        },
+        {
+          "case": "Semaglutide",
+          "label": "return to previously rendered source",
+          "kind": "render",
+          "target": null,
+          "policy": null,
+          "total_ms": 202.10000002384186,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 9.100000023841858,
+              "server_ms": 7.51
+            }
+          ]
+        },
+        {
+          "case": "Semaglutide",
+          "label": "first \u2192%",
+          "kind": "conversion",
+          "target": "branch",
+          "policy": "layout",
+          "total_ms": 680.9000000357628,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/convert_notation",
+              "status": 200,
+              "client_ms": 81.39999997615814,
+              "server_ms": 79.54
+            },
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 583.0,
+              "server_ms": 580.98
+            }
+          ]
+        },
+        {
+          "case": "Semaglutide",
+          "label": "first \u2192[ ] after \u2192%",
+          "kind": "conversion",
+          "target": "bracket",
+          "policy": "layout",
+          "total_ms": 98.09999996423721,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/convert_notation",
+              "status": 200,
+              "client_ms": 61.69999998807907,
+              "server_ms": 60.42
+            },
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 9.400000035762787,
+              "server_ms": 7.5
+            }
+          ]
+        },
+        {
+          "case": "Semaglutide",
+          "label": "repeat \u2192%",
+          "kind": "conversion",
+          "target": "branch",
+          "policy": "layout",
+          "total_ms": 96.90000003576279,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/convert_notation",
+              "status": 200,
+              "client_ms": 60.89999997615814,
+              "server_ms": 59.65
+            },
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 8.600000023841858,
+              "server_ms": 6.97
+            }
+          ]
+        },
+        {
+          "case": "Semaglutide",
+          "label": "repeat \u2192[ ]",
+          "kind": "conversion",
+          "target": "bracket",
+          "policy": "layout",
+          "total_ms": 96.5,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/convert_notation",
+              "status": 200,
+              "client_ms": 59.90000003576279,
+              "server_ms": 58.69
+            },
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 9.200000047683716,
+              "server_ms": 7.52
+            }
+          ]
+        },
+        {
+          "case": "Semaglutide",
+          "label": "canonical \u2192%",
+          "kind": "conversion",
+          "target": "branch",
+          "policy": "canonical",
+          "total_ms": 2163.900000035763,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/convert_notation",
+              "status": 200,
+              "client_ms": 82.0,
+              "server_ms": 80.73
+            },
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 2074.800000011921,
+              "server_ms": 2073.11
+            }
+          ]
+        },
+        {
+          "case": "Semaglutide",
+          "label": "canonical \u2192[ ]",
+          "kind": "conversion",
+          "target": "bracket",
+          "policy": "canonical",
+          "total_ms": 2513.899999976158,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/convert_notation",
+              "status": 200,
+              "client_ms": 170.80000001192093,
+              "server_ms": 169.21
+            },
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 2336.0,
+              "server_ms": 2334.29
+            }
+          ]
+        },
+        {
+          "case": "Lixisenatide",
+          "label": "first source in warm worker",
+          "kind": "render",
+          "target": null,
+          "policy": null,
+          "total_ms": 643.9000000357628,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 449.30000001192093,
+              "server_ms": 447.37
+            }
+          ]
+        },
+        {
+          "case": "Lixisenatide",
+          "label": "changed source in warm worker",
+          "kind": "render",
+          "target": null,
+          "policy": null,
+          "total_ms": 664.1999999880791,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 470.4000000357628,
+              "server_ms": 468.5
+            }
+          ]
+        },
+        {
+          "case": "Lixisenatide",
+          "label": "return to previously rendered source",
+          "kind": "render",
+          "target": null,
+          "policy": null,
+          "total_ms": 200.20000004768372,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 10.399999976158142,
+              "server_ms": 8.69
+            }
+          ]
+        },
+        {
+          "case": "Lixisenatide",
+          "label": "first \u2192%",
+          "kind": "conversion",
+          "target": "branch",
+          "policy": "layout",
+          "total_ms": 112.5,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/convert_notation",
+              "status": 200,
+              "client_ms": 83.79999995231628,
+              "server_ms": 82.52
+            },
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 9.800000011920929,
+              "server_ms": 8.12
+            }
+          ]
+        },
+        {
+          "case": "Lixisenatide",
+          "label": "first \u2192[ ] after \u2192%",
+          "kind": "conversion",
+          "target": "bracket",
+          "policy": "layout",
+          "total_ms": 113.70000004768372,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/convert_notation",
+              "status": 200,
+              "client_ms": 83.5,
+              "server_ms": 81.88
+            },
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 9.399999976158142,
+              "server_ms": 7.64
+            }
+          ]
+        },
+        {
+          "case": "Lixisenatide",
+          "label": "repeat \u2192%",
+          "kind": "conversion",
+          "target": "branch",
+          "policy": "layout",
+          "total_ms": 130.69999998807907,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/convert_notation",
+              "status": 200,
+              "client_ms": 87.90000003576279,
+              "server_ms": 85.3
+            },
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 10.199999988079071,
+              "server_ms": 8.35
+            }
+          ]
+        },
+        {
+          "case": "Lixisenatide",
+          "label": "repeat \u2192[ ]",
+          "kind": "conversion",
+          "target": "bracket",
+          "policy": "layout",
+          "total_ms": 130.4000000357628,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/convert_notation",
+              "status": 200,
+              "client_ms": 83.39999997615814,
+              "server_ms": 82.23
+            },
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 13.5,
+              "server_ms": 10.93
+            }
+          ]
+        },
+        {
+          "case": "Lixisenatide",
+          "label": "canonical \u2192%",
+          "kind": "conversion",
+          "target": "branch",
+          "policy": "canonical",
+          "total_ms": 580.5,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/convert_notation",
+              "status": 200,
+              "client_ms": 114.89999997615814,
+              "server_ms": 113.81
+            },
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 451.60000002384186,
+              "server_ms": 449.76
+            }
+          ]
+        },
+        {
+          "case": "Lixisenatide",
+          "label": "canonical \u2192[ ]",
+          "kind": "conversion",
+          "target": "bracket",
+          "policy": "canonical",
+          "total_ms": 129.39999997615814,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/convert_notation",
+              "status": 200,
+              "client_ms": 101.59999996423721,
+              "server_ms": 100.11
+            },
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 10.0,
+              "server_ms": 8.21
+            }
+          ]
+        },
+        {
+          "case": "Semaglutide",
+          "label": "click \u2192% immediately after changed input",
+          "kind": "conversion",
+          "target": "branch",
+          "policy": "layout",
+          "total_ms": 667.5,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/convert_notation",
+              "status": 200,
+              "client_ms": 61.799999952316284,
+              "server_ms": 60.7
+            },
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 598.3999999761581,
+              "server_ms": 596.7
+            }
+          ]
+        },
+        {
+          "case": "A-G",
+          "label": "prepare reference-overlap control",
+          "kind": "render",
+          "target": null,
+          "policy": null,
+          "total_ms": 215.5999999642372,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 3.900000035762787,
+              "server_ms": 2.53
+            }
+          ]
+        },
+        {
+          "case": "A-G",
+          "label": "click \u2192% while large reference is drawing",
+          "kind": "conversion",
+          "target": "branch",
+          "policy": "layout",
+          "total_ms": 3198.300000011921,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/verify",
+              "status": 200,
+              "client_ms": 100.10000002384186,
+              "server_ms": 98.1
+            },
+            {
+              "path": "/convert_notation",
+              "status": 200,
+              "client_ms": 50.10000002384186,
+              "server_ms": 48.81
+            },
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 14.0,
+              "server_ms": 12.69
+            },
+            {
+              "path": "/verify",
+              "status": 200,
+              "client_ms": 112.39999997615814,
+              "server_ms": 107.76
+            }
+          ]
+        },
+        {
+          "case": "A-G",
+          "label": "warm idle render before cancellation",
+          "kind": "render",
+          "target": null,
+          "policy": null,
+          "total_ms": 221.69999998807907,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 13.199999988079071,
+              "server_ms": 11.83
+            }
+          ]
+        },
+        {
+          "case": "A-G",
+          "label": "warm idle \u2192% before cancellation",
+          "kind": "conversion",
+          "target": "branch",
+          "policy": "layout",
+          "total_ms": 58.60000002384186,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/convert_notation",
+              "status": 200,
+              "client_ms": 21.5,
+              "server_ms": 20.24
+            },
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 4.300000011920929,
+              "server_ms": 2.49
+            }
+          ]
+        },
+        {
+          "case": "A-G",
+          "label": "replace active 200-G drawing with A-G",
+          "kind": "render",
+          "target": null,
+          "policy": null,
+          "total_ms": 3263.5,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/render",
+              "status": 503,
+              "client_ms": 1.600000023841858,
+              "server_ms": 0.29
+            },
+            {
+              "path": "/render",
+              "status": 503,
+              "client_ms": 1.4000000357627869,
+              "server_ms": 0.21
+            },
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 57.299999952316284,
+              "server_ms": 55.98
+            }
+          ]
+        },
+        {
+          "case": "A-G",
+          "label": "idle \u2192% after drawing cancellation",
+          "kind": "conversion",
+          "target": "branch",
+          "policy": "layout",
+          "total_ms": 43.700000047683716,
+          "structure_preserved": true,
+          "requests": [
+            {
+              "path": "/convert_notation",
+              "status": 200,
+              "client_ms": 19.399999976158142,
+              "server_ms": 18.05
+            },
+            {
+              "path": "/render",
+              "status": 200,
+              "client_ms": 3.399999976158142,
+              "server_ms": 2.14
+            }
+          ]
+        }
+      ]
+    },
+    "frontend_only_control": {
+      "baseline_ms": 2595.8,
+      "frontend_only_ms": 1269.5,
+      "combined_ms": 667.5,
+      "note": "One additional immediate-after-edit Semaglutide conversion with only the frontend change on the frozen backend; removes the preliminary drawing."
+    }
+  },
+  "canonical_outlier_repeats": {
+    "baseline": {
+      "source_sha256": "2ff1d53b8bf1334fda804afd67bf6cdbf08d991d55877e2217d6cea1554a622c",
+      "cases": [
+        {
+          "label": "canonical \u2192%",
+          "body": {
+            "cabiln": "H-Aib-E-G-T-F-T-S-D-V-S-S-Y-L-E-G-Q-A-A-K.!1(4,2)-E-F-I-A-W-L-V-R-G-R-G%C18FA-E_g-AEEA-AEEA.!1(2,4)",
+            "width": 1440,
+            "height": 729,
+            "seed": 0
+          },
+          "observed_ms": 2074.100000023842,
+          "samples": [
+            {
+              "wall_ms": 1143.2456250186078,
+              "process_cpu_ms": 1121.266,
+              "sha256": "a27769613fb5a191c02a728d386dacb6cab7fd6b7dd62451a03655bbcfddeaa6"
+            },
+            {
+              "wall_ms": 1119.2470410023816,
+              "process_cpu_ms": 1108.247,
+              "sha256": "a27769613fb5a191c02a728d386dacb6cab7fd6b7dd62451a03655bbcfddeaa6"
+            },
+            {
+              "wall_ms": 1139.8650840274058,
+              "process_cpu_ms": 1122.7039999999997,
+              "sha256": "a27769613fb5a191c02a728d386dacb6cab7fd6b7dd62451a03655bbcfddeaa6"
+            },
+            {
+              "wall_ms": 1122.5652089924552,
+              "process_cpu_ms": 1111.2190000000003,
+              "sha256": "a27769613fb5a191c02a728d386dacb6cab7fd6b7dd62451a03655bbcfddeaa6"
+            },
+            {
+              "wall_ms": 1152.832625026349,
+              "process_cpu_ms": 1120.1890000000008,
+              "sha256": "a27769613fb5a191c02a728d386dacb6cab7fd6b7dd62451a03655bbcfddeaa6"
+            }
+          ]
+        },
+        {
+          "label": "canonical \u2192[ ]",
+          "body": {
+            "cabiln": "H-Aib-E-G-T-F-T-S-D-V-S-S-Y-L-E-G-Q-A-A-K.[AEEA(4,2).[AEEA(1,2).[E_g(1,2).[C18FA(1,2)]]]]-E-F-I-A-W-L-V-R-G-R-G",
+            "width": 1440,
+            "height": 729,
+            "seed": 0
+          },
+          "observed_ms": 2335.5,
+          "samples": [
+            {
+              "wall_ms": 1167.4252090160735,
+              "process_cpu_ms": 1134.5079999999994,
+              "sha256": "21e2c0b7ba0ba1dca92d61a2099056870d8e72ec18a20c5472c8c058bf3a1465"
+            },
+            {
+              "wall_ms": 1199.3018329958431,
+              "process_cpu_ms": 1147.7590000000007,
+              "sha256": "21e2c0b7ba0ba1dca92d61a2099056870d8e72ec18a20c5472c8c058bf3a1465"
+            },
+            {
+              "wall_ms": 1264.7082499461249,
+              "process_cpu_ms": 1177.9630000000002,
+              "sha256": "21e2c0b7ba0ba1dca92d61a2099056870d8e72ec18a20c5472c8c058bf3a1465"
+            },
+            {
+              "wall_ms": 1251.0886249947362,
+              "process_cpu_ms": 1170.2250000000004,
+              "sha256": "21e2c0b7ba0ba1dca92d61a2099056870d8e72ec18a20c5472c8c058bf3a1465"
+            },
+            {
+              "wall_ms": 1179.7171660000458,
+              "process_cpu_ms": 1140.9319999999993,
+              "sha256": "21e2c0b7ba0ba1dca92d61a2099056870d8e72ec18a20c5472c8c058bf3a1465"
+            }
+          ]
+        }
+      ]
+    },
+    "candidate": {
+      "source_sha256": "3238b8dc5ca8952eae98e790081114dc838e4ec8cab9226fe7e39579f6cec2d6",
+      "cases": [
+        {
+          "label": "canonical \u2192%",
+          "body": {
+            "cabiln": "H-Aib-E-G-T-F-T-S-D-V-S-S-Y-L-E-G-Q-A-A-K.!1(4,2)-E-F-I-A-W-L-V-R-G-R-G%C18FA-E_g-AEEA-AEEA.!1(2,4)",
+            "width": 1440,
+            "height": 729,
+            "seed": 0
+          },
+          "observed_ms": 2074.100000023842,
+          "samples": [
+            {
+              "wall_ms": 607.0556250051595,
+              "process_cpu_ms": 584.7789999999999,
+              "sha256": "a27769613fb5a191c02a728d386dacb6cab7fd6b7dd62451a03655bbcfddeaa6"
+            },
+            {
+              "wall_ms": 589.5690000033937,
+              "process_cpu_ms": 581.262,
+              "sha256": "a27769613fb5a191c02a728d386dacb6cab7fd6b7dd62451a03655bbcfddeaa6"
+            },
+            {
+              "wall_ms": 647.6418750244193,
+              "process_cpu_ms": 595.8510000000001,
+              "sha256": "a27769613fb5a191c02a728d386dacb6cab7fd6b7dd62451a03655bbcfddeaa6"
+            },
+            {
+              "wall_ms": 584.415249992162,
+              "process_cpu_ms": 578.9759999999999,
+              "sha256": "a27769613fb5a191c02a728d386dacb6cab7fd6b7dd62451a03655bbcfddeaa6"
+            },
+            {
+              "wall_ms": 609.8374580033123,
+              "process_cpu_ms": 588.9549999999999,
+              "sha256": "a27769613fb5a191c02a728d386dacb6cab7fd6b7dd62451a03655bbcfddeaa6"
+            }
+          ]
+        },
+        {
+          "label": "canonical \u2192[ ]",
+          "body": {
+            "cabiln": "H-Aib-E-G-T-F-T-S-D-V-S-S-Y-L-E-G-Q-A-A-K.[AEEA(4,2).[AEEA(1,2).[E_g(1,2).[C18FA(1,2)]]]]-E-F-I-A-W-L-V-R-G-R-G",
+            "width": 1440,
+            "height": 729,
+            "seed": 0
+          },
+          "observed_ms": 2335.5,
+          "samples": [
+            {
+              "wall_ms": 607.2709590080194,
+              "process_cpu_ms": 590.8720000000005,
+              "sha256": "21e2c0b7ba0ba1dca92d61a2099056870d8e72ec18a20c5472c8c058bf3a1465"
+            },
+            {
+              "wall_ms": 648.9406669861637,
+              "process_cpu_ms": 595.8779999999999,
+              "sha256": "21e2c0b7ba0ba1dca92d61a2099056870d8e72ec18a20c5472c8c058bf3a1465"
+            },
+            {
+              "wall_ms": 627.9324580100365,
+              "process_cpu_ms": 599.7529999999997,
+              "sha256": "21e2c0b7ba0ba1dca92d61a2099056870d8e72ec18a20c5472c8c058bf3a1465"
+            },
+            {
+              "wall_ms": 631.5975000034086,
+              "process_cpu_ms": 599.0779999999995,
+              "sha256": "21e2c0b7ba0ba1dca92d61a2099056870d8e72ec18a20c5472c8c058bf3a1465"
+            },
+            {
+              "wall_ms": 623.7687920220196,
+              "process_cpu_ms": 600.9359999999999,
+              "sha256": "21e2c0b7ba0ba1dca92d61a2099056870d8e72ec18a20c5472c8c058bf3a1465"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

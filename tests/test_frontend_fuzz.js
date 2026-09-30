@@ -373,10 +373,16 @@ property('render-completion-order', [fc.scheduler(), fc.array(fc.record({ source
   assert.equal(ui.run('buildLeft'), null); assert.equal(ui.run('buildRight'), null);
 });
 
-property('foreground-admission-and-errors', [fc.record({
-  format: fc.boolean(), drawingBusy: fc.integer({ min: 0, max: 2 }), conversionBusy: fc.integer({ min: 0, max: 2 }),
-  cancel: fc.constantFrom('none', 'drawing', 'conversion'), outcome: fc.constantFrom('success', 'network', 'error'),
-})], async (example, count) => {
+const foregroundCase = fc.record({
+  format: fc.boolean(), drawingStarted: fc.boolean(),
+  drawingBusy: fc.integer({ min: 0, max: 2 }), conversionBusy: fc.integer({ min: 0, max: 2 }),
+  outcome: fc.constantFrom('success', 'network', 'error'),
+}).chain(example => fc.constantFrom('none', 'conversion', 'reference',
+  ...(!example.format || example.drawingStarted ? ['drawing'] : []),
+  ...(example.format && !example.drawingStarted && example.outcome !== 'success' ? ['fallback'] : []),
+).map(cancel => ({ ...example, cancel })));
+
+property('foreground-admission-and-errors', [foregroundCase], async (example, count) => {
   const ui = page('builder.js');
   const source = example.format ? 'K.[G(4,2)]' : 'NCC(=O)O';
   if (!example.format) {
@@ -384,42 +390,64 @@ property('foreground-admission-and-errors', [fc.record({
     await ui.element('notation-select').dispatchEvent({ type: 'change' });
   }
   await ui.input('cabiln-input', source);
+  if (example.drawingStarted) await ui.timers();
   const endpoint = example.format ? '/convert_notation' : '/to_cabiln';
   const renderEndpoint = example.format ? '/render' : '/render_reference';
   const button = example.format ? 'btn-to-bracket' : 'btn-to-cabiln-bracket';
   const conversion = ui.element(button).click();
   await tick();
-  assert.equal(pending(ui, endpoint).length, 0, 'Foreground work waits for its source drawing');
-  let rendering = pending(ui, renderEndpoint)[0];
+  const waitsForDrawing = !example.format || example.drawingStarted;
+  count(`${example.format ? 'format' : 'foreign'}.${example.drawingStarted ? 'activeDrawing' : 'pendingTimer'}`);
+  count(waitsForDrawing ? 'waitForDrawing' : 'skipUnsentFormatDrawing');
+
+  async function finishDrawing(url, text, blocksConversion = false) {
+    let rendering = pending(ui, url)[0];
+    assert.ok(rendering, 'The current source has an actual drawing request');
+    assert.equal(JSON.parse(rendering.options.body).cabiln || JSON.parse(rendering.options.body).input, text);
+    for (let i = 0; i < example.drawingBusy; i++) {
+      count('drawingRetry');
+      resolve(rendering, { error: 'busy' }, false, 503, { 'Retry-After': '1' });
+      await tick();
+      if (blocksConversion) assert.equal(pending(ui, endpoint).length, 0);
+      await ui.timers(); await tick();
+      rendering = pending(ui, url)[0];
+    }
+    resolve(rendering, { ...drawing(text), format: 'SMILES' });
+    await tick();
+  }
+
+  if (waitsForDrawing) {
+    assert.equal(pending(ui, endpoint).length, 0, 'Foreground work waits for an active or required drawing');
+  } else {
+    await ui.timers();
+    assert.equal(pending(ui, renderEndpoint).length, 0, 'Formatting consumes the unsent drawing timer');
+    assert.equal(pending(ui, endpoint).length, 1, 'Unsent CABILN can be formatted directly');
+  }
   if (example.cancel === 'drawing') {
     count('cancelDuringDrawing');
     await ui.input('cabiln-input', 'C');
+    resolve(pending(ui, renderEndpoint)[0], drawing('obsolete'));
     await conversion;
-    resolve(rendering, drawing('obsolete'));
     await settle(ui);
     assert.equal(ui.element('cabiln-input').value, 'C');
     assert.equal(pending(ui, endpoint).length, 0);
     assert.equal(ui.element('conversion-progress').hidden, true);
     return;
   }
-  for (let i = 0; i < example.drawingBusy; i++) {
-    count('drawingRetry');
-    resolve(rendering, { error: 'busy' }, false, 503, { 'Retry-After': '1' });
-    await tick();
-    assert.equal(pending(ui, endpoint).length, 0);
-    await ui.timers(); await tick();
-    rendering = pending(ui, renderEndpoint)[0];
-  }
-  resolve(rendering, { ...drawing(source), format: 'SMILES' });
-  await tick();
+  if (waitsForDrawing) await finishDrawing(renderEndpoint, source, true);
   let request = pending(ui, endpoint)[0];
   assert.ok(request);
-  if (example.cancel === 'conversion') {
-    count('cancelDuringConversion');
-    await ui.input('cabiln-input', 'C');
+  if (example.cancel === 'conversion' || example.cancel === 'reference') {
+    const referenceEdit = example.cancel === 'reference';
+    count(referenceEdit ? 'cancelByReferenceEdit' : 'cancelDuringConversion');
+    await ui.input(referenceEdit ? 'smiles-input' : 'cabiln-input', referenceEdit ? 'CCO' : 'C');
     resolve(request, { cabiln: 'OLD', result: 'OLD' });
     await conversion; await settle(ui);
-    assert.equal(ui.element('cabiln-input').value, 'C');
+    const expected = referenceEdit ? source : 'C';
+    assert.equal(ui.element('cabiln-input').value, expected);
+    assert.equal(ui.element('cabiln-input').className, 'ok');
+    assert.equal(ui.element('render-inner').innerHTML, `<svg>${expected}</svg>`);
+    if (referenceEdit && !waitsForDrawing) count('cancelRestoresUnsentDrawing');
     assert.equal(snapshot(ui).document.warning, '');
     return;
   }
@@ -434,11 +462,28 @@ property('foreground-admission-and-errors', [fc.record({
   count(example.outcome);
   if (example.outcome === 'network') reject(request);
   else resolve(request, example.outcome === 'error' ? { error: 'controlled conversion failure' } : success);
+  await tick();
+  if (!waitsForDrawing) {
+    if (example.cancel === 'fallback') {
+      count('cancelDuringFallbackDrawing');
+      const fallback = pending(ui, '/render')[0];
+      assert.equal(JSON.parse(fallback.options.body).cabiln, source);
+      await ui.input('cabiln-input', 'C');
+      resolve(fallback, drawing('obsolete'));
+      await conversion; await settle(ui);
+      assert.equal(ui.element('cabiln-input').value, 'C');
+      assert.equal(ui.element('render-inner').innerHTML, '<svg>C</svg>');
+      return;
+    }
+    count(example.outcome === 'success' ? 'drawOnlyFormattedResult' : 'drawAfterFormatFailure');
+    await finishDrawing('/render', example.outcome === 'success' ? result : source);
+  }
   await conversion;
   assert.equal(snapshot(ui).document.warning, '');
   if (example.outcome !== 'success') {
     assert.equal(ui.element('cabiln-input').value, source);
     assert.equal(ui.element('cabiln-input').className, 'ok');
+    assert.match(ui.element('cabiln-status').textContent, /failure|failed|Could not/);
     const retry = ui.element(button).click();
     await tick();
     resolve(pending(ui, endpoint)[0], success);
@@ -450,6 +495,12 @@ property('foreground-admission-and-errors', [fc.record({
   assert.doesNotMatch(ui.element('cabiln-status').textContent, /failure|failed|busy/);
   await ui.run('window.dispatchEvent(new Event("pagehide"))');
   assert.equal(JSON.parse(ui.storage.get('cabiln.draft.v1')).document.warning, '');
+  await ui.element('btn-undo').click(); await settle(ui);
+  assert.equal(ui.element('cabiln-input').value, source);
+  assert.equal(ui.element('notation-select').value, example.format ? 'cabiln' : 'smiles');
+  await ui.element('btn-redo').click(); await settle(ui);
+  assert.equal(ui.element('cabiln-input').value, result);
+  assert.equal(ui.element('notation-select').value, 'cabiln');
 });
 
 property('registration-preview-and-write-ownership', [fc.scheduler(), fc.record({

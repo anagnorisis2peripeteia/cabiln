@@ -159,6 +159,33 @@ def test_render_exports_same_molecule_and_residue_map(client, notation):
 
 
 @pytest.mark.parametrize(
+    "route,payload,layouts",
+    [
+        ("/render", {"cabiln": "A-G"}, 1),
+        ("/render_reference", {"input": "A-G", "input_format": "cabiln"}, 1),
+        ("/render_reference", {"input": "A-G"}, 1),
+        ("/verify", {"cabiln": "A-G", "smiles": "C[C@H](N)C(=O)NCC(=O)O"}, 0),
+    ],
+)
+def test_rendering_handlers_generate_only_final_coordinates(
+    client, monkeypatch, route, payload, layouts
+):
+    from unittest.mock import Mock
+
+    from rdkit.Chem import AllChem, rdDepictor
+
+    from pyPept.web.cache import clear_render_cache
+
+    coordinates = Mock(wraps=rdDepictor.Compute2DCoords)
+    monkeypatch.setattr(AllChem, "Compute2DCoords", coordinates)
+    monkeypatch.setattr(rdDepictor, "Compute2DCoords", coordinates)
+    clear_render_cache()
+    response = client.post(route, json=payload)
+    assert response.status_code == 200, response.text
+    assert coordinates.call_count == layouts
+
+
+@pytest.mark.parametrize(
     "source,roots,groups",
     [
         ("A%K.{G(4,2)}-A", [[0], [1, 2]], [(1, [3], "{", None)]),

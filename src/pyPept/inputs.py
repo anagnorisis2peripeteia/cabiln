@@ -85,17 +85,20 @@ def read_input(source, *, input_format="cabiln", warning_sink=None, track_source
     return MolecularInput(kind.upper(), normalized, sequence=sequence)
 
 
-def detect_input(source, *, policy="reference", on_notation_error=None):
+def detect_input(
+    source, *, policy="reference", on_notation_error=None, depiction="local"
+):
     """Apply the established reference, conversion, or display precedence.
 
     Reference and conversion prefer SMILES, then HELM, then legacy BILN.
     Reference additionally tries positional CABILN. Display prefers peptide
     notation for ambiguous bare tokens, while SMILES punctuation gets first try.
-    An invalid punctuated SMILES can still be valid CABILN.
+    An invalid punctuated SMILES can still be valid CABILN. Callers that draw
+    their own coordinates can skip the initial layout with ``depiction=None``.
     """
     if not isinstance(source, str):
         parsed = read_input(source)
-        parsed.assemble()
+        parsed.assemble(depiction=depiction)
         return parsed
     text = source if policy == "display" else source.strip()
     if policy == "display":
@@ -123,7 +126,7 @@ def detect_input(source, *, policy="reference", on_notation_error=None):
                 warning_sink=warnings.warn if policy == "display" else None,
             )
             if policy != "conversion":
-                parsed.assemble()
+                parsed.assemble(depiction=depiction)
                 if parsed.molecule is None:
                     raise ValueError("Assembly produced no molecule")
             return parsed

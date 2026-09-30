@@ -40,7 +40,7 @@ def render(req: _CabilnReq):
         messages = []
         parsed = read_input(req.cabiln, warning_sink=messages.append, track_source=True)
         seq, parsed_source = parsed.sequence, parsed.source
-        romol = parsed.assemble()
+        romol = parsed.assemble(depiction=None)
         mol = parsed.assembly
         if romol is None:
             return JSONResponse(
@@ -131,11 +131,11 @@ def render_reference(req: _ReferenceReq):
         context = project_context()
         w, h = max(400, req.width), max(300, req.height)
         parsed = (
-            detect_input(req.input)
+            detect_input(req.input, depiction=None)
             if req.input_format == "auto"
             else read_input(req.input, input_format=req.input_format)
         )
-        romol, fmt = parsed.assemble(), parsed.format
+        romol, fmt = parsed.assemble(depiction=None), parsed.format
         require_supported_stereo(romol)
 
         svg = _draw_mol(romol, w, h)
@@ -179,7 +179,7 @@ def render_mol(req: _MolBlockReq):
 def verify(req: _VerifyReq):
     try:
         smiles_mol = read_input(req.smiles, input_format="smiles").molecule
-        cabiln_mol = read_input(req.cabiln).assemble()
+        cabiln_mol = read_input(req.cabiln).assemble(depiction=None)
         if cabiln_mol is None:
             return JSONResponse(
                 {"error": "CABILN assembly produced no molecule"}, status_code=400

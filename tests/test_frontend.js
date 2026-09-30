@@ -300,34 +300,51 @@ test('closing build mode discards pending R-group selections', async () => {
 });
 
 test('notation conversion cannot replace an input edited during the request', async () => {
-  const ui = page('builder.js');
-  ui.element('cabiln-input').value = 'A-G';
-  const pending = ui.run('convertNotation("bracket")');
-  await new Promise(setImmediate);
-  await ui.input('cabiln-input', 'K-C');
-  ui.requests[0].resolve({ result: 'OLD CONVERSION' });
-  await pending;
-  assert.equal(ui.element('cabiln-input').value, 'K-C');
+  for (const edited of ['K-C', ' A-G ']) {
+    const ui = page('builder.js');
+    await ui.input('cabiln-input', 'A-G');
+    const pending = ui.run('convertNotation("bracket")');
+    await new Promise(setImmediate);
+    assert.deepEqual(ui.requests.map(request => request.url), ['/convert_notation']);
+    await ui.input('cabiln-input', edited);
+    ui.requests[0].resolve({ result: 'OLD CONVERSION' });
+    await pending;
+    assert.equal(ui.element('cabiln-input').value, edited);
+    assert.equal(ui.requests.length, 1);
+    await ui.timers();
+    assert.equal(ui.requests.filter(request => request.url === '/render').length, 1);
+    assert.equal(JSON.parse(latestRequest(ui, '/render').options.body).cabiln, edited.trim());
+  }
 });
 
 test('canonical formatting is explicit and the original spelling remains undoable', async () => {
-  const ui = page('builder.js');
-  await ui.input('cabiln-input', 'Ala-Gly');
-  ui.element('notation-policy').value = 'canonical';
-  const pending = ui.run('convertNotation("bracket")');
-  latestRequest(ui, '/render').resolve(rendered);
-  await new Promise(setImmediate);
-  const request = ui.requests.find(request => request.url === '/convert_notation');
-  assert.deepEqual(JSON.parse(request.options.body), {
-    cabiln: 'Ala-Gly', target: 'bracket', canonical: true,
-  });
-  request.resolve({ result: 'A-G' });
-  await pending;
-  assert.equal(ui.element('cabiln-input').value, 'A-G');
-  ui.run('travelHistory("undo")');
-  assert.equal(ui.element('cabiln-input').value, 'Ala-Gly');
-  ui.run('travelHistory("redo")');
-  assert.equal(ui.element('cabiln-input').value, 'A-G');
+  for (const [original, result] of [
+    ['Ala-Gly', 'A-G'],
+    ['D.(4,1)-G%G-A', 'D.[G(4,1).[A(2,1)]]-G'],
+  ]) {
+    const ui = page('builder.js');
+    await ui.input('cabiln-input', original);
+    ui.element('notation-policy').value = 'canonical';
+    const pending = ui.element('btn-to-bracket').click();
+    await new Promise(setImmediate);
+    await ui.timers();
+    assert.deepEqual(ui.requests.map(request => request.url), ['/convert_notation']);
+    const request = latestRequest(ui, '/convert_notation');
+    assert.deepEqual(JSON.parse(request.options.body), {
+      cabiln: original, target: 'bracket', canonical: true,
+    });
+    request.resolve({ result });
+    await pending;
+    assert.equal(ui.element('cabiln-input').value, result);
+    assert.deepEqual(ui.requests.map(request => request.url), ['/convert_notation', '/render']);
+    assert.equal(JSON.parse(latestRequest(ui, '/render').options.body).cabiln, result);
+    latestRequest(ui, '/render').resolve(rendered);
+    await new Promise(setImmediate);
+    ui.run('travelHistory("undo")');
+    assert.equal(ui.element('cabiln-input').value, original);
+    ui.run('travelHistory("redo")');
+    assert.equal(ui.element('cabiln-input').value, result);
+  }
 });
 
 test('typing coalesces Undo while server normalization preserves Redo', async () => {
@@ -407,6 +424,7 @@ test('layout errors retain the document without persisting as scientific warning
 test('format conversion uses a source normalized by its pending drawing', async () => {
   const ui = page('builder.js');
   await ui.input('cabiln-input', 'Ala-Gly');
+  await ui.timers();
   const history = ui.run('editor.past.length');
   const converting = ui.element('btn-to-bracket').click();
   assert.equal(latestRequest(ui, '/convert_notation'), undefined);
@@ -418,6 +436,96 @@ test('format conversion uses a source normalized by its pending drawing', async 
   await converting;
   assert.equal(ui.element('cabiln-input').value, 'A-G');
   assert.equal(ui.run('editor.past.length'), history);
+});
+
+test('failed immediate formatting draws pending input without hiding its error', async () => {
+  for (const failure of ['server', 'network', 'replacement']) {
+    const ui = page('builder.js');
+    await ui.input('cabiln-input', 'G');
+    await ui.timers();
+    latestRequest(ui, '/render').resolve(rendered);
+    await new Promise(setImmediate);
+    ui.run("verifyMode = true; lastSmiles = 'NCC(=O)O'");
+    const original = 'D.(4,1)-G%G-A';
+    const normalized = 'D.[G(4,1).A(2,1)]-G';
+    await ui.input('cabiln-input', original);
+    const history = ui.run('editor.past.length');
+    let converting = ui.element('btn-to-bracket').click();
+    await new Promise(setImmediate);
+    assert.equal(ui.requests.at(-1).url, '/convert_notation');
+    if (failure === 'replacement') {
+      const obsolete = converting;
+      const oldRequest = latestRequest(ui, '/convert_notation');
+      converting = ui.element('btn-to-branch').click();
+      await new Promise(setImmediate);
+      oldRequest.resolve({ result: 'OLD CONVERSION' });
+      await obsolete;
+      assert.equal(ui.requests.filter(request => request.url === '/render').length, 1);
+      assert.equal(ui.element('cabiln-input').value, original);
+    }
+    const request = latestRequest(ui, '/convert_notation');
+    const error = failure === 'network' ? 'Notation conversion failed. Try again.' : 'Cannot preserve this layout';
+    if (failure === 'network') request.reject(new Error('Connection lost'));
+    else request.resolve({ error }, false);
+    await new Promise(setImmediate);
+    const drawing = latestRequest(ui, '/render');
+    assert.equal(JSON.parse(drawing.options.body).cabiln, original);
+    assert.match(ui.element('render-inner').innerHTML, /OLD STRUCTURE/);
+    assert.equal(ui.element('residue-chips').getAttribute('aria-disabled'), 'true');
+    assert.equal(ui.element('btn-mol').disabled, true);
+    drawing.resolve({ ...rendered, normalized_cabiln: normalized });
+    await converting;
+    assert.equal(ui.element('cabiln-input').value, normalized);
+    assert.equal(ui.element('cabiln-input').className, 'ok');
+    assert.equal(ui.element('cabiln-status').textContent, error);
+    assert.equal(ui.element('cabiln-status').title, error);
+    assert.equal(ui.element('btn-mol').disabled, false);
+    assert.equal(ui.run('editor.past.length'), history);
+    assert.equal(ui.run('editor.present.warning'), '');
+    assert.equal(JSON.parse(latestRequest(ui, '/verify').options.body).cabiln, normalized);
+    latestRequest(ui, '/verify').resolve({ match: false });
+  }
+});
+
+test('immediate formatting waits for the reference and verifies the final drawing', async () => {
+  const ui = page('builder.js');
+  await ui.input('cabiln-input', 'Ala-Gly');
+  ui.run('verifyMode = true');
+  await ui.input('smiles-input', 'NCC(=O)O');
+  const converting = ui.element('btn-to-bracket').click();
+  await new Promise(setImmediate);
+  assert.deepEqual(ui.requests.map(request => request.url), ['/render_reference']);
+  ui.requests[0].resolve(glycineDrawing);
+  await new Promise(setImmediate);
+  assert.deepEqual(ui.requests.map(request => request.url), ['/render_reference', '/convert_notation']);
+  latestRequest(ui, '/convert_notation').resolve({ result: 'A-G' });
+  await converting;
+  assert.equal(ui.requests.filter(request => request.url === '/render').length, 1);
+  latestRequest(ui, '/render').resolve(rendered);
+  await new Promise(setImmediate);
+  assert.deepEqual(JSON.parse(latestRequest(ui, '/verify').options.body), { smiles: 'NCC(=O)O', cabiln: 'A-G' });
+  latestRequest(ui, '/verify').resolve({ match: false });
+});
+
+test('editing only the reference restores a cancelled formatter\'s deferred main drawing', async () => {
+  const ui = page('builder.js');
+  await ui.input('cabiln-input', 'A-G');
+  const converting = ui.element('btn-to-bracket').click();
+  await new Promise(setImmediate);
+  const obsolete = latestRequest(ui, '/convert_notation');
+  await ui.input('smiles-input', 'NCC(=O)O');
+  assert.equal(obsolete.options.signal.aborted, true);
+  await ui.timers();
+  const drawing = latestRequest(ui, '/render');
+  assert.ok(drawing, 'The unchanged main input still needs its drawing');
+  assert.equal(JSON.parse(drawing.options.body).cabiln, 'A-G');
+  obsolete.resolve({ result: 'OLD CONVERSION' });
+  await converting;
+  drawing.resolve(rendered);
+  latestRequest(ui, '/render_reference').resolve(glycineDrawing);
+  await new Promise(setImmediate);
+  assert.equal(ui.element('cabiln-input').value, 'A-G');
+  assert.equal(ui.element('cabiln-input').className, 'ok');
 });
 
 test('a failed format request preserves scientific warnings and recognition evidence', async () => {
