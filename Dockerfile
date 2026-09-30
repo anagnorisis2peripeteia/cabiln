@@ -24,7 +24,7 @@ ENV CABILN_RELEASE=${CABILN_RELEASE} \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends libxrender1 libxext6 \
+    && apt-get install -y --no-install-recommends libexpat1 libxrender1 libxext6 \
     && rm -rf /var/lib/apt/lists/*
 COPY requirements-production.txt ./
 RUN python -m pip install --no-cache-dir --only-binary=:all: \
