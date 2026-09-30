@@ -27,7 +27,7 @@ def main():
         try:
             ready = request("/ready")
             break
-        except (URLError, TimeoutError):
+        except (URLError, TimeoutError, ConnectionError):
             if time.monotonic() >= deadline:
                 raise
             time.sleep(0.2)
