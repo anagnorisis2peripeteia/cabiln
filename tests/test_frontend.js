@@ -130,6 +130,26 @@ test('an arm containing only a marker keeps its brackets', () => {
   assert.deepEqual(chips.map(chip => chip.textContent), ['ac', 'K', '$', '[', 'G', '$', '[', '!1', ']', ']', 'D', '!1', 'am']);
 });
 
+test('library metadata waits for the current palette before using the shared worker', async () => {
+  const ui = page('builder.js');
+  ui.run('openLib()');
+  assert.deepEqual(ui.requests.map(request => request.url), ['/monomers']);
+
+  ui.run("window.dispatchEvent(new Event('focus'))");
+  const latest = ui.requests[1];
+  ui.requests[0].resolve([]);
+  await new Promise(setImmediate);
+  assert.deepEqual(ui.requests.map(request => request.url), ['/monomers', '/monomers']);
+
+  latest.resolve([{ abbr: 'G', name: 'Glycine', type: 'aa', subtype: 'natural', chem_types: '' }]);
+  await new Promise(setImmediate);
+  assert.deepEqual(ui.requests.map(request => request.url), ['/monomers', '/monomers', '/reactions']);
+  ui.requests[2].resolve([['backbone_c', 'backbone_n']]);
+  await new Promise(setImmediate);
+  assert.equal(ui.run('allMonomers[0].abbr'), 'G');
+  assert.equal(ui.run('reactionPairs[0].join(",")'), 'backbone_c,backbone_n');
+});
+
 test('reopening the palette discovers new monomers and preserves its search', async () => {
   const ui = page('builder.js');
   const gly = { abbr: 'G', name: 'Glycine', type: 'aa', subtype: 'natural', chem_types: '' };

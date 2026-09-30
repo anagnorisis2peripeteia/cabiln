@@ -740,6 +740,12 @@ async function loadReactions() {
   const request = startRequest('reactions');
   libStatus.hidden = true;
   try {
+    // Both endpoints share one calculation worker. Let the palette finish so
+    // a quick reaction-list request cannot force it into a one-second retry.
+    while (activeRequests.has('library')) {
+      await activeRequests.get('library').done;
+      if (!request.current()) return;
+    }
     const res = await fetchCalculation('/reactions', { signal: request.signal });
     const data = await readResponse(res);
     if (!request.current()) return;
