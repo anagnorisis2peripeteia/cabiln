@@ -69,47 +69,111 @@ def _tag_stereo_annotations(svg, molecule):
     return re.sub(marker, lambda _: f"class='CIP_Code {next(owners)}'", svg)
 
 
-def _indigo_layout(romol):
-    """Lay out romol using Indigo's algorithm; copy coords back preserving atom indices."""
+def _draw_svg(drawer, molecule):
+    """Draw a prepared copy; map added display hydrogens to their source parent."""
+    import re
+
     from rdkit import Chem
-    from rdkit.Chem import rdDepictor
-    from rdkit.Chem.rdchem import Conformer
+    from rdkit.Chem.Draw import rdMolDraw2D
+
+    source_index = "_cabiln_draw_source_atom"
+    marked = Chem.Mol(molecule)
+    for atom in marked.GetAtoms():
+        atom.SetIntProp(source_index, atom.GetIdx())
+    prepared = rdMolDraw2D.PrepareMolForDrawing(marked)
+    drawer.drawOptions().prepareMolsBeforeDrawing = False
+    drawer.DrawMolecule(prepared)
+    drawer.FinishDrawing()
+    svg = _tag_atom_joins(drawer.GetDrawingText(), drawer, prepared.GetNumAtoms())
+    svg = _tag_stereo_annotations(svg, prepared)
+
+    owners = {}
+    for atom in prepared.GetAtoms():
+        source = atom
+        if (
+            not atom.HasProp(source_index)
+            and atom.GetAtomicNum() == 1 and atom.GetDegree() == 1
+        ):
+            source = atom.GetNeighbors()[0]
+        if source.HasProp(source_index):
+            owner = source.GetIntProp(source_index)
+            if owner != atom.GetIdx():
+                owners[atom.GetIdx()] = owner
+    if not owners:
+        return svg
+    mapped_classes = {f"atom-{index}": f"atom-{owner}" for index, owner in owners.items()}
+
+    def remap_classes(match):
+        classes = (mapped_classes.get(name, name) for name in match[1].split())
+        return "class='" + " ".join(dict.fromkeys(classes)) + "'"
+
+    return re.sub(r"class='([^']*)'", remap_classes, svg)
+
+
+def _indigo_layout(romol):
+    """Accept Indigo coordinates only for the same mapped, stereochemical graph."""
+    import math
+
+    from rdkit import Chem
 
     try:
-        from indigo import Indigo as _Indigo
-    except ImportError:
-        return None
-    # mol block needs a conformer — compute a quick one just for the connectivity export
-    tmp = Chem.RWMol(romol)
-    if tmp.GetNumConformers() == 0:
-        rdDepictor.SetPreferCoordGen(True)
-        rdDepictor.Compute2DCoords(tmp)
-    mol_block = Chem.MolToMolBlock(tmp)
-    try:
-        indigo = _Indigo()
-        indigo.setOption("ignore-stereochemistry-errors", True)
-        im = indigo.loadMolecule(mol_block)
+        # Plain SMILES cannot carry queries or every RDKit stereo/bond type.
+        if any(
+            atom.HasQuery() or atom.GetAtomicNum() == 0 or atom.GetChiralTag() not in (
+                Chem.ChiralType.CHI_UNSPECIFIED, Chem.ChiralType.CHI_TETRAHEDRAL_CW,
+                Chem.ChiralType.CHI_TETRAHEDRAL_CCW,
+            )
+            for atom in romol.GetAtoms()
+        ) or any(
+            bond.HasQuery() or bond.GetBondType() not in (
+                Chem.BondType.SINGLE, Chem.BondType.DOUBLE,
+                Chem.BondType.TRIPLE, Chem.BondType.AROMATIC,
+            ) or bond.GetStereo() not in (
+                Chem.BondStereo.STEREONONE, Chem.BondStereo.STEREOANY,
+                Chem.BondStereo.STEREOCIS, Chem.BondStereo.STEREOTRANS,
+                Chem.BondStereo.STEREOE, Chem.BondStereo.STEREOZ,
+            )
+            for bond in romol.GetBonds()
+        ):
+            return None
+        from indigo import Indigo
+
+        # A detached, mapped SMILES needs no preliminary coordinate calculation.
+        # The original atoms, metadata, maps and stereo groups never leave RDKit.
+        temporary = Chem.Mol(romol)
+        for atom in temporary.GetAtoms():
+            atom.SetAtomMapNum(atom.GetIdx() + 1)
+        expected = Chem.MolToSmiles(temporary)
+        indigo = Indigo()
+        im = indigo.loadMolecule(Chem.MolToSmiles(temporary, canonical=False))
         im.layout()
-        result_block = im.molfile()
-        result = Chem.MolFromMolBlock(result_block, removeHs=False, sanitize=False)
+        result = Chem.MolFromMolBlock(im.molfile(), removeHs=False)
         if result is None or result.GetNumConformers() == 0:
             return None
-        src = result.GetConformer()
         n = romol.GetNumAtoms()
-        if romol.GetNumConformers() == 0:
-            conf = Conformer(n)
-            for i in range(n):
-                p = src.GetAtomPosition(i)
-                conf.SetAtomPosition(i, (p.x, p.y, 0.0))
-            romol.AddConformer(conf, assignId=True)
-        else:
-            conf = romol.GetConformer()
-            for i in range(n):
-                p = src.GetAtomPosition(i)
-                conf.SetAtomPosition(i, (p.x, p.y, 0.0))
-        return romol
+        maps = [atom.GetAtomMapNum() for atom in result.GetAtoms()]
+        if sorted(maps) != list(range(1, n + 1)) or Chem.MolToSmiles(result) != expected:
+            return None
+        source = result.GetConformer()
+        positions = []
+        for i in range(n):
+            point = source.GetAtomPosition(i)
+            positions.append((point.x, point.y, point.z))
+        if source.Is3D() or any(
+            not all(math.isfinite(value) for value in position) or position[2] != 0
+            for position in positions
+        ) or len(set(positions)) != n:
+            return None
+        conformer = Chem.Conformer(n)
+        conformer.Set3D(False)
+        for identifier, position in zip(maps, positions):
+            conformer.SetAtomPosition(identifier - 1, position)
     except Exception:
         return None
+    # Commit only after every external atom and coordinate passed validation.
+    romol.RemoveAllConformers()
+    romol.AddConformer(conformer, assignId=True)
+    return romol
 
 
 def _overlap_score(romol) -> int:
@@ -144,13 +208,12 @@ def _best_layout(romol, base_seed: int, n_tries: int = 6):
     from rdkit.Chem.rdchem import Conformer
 
     n = romol.GetNumAtoms()
-    best_positions = None
-    best_score = 10**9
-
     # Compute baseline CoordGen score so we never return something worse
     rdDepictor.SetPreferCoordGen(True)
     rdDepictor.Compute2DCoords(romol)
     baseline_score = _overlap_score(romol)
+    if baseline_score == 0:
+        return romol
     baseline_conf = romol.GetConformer()
     baseline_positions = {
         i: (baseline_conf.GetAtomPosition(i).x, baseline_conf.GetAtomPosition(i).y)
@@ -178,11 +241,8 @@ def _best_layout(romol, base_seed: int, n_tries: int = 6):
             for new_idx in range(n):
                 p = conf.GetAtomPosition(new_idx)
                 best_positions[new_order[new_idx]] = (p.x, p.y)
-
-    if best_positions is None:
-        rdDepictor.SetPreferCoordGen(True)
-        rdDepictor.Compute2DCoords(romol)
-        return romol
+            if score == 0:
+                break
 
     if romol.GetNumConformers() == 0:
         conf = Conformer(n)
@@ -205,8 +265,9 @@ def _draw_mol(
     from rdkit.Chem.Draw import rdMolDraw2D
 
     if seed == 0:
-        rdDepictor.SetPreferCoordGen(True)
-        rdDepictor.Compute2DCoords(romol)
+        if _indigo_layout(romol) is None:
+            rdDepictor.SetPreferCoordGen(True)
+            rdDepictor.Compute2DCoords(romol)
     elif seed % 2 == 1:
         if _indigo_layout(romol) is None:
             romol = _best_layout(romol, base_seed=seed * 6)
@@ -228,10 +289,7 @@ def _draw_mol(
         opts.minFontSize = 7
         opts.maxFontSize = 10
         opts.bondLineWidth = 1.0
-    drawer.DrawMolecule(romol)
-    drawer.FinishDrawing()
-    svg = _tag_atom_joins(drawer.GetDrawingText(), drawer, natoms)
-    svg = _tag_stereo_annotations(svg, romol)
+    svg = _draw_svg(drawer, romol)
 
     if used_slots is not None:
         dummy_slot = {}

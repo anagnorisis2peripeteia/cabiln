@@ -159,16 +159,18 @@ def test_render_exports_same_molecule_and_residue_map(client, notation):
 
 
 @pytest.mark.parametrize(
-    "route,payload,layouts",
+    "route,payload,engine",
     [
-        ("/render", {"cabiln": "A-G"}, 1),
-        ("/render_reference", {"input": "A-G", "input_format": "cabiln"}, 1),
-        ("/render_reference", {"input": "A-G"}, 1),
-        ("/verify", {"cabiln": "A-G", "smiles": "C[C@H](N)C(=O)NCC(=O)O"}, 0),
+        ("/render", {"cabiln": "A-G"}, "indigo"),
+        ("/render", {"cabiln": "A-G", "seed": 1}, "indigo"),
+        ("/render", {"cabiln": "A-G", "seed": 2}, "coordgen"),
+        ("/render_reference", {"input": "A-G", "input_format": "cabiln"}, "indigo"),
+        ("/render_reference", {"input": "A-G"}, "indigo"),
+        ("/verify", {"cabiln": "A-G", "smiles": "C[C@H](N)C(=O)NCC(=O)O"}, None),
     ],
 )
 def test_rendering_handlers_generate_only_final_coordinates(
-    client, monkeypatch, route, payload, layouts
+    client, monkeypatch, route, payload, engine
 ):
     from unittest.mock import Mock
 
@@ -179,10 +181,25 @@ def test_rendering_handlers_generate_only_final_coordinates(
     coordinates = Mock(wraps=rdDepictor.Compute2DCoords)
     monkeypatch.setattr(AllChem, "Compute2DCoords", coordinates)
     monkeypatch.setattr(rdDepictor, "Compute2DCoords", coordinates)
+    native_layouts = []
+    try:
+        from indigo import IndigoObject
+    except ImportError:
+        if engine == "indigo":
+            engine = "coordgen"
+    else:
+        original = IndigoObject.layout
+
+        def indigo_coordinates(molecule):
+            native_layouts.append(molecule)
+            return original(molecule)
+
+        monkeypatch.setattr(IndigoObject, "layout", indigo_coordinates)
     clear_render_cache()
     response = client.post(route, json=payload)
     assert response.status_code == 200, response.text
-    assert coordinates.call_count == layouts
+    assert len(native_layouts) == (engine == "indigo")
+    assert coordinates.call_count == (engine == "coordgen")
 
 
 @pytest.mark.parametrize(

@@ -1,0 +1,1527 @@
+{
+  "baseline": "9d2d94641f432bae69b9a29dea66b5a52a7cbe69",
+  "environment": {
+    "host": "Apple M4 Pro, macOS arm64",
+    "python": "3.11.15",
+    "rdkit": "2026.03.6",
+    "date": "2026-10-01"
+  },
+  "method": "Sequential frozen baseline and final unmodified candidate, local HTTP TestClient, render cache cleared before each request. Three samples where n=3; others are single observations. This machine had other active jobs. These are small samples, not production percentiles or a latency SLA.",
+  "source_hashes": {
+    "baseline": {
+      "src/pyPept/inputs.py": "54445d1646a08ca1106064613d998aefb94fdb43a77356d22afb24ea3ff60a98",
+      "src/pyPept/web/rendering.py": "3238b8dc5ca8952eae98e790081114dc838e4ec8cab9226fe7e39579f6cec2d6",
+      "src/pyPept/web/drawing.py": "5d54a10c2de3b9be04d4d5b5e925892d33c43d2fa3bfa3aa3af5305f7f2ae33c"
+    },
+    "candidate": {
+      "src/pyPept/inputs.py": "54445d1646a08ca1106064613d998aefb94fdb43a77356d22afb24ea3ff60a98",
+      "src/pyPept/web/rendering.py": "3238b8dc5ca8952eae98e790081114dc838e4ec8cab9226fe7e39579f6cec2d6",
+      "src/pyPept/web/drawing.py": "52a76723aca5717cb503000e27efa867b102b1ed378f2f0b7d199838ca6c3995"
+    }
+  },
+  "backend": [
+    {
+      "case": "G/render/default",
+      "baseline": {
+        "n": 3,
+        "median_ms": 12.501291988883168,
+        "min_ms": 9.853916009888053,
+        "max_ms": 13.816250022500753,
+        "samples_ms": [
+          13.816250022500753,
+          9.853916009888053,
+          12.501291988883168
+        ]
+      },
+      "candidate": {
+        "n": 3,
+        "median_ms": 8.798625029157847,
+        "min_ms": 8.372000011149794,
+        "max_ms": 9.105541976168752,
+        "samples_ms": [
+          9.105541976168752,
+          8.798625029157847,
+          8.372000011149794
+        ]
+      },
+      "preserved_sha256": "ffd7b87b1b6e9bbf6c042d499f7337bb75e9b26052f83ec0683d368ae53aa7a8",
+      "baseline_response_sha256": "54ac343633f98e568e16405e8c841e136bb8266ecd29e78a2003368634ef13e1",
+      "candidate_response_sha256": "c2c2bce9bbdc3b1880660985d2f26aaa149b1b85df53c512a5e6b0536eaa57d6"
+    },
+    {
+      "case": "A-G/render/default",
+      "baseline": {
+        "n": 3,
+        "median_ms": 12.331167003139853,
+        "min_ms": 9.943291021045297,
+        "max_ms": 12.679916981142014,
+        "samples_ms": [
+          12.679916981142014,
+          9.943291021045297,
+          12.331167003139853
+        ]
+      },
+      "candidate": {
+        "n": 3,
+        "median_ms": 10.004749987274408,
+        "min_ms": 9.71966702491045,
+        "max_ms": 10.360542044509202,
+        "samples_ms": [
+          10.004749987274408,
+          9.71966702491045,
+          10.360542044509202
+        ]
+      },
+      "preserved_sha256": "18683b2cdf4c25d0ff449fb986bcd75345640b17b1f4e6192182aa97bc8f5b63",
+      "baseline_response_sha256": "e118ae00daac5bcd603c3cfa7e8fd3d14786a6df8fb759aeab85b897931a04a5",
+      "candidate_response_sha256": "f9b9c0b7a605103c98b3324e679bc9f6e6a303b433fb4d5c2178ff9123973b5e"
+    },
+    {
+      "case": "Semaglutide/render/default",
+      "baseline": {
+        "n": 3,
+        "median_ms": 728.9782500010915,
+        "min_ms": 650.7294999901205,
+        "max_ms": 830.3584159584716,
+        "samples_ms": [
+          650.7294999901205,
+          728.9782500010915,
+          830.3584159584716
+        ]
+      },
+      "candidate": {
+        "n": 3,
+        "median_ms": 55.59070798335597,
+        "min_ms": 55.54966599447653,
+        "max_ms": 57.674249983392656,
+        "samples_ms": [
+          57.674249983392656,
+          55.59070798335597,
+          55.54966599447653
+        ]
+      },
+      "preserved_sha256": "a89fbf4576ed11b1b7e1bac72239e13b159818a47ef4995c9e7226fde229ac67",
+      "baseline_response_sha256": "b5bff36e3be4c54d27e32d23aeb0e18f87e9b2fdb86adf7a3734d6653db7fbb6",
+      "candidate_response_sha256": "a70e84346a0bd4ccdfda2680ea85f0740d646c66394984fb914b8c4ef3e063dd"
+    },
+    {
+      "case": "Liraglutide/render/default",
+      "baseline": {
+        "n": 1,
+        "median_ms": 383.87933297781274,
+        "min_ms": 383.87933297781274,
+        "max_ms": 383.87933297781274,
+        "samples_ms": [
+          383.87933297781274
+        ]
+      },
+      "candidate": {
+        "n": 1,
+        "median_ms": 50.24733301252127,
+        "min_ms": 50.24733301252127,
+        "max_ms": 50.24733301252127,
+        "samples_ms": [
+          50.24733301252127
+        ]
+      },
+      "preserved_sha256": "2834149dd3e54d58986ca87de2e389326ac084c8069cc1850f093320e79a6c8c",
+      "baseline_response_sha256": "4d9e3fc6b04e69b0c940abba2eb72aff641d3fdabb7ea35113bc79978762e676",
+      "candidate_response_sha256": "7ac00ad8886c1bad9b8b78fe83d8cc831e43573541524ccf5f83aa0513112fa5"
+    },
+    {
+      "case": "Tirzepatide/render/default",
+      "baseline": {
+        "n": 1,
+        "median_ms": 565.4519579838961,
+        "min_ms": 565.4519579838961,
+        "max_ms": 565.4519579838961,
+        "samples_ms": [
+          565.4519579838961
+        ]
+      },
+      "candidate": {
+        "n": 1,
+        "median_ms": 89.78787495288998,
+        "min_ms": 89.78787495288998,
+        "max_ms": 89.78787495288998,
+        "samples_ms": [
+          89.78787495288998
+        ]
+      },
+      "preserved_sha256": "ede71df32264d5ce045fcb1b69f3549db6a636e7332669a8c9a999a157f862ef",
+      "baseline_response_sha256": "2083099888ba4ea36da28c87501df12ab52c8532e547f91e1611b070801c0940",
+      "candidate_response_sha256": "40aafbca7fe6e800bf14f8cc4b8dcf2f73eed8338366725beaa5a5e73f1fa0fa"
+    },
+    {
+      "case": "Retatrutide/render/default",
+      "baseline": {
+        "n": 1,
+        "median_ms": 577.7742909849621,
+        "min_ms": 577.7742909849621,
+        "max_ms": 577.7742909849621,
+        "samples_ms": [
+          577.7742909849621
+        ]
+      },
+      "candidate": {
+        "n": 1,
+        "median_ms": 77.20733300084248,
+        "min_ms": 77.20733300084248,
+        "max_ms": 77.20733300084248,
+        "samples_ms": [
+          77.20733300084248
+        ]
+      },
+      "preserved_sha256": "1dc746a35d0fa600b264c48f22811b9adc780a1b7e388da478c3c8731a59fa81",
+      "baseline_response_sha256": "c616cec3321be7c14012114b8dee2d8c2c8b5614758d370758ff64d5e2b0aeb4",
+      "candidate_response_sha256": "744dc08ad12402bfa0e25e72e6b436edd8e3426536806eb88d56163a786d3ac7"
+    },
+    {
+      "case": "Exenatide/render/default",
+      "baseline": {
+        "n": 1,
+        "median_ms": 392.96174998162314,
+        "min_ms": 392.96174998162314,
+        "max_ms": 392.96174998162314,
+        "samples_ms": [
+          392.96174998162314
+        ]
+      },
+      "candidate": {
+        "n": 1,
+        "median_ms": 63.3954590302892,
+        "min_ms": 63.3954590302892,
+        "max_ms": 63.3954590302892,
+        "samples_ms": [
+          63.3954590302892
+        ]
+      },
+      "preserved_sha256": "9ea44286cf32f2ee394b24779e8dd015df3e02c7e42b1bacc8427865a75bd408",
+      "baseline_response_sha256": "da401df19e605dd17d9b256c1637a33741febbe6ea8bdd8a9e7ea7119773c0bb",
+      "candidate_response_sha256": "984bf621c5e395acc76b168a749815cf4554efdd3bf93e49fdd2e3ed69534b2f"
+    },
+    {
+      "case": "Lixisenatide/render/default",
+      "baseline": {
+        "n": 3,
+        "median_ms": 636.033957998734,
+        "min_ms": 598.5677500138991,
+        "max_ms": 676.5959580079652,
+        "samples_ms": [
+          676.5959580079652,
+          598.5677500138991,
+          636.033957998734
+        ]
+      },
+      "candidate": {
+        "n": 3,
+        "median_ms": 74.57962504122406,
+        "min_ms": 73.63412500126287,
+        "max_ms": 75.14758303295821,
+        "samples_ms": [
+          74.57962504122406,
+          75.14758303295821,
+          73.63412500126287
+        ]
+      },
+      "preserved_sha256": "5d9e3a34e07d38dc62d92a1c1224c1918db95fb81c0492011403f11f4c0679f1",
+      "baseline_response_sha256": "97f8056ed74629b1959bbf0df71d0c89dd7979ee38f22c5fe8ac1e012bc4473b",
+      "candidate_response_sha256": "9f0c95067e2101eaac174d3914c53382b4aa3d498221fc586624c3be33e1e197"
+    },
+    {
+      "case": "TBMB Bicycle \u2014 minimal/render/default",
+      "baseline": {
+        "n": 1,
+        "median_ms": 54.21262496383861,
+        "min_ms": 54.21262496383861,
+        "max_ms": 54.21262496383861,
+        "samples_ms": [
+          54.21262496383861
+        ]
+      },
+      "candidate": {
+        "n": 1,
+        "median_ms": 16.518042015377432,
+        "min_ms": 16.518042015377432,
+        "max_ms": 16.518042015377432,
+        "samples_ms": [
+          16.518042015377432
+        ]
+      },
+      "preserved_sha256": "aae7db43624e99ceb0eccc930d057d3167f4a8bb6d5016c374a9aa015c778ebf",
+      "baseline_response_sha256": "a0f56dd7cc680a73bf51f6b480d1e5ccf370b143ca71b1f9bd508d22ad8194a6",
+      "candidate_response_sha256": "d72d6388bababf4ad034f842b6fb19f6b51a03d5c259408c10b90f81e7efa8c1"
+    },
+    {
+      "case": "TBMB Bicycle \u2014 asymmetric loops/render/default",
+      "baseline": {
+        "n": 1,
+        "median_ms": 105.445834051352,
+        "min_ms": 105.445834051352,
+        "max_ms": 105.445834051352,
+        "samples_ms": [
+          105.445834051352
+        ]
+      },
+      "candidate": {
+        "n": 1,
+        "median_ms": 18.589249986689538,
+        "min_ms": 18.589249986689538,
+        "max_ms": 18.589249986689538,
+        "samples_ms": [
+          18.589249986689538
+        ]
+      },
+      "preserved_sha256": "f3cf4a667c234a0d557bf7984b286119d31cba6861a3cd90f0e9f3410618d501",
+      "baseline_response_sha256": "aa99049200a79b0f5c94a98111d32288ebba709d607f60e2877536f4fabe48cc",
+      "candidate_response_sha256": "adb8eb111dc1a85b48f1f3ec0bdce29f7abfc6e3b46345fe2048ffc97e80e044"
+    },
+    {
+      "case": "Head-to-tail cyclic with lipid/render/default",
+      "baseline": {
+        "n": 3,
+        "median_ms": 26.671833998989314,
+        "min_ms": 24.58604099228978,
+        "max_ms": 27.768332976847887,
+        "samples_ms": [
+          24.58604099228978,
+          27.768332976847887,
+          26.671833998989314
+        ]
+      },
+      "candidate": {
+        "n": 3,
+        "median_ms": 15.180790971498936,
+        "min_ms": 14.578500005882233,
+        "max_ms": 15.791834041010588,
+        "samples_ms": [
+          15.180790971498936,
+          15.791834041010588,
+          14.578500005882233
+        ]
+      },
+      "preserved_sha256": "ec6257f25647c80e35e98461a40fdb63de3898f7b93e1bb2907e65ed11571392",
+      "baseline_response_sha256": "fd75a8f8f92a82bcdbaac6c02a9793e9d5290d32f5883ffcaa49f674918a562d",
+      "candidate_response_sha256": "926ef0501841ccebb35cad1e493efb5643cba3b938ccbc9830808336fd928a1c"
+    },
+    {
+      "case": "Head-to-tail cyclic/render/default",
+      "baseline": {
+        "n": 1,
+        "median_ms": 61.12870801007375,
+        "min_ms": 61.12870801007375,
+        "max_ms": 61.12870801007375,
+        "samples_ms": [
+          61.12870801007375
+        ]
+      },
+      "candidate": {
+        "n": 1,
+        "median_ms": 13.844541972503066,
+        "min_ms": 13.844541972503066,
+        "max_ms": 13.844541972503066,
+        "samples_ms": [
+          13.844541972503066
+        ]
+      },
+      "preserved_sha256": "b8a1979ef0f5922acce50dfc48b63af0049b753c502e74a805c28b4de857e0d9",
+      "baseline_response_sha256": "dfdc593a108e2ed0f1653497fb00fc196de7e9d12c5f4874325e62b92d703d6b",
+      "candidate_response_sha256": "0751ff039e320dde05a61d0147721e41148ab6b5e68619234dbbfc29d6387bc3"
+    },
+    {
+      "case": "Dual-lipid backbone/render/default",
+      "baseline": {
+        "n": 1,
+        "median_ms": 44.51562504982576,
+        "min_ms": 44.51562504982576,
+        "max_ms": 44.51562504982576,
+        "samples_ms": [
+          44.51562504982576
+        ]
+      },
+      "candidate": {
+        "n": 1,
+        "median_ms": 18.08970799902454,
+        "min_ms": 18.08970799902454,
+        "max_ms": 18.08970799902454,
+        "samples_ms": [
+          18.08970799902454
+        ]
+      },
+      "preserved_sha256": "921eade3267a4889f535f5f784cbd0fc5e473f85f341bf7c35a9aa49d0195fab",
+      "baseline_response_sha256": "7403e2850cb1cfee34ddff034845c2bb4aab477224e5b55df5051a5817353a66",
+      "candidate_response_sha256": "9abc900ec6cbc4c565e4d64bb8c95a6f7bd2f7a3503dd76c994d67a22193d3a6"
+    },
+    {
+      "case": "AEEA PEG spacer/render/default",
+      "baseline": {
+        "n": 1,
+        "median_ms": 15.555791964288801,
+        "min_ms": 15.555791964288801,
+        "max_ms": 15.555791964288801,
+        "samples_ms": [
+          15.555791964288801
+        ]
+      },
+      "candidate": {
+        "n": 1,
+        "median_ms": 12.89691700367257,
+        "min_ms": 12.89691700367257,
+        "max_ms": 12.89691700367257,
+        "samples_ms": [
+          12.89691700367257
+        ]
+      },
+      "preserved_sha256": "5832325f6795812a89c6163f718238b0774d906743aaa5b0e5d00668a8c7e459",
+      "baseline_response_sha256": "073aa63ac690dbc5575b5b549f097e1c08fc9796a03528f2a1e8cd1d965f965d",
+      "candidate_response_sha256": "2e4c8d1dacadb9edc1322451711543eaf1e2cc1b0ceb794cae22cb236ba61187"
+    },
+    {
+      "case": "RGD pendant arm/render/default",
+      "baseline": {
+        "n": 1,
+        "median_ms": 21.86545799486339,
+        "min_ms": 21.86545799486339,
+        "max_ms": 21.86545799486339,
+        "samples_ms": [
+          21.86545799486339
+        ]
+      },
+      "candidate": {
+        "n": 1,
+        "median_ms": 14.452165982220322,
+        "min_ms": 14.452165982220322,
+        "max_ms": 14.452165982220322,
+        "samples_ms": [
+          14.452165982220322
+        ]
+      },
+      "preserved_sha256": "a8da4585e8f530190c947f77127268befb6447bdd930fe5825d201cc264e0091",
+      "baseline_response_sha256": "b54c7036fcf53ee41b0504c67995cbed2c2cb42793596d70d2872aa8e9ffa54e",
+      "candidate_response_sha256": "28d7c22bad22f454099d76a3c45c149a27b70ef4e805dc0b32a95b97a60a88db"
+    },
+    {
+      "case": "Dual-E isopeptide scaffold/render/default",
+      "baseline": {
+        "n": 1,
+        "median_ms": 18.949042016174644,
+        "min_ms": 18.949042016174644,
+        "max_ms": 18.949042016174644,
+        "samples_ms": [
+          18.949042016174644
+        ]
+      },
+      "candidate": {
+        "n": 1,
+        "median_ms": 15.172958024777472,
+        "min_ms": 15.172958024777472,
+        "max_ms": 15.172958024777472,
+        "samples_ms": [
+          15.172958024777472
+        ]
+      },
+      "preserved_sha256": "1e5328dc2f9fc2c5ff587f740eb95d2e4a8469f58c658ecb908f23b87fc59671",
+      "baseline_response_sha256": "769110ea157265a21a49065a5e82195c1a45a33b2e19383cb7e2689733abfa67",
+      "candidate_response_sha256": "cae0831d49924a2e196ab086e2ed468280b8f365dfe3aff936623edd555f827b"
+    },
+    {
+      "case": "G/render/seed=1",
+      "baseline": {
+        "n": 1,
+        "median_ms": 106.99129197746515,
+        "min_ms": 106.99129197746515,
+        "max_ms": 106.99129197746515,
+        "samples_ms": [
+          106.99129197746515
+        ]
+      },
+      "candidate": {
+        "n": 1,
+        "median_ms": 8.815167006105185,
+        "min_ms": 8.815167006105185,
+        "max_ms": 8.815167006105185,
+        "samples_ms": [
+          8.815167006105185
+        ]
+      },
+      "preserved_sha256": "ffd7b87b1b6e9bbf6c042d499f7337bb75e9b26052f83ec0683d368ae53aa7a8",
+      "baseline_response_sha256": "c2c2bce9bbdc3b1880660985d2f26aaa149b1b85df53c512a5e6b0536eaa57d6",
+      "candidate_response_sha256": "c2c2bce9bbdc3b1880660985d2f26aaa149b1b85df53c512a5e6b0536eaa57d6"
+    },
+    {
+      "case": "G/render/seed=2",
+      "baseline": {
+        "n": 1,
+        "median_ms": 17.8016250138171,
+        "min_ms": 17.8016250138171,
+        "max_ms": 17.8016250138171,
+        "samples_ms": [
+          17.8016250138171
+        ]
+      },
+      "candidate": {
+        "n": 1,
+        "median_ms": 12.6241659745574,
+        "min_ms": 12.6241659745574,
+        "max_ms": 12.6241659745574,
+        "samples_ms": [
+          12.6241659745574
+        ]
+      },
+      "preserved_sha256": "ffd7b87b1b6e9bbf6c042d499f7337bb75e9b26052f83ec0683d368ae53aa7a8",
+      "baseline_response_sha256": "54ac343633f98e568e16405e8c841e136bb8266ecd29e78a2003368634ef13e1",
+      "candidate_response_sha256": "54ac343633f98e568e16405e8c841e136bb8266ecd29e78a2003368634ef13e1"
+    },
+    {
+      "case": "A-G/render/seed=1",
+      "baseline": {
+        "n": 1,
+        "median_ms": 23.346834001131356,
+        "min_ms": 23.346834001131356,
+        "max_ms": 23.346834001131356,
+        "samples_ms": [
+          23.346834001131356
+        ]
+      },
+      "candidate": {
+        "n": 1,
+        "median_ms": 10.100750019773841,
+        "min_ms": 10.100750019773841,
+        "max_ms": 10.100750019773841,
+        "samples_ms": [
+          10.100750019773841
+        ]
+      },
+      "preserved_sha256": "18683b2cdf4c25d0ff449fb986bcd75345640b17b1f4e6192182aa97bc8f5b63",
+      "baseline_response_sha256": "58fd9a8cc8dd21e052184add3dd199426f2cd8d3e9ea65c69e48390997a4c798",
+      "candidate_response_sha256": "f9b9c0b7a605103c98b3324e679bc9f6e6a303b433fb4d5c2178ff9123973b5e"
+    },
+    {
+      "case": "A-G/render/seed=2",
+      "baseline": {
+        "n": 1,
+        "median_ms": 22.921124997083098,
+        "min_ms": 22.921124997083098,
+        "max_ms": 22.921124997083098,
+        "samples_ms": [
+          22.921124997083098
+        ]
+      },
+      "candidate": {
+        "n": 1,
+        "median_ms": 9.918625000864267,
+        "min_ms": 9.918625000864267,
+        "max_ms": 9.918625000864267,
+        "samples_ms": [
+          9.918625000864267
+        ]
+      },
+      "preserved_sha256": "18683b2cdf4c25d0ff449fb986bcd75345640b17b1f4e6192182aa97bc8f5b63",
+      "baseline_response_sha256": "e118ae00daac5bcd603c3cfa7e8fd3d14786a6df8fb759aeab85b897931a04a5",
+      "candidate_response_sha256": "e118ae00daac5bcd603c3cfa7e8fd3d14786a6df8fb759aeab85b897931a04a5"
+    },
+    {
+      "case": "cyclic-lipid/render/seed=1",
+      "baseline": {
+        "n": 1,
+        "median_ms": 29.650459007825702,
+        "min_ms": 29.650459007825702,
+        "max_ms": 29.650459007825702,
+        "samples_ms": [
+          29.650459007825702
+        ]
+      },
+      "candidate": {
+        "n": 1,
+        "median_ms": 15.071290952619165,
+        "min_ms": 15.071290952619165,
+        "max_ms": 15.071290952619165,
+        "samples_ms": [
+          15.071290952619165
+        ]
+      },
+      "preserved_sha256": "ec6257f25647c80e35e98461a40fdb63de3898f7b93e1bb2907e65ed11571392",
+      "baseline_response_sha256": "dd503572edd6736a1ea721401467d1bdf27616f178b89e9d3221448daa3c0d65",
+      "candidate_response_sha256": "926ef0501841ccebb35cad1e493efb5643cba3b938ccbc9830808336fd928a1c"
+    },
+    {
+      "case": "cyclic-lipid/render/seed=2",
+      "baseline": {
+        "n": 1,
+        "median_ms": 72.91654101572931,
+        "min_ms": 72.91654101572931,
+        "max_ms": 72.91654101572931,
+        "samples_ms": [
+          72.91654101572931
+        ]
+      },
+      "candidate": {
+        "n": 1,
+        "median_ms": 17.920624988619238,
+        "min_ms": 17.920624988619238,
+        "max_ms": 17.920624988619238,
+        "samples_ms": [
+          17.920624988619238
+        ]
+      },
+      "preserved_sha256": "ec6257f25647c80e35e98461a40fdb63de3898f7b93e1bb2907e65ed11571392",
+      "baseline_response_sha256": "fd75a8f8f92a82bcdbaac6c02a9793e9d5290d32f5883ffcaa49f674918a562d",
+      "candidate_response_sha256": "fd75a8f8f92a82bcdbaac6c02a9793e9d5290d32f5883ffcaa49f674918a562d"
+    },
+    {
+      "case": "Semaglutide/render/seed=1",
+      "baseline": {
+        "n": 1,
+        "median_ms": 68.48470802651718,
+        "min_ms": 68.48470802651718,
+        "max_ms": 68.48470802651718,
+        "samples_ms": [
+          68.48470802651718
+        ]
+      },
+      "candidate": {
+        "n": 1,
+        "median_ms": 56.45454197656363,
+        "min_ms": 56.45454197656363,
+        "max_ms": 56.45454197656363,
+        "samples_ms": [
+          56.45454197656363
+        ]
+      },
+      "preserved_sha256": "a89fbf4576ed11b1b7e1bac72239e13b159818a47ef4995c9e7226fde229ac67",
+      "baseline_response_sha256": "0dad552db5d64f88b1b0f6eff6120a075716825865d3bd016d2dc58545d4bab6",
+      "candidate_response_sha256": "a70e84346a0bd4ccdfda2680ea85f0740d646c66394984fb914b8c4ef3e063dd"
+    },
+    {
+      "case": "Semaglutide/render/seed=2",
+      "baseline": {
+        "n": 3,
+        "median_ms": 5487.182249955367,
+        "min_ms": 4966.667499975301,
+        "max_ms": 5564.745916984975,
+        "samples_ms": [
+          4966.667499975301,
+          5564.745916984975,
+          5487.182249955367
+        ]
+      },
+      "candidate": {
+        "n": 3,
+        "median_ms": 3898.0704999994487,
+        "min_ms": 3819.3970000138506,
+        "max_ms": 4102.246958005708,
+        "samples_ms": [
+          4102.246958005708,
+          3819.3970000138506,
+          3898.0704999994487
+        ]
+      },
+      "preserved_sha256": "a89fbf4576ed11b1b7e1bac72239e13b159818a47ef4995c9e7226fde229ac67",
+      "baseline_response_sha256": "b5bff36e3be4c54d27e32d23aeb0e18f87e9b2fdb86adf7a3734d6653db7fbb6",
+      "candidate_response_sha256": "b5bff36e3be4c54d27e32d23aeb0e18f87e9b2fdb86adf7a3734d6653db7fbb6"
+    },
+    {
+      "case": "Lixisenatide/render/seed=1",
+      "baseline": {
+        "n": 1,
+        "median_ms": 114.56516600446776,
+        "min_ms": 114.56516600446776,
+        "max_ms": 114.56516600446776,
+        "samples_ms": [
+          114.56516600446776
+        ]
+      },
+      "candidate": {
+        "n": 1,
+        "median_ms": 81.16037503350526,
+        "min_ms": 81.16037503350526,
+        "max_ms": 81.16037503350526,
+        "samples_ms": [
+          81.16037503350526
+        ]
+      },
+      "preserved_sha256": "5d9e3a34e07d38dc62d92a1c1224c1918db95fb81c0492011403f11f4c0679f1",
+      "baseline_response_sha256": "c7c39767d36edc603be10f194513ce5aa247a456fdc9241b9133ca3cf160719b",
+      "candidate_response_sha256": "9f0c95067e2101eaac174d3914c53382b4aa3d498221fc586624c3be33e1e197"
+    },
+    {
+      "case": "Lixisenatide/render/seed=2",
+      "baseline": {
+        "n": 1,
+        "median_ms": 3710.3532499750145,
+        "min_ms": 3710.3532499750145,
+        "max_ms": 3710.3532499750145,
+        "samples_ms": [
+          3710.3532499750145
+        ]
+      },
+      "candidate": {
+        "n": 1,
+        "median_ms": 2756.962708022911,
+        "min_ms": 2756.962708022911,
+        "max_ms": 2756.962708022911,
+        "samples_ms": [
+          2756.962708022911
+        ]
+      },
+      "preserved_sha256": "5d9e3a34e07d38dc62d92a1c1224c1918db95fb81c0492011403f11f4c0679f1",
+      "baseline_response_sha256": "97f8056ed74629b1959bbf0df71d0c89dd7979ee38f22c5fe8ac1e012bc4473b",
+      "candidate_response_sha256": "97f8056ed74629b1959bbf0df71d0c89dd7979ee38f22c5fe8ac1e012bc4473b"
+    },
+    {
+      "case": "A-G/reference/cabiln",
+      "baseline": {
+        "n": 1,
+        "median_ms": 19.263125024735928,
+        "min_ms": 19.263125024735928,
+        "max_ms": 19.263125024735928,
+        "samples_ms": [
+          19.263125024735928
+        ]
+      },
+      "candidate": {
+        "n": 1,
+        "median_ms": 10.485042002983391,
+        "min_ms": 10.485042002983391,
+        "max_ms": 10.485042002983391,
+        "samples_ms": [
+          10.485042002983391
+        ]
+      },
+      "preserved_sha256": "15d96421e5841dfe233e3e46534d48a57d50dd85ebcd3f1897967eec889a697c",
+      "baseline_response_sha256": "b731083c248ac1eccc1b4d2f9dbdd769662a497c54e9a2bc0814f52ca6a403b6",
+      "candidate_response_sha256": "1b2acc5c152eadef49a51f6fc77fa858be7ec0cdae833395d2325331bfdd1c68"
+    },
+    {
+      "case": "A-G/reference/auto",
+      "baseline": {
+        "n": 1,
+        "median_ms": 12.444709020201117,
+        "min_ms": 12.444709020201117,
+        "max_ms": 12.444709020201117,
+        "samples_ms": [
+          12.444709020201117
+        ]
+      },
+      "candidate": {
+        "n": 1,
+        "median_ms": 10.485416976734996,
+        "min_ms": 10.485416976734996,
+        "max_ms": 10.485416976734996,
+        "samples_ms": [
+          10.485416976734996
+        ]
+      },
+      "preserved_sha256": "c33f1f26e1f9983b7744b8fb87a16b381eaceba20d66da2e062af84f1b6a9ef3",
+      "baseline_response_sha256": "167c210f1f61dc1126b8774479da802ba150e652da9ca3c0b1884a8894ee192b",
+      "candidate_response_sha256": "db62817c6c50c297521717a683baa61084603a69d433c3ecdc0fdbaca6381f6c"
+    },
+    {
+      "case": "A-G/reference/smiles",
+      "baseline": {
+        "n": 1,
+        "median_ms": 3.4004159970209002,
+        "min_ms": 3.4004159970209002,
+        "max_ms": 3.4004159970209002,
+        "samples_ms": [
+          3.4004159970209002
+        ]
+      },
+      "candidate": {
+        "n": 1,
+        "median_ms": 3.0406250152736902,
+        "min_ms": 3.0406250152736902,
+        "max_ms": 3.0406250152736902,
+        "samples_ms": [
+          3.0406250152736902
+        ]
+      },
+      "preserved_sha256": "1c80017dd97392ea5995630db0d786e12fb88e358457c2d54a6425722d273d0f",
+      "baseline_response_sha256": "52ef111167b8fab5b78c7e109cf2a68cb56c1cbd5e3ea030a35835f66a86b3ea",
+      "candidate_response_sha256": "3c48d1b7250926668cc69d21a08ee9775a7352e356a7c6ab496b44d8173a1e45"
+    },
+    {
+      "case": "A-G/reference/mol",
+      "baseline": {
+        "n": 1,
+        "median_ms": 4.667041008360684,
+        "min_ms": 4.667041008360684,
+        "max_ms": 4.667041008360684,
+        "samples_ms": [
+          4.667041008360684
+        ]
+      },
+      "candidate": {
+        "n": 1,
+        "median_ms": 3.2376250019297004,
+        "min_ms": 3.2376250019297004,
+        "max_ms": 3.2376250019297004,
+        "samples_ms": [
+          3.2376250019297004
+        ]
+      },
+      "preserved_sha256": "b58b9e951733208f1e570ef3a551dc0d07b521fe756019b41df8348c9dbe1345",
+      "baseline_response_sha256": "c1c2244c4d9d54e5eb43a56de24cf4c188362b96f5c337715eba83565c0637a3",
+      "candidate_response_sha256": "2309c9f1219b7be7d32bc4f313070c8eb211d99b8d11ef527aac946b684b72dc"
+    },
+    {
+      "case": "A-G/reference/biln",
+      "baseline": {
+        "n": 1,
+        "median_ms": 43.75354200601578,
+        "min_ms": 43.75354200601578,
+        "max_ms": 43.75354200601578,
+        "samples_ms": [
+          43.75354200601578
+        ]
+      },
+      "candidate": {
+        "n": 1,
+        "median_ms": 9.56641702214256,
+        "min_ms": 9.56641702214256,
+        "max_ms": 9.56641702214256,
+        "samples_ms": [
+          9.56641702214256
+        ]
+      },
+      "preserved_sha256": "c33f1f26e1f9983b7744b8fb87a16b381eaceba20d66da2e062af84f1b6a9ef3",
+      "baseline_response_sha256": "167c210f1f61dc1126b8774479da802ba150e652da9ca3c0b1884a8894ee192b",
+      "candidate_response_sha256": "db62817c6c50c297521717a683baa61084603a69d433c3ecdc0fdbaca6381f6c"
+    },
+    {
+      "case": "A-G/reference/helm",
+      "baseline": {
+        "n": 1,
+        "median_ms": 24.35383398551494,
+        "min_ms": 24.35383398551494,
+        "max_ms": 24.35383398551494,
+        "samples_ms": [
+          24.35383398551494
+        ]
+      },
+      "candidate": {
+        "n": 1,
+        "median_ms": 10.39424998452887,
+        "min_ms": 10.39424998452887,
+        "max_ms": 10.39424998452887,
+        "samples_ms": [
+          10.39424998452887
+        ]
+      },
+      "preserved_sha256": "3fe99bc41ff75b31d01efbe8bea9b82ab9f32791e90271410a62fba18ec9e882",
+      "baseline_response_sha256": "4fc1b4cb6dd9cd07a2888c00245c019a2b75eadec26874739e33577042a316a5",
+      "candidate_response_sha256": "963fa9c2d52d8fc42a0aadc61e26cb1a9ffd800c1dc1ae2e7d45fa542860392c"
+    },
+    {
+      "case": "A-G/verify/exact",
+      "baseline": {
+        "n": 3,
+        "median_ms": 10.953333985526115,
+        "min_ms": 9.978291986044496,
+        "max_ms": 11.99783303309232,
+        "samples_ms": [
+          9.978291986044496,
+          10.953333985526115,
+          11.99783303309232
+        ]
+      },
+      "candidate": {
+        "n": 3,
+        "median_ms": 7.979499991051853,
+        "min_ms": 7.949209015350789,
+        "max_ms": 8.021999965421855,
+        "samples_ms": [
+          7.979499991051853,
+          7.949209015350789,
+          8.021999965421855
+        ]
+      },
+      "preserved_sha256": "5012d03e1aca24c5deeeae620896d9a34d05cc5139e2199f3196546beee8e328",
+      "baseline_response_sha256": "c0b14c2e215fc7def825637ac7e79e2250bc33f48eab73db3bf07c3bf7407b7c",
+      "candidate_response_sha256": "c0b14c2e215fc7def825637ac7e79e2250bc33f48eab73db3bf07c3bf7407b7c"
+    },
+    {
+      "case": "A-G/verify/unspecified",
+      "baseline": {
+        "n": 1,
+        "median_ms": 9.85333399148658,
+        "min_ms": 9.85333399148658,
+        "max_ms": 9.85333399148658,
+        "samples_ms": [
+          9.85333399148658
+        ]
+      },
+      "candidate": {
+        "n": 1,
+        "median_ms": 8.396999968681484,
+        "min_ms": 8.396999968681484,
+        "max_ms": 8.396999968681484,
+        "samples_ms": [
+          8.396999968681484
+        ]
+      },
+      "preserved_sha256": "fbc318fb5ece33ce57b60fbf9cebbb9972508dbc0d8ac8487f3db200d838507c",
+      "baseline_response_sha256": "4999dfe82d7d5f4d564001b4fde248d259dac345e64e50840cee0ee0184d0806",
+      "candidate_response_sha256": "4999dfe82d7d5f4d564001b4fde248d259dac345e64e50840cee0ee0184d0806"
+    },
+    {
+      "case": "A-G/verify/mismatch",
+      "baseline": {
+        "n": 1,
+        "median_ms": 8.780832984484732,
+        "min_ms": 8.780832984484732,
+        "max_ms": 8.780832984484732,
+        "samples_ms": [
+          8.780832984484732
+        ]
+      },
+      "candidate": {
+        "n": 1,
+        "median_ms": 8.091374998912215,
+        "min_ms": 8.091374998912215,
+        "max_ms": 8.091374998912215,
+        "samples_ms": [
+          8.091374998912215
+        ]
+      },
+      "preserved_sha256": "19e65005f777ff7ed65319b6e0e0bbfc96381f87852ea78767c5c259df5ee108",
+      "baseline_response_sha256": "5673dc646b934a747244b1ae3895841bd5227ddbd2239405ed6117116d539001",
+      "candidate_response_sha256": "5673dc646b934a747244b1ae3895841bd5227ddbd2239405ed6117116d539001"
+    },
+    {
+      "case": "Semaglutide/reference/cabiln",
+      "baseline": {
+        "n": 3,
+        "median_ms": 753.6331670125946,
+        "min_ms": 737.5746250036173,
+        "max_ms": 773.9509579841979,
+        "samples_ms": [
+          773.9509579841979,
+          737.5746250036173,
+          753.6331670125946
+        ]
+      },
+      "candidate": {
+        "n": 3,
+        "median_ms": 52.17404197901487,
+        "min_ms": 52.086375013459474,
+        "max_ms": 53.46520902821794,
+        "samples_ms": [
+          52.17404197901487,
+          52.086375013459474,
+          53.46520902821794
+        ]
+      },
+      "preserved_sha256": "39500b390eef928876ffba1941d7938a0b3b1f5d3439b7405455dfce05fb7d61",
+      "baseline_response_sha256": "de8bfb0b18d0fdbdc4be83766ed2fe78abcc68b7fe6024a9af5f0c43e9f1ae5f",
+      "candidate_response_sha256": "159685a0bc6beca6ab90b9ce5b0f62866970f98fc46e2082166cf5d5f3c3ff84"
+    },
+    {
+      "case": "Semaglutide/reference/auto",
+      "baseline": {
+        "n": 3,
+        "median_ms": 770.7354589947499,
+        "min_ms": 721.3909159763716,
+        "max_ms": 776.9912499934435,
+        "samples_ms": [
+          770.7354589947499,
+          721.3909159763716,
+          776.9912499934435
+        ]
+      },
+      "candidate": {
+        "n": 3,
+        "median_ms": 52.39274998893961,
+        "min_ms": 51.66120798094198,
+        "max_ms": 72.67483399482444,
+        "samples_ms": [
+          72.67483399482444,
+          51.66120798094198,
+          52.39274998893961
+        ]
+      },
+      "preserved_sha256": "9b067e16de9cd40f17331a13b32b6b66055cbd57f4b94fea728a5607ea59e3b9",
+      "baseline_response_sha256": "61013fd31558d7c11080b5b74f0d3223dc18a00089ff2bcb5b1219ee6bda8ecb",
+      "candidate_response_sha256": "d9575a820b9b31d6784d78e123e54b0cbec442e33d88f4edafd11a82b6148d9d"
+    },
+    {
+      "case": "Semaglutide/reference/smiles",
+      "baseline": {
+        "n": 1,
+        "median_ms": 280.38279101019725,
+        "min_ms": 280.38279101019725,
+        "max_ms": 280.38279101019725,
+        "samples_ms": [
+          280.38279101019725
+        ]
+      },
+      "candidate": {
+        "n": 1,
+        "median_ms": 27.38237497396767,
+        "min_ms": 27.38237497396767,
+        "max_ms": 27.38237497396767,
+        "samples_ms": [
+          27.38237497396767
+        ]
+      },
+      "preserved_sha256": "c42eb9142b4162829405b20803ca50192370f2c95efc6d5887a1ced5aed638ff",
+      "baseline_response_sha256": "8c6e4612b57411cd96956568c4a416e2b4c071233fbf427cc44d23877c0f753b",
+      "candidate_response_sha256": "14429ed60cfc40661a70bf1c63cf916ade14f192e8f1523cedb204b179ee7528"
+    },
+    {
+      "case": "Semaglutide/reference/mol",
+      "baseline": {
+        "n": 1,
+        "median_ms": 783.316167013254,
+        "min_ms": 783.316167013254,
+        "max_ms": 783.316167013254,
+        "samples_ms": [
+          783.316167013254
+        ]
+      },
+      "candidate": {
+        "n": 1,
+        "median_ms": 27.534249995369464,
+        "min_ms": 27.534249995369464,
+        "max_ms": 27.534249995369464,
+        "samples_ms": [
+          27.534249995369464
+        ]
+      },
+      "preserved_sha256": "da9c54264407c8fcd73f7046829deaa765994bc44e31e1fedafad3dda0cee1d1",
+      "baseline_response_sha256": "dcce8dbfd1794c30497fb7f855454c8d757b028186b6b00eb5951bbe85024cd4",
+      "candidate_response_sha256": "42372431d9bead684a030edd6a3a6323a37d7058289c229bfe75d04824d555f6"
+    },
+    {
+      "case": "Semaglutide/verify/exact",
+      "baseline": {
+        "n": 3,
+        "median_ms": 30.089000007137656,
+        "min_ms": 29.84566701343283,
+        "max_ms": 38.83325000060722,
+        "samples_ms": [
+          30.089000007137656,
+          29.84566701343283,
+          38.83325000060722
+        ]
+      },
+      "candidate": {
+        "n": 3,
+        "median_ms": 28.02283299388364,
+        "min_ms": 27.17912499792874,
+        "max_ms": 28.65999995265156,
+        "samples_ms": [
+          28.65999995265156,
+          27.17912499792874,
+          28.02283299388364
+        ]
+      },
+      "preserved_sha256": "63219512aa7180a5658174f5eac03293dede3bf8b13d08b6932f7656f34d7e41",
+      "baseline_response_sha256": "1e9895e6fbd3947aa09fb32dd49ede5edb779bb46389ecd73d5719fd336f3d84",
+      "candidate_response_sha256": "1e9895e6fbd3947aa09fb32dd49ede5edb779bb46389ecd73d5719fd336f3d84"
+    },
+    {
+      "case": "Semaglutide/verify/unspecified",
+      "baseline": {
+        "n": 1,
+        "median_ms": 30.276125005912036,
+        "min_ms": 30.276125005912036,
+        "max_ms": 30.276125005912036,
+        "samples_ms": [
+          30.276125005912036
+        ]
+      },
+      "candidate": {
+        "n": 1,
+        "median_ms": 28.765916998963803,
+        "min_ms": 28.765916998963803,
+        "max_ms": 28.765916998963803,
+        "samples_ms": [
+          28.765916998963803
+        ]
+      },
+      "preserved_sha256": "092e4c26901752f112598905d3061b8ed483f20d0e4e5dc01f9835cecc14842f",
+      "baseline_response_sha256": "2b6126ee03ed55e184ab6499a891d79b6e127558c9fcfa518b38eea651335944",
+      "candidate_response_sha256": "2b6126ee03ed55e184ab6499a891d79b6e127558c9fcfa518b38eea651335944"
+    },
+    {
+      "case": "Semaglutide/verify/mismatch",
+      "baseline": {
+        "n": 1,
+        "median_ms": 30.37241700803861,
+        "min_ms": 30.37241700803861,
+        "max_ms": 30.37241700803861,
+        "samples_ms": [
+          30.37241700803861
+        ]
+      },
+      "candidate": {
+        "n": 1,
+        "median_ms": 27.602417045272887,
+        "min_ms": 27.602417045272887,
+        "max_ms": 27.602417045272887,
+        "samples_ms": [
+          27.602417045272887
+        ]
+      },
+      "preserved_sha256": "bb82927035d1c4f2e2de636e0ab0113c50ebb64b4e0efaadc3888d7e62f5d32f",
+      "baseline_response_sha256": "34a1cff822dc4cf22c04b5a6506576ff0c976a24e3418ba7207622b9f5c6d956",
+      "candidate_response_sha256": "34a1cff822dc4cf22c04b5a6506576ff0c976a24e3418ba7207622b9f5c6d956"
+    }
+  ],
+  "preservation": {
+    "compared_responses": 42,
+    "identical_error_and_detection_responses": 7,
+    "errors_sha256": "ce5fcf7f716e82da979a50c16cc854557a24e3f01b9c7c537ddcb85b26db91d0",
+    "compared": "All nonvisual response metadata plus exported MOL canonical isomeric SMILES and ordered atom/bond signatures. SVG geometry and MOL coordinates intentionally change."
+  },
+  "prototype_quality": {
+    "method": "Twenty cases include all fourteen built-in examples. These are engine-selection experiments using the final mapped-SMILES transport, before the application integration. Quality is measured after normalization and straightening at 960x680, not the raw CoordGen search score.",
+    "cases": {
+      "Semaglutide": {
+        "quality": {
+          "nonbonded_atom_overlaps": 0,
+          "bond_crossings": 0,
+          "median_bond_px": 11.107172049917391,
+          "min_bond_px": 11.106370937271208,
+          "bbox_width_px": 727.8071053784779,
+          "bbox_height_px": 444.28055776387225,
+          "bbox_aspect": 1.6381700541694542,
+          "font_px": 5.0,
+          "finite_coordinates": true,
+          "is_2d": true
+        },
+        "ordered_graph_ownership_equal": true,
+        "smiles_equal": true,
+        "molblock_stereo_charge_isotope_equal": true
+      },
+      "Liraglutide": {
+        "quality": {
+          "nonbonded_atom_overlaps": 0,
+          "bond_crossings": 0,
+          "median_bond_px": 10.980330295635818,
+          "min_bond_px": 10.97945708599184,
+          "bbox_width_px": 729.0,
+          "bbox_height_px": 263.5222922121403,
+          "bbox_aspect": 2.7663693795329527,
+          "font_px": 5.0,
+          "finite_coordinates": true,
+          "is_2d": true
+        },
+        "ordered_graph_ownership_equal": true,
+        "smiles_equal": true,
+        "molblock_stereo_charge_isotope_equal": true
+      },
+      "Tirzepatide": {
+        "quality": {
+          "nonbonded_atom_overlaps": 0,
+          "bond_crossings": 0,
+          "median_bond_px": 10.394171572616873,
+          "min_bond_px": 10.393507831598797,
+          "bbox_width_px": 722.7486419057087,
+          "bbox_height_px": 514.5115546308011,
+          "bbox_aspect": 1.4047277177756146,
+          "font_px": 5.0,
+          "finite_coordinates": true,
+          "is_2d": true
+        },
+        "ordered_graph_ownership_equal": true,
+        "smiles_equal": true,
+        "molblock_stereo_charge_isotope_equal": true
+      },
+      "Retatrutide": {
+        "quality": {
+          "nonbonded_atom_overlaps": 0,
+          "bond_crossings": 0,
+          "median_bond_px": 8.491604464805313,
+          "min_bond_px": 8.490755304358892,
+          "bbox_width_px": 725.640041945366,
+          "bbox_height_px": 305.69930064933146,
+          "bbox_aspect": 2.373705273136198,
+          "font_px": 5.0,
+          "finite_coordinates": true,
+          "is_2d": true
+        },
+        "ordered_graph_ownership_equal": true,
+        "smiles_equal": true,
+        "molblock_stereo_charge_isotope_equal": true
+      },
+      "Exenatide": {
+        "quality": {
+          "nonbonded_atom_overlaps": 0,
+          "bond_crossings": 0,
+          "median_bond_px": 10.821448130903363,
+          "min_bond_px": 10.82075710526947,
+          "bbox_width_px": 727.837776470741,
+          "bbox_height_px": 337.30601620045854,
+          "bbox_aspect": 2.157796604606638,
+          "font_px": 5.0,
+          "finite_coordinates": true,
+          "is_2d": true
+        },
+        "ordered_graph_ownership_equal": true,
+        "smiles_equal": true,
+        "molblock_stereo_charge_isotope_equal": true
+      },
+      "Lixisenatide": {
+        "quality": {
+          "nonbonded_atom_overlaps": 0,
+          "bond_crossings": 0,
+          "median_bond_px": 10.586954429474002,
+          "min_bond_px": 10.586332156617493,
+          "bbox_width_px": 712.0698524360619,
+          "bbox_height_px": 513.0017592744714,
+          "bbox_aspect": 1.3880456344694192,
+          "font_px": 5.0,
+          "finite_coordinates": true,
+          "is_2d": true
+        },
+        "ordered_graph_ownership_equal": true,
+        "smiles_equal": true,
+        "molblock_stereo_charge_isotope_equal": true
+      },
+      "TBMB Bicycle \u2014 minimal": {
+        "quality": {
+          "nonbonded_atom_overlaps": 0,
+          "bond_crossings": 0,
+          "median_bond_px": 50.923087613504585,
+          "min_bond_px": 50.91882897221545,
+          "bbox_width_px": 641.0912797459767,
+          "bbox_height_px": 515.9310404067483,
+          "bbox_aspect": 1.2425910238712425,
+          "font_px": 20.369282913272915,
+          "finite_coordinates": true,
+          "is_2d": true
+        },
+        "ordered_graph_ownership_equal": true,
+        "smiles_equal": true,
+        "molblock_stereo_charge_isotope_equal": true
+      },
+      "TBMB Bicycle \u2014 asymmetric loops": {
+        "quality": {
+          "nonbonded_atom_overlaps": 0,
+          "bond_crossings": 0,
+          "median_bond_px": 36.616425769965915,
+          "min_bond_px": 36.61246915622774,
+          "bbox_width_px": 593.9335386619246,
+          "bbox_height_px": 500.38676557575366,
+          "bbox_aspect": 1.1869489353471097,
+          "font_px": 14.646561373589384,
+          "finite_coordinates": true,
+          "is_2d": true
+        },
+        "ordered_graph_ownership_equal": true,
+        "smiles_equal": true,
+        "molblock_stereo_charge_isotope_equal": true
+      },
+      "Head-to-tail cyclic with lipid": {
+        "quality": {
+          "nonbonded_atom_overlaps": 0,
+          "bond_crossings": 0,
+          "median_bond_px": 19.501671661506798,
+          "min_bond_px": 19.50127605849689,
+          "bbox_width_px": 723.9295167418408,
+          "bbox_height_px": 136.612031066302,
+          "bbox_aspect": 5.299163705358393,
+          "font_px": 7.800743474091352,
+          "finite_coordinates": true,
+          "is_2d": true
+        },
+        "ordered_graph_ownership_equal": true,
+        "smiles_equal": true,
+        "molblock_stereo_charge_isotope_equal": true
+      },
+      "Head-to-tail cyclic": {
+        "quality": {
+          "nonbonded_atom_overlaps": 0,
+          "bond_crossings": 0,
+          "median_bond_px": 49.29970354255777,
+          "min_bond_px": 49.2952488665839,
+          "bbox_width_px": 587.4277034780821,
+          "bbox_height_px": 508.7233637571185,
+          "bbox_aspect": 1.1547095048666562,
+          "font_px": 19.719881417023114,
+          "finite_coordinates": true,
+          "is_2d": true
+        },
+        "ordered_graph_ownership_equal": true,
+        "smiles_equal": true,
+        "molblock_stereo_charge_isotope_equal": true
+      },
+      "Dual-lipid backbone": {
+        "quality": {
+          "nonbonded_atom_overlaps": 0,
+          "bond_crossings": 0,
+          "median_bond_px": 13.2981659756852,
+          "min_bond_px": 13.297873412815402,
+          "bbox_width_px": 725.5424768463218,
+          "bbox_height_px": 425.542683613018,
+          "bbox_aspect": 1.704981673486176,
+          "font_px": 7.000000000000001,
+          "finite_coordinates": true,
+          "is_2d": true
+        },
+        "ordered_graph_ownership_equal": true,
+        "smiles_equal": true,
+        "molblock_stereo_charge_isotope_equal": true
+      },
+      "AEEA PEG spacer": {
+        "quality": {
+          "nonbonded_atom_overlaps": 0,
+          "bond_crossings": 0,
+          "median_bond_px": 31.430847372680564,
+          "min_bond_px": 31.430847372680326,
+          "bbox_width_px": 707.7340075198142,
+          "bbox_height_px": 188.5898381161413,
+          "bbox_aspect": 3.7527685191816262,
+          "font_px": 12.572615549656929,
+          "finite_coordinates": true,
+          "is_2d": true
+        },
+        "ordered_graph_ownership_equal": true,
+        "smiles_equal": true,
+        "molblock_stereo_charge_isotope_equal": true
+      },
+      "RGD pendant arm": {
+        "quality": {
+          "nonbonded_atom_overlaps": 0,
+          "bond_crossings": 0,
+          "median_bond_px": 50.68811027660153,
+          "min_bond_px": 50.68699512590864,
+          "bbox_width_px": 702.3543884510764,
+          "bbox_height_px": 456.1939820252218,
+          "bbox_aspect": 1.5395959090320595,
+          "font_px": 20.27524411064063,
+          "finite_coordinates": true,
+          "is_2d": true
+        },
+        "ordered_graph_ownership_equal": true,
+        "smiles_equal": true,
+        "molblock_stereo_charge_isotope_equal": true
+      },
+      "Dual-E isopeptide scaffold": {
+        "quality": {
+          "nonbonded_atom_overlaps": 0,
+          "bond_crossings": 0,
+          "median_bond_px": 39.519683310645746,
+          "min_bond_px": 39.5188138680489,
+          "bbox_width_px": 718.7248823392321,
+          "bbox_height_px": 355.6801190758912,
+          "bbox_aspect": 2.0207058078100744,
+          "font_px": 15.80787332425834,
+          "finite_coordinates": true,
+          "is_2d": true
+        },
+        "ordered_graph_ownership_equal": true,
+        "smiles_equal": true,
+        "molblock_stereo_charge_isotope_equal": true
+      },
+      "Nested sibling branch": {
+        "quality": {
+          "nonbonded_atom_overlaps": 0,
+          "bond_crossings": 0,
+          "median_bond_px": 51.982691484565485,
+          "min_bond_px": 51.981547852772565,
+          "bbox_width_px": 720.2928538948112,
+          "bbox_height_px": 311.8965382376902,
+          "bbox_aspect": 2.30939675690113,
+          "font_px": 20.793076593826203,
+          "finite_coordinates": true,
+          "is_2d": true
+        },
+        "ordered_graph_ownership_equal": true,
+        "smiles_equal": true,
+        "molblock_stereo_charge_isotope_equal": true
+      },
+      "DeltaAbu defined alkene": {
+        "quality": {
+          "nonbonded_atom_overlaps": 0,
+          "bond_crossings": 0,
+          "median_bond_px": 176.32463308938378,
+          "min_bond_px": 176.32463308938375,
+          "bbox_width_px": 610.8154050472679,
+          "bbox_height_px": 440.81352232998245,
+          "bbox_aspect": 1.3856548724247757,
+          "font_px": 40.0,
+          "finite_coordinates": true,
+          "is_2d": true
+        },
+        "ordered_graph_ownership_equal": true,
+        "smiles_equal": true,
+        "molblock_stereo_charge_isotope_equal": true
+      },
+      "Two centers plus E and Z": {
+        "quality": {
+          "nonbonded_atom_overlaps": 0,
+          "bond_crossings": 0,
+          "median_bond_px": 51.47504699879619,
+          "min_bond_px": 51.47504699879593,
+          "bbox_width_px": 727.0696347728248,
+          "bbox_height_px": 276.22819213635563,
+          "bbox_aspect": 2.632134066945341,
+          "font_px": 20.59047179488096,
+          "finite_coordinates": true,
+          "is_2d": true
+        },
+        "ordered_graph_ownership_equal": true,
+        "smiles_equal": true,
+        "molblock_stereo_charge_isotope_equal": true
+      },
+      "Charged isotope glycine": {
+        "quality": {
+          "nonbonded_atom_overlaps": 0,
+          "bond_crossings": 0,
+          "median_bond_px": 222.72800193795172,
+          "min_bond_px": 222.72555187602856,
+          "bbox_width_px": 578.6747633362446,
+          "bbox_height_px": 334.0977978951189,
+          "bbox_aspect": 1.7320520128597319,
+          "font_px": 40.0,
+          "finite_coordinates": true,
+          "is_2d": true
+        },
+        "ordered_graph_ownership_equal": true,
+        "smiles_equal": true,
+        "molblock_stereo_charge_isotope_equal": true
+      },
+      "Absolute stereo group": {
+        "quality": {
+          "nonbonded_atom_overlaps": 0,
+          "bond_crossings": 0,
+          "median_bond_px": 129.499211755207,
+          "min_bond_px": 129.4963627412089,
+          "bbox_width_px": 672.9038041203042,
+          "bbox_height_px": 323.7488705178057,
+          "bbox_aspect": 2.078474599908436,
+          "font_px": 40.0,
+          "finite_coordinates": true,
+          "is_2d": true
+        },
+        "ordered_graph_ownership_equal": true,
+        "smiles_equal": true,
+        "molblock_stereo_charge_isotope_equal": true
+      },
+      "Glycine and sodium": {
+        "quality": {
+          "nonbonded_atom_overlaps": 0,
+          "bond_crossings": 0,
+          "median_bond_px": 129.10212213214925,
+          "min_bond_px": 129.10070197756218,
+          "bbox_width_px": 593.6320095653984,
+          "bbox_height_px": 193.65706613233917,
+          "bbox_aspect": 3.0653774810351044,
+          "font_px": 40.0,
+          "finite_coordinates": true,
+          "is_2d": true
+        },
+        "ordered_graph_ownership_equal": true,
+        "smiles_equal": true,
+        "molblock_stereo_charge_isotope_equal": true
+      }
+    }
+  },
+  "diagnostic": {
+    "source_file": "src/pyPept/web/drawing.py",
+    "case": "Semaglutide",
+    "samples_ms": [
+      100.41216696845368,
+      55.3126250160858,
+      56.363374984357506
+    ],
+    "median_ms": 56.363374984357506,
+    "diagnostic_budget_ms": 100,
+    "passes": true
+  },
+  "limitations": [
+    "Explicit alternate CoordGen remains expensive for long peptides. Its raw overlap score was 6 for both Semaglutide and Lixisenatide, becoming 0 only after normalization; no early-exit speedup is established for these cases.",
+    "The initial integrated candidate was slower because tuple(Point3D) iterated through a native IndexError per atom. Direct x/y/z access preserved identical coordinates and SVG while removing this overhead.",
+    "Host load affected wall times. The earlier candidate capture had slower default timings and a slower explicit Semaglutide seed2 than the final capture; its samples are retained here. The zero-score shortcut does not skip these long-peptide baselines. No long-peptide early-exit speedup or production latency claim is made."
+  ],
+  "earlier_candidate_capture": {
+    "note": "Same final layout adapter before the display-H ownership fix. No claim that the ownership change caused the difference; unrelated machine load varied.",
+    "drawing_sha256": "170b0d0ab2a4bfd3fd0a58df6108e63627652e7fbc40a5026ce2febadeef0d33",
+    "timings": {
+      "Semaglutide/render/default": {
+        "n": 3,
+        "median_ms": 92.08933298941702,
+        "min_ms": 64.30879095569253,
+        "max_ms": 137.1011250303127,
+        "samples_ms": [
+          64.30879095569253,
+          137.1011250303127,
+          92.08933298941702
+        ]
+      },
+      "Lixisenatide/render/default": {
+        "n": 3,
+        "median_ms": 136.11920800758526,
+        "min_ms": 114.71283400896937,
+        "max_ms": 239.63487503351644,
+        "samples_ms": [
+          239.63487503351644,
+          136.11920800758526,
+          114.71283400896937
+        ]
+      },
+      "Semaglutide/reference/auto": {
+        "n": 3,
+        "median_ms": 130.06641599349678,
+        "min_ms": 95.59120802441612,
+        "max_ms": 197.2696669981815,
+        "samples_ms": [
+          197.2696669981815,
+          130.06641599349678,
+          95.59120802441612
+        ]
+      },
+      "Semaglutide/render/seed=2": {
+        "n": 3,
+        "median_ms": 7549.215541977901,
+        "min_ms": 6309.175874979701,
+        "max_ms": 8543.795541045256,
+        "samples_ms": [
+          6309.175874979701,
+          7549.215541977901,
+          8543.795541045256
+        ]
+      }
+    }
+  },
+  "browser_preservation": {
+    "source_drawing_sha256": "52a76723aca5717cb503000e27efa867b102b1ed378f2f0b7d199838ca6c3995",
+    "counts": {
+      "examples": 14,
+      "tabs": 367,
+      "atom_path_style_checks": 290750,
+      "atom_or_membership_failures": [],
+      "unowned_annotations": [],
+      "residues": 312,
+      "atoms": 2345,
+      "nitrogen_atoms": 363,
+      "nh2_atoms": 51,
+      "nitrogen_glyph_paths": 758,
+      "tagged_paths": 7893,
+      "cip_annotation_paths": 759,
+      "unowned_cip_annotation_paths": 0,
+      "tab_types": {
+        "residue": 312,
+        "whole-branch": 13,
+        "branch-open": 11,
+        "branch-close": 11,
+        "segment": 4,
+        "crosslink": 16
+      }
+    },
+    "independent_exported_molecules": 23,
+    "unchanged_example_geometries_after_display_h_fix": 14,
+    "notation_controls": 4,
+    "reroll_seeds": [
+      0,
+      2,
+      3
+    ],
+    "method": "Actual Playwright browser. Painted glyph membership is checked against pre-fix native SVG glyphs and a separately prepared RDKit graph, including added display hydrogens. MOL downloads are parsed independently. Before-fix controls showed H labels dimmed at opacity0.12 while their bonds lit; both labels light after the fix. A standalone fixture index mismatch was corrected against its own retained red artifact before the final passing audit.",
+    "existing_browser_tests": 57,
+    "source_unchanged": true
+  }
+}

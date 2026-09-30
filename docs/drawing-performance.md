@@ -1,8 +1,20 @@
 # Drawing and notation conversion performance
 
 Web rendering assembles the molecule without calculating a preliminary layout.
-The drawing routine supplies the final coordinates. Structure verification
-assembles without coordinates because its comparison uses molecular structure.
+The default drawing uses Indigo through a detached, atom-mapped isomeric SMILES.
+The returned structure must preserve the mapped graph and stereochemistry, and
+provide a complete atom correspondence and valid two-dimensional coordinates.
+Only those coordinates are copied to the original molecule; its atoms, bonds,
+properties and monomer ownership remain authoritative. Unsupported structures
+and failed validation use the existing CoordGen renderer.
+
+Explicit odd layout seeds retain Indigo and even seeds retain the CoordGen
+search. The first GUI reroll selects seed 2, so it changes engines from the new
+default. The CoordGen search stops when it reaches zero atom overlaps: its
+nonnegative score cannot improve further, and equal scores never replace the
+current winner.
+
+Structure verification assembles without coordinates because its comparison uses molecular structure.
 Reference format detection keeps its existing precedence and validates assembly;
 the web caller opts out of its preliminary layout. Other callers retain the
 existing depiction default.
@@ -15,9 +27,9 @@ results. History records the exact text entered before an immediate conversion.
 Undo's ordinary renderer can subsequently normalize legacy spelling. Normalization
 by an already active drawing keeps its existing history behavior.
 
-## Measurements
+## Removal of duplicate work, 30 September 2026
 
-The baseline is `6c4ed23`. These are small local samples from 30 September 2026,
+These measurements compare `6c4ed23` with `9d2d946`. They are small local samples from 30 September 2026,
 using an Apple M4 Pro, Python 3.11.15 and RDKit 2026.03.6. Independent baseline and
 candidate processes use the same inputs and environment. Render misses clear the
 existing cache; identical request hits are measured separately.
@@ -65,9 +77,9 @@ coordinates then reduced the combined result to 668 ms.
 distinguish backend calculations from browser event-to-paint measurements.
 Local timings exclude hosted cold starts and network latency.
 
-## Preservation checks
+## Preservation of the duplicate-work changes
 
-All 42 compared request responses are identical across revisions. The comparison
+All 42 compared request responses are identical between `6c4ed23` and `9d2d946`. The comparison
 includes every built-in example at the default layout, five representative
 peptides at both alternate layout seeds, explicit and automatic reference
 formats, and exact, unspecified-stereo and mismatching verification cases.
@@ -86,11 +98,49 @@ Notation conversion retains occurrence, connection, monomer-definition and
 assembled-structure checks. Library bindings, recognition and ingestion are
 unchanged. No additional cache or runtime dependency is introduced.
 
+## Faster default layout, 1 October 2026
+
+The guarded Indigo default substantially reduces drawing time relative to
+`9d2d946`. The same local HTTP capture clears the render cache before each call.
+These are medians of three samples per revision on the machine described above.
+
+| Operation | Previous default | Guarded Indigo default |
+| --- | ---: | ---: |
+| Semaglutide drawing | 729 ms | 56 ms |
+| Lixisenatide drawing | 636 ms | 75 ms |
+| Semaglutide reference, automatic format detection | 771 ms | 52 ms |
+
+The machine had other active jobs; sample ranges and an earlier candidate capture are retained in the
+[measurement record](../tools/benchmarks/results/fast-layout-20261001.json).
+These local figures exclude network latency and hosted cold starts.
+
+All 42 compared responses retain their nonvisual metadata and exported molecular
+structure, including atom order, bond order and stereochemistry. Seven detection
+and error cases also match. Drawing geometry changes. The engine-selection
+experiment covered all fourteen examples and six additional chemical structures;
+all twenty retained chemistry and ownership, with finite 2D coordinates and no
+measured atom overlaps or bond crossings after normalization.
+
+An initial integration spent most of its time converting native coordinate
+objects into tuples. Reading their `x`, `y` and `z` fields directly avoids a
+native exception at the end of each iteration. The control produced identical
+coordinates and SVG output. All map, chemistry and coordinate checks remain.
+
+RDKit can add display-only hydrogens while preparing a drawing. These glyphs
+inherit the original neighboring atom's SVG identity, so residue highlighting
+includes them. Existing explicit hydrogens keep their own identity. Preparation
+uses a separate drawing molecule; exported atoms and residue maps do not change.
+The browser audit checks all 367 tabs across the fourteen examples, including
+51 NH₂ groups, 759 stereo glyphs and both previously dim display hydrogens.
+
 ## Remaining costs
 
-The alternate CoordGen layout still evaluates six candidates. The default long
-peptide layout still needs its final coordinate calculation. Superseding an
-active drawing still retires its process worker; an isolated 200-G cancellation
+The alternate CoordGen layout can evaluate six additional candidates when its
+initial drawing has overlaps. Semaglutide and Lixisenatide have nonzero raw
+overlap scores, so the zero-score shortcut does not skip their initial search.
+The local samples do not establish faster long-peptide CoordGen rerolls.
+Every uncached drawing still needs its final coordinate calculation.
+Superseding an active drawing still retires its process worker; an isolated 200-G cancellation
 control needed about 3.25 seconds for replacement and admission retries.
 
 Equivalent notation can change atom order, residue maps and the resulting SVG.

@@ -269,7 +269,7 @@ test('canvas toggles, zoom, pan, reset, reroll and downloads remain usable', asy
   await expect(page.locator('#render-inner')).toHaveCSS('transform', /40, 30/);
   await canvas.dblclick({ position: { x: 15, y: 15 } });
   await expect(page.locator('#render-inner')).toHaveCSS('transform', 'matrix(1, 0, 0, 1, 0, 0)');
-  for (const [seed, label] of [[1, 'Indigo'], [2, 'CoordGen']]) {
+  for (const [seed, label] of [[2, 'CoordGen'], [3, 'Indigo']]) {
     const rendered = page.waitForResponse(response => isCompletedResponse(response) && new URL(response.url()).pathname === '/render');
     await page.locator('#btn-reroll').click();
     const response = await rendered;

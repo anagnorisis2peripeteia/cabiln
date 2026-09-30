@@ -1915,7 +1915,8 @@ btnToBranch.addEventListener('click', () => convertNotation('branch'));
 
 btnReroll.addEventListener('click', () => {
   if (!lastCabiln) return;
-  rerollSeed++;
+  // The default already uses Indigo; start with the alternate CoordGen layout.
+  rerollSeed = rerollSeed === 0 ? 2 : rerollSeed + 1;
   btnReroll.textContent = rerollSeed % 2 === 1 ? '⟳ Indigo' : '⟳ CoordGen';
   setMainProgress(true);
   doRenderCabiln(lastCabiln);
