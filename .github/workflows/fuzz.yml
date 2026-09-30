@@ -1,0 +1,141 @@
+name: Fuzzing
+
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: '23 3 * * *'
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: Campaign size
+        type: choice
+        options: [ci, deep]
+        default: ci
+      seed:
+        description: Optional signed 32-bit replay seed (use the recorded dependency versions)
+        type: string
+        required: false
+
+permissions:
+  contents: read
+
+env:
+  CABILN_FUZZ_PROFILE: ${{ github.event_name == 'schedule' && 'deep' || inputs.profile || 'ci' }}
+  CABILN_FUZZ_SEED: ${{ inputs.seed || '' }}
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ (github.event_name == 'schedule' || inputs.profile == 'deep') && 60 || 20 }}
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.9', '3.11', '3.13']
+    env:
+      CABILN_FUZZ_ARTIFACTS: ${{ github.workspace }}/.fuzz-artifacts/python
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: |
+            pyproject.toml
+            requirements*.txt
+      - name: Install development and web dependencies
+        run: python -m pip install -e '.[dev,web]'
+      - uses: actions/cache@v4
+        with:
+          path: ${{ env.CABILN_FUZZ_ARTIFACTS }}/hypothesis
+          key: fuzz-${{ runner.os }}-py${{ matrix.python-version }}-${{ hashFiles('requirements-dev.txt') }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            fuzz-${{ runner.os }}-py${{ matrix.python-version }}-${{ hashFiles('requirements-dev.txt') }}-
+      - name: Generate, check and shrink notation, chemistry and library cases
+        shell: bash
+        run: |
+          mkdir -p "$CABILN_FUZZ_ARTIFACTS"
+          limit=300
+          if [[ "$CABILN_FUZZ_PROFILE" == deep ]]; then limit=1200; fi
+          replay=()
+          if [[ -n "$CABILN_FUZZ_SEED" ]]; then replay+=(--hypothesis-seed="$CABILN_FUZZ_SEED"); fi
+          python -m pytest -m fuzz -v --hypothesis-show-statistics \
+            --timeout="$limit" --timeout-method=thread \
+            --junitxml="$CABILN_FUZZ_ARTIFACTS/results.xml" "${replay[@]}" \
+            2>&1 | tee "$CABILN_FUZZ_ARTIFACTS/pytest.log"
+      - name: Preserve reduced failures, coverage observations and replay context
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-python-${{ matrix.python-version }}
+          path: ${{ env.CABILN_FUZZ_ARTIFACTS }}
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 14
+
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CABILN_FUZZ_ARTIFACTS: ${{ github.workspace }}/.fuzz-artifacts/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: tests/browser/package-lock.json
+      - run: npm ci --prefix tests/browser
+      - name: Generate and shrink UI histories and request completion orders
+        run: npm run fuzz:frontend --prefix tests/browser
+      - name: Preserve command histories, seeds and replay paths
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-frontend
+          path: ${{ env.CABILN_FUZZ_ARTIFACTS }}
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 14
+
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ (github.event_name == 'schedule' || inputs.profile == 'deep') && 60 || 20 }}
+    env:
+      CABILN_FUZZ_ARTIFACTS: ${{ github.workspace }}/.fuzz-artifacts/browser
+      CABILN_BROWSER_ARTIFACTS: ${{ github.workspace }}/.fuzz-artifacts/browser/playwright
+      CABILN_BROWSER_INSTALLED: '1'
+      CABILN_PYTHON: python
+      CABILN_EXECUTION: process
+      CABILN_WORKER_MEMORY_MB: '1024'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11.15'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: tests/browser/package-lock.json
+      - name: Install application with frozen production dependencies
+        run: |
+          python -m pip install --only-binary=:all: -r requirements-production.txt
+          python -m pip install --no-deps .
+          python -m pip check
+          npm ci --prefix tests/browser
+      - name: Install Chromium
+        working-directory: tests/browser
+        run: npx playwright install --with-deps chromium
+      - name: Generate builder interactions against an isolated monomer library
+        working-directory: tests/browser
+        run: npm run fuzz:browser
+      - name: Preserve browser traces and reduced histories
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-browser
+          path: ${{ env.CABILN_FUZZ_ARTIFACTS }}
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 14

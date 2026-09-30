@@ -1,12 +1,17 @@
 {
   "name": "cabiln-browser-acceptance",
   "private": true,
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "test": "playwright test",
-    "test:list": "playwright test --list"
+    "test:list": "playwright test --list",
+    "fuzz:frontend": "node --test ../test_frontend_fuzz.js",
+    "fuzz:browser": "playwright test --config fuzz.config.js"
   },
   "devDependencies": {
-    "@playwright/test": "1.63.0"
+    "@playwright/test": "1.63.0",
+    "fast-check": "4.10.2"
   }
 }

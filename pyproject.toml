@@ -51,7 +51,10 @@ web = {file = "requirements-web.txt"}
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = ["-ra", "--strict-markers"]
-markers = ["distribution: builds and installs the wheel in a clean environment"]
+markers = [
+    "distribution: builds and installs the wheel in a clean environment",
+    "fuzz: bounded generated cases with shrinking and replay artifacts",
+]
 
 [tool.black]
 target-version = ["py39"]

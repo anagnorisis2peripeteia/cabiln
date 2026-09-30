@@ -5,6 +5,7 @@ import os
 import sys
 
 import pytest
+from hypothesis import given, strategies as st
 from rdkit import Chem, RDLogger
 
 RDLogger.DisableLog('rdApp.*')
@@ -15,6 +16,164 @@ from pyPept.molecule import Molecule
 from pyPept.sequence import Sequence
 
 from _chemistry_oracles import _assert_same_monomer_partition
+from _chemistry_fuzz import alternate_smiles, isolated_library, reordered, write_library
+from _fuzzing import fuzz_settings, record
+
+
+def _assert_fuzz_source_partition(source, result):
+    """Check emitted ownership against independent source-to-product isomorphisms."""
+    molecule = Chem.MolFromSmiles(source)
+    assembly = Molecule(Sequence(result.cabiln), depiction=None)
+    rebuilt = assembly.get_molecule(fmt="ROMol")
+    assert Chem.MolToSmiles(rebuilt) == Chem.MolToSmiles(molecule)
+    owned = [atom for item in result.assignments for atom in item.source_atoms]
+    assert sorted(owned) == list(range(molecule.GetNumAtoms()))
+    groups = assembly.get_residue_atom_map()
+    matches = rebuilt.GetSubstructMatches(molecule, useChirality=True, uniquify=False, maxMatches=4096)
+    assert any(all(
+        {match[atom] for atom in item.source_atoms} == set(groups[item.residue_index])
+        for item in result.assignments
+    ) for match in matches)
+    for item in result.assignments:
+        assert all(atom in item.source_atoms for slot, atom in item.attachments)
+
+
+@pytest.mark.fuzz
+@fuzz_settings(examples=10)
+@given(glycines=st.integers(2, 3), length=st.integers(1, 3), aliases=st.integers(0, 2),
+       overlap=st.booleans(), order=st.integers(0, 65535), notation=st.sampled_from(("percent", "bracket")))
+def test_fuzz_known_unknown_partitions_survive_atom_library_and_alias_order(
+    glycines, length, aliases, overlap, order, notation
+):
+    from pyPept.interfaces.cli_monomer import register_monomer
+    from pyPept.recognition import RecognitionBudgets
+    from pyPept.smiles import convert_smiles
+
+    original = "NCC(=O)" * glycines + f"N[C@@H]({'C' * length}(F)(F)F)C(=O)N[C@@H](C)C(=O)O"
+    source = alternate_smiles(original, order)
+    record("recognition.known-unknown", source=source, aliases=aliases, overlap=overlap,
+           order=order, notation=notation)
+    with isolated_library(("G", "A")) as path:
+        records = list(Chem.SDMolSupplier(str(path), removeHs=False))
+        glycine = next(item for item in records if item.GetProp("m_abbr") == "G")
+        for index in range(aliases):
+            alias = Chem.Mol(glycine)
+            alias.SetProp("symbol", f"GlyAlias{index}")
+            alias.SetProp("m_abbr", f"GlyAlias{index}")
+            records.append(alias)
+        write_library(path, records)
+        if overlap:
+            register_monomer("NCC(=O)NCC(=O)O", "GlyPair")
+        records = list(Chem.SDMolSupplier(str(path), removeHs=False))
+        write_library(path, (reordered(item, order) for item in reversed(records)))
+        result = convert_smiles(source, notation=notation, budgets=RecognitionBudgets(max_states=5000))
+        assert result.recognition_status == "partial"
+        assert not result.inferred_stereo
+        _assert_fuzz_source_partition(source, result)
+        molecule = Chem.MolFromSmiles(source)
+        original_molecule = Chem.MolFromSmiles(original)
+        match = molecule.GetSubstructMatch(original_molecule, useChirality=True)
+        assert len(match) == molecule.GetNumAtoms()
+        expected_known = {match[index] for index in range(4 * glycines)} | set(match[-6:])
+        known = {atom for item in result.assignments if item.recognized for atom in item.source_atoms}
+        assert known == expected_known
+        assert sum(not item.recognized for item in result.assignments) == 1
+        assert any(item.recognized and item.symbol == "A" for item in result.assignments)
+        assert result.synthetic_components == (0,)
+
+
+@pytest.mark.fuzz
+@pytest.mark.parametrize("nitrogen,carbon", [("[NH3+]", "C"), ("N", "[13CH2]"), ("[NH3+]", "[13CH2]")])
+@fuzz_settings(examples=10)
+@given(order=st.integers(0, 65535), notation=st.sampled_from(("percent", "bracket")))
+def test_fuzz_charge_and_isotope_changes_are_preserved_and_not_claimed_as_glycine(
+    nitrogen, carbon, order, notation
+):
+    from pyPept.smiles import convert_smiles
+
+    source = alternate_smiles(f"{nitrogen}{carbon}C(=O)N[C@@H](C)C(=O)O", order)
+    record("recognition.charge-isotope", source=source, notation=notation)
+    with isolated_library(("G", "A")):
+        result = convert_smiles(source, notation=notation)
+        assert result.recognition_status == "partial"
+        _assert_fuzz_source_partition(source, result)
+        assert [item.symbol for item in result.assignments if item.recognized] == ["A"]
+        assert sum(not item.recognized for item in result.assignments) == 1
+
+
+@pytest.mark.fuzz
+@pytest.mark.parametrize("stereo", ("@", "@@", ""))
+@fuzz_settings(examples=10)
+@given(order=st.integers(0, 65535), allow_inference=st.booleans())
+def test_fuzz_stereo_inference_is_explicit_and_never_overrides_defined_source(
+    stereo, order, allow_inference
+):
+    from pyPept.recognition import RecognitionBudgets
+    from pyPept.smiles import convert_smiles
+
+    source = alternate_smiles(f"N[C{stereo}H](C)C(=O)O" if stereo else "NC(C)C(=O)O", order)
+    record("recognition.stereo-policy", source=source, allow_inference=allow_inference)
+    with isolated_library(("A",)):
+        result = convert_smiles(source, budgets=RecognitionBudgets(allow_unspecified_stereo=allow_inference))
+        inferred = not stereo and allow_inference
+        assert result.inferred_stereo is inferred
+        assert any("stereochemistry unspecified" in warning for warning in result.warnings) is inferred
+        known = stereo == "@@" or inferred
+        assert any(item.recognized for item in result.assignments) is known
+        if inferred:
+            assert Chem.MolToSmiles(Molecule(Sequence(result.cabiln), depiction=None).get_molecule(fmt="ROMol")) == Chem.MolToSmiles(Chem.MolFromSmiles("N[C@@H](C)C(=O)O"))
+        else:
+            _assert_fuzz_source_partition(source, result)
+
+
+@pytest.mark.fuzz
+@fuzz_settings(examples=10)
+@given(length=st.integers(2, 5), order=st.integers(0, 65535))
+def test_fuzz_exhausted_recognition_preserves_structure_without_claiming_completion(length, order):
+    from pyPept.recognition import RecognitionBudgets
+    from pyPept.smiles import convert_smiles
+
+    source = alternate_smiles("NCC(=O)" * length + "O", order)
+    record("recognition.budget", source=source, max_states=1)
+    with isolated_library(("G",)):
+        result = convert_smiles(source, budgets=RecognitionBudgets(max_states=1))
+        assert result.search_complete is False
+        assert any("limit" in warning.lower() or "budget" in warning.lower() for warning in result.warnings)
+        rebuilt = Molecule(Sequence(result.cabiln), depiction=None).get_molecule(fmt="ROMol")
+        assert Chem.MolToSmiles(rebuilt) == Chem.MolToSmiles(Chem.MolFromSmiles(source))
+
+
+@pytest.mark.fuzz
+@pytest.mark.parametrize("symbols,product", [
+    (("Ala_3Br", "C"), "N[C@@H](CSC[C@H](N)C(=O)O)C(=O)O"),
+    (("D_Ala_3Cl", "C"), "N[C@H](CSC[C@H](N)C(=O)O)C(=O)O"),
+    (("C", "C"), "N[C@@H](CSSC[C@H](N)C(=O)O)C(=O)O"),
+    (("Pra", "AzK"), "N[C@@H](Cc1cn(CCCC[C@H](N)C(=O)O)nn1)C(=O)O"),
+])
+@fuzz_settings(examples=10)
+@given(order=st.integers(0, 65535), alias=st.booleans(),
+       notation=st.sampled_from(("percent", "bracket")))
+def test_fuzz_non_amide_recognition_retains_editable_partitions(symbols, product, order, alias, notation):
+    from pyPept.smiles import convert_smiles
+
+    source = alternate_smiles(product, order)
+    record("recognition.non-amide", symbols=symbols, source=source, alias=alias, notation=notation)
+    with isolated_library(tuple(dict.fromkeys(symbols))) as path:
+        records = list(Chem.SDMolSupplier(str(path), removeHs=False))
+        if alias:
+            extra = Chem.Mol(records[0])
+            extra.SetProp("symbol", "ZZAlias")
+            extra.SetProp("m_abbr", "ZZAlias")
+            records.append(extra)
+        write_library(path, (reordered(item, order) for item in reversed(records)))
+        result = convert_smiles(source, notation=notation)
+        assert result.recognition_status == "complete"
+        assert len(result.assignments) == 2
+        assert all(item.recognized for item in result.assignments)
+        assert not result.synthetic_components
+        _assert_fuzz_source_partition(source, result)
+        _assert_same_monomer_partition(
+            f"{symbols[0]}.!bond(4,4)%{symbols[1]}.!bond(4,4)", result.cabiln)
 
 
 @pytest.mark.parametrize("template,leaving,diagnostic", [

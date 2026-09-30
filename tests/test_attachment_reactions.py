@@ -4,6 +4,7 @@ import os
 import sys
 
 import pytest
+from hypothesis import given, strategies as st
 from rdkit import Chem, RDLogger
 
 RDLogger.DisableLog('rdApp.*')
@@ -12,6 +13,84 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 
 from _chemistry_oracles import _romol
+from _chemistry_fuzz import reordered
+from _fuzzing import fuzz_settings, record
+
+
+# Independent molecular expectations. {tail} is a spectator substituent, never
+# generated from reaction SMARTS. Activated handles are explicitly supplied.
+_FUZZ_PRODUCTS = [
+    ("backbone_amide", "{tail}N[400*]", "[401*]C(=O)CC", "{tail}NC(=O)CC"),
+    ("sidechain_amide", "{tail}N[400*]", "[401*]C(=O)CC", "{tail}NC(=O)CC"),
+    ("isopeptide", "{tail}C(=O)[400*]", "[401*]NCC", "{tail}C(=O)NCC"),
+    ("aspartimide", "{tail}C(=O)[400*]", "[401*]N(C)C(=O)C", "{tail}C(=O)N(C)C(=O)C"),
+    ("hydroxylamine_cap", "{tail}O[400*]", "[401*]NCC", "{tail}ONCC"),
+    ("sulfonamide", "{tail}N[400*]", "[401*]S(=O)(=O)CC", "{tail}NS(=O)(=O)CC"),
+    ("backbone_ester", "{tail}O[400*]", "[401*]C(=O)CC", "{tail}OC(=O)CC"),
+    ("disulfide", "{tail}S[400*]", "[401*]SCC", "{tail}SSCC"),
+    ("diselenide", "{tail}[Se][400*]", "[401*][Se]CC", "{tail}[Se][Se]CC"),
+    ("thioester", "{tail}S[400*]", "[401*]C(=O)CC", "{tail}SC(=O)CC"),
+    ("thioester_sc", "{tail}S[400*]", "[401*]C(=O)CC", "{tail}SC(=O)CC"),
+    ("thioether_halide", "{tail}S[400*]", "[401*]CCC", "{tail}SCCC"),
+    ("thia_michael", "{tail}S[400*]", "[401*]CCC(=O)N", "{tail}SCCC(=O)N"),
+    ("thiol_maleimide", "{tail}S[400*]", "[401*]C1=CC(=O)NC1=O", "{tail}SC1CC(=O)NC1=O"),
+    ("nhs_ester_amide", "{tail}C([400*])C(=O)ON1C(=O)CCC1=O", "[401*]NCC", "{tail}CC(=O)NCC"),
+    ("oxime_ligation", "{tail}O[NH][400*]", "CC([401*])=O", "{tail}ON=CC"),
+    ("hydrazone", "{tail}N([400*])N", "CC([401*])=O", "{tail}NN=CC"),
+    ("cuaac_1_4_triazole", "{tail}C([400*])C#C", "CC([401*])N=[N+]=[N-]", "{tail}Cc1cn(CC)nn1"),
+    ("spaac_triazole", "{tail}C1([400*])C#CCCCCC1", "CC([401*])N=[N+]=[N-]", "{tail}C1c2nnn(CC)c2CCCCC1"),
+    ("iedda_tetrazine_tco", "{tail}C([400*])c1nncnn1", "C1CC([401*])C=CCCC1", "{tail}CC1N=NC=C2CCCCCCC12"),
+    ("phosphorylation", "{tail}O[400*]", "[401*]P(=O)(O)O", "{tail}OP(=O)(O)O"),
+    ("rcm_alkene", "{tail}C([400*])=C", "CCC([401*])=C", "{tail}C=CCC"),
+    ("imide_n_acylation", "{tail}N([400*])C(=O)C", "[401*]C(=O)CC", "{tail}N(C(=O)C)C(=O)CC"),
+    ("guanidine_n_acylation", "{tail}NC(N[400*])=N", "[401*]C(=O)CC", "{tail}NC(NC(=O)CC)=N"),
+    ("backbone_n_alkylation", "{tail}N([400*])C(=O)C", "[401*]CCC", "{tail}N(CCC)C(=O)C"),
+    ("macrolactam_amide", "{tail}N[400*]", "[401*]C(=O)CC", "{tail}NC(=O)CC"),
+    ("ester_sidechain_oh", "{tail}O[400*]", "[401*]C(=O)CC", "{tail}OC(=O)CC"),
+    ("n_alkylation_halide_backbone", "{tail}C[400*]", "[401*]NCC", "{tail}CNCC"),
+    ("n_o_bond", "{tail}N[400*]", "[401*]OCC", "{tail}NOCC"),
+    ("n_n_bond", "{tail}N[400*]", "[401*]NCC", "{tail}NNCC"),
+    ("aryl_c_c_bond", "{tail}C[400*]", "[401*]c1ccccc1", "{tail}Cc1ccccc1"),
+    ("aryl_amide_to_backbone_n", "{tail}c1ccc(C(=O)[400*])cc1", "[401*]NCC", "{tail}c1ccc(C(=O)NCC)cc1"),
+    ("reduced_amide", "{tail}N[400*]", "[401*]CCC", "{tail}NCCC"),
+    ("benzylamine_xlink", "{tail}c1ccc(C[400*])cc1", "[401*]NCC", "{tail}c1ccc(CNCC)cc1"),
+    ("aryl_ether", "{tail}c1ccc(O[400*])cc1", "[401*]C(C)(C)CC", "{tail}c1ccc(OC(C)(C)CC)cc1"),
+    ("aryl_o_alkylation", "{tail}c1ccc(O[400*])cc1", "[401*]CCC", "{tail}c1ccc(OCCC)cc1"),
+    ("aryl_ester", "{tail}c1ccc(O[400*])cc1", "[401*]C(=O)CC", "{tail}c1ccc(OC(=O)CC)cc1"),
+    ("diaryl_ether", "{tail}c1ccc(O[400*])cc1", "[401*]c1ccccc1", "{tail}c1ccc(Oc2ccccc2)cc1"),
+]
+
+
+@pytest.mark.fuzz
+@pytest.mark.parametrize("reaction_id,left,right,expected", _FUZZ_PRODUCTS,
+                         ids=[row[0] for row in _FUZZ_PRODUCTS])
+@fuzz_settings(examples=10)
+@given(tail=st.sampled_from(("C", "CCC", "[13CH3]", "[NH3+]C", "F[C@H](C)", "F[C@@H](C)")),
+       order=st.integers(0, 65535), port=st.integers(0, 100), reverse=st.booleans())
+def test_fuzz_reaction_products_preserve_spectators_and_target_only_selected_ports(
+    reaction_id, left, right, expected, tail, order, port, reverse
+):
+    from pyPept.interfaces.reaction_library import REACTIONS, run_bond_smirks
+
+    record("reaction." + reaction_id, tail=tail, order=order, port=port, reverse=reverse)
+    molecules = []
+    first, second = 400 + port, 800 + port
+    for source, old, new in ((left, 400, first), (right, 401, second)):
+        text = source.format(tail=tail).replace(f"[{old}*]", f"[{new}*]")
+        molecule = Chem.MolFromSmiles(text)
+        assert molecule is not None, text
+        molecules.append(reordered(molecule, order))
+    if reverse:
+        molecules.reverse()
+        first, second = second, first
+    product = run_bond_smirks(*molecules, first, second, REACTIONS[reaction_id], False)
+    literal = Chem.MolFromSmiles(expected.format(tail=tail))
+    assert literal is not None
+    assert Chem.MolToSmiles(product) == Chem.MolToSmiles(literal)
+    assert not any(atom.GetAtomicNum() == 0 for atom in product.GetAtoms())
+    # A requested port absent from the molecule must not silently use another.
+    with pytest.raises(ValueError, match="produced no products"):
+        run_bond_smirks(*molecules, first + 2000, second, REACTIONS[reaction_id], False)
 
 
 class TestSPAAC:

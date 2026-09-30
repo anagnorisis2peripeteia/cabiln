@@ -1,6 +1,7 @@
 """Input policies stay consistent across display, CLI and HTTP entry points."""
 
 import pytest
+from hypothesis import given, strategies as st
 from fastapi.testclient import TestClient
 from rdkit import Chem
 
@@ -10,9 +11,82 @@ from pyPept.sequence import Sequence
 from pyPept.show import show
 from pyPept.web.app import create_app
 
+from _chemistry_fuzz import alternate_smiles
+from _fuzzing import fuzz_settings, record
+
 
 def canonical(molecule):
     return Chem.MolToSmiles(molecule)
+
+
+@pytest.mark.fuzz
+@fuzz_settings()
+@given(
+    residues=st.lists(st.sampled_from("AGCSV"), min_size=2, max_size=5),
+    order=st.integers(min_value=0, max_value=65535),
+)
+def test_fuzz_supported_imports_agree_with_independent_linear_product(residues, order):
+    from pyPept.inputs import detect_input, read_input
+
+    # Literal amino-acid units, independent of library templates and reactions.
+    units = {"A": "N[C@@H](C)C(=O)", "G": "NCC(=O)",
+             "C": "N[C@@H](CS)C(=O)", "S": "N[C@@H](CO)C(=O)",
+             "V": "N[C@@H](C(C)C)C(=O)"}
+    source = "".join(units[residue] for residue in residues) + "O"
+    expected = canonical(Chem.MolFromSmiles(source))
+    inputs = {
+        "cabiln": "-".join(residues), "biln": "-".join(residues),
+        "fasta": "".join(residues),
+        "helm": "PEPTIDE1{" + ".".join(residues) + "}$$$$V2.0",
+        "smiles": alternate_smiles(source, order),
+    }
+    for kind, text in inputs.items():
+        record("input." + kind, text=text, order=order)
+        parsed = read_input(text, input_format=kind)
+        assert parsed.format == kind.upper()
+        assert canonical(parsed.assemble()) == expected
+        if kind in {"biln", "helm", "smiles"}:
+            # C-C is both a valid BILN dipeptide and a valid SMILES alkane.
+            # Auto/reference deliberately chooses SMILES; explicit format wins.
+            smiles = Chem.MolFromSmiles(text)
+            auto_expected = canonical(smiles) if smiles is not None else expected
+            assert canonical(detect_input(text).assemble()) == auto_expected
+
+
+@pytest.mark.fuzz
+@fuzz_settings(examples=20)
+@given(token=st.sampled_from(("C", "N")), label=st.integers(min_value=1, max_value=999))
+def test_fuzz_format_selection_and_legacy_slot_translation_are_explicit(token, label):
+    from pyPept.inputs import detect_input, read_input
+
+    record("input.precedence-and-legacy", token=token, label=label)
+    assert canonical(read_input(token, input_format="smiles").assemble()) == token
+    peptide = read_input(token, input_format="cabiln").assemble()
+    assert canonical(peptide) != token
+    assert canonical(detect_input(token, policy="display").assemble()) == canonical(peptide)
+    assert canonical(detect_input(token, policy="reference").assemble()) == token
+    legacy = read_input(f"C({label},3)-A-C({label},3)", input_format="biln")
+    modern = read_input(legacy.source, input_format="cabiln")
+    assert legacy.sequence.s_bonds == modern.sequence.s_bonds
+    assert [edge[4:] for edge in modern.sequence.s_bonds if edge[4:] == [4, 4]] == [[4, 4]]
+    with pytest.raises(ValueError, match="CABILN"):
+        Converter(biln=legacy.source)
+
+
+@pytest.mark.fuzz
+@fuzz_settings(examples=20)
+@given(polymer=st.sampled_from(("RNA", "CHEM")), number=st.integers(min_value=1, max_value=20))
+def test_fuzz_non_peptide_helm_and_extended_fasta_are_rejected(polymer, number):
+    from pyPept.inputs import read_input
+
+    record("input.unrepresentable", polymer=polymer, number=number)
+    with pytest.raises(ValueError):
+        read_input(f"{polymer}{number}{{A.G}}$$$$V2.0", input_format="helm")
+    # This entry point accepts plain one-letter sequences, not extended tokens.
+    with pytest.raises(ValueError):
+        read_input(f"[Custom{number}]", input_format="fasta")
+    with pytest.raises(ValueError, match="Invalid SMILES"):
+        read_input("A" * number, input_format="smiles")
 
 
 @pytest.mark.parametrize(

@@ -19,6 +19,8 @@ venv/
 
 # pytest
 .pytest_cache
+.hypothesis/
+.fuzz-artifacts/
 .coverage
 htmlcov/
 

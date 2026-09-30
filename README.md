@@ -193,7 +193,7 @@ See [deployment](docs/deployment.md) and the current
 
 ```bash
 python -m pip install -e '.[dev,web]'
-python -m pytest -m 'not distribution'
+python -m pytest -m 'not distribution and not fuzz'
 node --test tests/test_frontend.js
 python -m pytest tests/test_distribution.py
 ```
@@ -202,6 +202,38 @@ The distribution test builds an sdist and wheel, then installs them in a fresh
 environment outside the checkout. It needs package-index access. CI checks
 Python 3.9, 3.11, and 3.13. Historical repair scripts under `tools/` are not test
 entry points; some modify library files when run.
+
+Generated tests use Hypothesis for notation, chemistry and library changes, and
+fast-check for UI histories and browser interactions. Run the bounded campaign:
+
+```bash
+CABILN_FUZZ_ARTIFACTS=/tmp/cabiln-fuzz/python python -m pytest -m fuzz \
+  --hypothesis-show-statistics --timeout=300 --timeout-method=thread
+npm ci --prefix tests/browser
+CABILN_FUZZ_ARTIFACTS=/tmp/cabiln-fuzz/frontend npm run fuzz:frontend --prefix tests/browser
+# Install Chromium first: cd tests/browser && npx playwright install chromium
+CABILN_FUZZ_ARTIFACTS=/tmp/cabiln-fuzz/browser npm run fuzz:browser --prefix tests/browser
+```
+
+Set `CABILN_FUZZ_PROFILE=deep` for longer campaigns; use `--timeout=1200` for the
+Python run. CI runs bounded campaigns on pushes and pull requests, and the deep
+profile nightly. Browser servers and library changes use temporary local copies.
+These campaigns sample supported feature combinations; they do not exhaust the
+possible peptides or editing histories.
+
+Failures retain reduced inputs, seeds, dependency versions and replay information.
+Python artifacts include source/library hashes, Hypothesis's example database
+and reproduction decorator. Replay with the recorded versions and
+`--hypothesis-seed=<seed>`, or apply the reported reproduction decorator to the
+owning test. Select the recorded fast-check property with `CABILN_FUZZ_CASE`, then
+use `CABILN_FUZZ_SEED`, `CABILN_FUZZ_PATH` and, for command histories,
+`CABILN_FUZZ_REPLAY_PATH` to replay its failure. `CABILN_FUZZ_SCHEDULE` accepts the
+saved task order for exact replay of a frontend scheduling failure.
+Observation counters include shrinking and repeated examples; they do not count
+unique peptides. A watchdog termination preserves
+the latest eight Python observations in `active.json`, alongside the captured CI log.
+The [initial campaign record](tools/benchmarks/results/fuzz-20260930.json) documents
+generated cases, independent fault controls and coverage limits.
 
 The code layout and review findings are in [docs/architecture.md](docs/architecture.md)
 and [docs/cleanup-review.md](docs/cleanup-review.md). The latest editing, browser,

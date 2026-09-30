@@ -1,12 +1,16 @@
 """An unseen monomer must flow from detection through palette to assembly."""
 
 import pytest
+from hypothesis import given, strategies as st
 from fastapi.testclient import TestClient
 from rdkit import Chem
 
 from pyPept import monomer_store
 from pyPept.interfaces.cli_monomer import register_monomer
 from pyPept.web.app import create_app
+
+from _chemistry_fuzz import alternate_smiles, isolated_library, reordered, write_library
+from _fuzzing import fuzz_settings, record
 
 
 @pytest.fixture
@@ -154,3 +158,75 @@ def test_sdf_record_without_declared_types_is_discovered_and_detected(library_ap
         "rgroups"
     ]
     assert next(site for site in slots if site["slot"] == 4)["chem_type"] == "thiol"
+
+
+@pytest.mark.fuzz
+@fuzz_settings(examples=10)
+@given(length=st.integers(2, 4), stereo=st.sampled_from(("@", "@@")),
+       isotope=st.sampled_from(("", "13")), order=st.integers(0, 65535))
+def test_fuzz_registration_refreshes_consumers_and_preserves_selected_bindings(
+    length, stereo, isotope, order
+):
+    from pyPept.interfaces.monomer_pipeline import pre_activate
+    from pyPept.smiles import convert_smiles
+    from pyPept.web import projects
+
+    source = f"N[{isotope}C{stereo}H]({'C' * length}S)C(=O)O"
+    record("library.register-reorder-edit", source=source, order=order)
+
+    def save(text):
+        return projects.validate_project({
+            "format": "cabiln-project", "version": 1,
+            "document": {"text": text, "notation": "cabiln", "warning": ""},
+            "drafts": {}, "reference": {"text": "NCC(=O)O", "original": None},
+        }, preparing=True)
+
+    with isolated_library(("ac", "am", "G", "C")) as path:
+        with TestClient(create_app(allow_registration=True)) as client:
+            assert len(client.get("/monomers").json()) == 4
+            baseline = smiles_of_render(client, "ac-G-am")
+            assert convert_smiles("NCC(=O)O").recognition_status == "complete"
+            saved = save("ac-G-am")
+            preview = post(client, "/preview_monomer", {"smiles": alternate_smiles(source, order)})
+            assert preview["chem_types"]["4"] == "thiol"
+            post(client, "/register_monomer", {
+                **{key: preview[key] for key in ("chuckles", "chem_types", "leaving")},
+                "abbr": "Novel", "name": "Generated temporary thiol",
+            })
+            tile = next(item for item in client.get("/monomers").json() if item["abbr"] == "Novel")
+            assert "4:thiol" in tile["chem_types"]
+            slots = client.get("/monomer_rgroups", params={"abbr": "Novel"}).json()["rgroups"]
+            assert {site["slot"] for site in slots} == {1, 2, 3, 4}
+            assert next(site for site in slots if site["slot"] == 4)["chem_type"] == "thiol"
+            assert smiles_of_render(client, "Novel") == Chem.MolToSmiles(Chem.MolFromSmiles(source))
+            # Product expectation is independent of activation and assembly.
+            product = f"CC(=O)NCC(=O)N[{isotope}C{stereo}H]({'C' * length}S)C(=O)N"
+            assert smiles_of_render(client, "ac-G-Novel-am") == Chem.MolToSmiles(Chem.MolFromSmiles(product))
+            recognized = convert_smiles(alternate_smiles(source, order))
+            assert recognized.recognition_status == "complete"
+            assert len(recognized.assignments) == 1 and recognized.assignments[0].symbol == "Novel"
+            assert projects.validate_project(saved)["document"]["text"] == "ac-G-am"
+            selected = save("Novel")
+            records = list(Chem.SDMolSupplier(str(path), removeHs=False))
+            # Changing physical order and atom order must not change chemistry.
+            write_library(path, (reordered(molecule, order) for molecule in reversed(records)))
+            assert smiles_of_render(client, "ac-G-am") == baseline
+            assert projects.validate_project(selected)["document"]["text"] == "Novel"
+            assert convert_smiles(source).recognition_status == "complete"
+
+            edited_source = f"N[{isotope}C{stereo}H]({'C' * length}O)C(=O)O"
+            activated = pre_activate(edited_source)
+            replacement = monomer_store.monomer_record(
+                activated.chuckles, "Novel", activated.leaving, activated.chem_types)
+            write_library(path, (replacement if item.GetProp("m_abbr") == "Novel" else item for item in records))
+            with pytest.raises(projects.ProjectError, match="definitions differ"):
+                projects.validate_project(selected)
+            assert projects.validate_project(saved)["document"]["text"] == "ac-G-am"
+            assert smiles_of_render(client, "Novel") == Chem.MolToSmiles(Chem.MolFromSmiles(edited_source))
+            new_tile = next(item for item in client.get("/monomers").json() if item["abbr"] == "Novel")
+            assert "4:hydroxyl" in new_tile["chem_types"] and "thiol" not in new_tile["chem_types"]
+            updated = convert_smiles(edited_source)
+            assert updated.recognition_status == "complete"
+            assert updated.assignments[0].symbol == "Novel"
+            old = convert_smiles(source)
+            assert not any(item.recognized and item.symbol == "Novel" for item in old.assignments)

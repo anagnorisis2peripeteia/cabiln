@@ -7,7 +7,11 @@ import sys
 import tempfile
 
 import pytest
+from hypothesis import given, strategies as st
 from rdkit import Chem, RDLogger
+
+from _chemistry_fuzz import alternate_smiles
+from _fuzzing import fuzz_settings, record
 
 RDLogger.DisableLog('rdApp.*')
 
@@ -693,3 +697,55 @@ class TestMonomerPreActivate:
                      if atom.GetAtomicNum() == 0 and atom.GetIsotope() == 4)
         neighbor = dummy.GetNeighbors()[0]
         assert not neighbor.IsInRing(), "TCO dummy should be on exocyclic C"
+
+    @pytest.mark.fuzz
+    @pytest.mark.parametrize("tail,kind,element,leaving,activated_side", [
+        ("S", "thiol", 16, "[H]", "{chain}S[4*]"),
+        ("[SeH]", "selenol", 34, "[H]", "{chain}[Se][4*]"),
+        ("O", "hydroxyl", 8, "[H]", "{chain}O[4*]"),
+        ("N", "amine_primary", 7, "[H]", "{chain}N([4*])[5*]"),
+        ("Cl", "alkyl_halide_c", 6, "[Cl]", "{chain}[4*]"),
+        ("Br", "alkyl_halide_c", 6, "[Br]", "{chain}[4*]"),
+        ("C(=O)O", "carboxyl", 6, "[OH]", "{chain}C([4*])=O"),
+        ("N=[N+]=[N-]", "azide_alpha_c", 6, "[H]", "{prefix}C([4*])N=[N+]=[N-]"),
+        ("C#C", "alkyne_c", 6, "[H]", "{prefix}C([4*])C#C"),
+    ])
+    @fuzz_settings(examples=10)
+    @given(length=st.integers(1, 3), stereo=st.sampled_from(("@", "@@")),
+           isotope=st.sampled_from(("", "13")), order=st.integers(0, 65535))
+    def test_fuzz_activation_preserves_source_and_independent_site_chemistry(
+        self, tail, kind, element, leaving, activated_side, length, stereo, isotope, order
+    ):
+        from pyPept.leaving_groups import restore_leaving_groups
+
+        source = f"N[{isotope}C{stereo}H]({'C' * length}{tail})C(=O)O"
+        record("activation." + kind, source=source, order=order)
+        slots = {1: 7, 2: 6, 3: 7, 4: element}
+        groups = {1: "[H]", 2: "[OH]", 3: "[H]", 4: leaving}
+        types = {1: "backbone_n", 2: "backbone_c", 3: "backbone_n_mod", 4: kind}
+        if kind == "amine_primary":
+            slots[5], groups[5], types[5] = 7, "[H]", "amine_secondary"
+        activated = self._check(
+            alternate_smiles(source, order),
+            expect_slots=slots, expect_lg=groups, expect_ct=types,
+        )
+        # Equal standalone products do not prove numbered attachment ownership:
+        # swapping backbone R2 and side-chain R4 carboxyls restores the same acid.
+        side = activated_side.format(chain="C" * length, prefix="C" * (length - 1))
+        expected = Chem.MolFromSmiles(f"[1*]N([3*])[{isotope}C{stereo}H]({side})C([2*])=O")
+        assert expected is not None
+        assert Chem.MolToSmiles(Chem.MolFromSmiles(activated.chuckles)) == Chem.MolToSmiles(expected)
+        restored = restore_leaving_groups(Chem.MolFromSmiles(activated.chuckles), activated.leaving)
+        assert Chem.MolToSmiles(restored) == Chem.MolToSmiles(Chem.MolFromSmiles(source))
+
+    @pytest.mark.fuzz
+    @fuzz_settings(examples=20)
+    @given(length=st.integers(1, 4), tail=st.sampled_from(("SC", "OC")),
+           order=st.integers(0, 65535))
+    def test_fuzz_blocked_sidechains_do_not_invent_free_thiol_or_hydroxyl(
+        self, length, tail, order
+    ):
+        source = f"N[C@@H]({'C' * length}{tail})C(=O)O"
+        record("activation.blocked", source=source, order=order)
+        activated = self._check(alternate_smiles(source, order), expect_slots={1: 7, 2: 6, 3: 7})
+        assert not {"thiol", "hydroxyl"}.intersection(activated.chem_types.values())

@@ -134,7 +134,7 @@ jobs:
       - name: Check dependency compatibility
         run: python -m pip check
       - name: Test chemistry and web API
-        run: python -m pytest -m "not distribution"
+        run: python -m pytest -m "not distribution and not fuzz"
 
   distribution:
     runs-on: ubuntu-latest

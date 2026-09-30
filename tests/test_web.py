@@ -4,6 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 from threading import Event
 
 import pytest
+from hypothesis import given, strategies as st
 from fastapi.testclient import TestClient
 from rdkit import Chem
 
@@ -12,6 +13,8 @@ from pyPept.molecule import Molecule
 from pyPept.sequence import Sequence
 from pyPept.web import rendering
 from pyPept.web.app import create_app
+
+from _fuzzing import fuzz_settings, record
 
 
 @pytest.fixture
@@ -22,6 +25,58 @@ def client():
 
 def canonical(notation):
     return Chem.MolToSmiles(Molecule(Sequence(notation)).get_molecule(fmt="ROMol"))
+
+
+@pytest.mark.fuzz
+@pytest.mark.parametrize("mode", ["local", "process"])
+@fuzz_settings(examples=10)
+@given(
+    residues=st.lists(st.sampled_from(("A", "G", "S")), min_size=1, max_size=4),
+    requests=st.lists(
+        st.tuples(
+            st.sampled_from((
+                "/render", "/convert_notation", "/insert_bond", "/insert_backbone",
+                "/to_cabiln", "/render_reference", "/verify",
+            )),
+            st.sampled_from(("unclosed", "trailing", "unpaired", "oversize")),
+        ), min_size=1, max_size=4,
+    ),
+)
+def test_fuzz_http_errors_preserve_next_request_and_worker_health(mode, residues, requests):
+    source = "-".join(residues)
+    bodies = {
+        "/render": {"cabiln": source},
+        "/convert_notation": {"cabiln": source, "target": "bracket", "canonical": True},
+        "/insert_bond": {"cabiln": source, "host_residue_idx": len(residues) - 1,
+                         "new_abbr": "G", "r_host": 2, "r_new": 1},
+        "/insert_backbone": {"cabiln": source, "after_idx": 0, "new_abbr": "G"},
+        "/to_cabiln": {"input": source, "input_format": "cabiln"},
+        "/render_reference": {"input": source, "input_format": "cabiln"},
+        "/verify": {"cabiln": source, "smiles": "NCC(=O)O"},
+    }
+    broken = {
+        "unclosed": source + ".[G(2,1)",
+        "trailing": source + "]",
+        "unpaired": source + ".!lost(2,1)",
+        "oversize": "G-" * 10000 + "G",
+    }
+    record("http.history", mode=mode, source=source, requests=requests)
+    with TestClient(create_app(execution_mode=mode, observability=False)) as client:
+        for path, fault in requests:
+            body = bodies[path]
+            record("http." + path + "." + fault, mode=mode, source=source)
+            before = client.post(path, json=body)
+            assert before.status_code == 200, before.text
+            field = "input" if "input" in body else "cabiln"
+            rejected = client.post(path, json={**body, field: broken[fault]})
+            assert rejected.status_code == (422 if fault == "oversize" else 400), rejected.text
+            assert rejected.json()["error"]
+            assert not {"svg", "result", "cabiln"}.intersection(rejected.json())
+            after = client.post(path, json=body)
+            assert after.status_code == 200, after.text
+            assert after.json() == before.json()
+            assert client.get("/health").status_code == 200
+            assert client.get("/ready").status_code == 200
 
 
 @pytest.mark.parametrize(

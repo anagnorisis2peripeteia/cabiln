@@ -1,7 +1,11 @@
 """Recursive scope ownership, complete consumption, and stack-based lowering."""
 
 import pytest
+from hypothesis import given, strategies as st
 from rdkit import Chem
+
+from _fuzzing import fuzz_settings, record
+from _notation_fuzz import branch_cases, edge_set, observed_edges
 
 from pyPept.molecule import Molecule
 from pyPept.notation import (
@@ -275,3 +279,55 @@ def test_resource_limits_are_explicit_and_actionable():
         _expand_inline_caps(source)
     with pytest.raises(ValueError, match="characters.*smaller documents"):
         Sequence("G" * (MAX_NOTATION_CHARACTERS + 1), track_source=True)
+
+
+@pytest.mark.fuzz
+@fuzz_settings()
+@given(case=branch_cases())
+def test_fuzz_recursive_spellings_preserve_generated_hosts_and_protection(case):
+    expected_edges = edge_set(case.graph.edges)
+    record("notation_recursive_input", tokens=case.tokens,
+           children=case.children, protected=case.protected)
+    canonical = serialize(case.graph.peptide(range(len(case.tokens))),
+                          "bracket", canonical=True).text
+    for mode in ("explicit", "implied", "legacy", "hub"):
+        source, order, protected = case.spelling(mode)
+        record("notation_scope:" + mode, nodes=len(order),
+               protected=len(protected), source=source)
+        sequence = parsed(source)
+        peptide = Peptide.from_sequence(sequence, order)
+        assert observed_edges(peptide) == expected_edges
+        assert {i for i, location in zip(order, sequence.s_sources)
+                if location.protected} == protected
+        assert serialize(peptide, "preserve").text == source
+        normalized = normalize_legacy_brackets(source)
+        assert normalize_legacy_brackets(normalized) == normalized
+        normalized_graph = Peptide.from_sequence(parsed(normalized), order)
+        assert observed_edges(normalized_graph) == expected_edges
+        assert serialize(peptide, "bracket", canonical=True).text == canonical
+        formatted = serialize(peptide, "percent")
+        replay = parsed(formatted.text)
+        replay_graph = Peptide.from_sequence(replay, formatted.occurrence_order)
+        assert observed_edges(replay_graph) == expected_edges
+        assert {i for i, location in zip(formatted.occurrence_order, replay.s_sources)
+                if location.protected} == protected
+
+
+@pytest.mark.fuzz
+@fuzz_settings()
+@given(depth=st.integers(0, 8), tail=st.sampled_from(("A", "Ala", "Gly")))
+def test_fuzz_sibling_and_deeper_children_remain_different(depth, tail):
+    left = "K(1,2)" + ".[G(1,2)" * depth + "]" * depth
+    siblings = f"K.[K(4,2).[{left}].[K(4,2)]]-{tail}"
+    deeper = f"K.[K(4,2).[{left}.[K(4,2)]]]-{tail}"
+    common = [(0, 2, 1, 1), (0, 4, 2, 2), (2, 1, 3, 2)]
+    common += [(3 + i, 1, 4 + i, 2) for i in range(depth)]
+    first = Peptide.from_sequence(parsed(siblings))
+    second = Peptide.from_sequence(parsed(deeper))
+    record("notation_distinct_scope", depth=depth, siblings=siblings, deeper=deeper)
+    assert observed_edges(first) == edge_set(common + [(2, 4, 4 + depth, 2)])
+    assert observed_edges(second) == edge_set(common + [(3, 4, 4 + depth, 2)])
+    for style in ("percent", "bracket"):
+        assert serialize(first, style, canonical=True).text != serialize(
+            second, style, canonical=True
+        ).text

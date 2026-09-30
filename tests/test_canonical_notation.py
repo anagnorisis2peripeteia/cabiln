@@ -4,7 +4,11 @@ import random
 from dataclasses import replace
 
 import pytest
+from hypothesis import given, strategies as st
 from rdkit import Chem, rdBase
+
+from _fuzzing import fuzz_settings, record
+from _notation_fuzz import edge_set, graph_cases, observed_edges
 
 from pyPept.canonical import canonical_convention
 from pyPept.molecule import Molecule
@@ -253,3 +257,49 @@ def test_canonical_policy_is_explicit_and_versioned():
         "labeling": "rdkit-colored-port-graph-v1",
         "rdkit": rdBase.rdkitVersion,
     }
+
+
+@pytest.mark.fuzz
+@fuzz_settings()
+@given(case=graph_cases(), data=st.data())
+def test_fuzz_resolved_graph_spellings(case, data):
+    order = data.draw(st.permutations(tuple(range(len(case.tokens)))))
+    seed = data.draw(st.integers(0, 2**32 - 1))
+    prefix = data.draw(st.text(alphabet="abcdefghxyz", min_size=1, max_size=8))
+    source = case.tagged(order, prefix, data.draw(st.booleans()))
+    record("notation_graph:" + case.family, nodes=len(case.tokens),
+           edges=case.edges, tokens=case.tokens, order=order, shuffle_seed=seed,
+           source=source, convention=canonical_convention())
+    original = case.peptide(range(len(case.tokens)))
+    for node, token in zip(original.occurrences, case.tokens):
+        if token.startswith("<"):
+            assert Chem.MolToSmiles(node.definition.copy_template()) == (
+                Chem.MolToSmiles(Chem.MolFromSmiles(token[1:-1]))
+            )
+    for category, present in (
+        ("synthetic", any(t.startswith("<") for t in case.tokens)),
+        ("isotope", any("[13" in t or "[2H]" in t for t in case.tokens)),
+        ("charge", any("[O-]" in t or "[NH3+]" in t for t in case.tokens)),
+        ("stereo", any("@" in t for t in case.tokens)),
+        ("alias", any(t in {"Gly", "Ala", "Lys", "Cys", "Ser", "Val"}
+                      for t in case.tokens)),
+    ):
+        if present:
+            record("notation_definition:" + category)
+    expected_edges = edge_set(case.edges)
+    expected_definitions = {n.id: n.definition.key for n in original.occurrences}
+    parsed = Peptide.from_sequence(_sequence(source), order)
+    assert observed_edges(parsed) == expected_edges
+    assert {n.id: n.definition.key for n in parsed.occurrences} == expected_definitions
+    for style in STYLES:
+        expected = serialize(original, style, canonical=True).text
+        emission = serialize(parsed, style, canonical=True)
+        assert emission.text == expected
+        assert serialize(_shuffle(parsed, seed), style, canonical=True).text == expected
+        assert sorted(emission.occurrence_order) == list(range(len(case.tokens)))
+        restored = Peptide.from_sequence(_sequence(expected), emission.occurrence_order)
+        assert observed_edges(restored) == expected_edges
+        assert {
+            n.id: n.definition.key for n in restored.occurrences
+        } == expected_definitions
+        assert serialize(restored, style, canonical=True).text == expected

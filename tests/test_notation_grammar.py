@@ -1,7 +1,11 @@
 """Bracket lowering must preserve every entry and every declared attachment."""
 
 import pytest
+from hypothesis import given, strategies as st
 from rdkit import Chem
+from unittest.mock import patch
+
+from _fuzzing import fuzz_settings, record
 
 from pyPept.molecule import Molecule
 from pyPept.peptide import Peptide, serialize
@@ -181,3 +185,66 @@ def test_text_bracket_conversion_does_not_remove_conflicting_hub_declaration(par
     with pytest.raises(ValueError, match="R-group conflict"):
         parsed(source)
     assert cabiln_to_branch(source) == source
+
+
+@pytest.mark.fuzz
+@fuzz_settings()
+@given(depth=st.integers(1, 8), fault=st.sampled_from((
+    "missing_close", "wrong_close", "garbage", "zero_slot", "occupied_slot",
+    "missing_slot", "conflicting_pair", "unpaired_tag", "third_endpoint",
+)), tag=st.text(alphabet="abcdefghxyz", min_size=1, max_size=8))
+def test_fuzz_one_fault_is_rejected_without_graph_repair(depth, fault, tag):
+    source = "K.[G(4,2)" + ".[G(1,2)" * (depth - 1) + "]" * depth + "-A"
+    if fault in ("conflicting_pair", "unpaired_tag", "third_endpoint"):
+        source = f"K.!{tag}(4,2)-A%G.!{tag}(2,4)"
+    assert Sequence.validate(source).ok
+    if fault == "missing_close":
+        position = source.rindex("]")
+        broken = source[:position] + source[position + 1:]
+    elif fault == "wrong_close":
+        position = source.rindex("]")
+        broken = source[:position] + "}" + source[position + 1:]
+    elif fault == "garbage":
+        position = source.index(")") + 1
+        broken = source[:position] + "?" + source[position:]
+    elif fault == "zero_slot":
+        broken = source.replace(",2)", ",0)", 1)
+    elif fault == "occupied_slot":
+        broken = source.replace("(4,2)", "(2,2)", 1)
+    elif fault == "missing_slot":
+        broken = source.replace(",2)", ",999)", 1)
+    elif fault == "conflicting_pair":
+        broken = source.replace(f".!{tag}(2,4)", f".!{tag}(1,4)")
+    elif fault == "unpaired_tag":
+        broken = source.replace(f"G.!{tag}(2,4)", "G")
+    else:
+        broken = source + f"%G.!{tag}(2,4)"
+    record("notation_malformed:" + fault, original=source, source=broken)
+    for tracking in (False, True):
+        with pytest.raises(ValueError):
+            Sequence(broken, track_source=tracking, warning_sink=lambda _: None)
+    assert not Sequence.validate(broken).ok
+
+
+@pytest.mark.fuzz
+@fuzz_settings()
+@given(depth=st.integers(1, 8), entries=st.integers(1, 12))
+def test_fuzz_parser_limit_boundaries_are_exact(depth, entries):
+    import pyPept.notation as grammar
+
+    nested = ".[G(1,2)" * depth + "]" * depth
+    flat = ".[" + ".".join(["G(1,2)"] * entries) + "]"
+    record("notation_limits", depth=depth, entries=entries, characters=len(flat))
+    with patch.object(grammar, "MAX_BRACKET_DEPTH", depth):
+        grammar.parse_bracket_group(nested)
+        with pytest.raises(ValueError, match="nesting exceeds"):
+            grammar.parse_bracket_group(".[G(1,2)" + nested + "]")
+    with patch.object(grammar, "MAX_BRACKET_ENTRIES", entries):
+        grammar.parse_bracket_group(flat)
+        with pytest.raises(ValueError, match="entries"):
+            grammar.parse_bracket_group(flat[:-1] + ".G(1,2)]")
+    with patch.object(grammar, "MAX_NOTATION_CHARACTERS", len(flat)):
+        grammar.parse_bracket_group(flat)
+    with patch.object(grammar, "MAX_NOTATION_CHARACTERS", len(flat) - 1):
+        with pytest.raises(ValueError, match="characters"):
+            grammar.parse_bracket_group(flat)
