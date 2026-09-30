@@ -521,14 +521,20 @@ property('normalization-keeps-redo-and-reference', [fc.array(fc.constantFrom('A'
 });
 
 property('selection-and-library-revisions', [fc.scheduler(), fc.array(fc.integer({ min: 0, max: 1 }), { minLength: 2, maxLength: 7 }),
-  fc.constantFrom('none', 'close', 'edit')], async (scheduler, selections, invalidate, count) => {
+  fc.constantFrom('none', 'close', 'edit'), fc.boolean()], async (scheduler, selections, invalidate, changedLibrary, count) => {
   const ui = page('builder.js');
   await ui.input('cabiln-input', 'K-A'); await ui.timers();
   resolve(pending(ui, '/render')[0], { ...drawing('K-A'), residue_map: { 0: [0], 1: [1] },
     residues: [{ idx: 0, abbr: 'K' }, { idx: 1, abbr: 'A' }],
     layout: { segments: [{ roots: [0, 1], members: [0, 1] }], groups: [], markers: [] } });
   await tick();
-  await ui.element('btn-build').click(); await settle(ui);
+  await ui.element('btn-build').click();
+  const initialLibrary = [
+    { abbr: 'K', name: 'Lysine', type: 'aa', chem_types: '' },
+    { abbr: 'A', name: 'Alanine', type: 'aa', chem_types: '' },
+  ];
+  resolve(pending(ui, '/monomers')[0], initialLibrary, true, 200, { 'X-Library-Version': 'initial' });
+  await settle(ui);
   const chips = ui.element('residue-chips').children;
   const tasks = [];
   const responses = [];
@@ -544,7 +550,10 @@ property('selection-and-library-revisions', [fc.scheduler(), fc.array(fc.integer
       await tick();
     }));
     responses.push(scheduler.schedule(Promise.resolve(), `library:${revision}`).then(async () => {
-      resolve(library, [{ abbr: `Revision${revision}`, name: 'Generated library revision', type: 'aa', chem_types: '' }], true, 200, { 'X-Library-Version': String(revision) });
+      const palette = changedLibrary
+        ? [{ abbr: `Revision${revision}`, name: 'Generated library revision', type: 'aa', chem_types: '' }]
+        : initialLibrary;
+      resolve(library, palette, true, 200, { 'X-Library-Version': changedLibrary ? String(revision) : 'initial' });
       await tick();
     }));
   }
@@ -552,11 +561,12 @@ property('selection-and-library-revisions', [fc.scheduler(), fc.array(fc.integer
   if (invalidate === 'edit') { count('editCancelsSelection'); await ui.input('cabiln-input', 'G'); }
   await ui.element('lib-close').click();
   await scheduler.waitAll(); await Promise.all(responses); await Promise.all(tasks);
-  assert.equal(ui.run('allMonomers[0].abbr'), `Revision${selections.length - 1}`);
+  assert.equal(ui.run('allMonomers[0].abbr'), changedLibrary ? `Revision${selections.length - 1}` : 'K');
   assert.equal(ui.element('lib-panel').classList.contains('open'), false);
   assert.equal(ui.element('lib-preview').style.display, 'none');
   assert.equal(ui.element('build-connect').disabled, true);
-  if (invalidate !== 'none') assert.equal(ui.run('buildLeft'), null);
+  count(changedLibrary ? 'changedLibrary' : 'unchangedLibrary');
+  if (invalidate !== 'none' || changedLibrary) assert.equal(ui.run('buildLeft'), null);
   else {
     assert.equal(ui.run('buildLeft.abbr'), selections.at(-1) === 0 ? 'K' : 'A');
     assert.equal(ui.element('build-left-svg').innerHTML, `<svg>SITE:${selections.length - 1}</svg>`);
