@@ -91,7 +91,7 @@ btnPreview.addEventListener('click', async () => {
   detDisp.innerHTML = '';
   prevSec.style.display = 'block';
   try {
-    const res  = await fetch('/preview_monomer', {
+    const res  = await fetchCalculation('/preview_monomer', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({ smiles: smi }),

@@ -225,14 +225,15 @@ test('palette refresh preserves unchanged rows and invalidates changed-definitio
     const response = await route.fetch();
     await route.fulfill({ response, headers: { ...response.headers(), 'x-library-version': 'changed-definition' } });
   });
-  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
-  await expect(row).not.toHaveAttribute('data-identity');
-  await expect(page.locator('#lib-preview')).toBeHidden();
-  await page.locator('#lib-search').hover();
+  // Replacing the row under the pointer can start a fresh preview immediately.
   const preview = page.waitForRequest(request => {
     const url = new URL(request.url());
     return url.pathname === '/monomer_svg' && url.searchParams.get('abbr') === 'G';
   });
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect(row).not.toHaveAttribute('data-identity');
+  await expect(page.locator('#lib-preview')).toBeHidden();
+  await page.locator('#lib-search').hover();
   await row.hover();
   await preview;
   await expect(page.locator('#lib-preview svg').first()).toBeVisible();

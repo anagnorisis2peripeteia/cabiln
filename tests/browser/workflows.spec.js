@@ -125,10 +125,17 @@ test('registration refreshes the open library and supplies detected sites to bui
   await page.locator('#lib-search').fill('BrowserThiol');
   await expect(page.locator('#lib-list')).toHaveText('No matches');
   const registration = await context.newPage();
+  let previews = 0;
+  await registration.route('**/preview_monomer', route => {
+    if (++previews > 1) return route.continue();
+    return route.fulfill({ status: 503, contentType: 'application/json',
+      headers: { 'Retry-After': '1' }, body: JSON.stringify({ error: 'Chemistry capacity is busy' }) });
+  });
   await registration.goto(`${app.url}/register`);
   await registration.locator('#smiles-in').fill('N[C@@H](CCCS)C(=O)O');
   await registration.locator('#btn-preview').click();
   await expect(registration.locator('#preview-canvas svg')).toBeVisible();
+  expect(previews).toBeGreaterThanOrEqual(2);
   await expect(registration.locator('#detected-display')).toContainText('thiol');
   await expect(registration.locator('#btn-register')).toBeDisabled();
   await registration.locator('#abbr-in').fill('BrowserThiol');

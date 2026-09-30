@@ -98,11 +98,11 @@ function page(script, { registration = false, storedDraft = null, now = Date.now
     },
   });
   const filename = path.join(__dirname, '../src/pyPept/web/static', script);
-  if (script === 'builder.js') {
-    for (const name of ['project.js', 'document.js']) {
-      const dependency = path.join(path.dirname(filename), name);
-      vm.runInContext(fs.readFileSync(dependency, 'utf8'), context, { filename: dependency });
-    }
+  const dependencies = script === 'builder.js'
+    ? ['requests.js', 'project.js', 'document.js'] : ['requests.js'];
+  for (const name of dependencies) {
+    const dependency = path.join(path.dirname(filename), name);
+    vm.runInContext(fs.readFileSync(dependency, 'utf8'), context, { filename: dependency });
   }
   vm.runInContext(fs.readFileSync(filename, 'utf8'), context, { filename });
   return {
@@ -505,6 +505,32 @@ test('a monomer preview arriving after an edit is discarded', async () => {
   await pending;
   assert.equal(ui.run('detectedData'), null);
   assert.equal(ui.element('btn-register').disabled, true);
+});
+
+test('a busy monomer preview retries, but editing cancels its retry', async () => {
+  for (const edited of [false, true]) {
+    const ui = page('register.js');
+    ui.element('smiles-in').value = 'NCC(=O)O';
+    const pending = ui.element('btn-preview').click();
+    ui.requests[0].resolve({ error: 'Chemistry capacity is busy' }, false, 503, { 'Retry-After': '1' });
+    await new Promise(setImmediate);
+    assert.equal(ui.element('btn-preview').disabled, true);
+    if (edited) await ui.input('smiles-in', 'CC(=O)O');
+    await ui.timers();
+    if (edited) {
+      await pending;
+      assert.equal(ui.requests.length, 1);
+      assert.equal(ui.run('detectedData'), null);
+      assert.equal(ui.element('preview-section').style.display, 'none');
+    } else {
+      assert.equal(ui.requests.length, 2);
+      assert.equal(ui.requests[1].options.body, ui.requests[0].options.body);
+      ui.requests[1].resolve(preview);
+      await pending;
+      assert.equal(ui.element('smiles-in').className, 'ok');
+      assert.equal(ui.element('preview-canvas').innerHTML, preview.svg);
+    }
+  }
 });
 
 test('the latest successful render enables exports; an older response cannot replace it', async () => {
