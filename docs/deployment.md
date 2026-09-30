@@ -72,6 +72,12 @@ replaced after crashes and periodically recycled. The browser makes at most two
 abort-aware retries for transient busy computation requests. Persistent overload
 remains visible. It never automatically retries a registration write.
 
+Each worker prepares the Library palette before reporting readiness, including
+replacement workers. The existing bounded cache stores its finished JSON bytes,
+so the first user does not trigger library-wide detection or repeated encoding.
+SDF and alias-file changes still rebuild the palette automatically. This moves
+initial preparation into startup; it does not eliminate hosting startup time.
+
 The 32-MiB render-cache budget counts retained Python payload size; it is not a
 bound on total process memory. Linux enforces the worker address-space limit.
 macOS tests exercise process lifecycle but do not prove that limit. Keep the

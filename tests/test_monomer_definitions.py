@@ -176,7 +176,7 @@ def test_palette_version_header_tracks_unchanged_metadata_and_alias_updates(defi
 def test_palette_does_not_certify_a_revision_that_changes_during_loading(
     definitions, monkeypatch
 ):
-    from pyPept.web import monomers
+    from pyPept.web import cache, monomers
 
     attachment_sites = monomers.attachment_sites
     changed = False
@@ -190,8 +190,10 @@ def test_palette_does_not_certify_a_revision_that_changes_during_loading(
             )
         return attachment_sites(*args)
 
-    monkeypatch.setattr(monomers, "attachment_sites", inspect_and_change_library)
     with TestClient(create_app()) as client:
+        # Trigger a request-time cache miss after startup has prepared the palette.
+        cache.clear_render_cache()
+        monkeypatch.setattr(monomers, "attachment_sites", inspect_and_change_library)
         interrupted = client.get("/monomers")
         assert interrupted.status_code == 200
         assert "x-library-version" not in interrupted.headers

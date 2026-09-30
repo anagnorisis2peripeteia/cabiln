@@ -51,6 +51,8 @@ def create_app(*, allow_registration=None, execution_mode=None, observability=Tr
             if config.mode == "process":
                 app.state.executor = ChemistryExecutor(config)
                 await app.state.executor.start()
+            else:
+                await asyncio.to_thread(monomers.palette_response)
         except Exception as exc:
             app.state.readiness = {"ready": False}
             _internal_error(exc)

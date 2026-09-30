@@ -276,6 +276,7 @@ def _worker_main(sock, config):
         os.dup2(sink.fileno(), 2)
     try:
         from .app import STATIC_DIR, create_app
+        from .monomers import palette_response
         from .readiness import check_readiness
 
         app = create_app(allow_registration=False, execution_mode="local",
@@ -288,6 +289,7 @@ def _worker_main(sock, config):
             cap = config.memory_mb * 1024 * 1024
             resource.setrlimit(resource.RLIMIT_AS, (cap, cap))
         check_readiness(STATIC_DIR)
+        palette_response()
         _send_message(sock, {"ready": True})
         runner_class = getattr(asyncio, "Runner", _EventLoop)
         with runner_class() as runner:

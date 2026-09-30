@@ -26,94 +26,98 @@ router = APIRouter()
 
 
 @router.get("/monomers")
-def list_monomers(response: Response = None):
+def list_monomers():
     try:
-        version = library_version()
-        key = (version, "monomers")
-        token = sha256(repr(version).encode("utf-8")).hexdigest()
-        cached = _rc_get(key)
-        if cached is not None:
-            if response is not None:
-                response.headers["X-Library-Version"] = token
-            return cached
-        all_mols, mol_by_abbr = _load_sdf()
-        from pyPept.sequence import get_monomer_info
-        from pyPept.library_quality import quality_for_monomer
-
-        aliases = get_monomer_info(str(library_path())).attrs.get("_degen_aliases", {})
-        monomers = []
-        degen_nterm = {}  # base -> entry with trailing _
-        degen_cterm = {}  # base -> entry with leading _
-        for mol in all_mols:
-            if mol is None:
-                continue
-            p = mol.GetPropsAsDict()
-            abbr = p.get("m_abbr", "") or p.get("symbol", "")
-            if not abbr:
-                continue
-            rgroups = p.get("m_Rgroups", "")
-            slots = [r.strip() for r in rgroups.split(",")]
-            lg_parts = [
-                f"R{i+1}:{slots[i]}"
-                for i in range(len(slots))
-                if slots[i] not in ("None", "", "none")
-            ]
-            sites = attachment_sites(mol)
-            entry = {
-                "abbr": abbr,
-                "name": p.get("m_name", ""),
-                "type": p.get("m_type", ""),
-                "subtype": p.get("m_subtype", ""),
-                "chem_types": ",".join(f"{s['slot']}:{s['chem_type']}" for s in sites),
-                "declared_chem_types": p.get("m_chem_types", ""),
-                "backbone_insertable": {1, 2}.issubset({s["slot"] for s in sites}),
-                "leaving": ", ".join(lg_parts),
-                "quality": quality_for_monomer(mol),
-            }
-            # Collect degenerate cap pairs for merging
-            if abbr.endswith("_") and abbr[:-1] in aliases:
-                degen_nterm[abbr[:-1]] = entry
-                continue
-            if abbr.startswith("_") and abbr[1:] in aliases:
-                degen_cterm[abbr[1:]] = entry
-                continue
-            monomers.append(entry)
-        # Merge degenerate pairs into single entries
-        all_bases = set(degen_nterm) | set(degen_cterm)
-        for base in sorted(all_bases):
-            nt = degen_nterm.get(base)
-            ct = degen_cterm.get(base)
-            primary = nt or ct
-            merged = {
-                "abbr": base,
-                "name": primary["name"],
-                "type": primary["type"],
-                "subtype": primary["subtype"],
-                "chem_types": ",".join(
-                    entry["chem_types"] for entry in (nt, ct) if entry
-                ),
-                "backbone_insertable": False,
-                "leaving": primary["leaving"],
-                "degenerate": True,
-                "quality": _merged_quality(nt, ct),
-            }
-            if nt:
-                merged["nterm_abbr"] = nt["abbr"]
-                merged["nterm_leaving"] = nt["leaving"]
-            if ct:
-                merged["cterm_abbr"] = ct["abbr"]
-                merged["cterm_leaving"] = ct["leaving"]
-            monomers.append(merged)
-        # A definition can change without changing its tile labels. Expose its
-        # revision so browser previews can invalidate independently of the body.
-        # Do not certify or cache a response assembled across a library update.
-        if library_version() == version:
-            _rc_put(key, monomers)
-            if response is not None:
-                response.headers["X-Library-Version"] = token
-        return monomers
+        return palette_response()
     except Exception as exc:
         return error_response(exc)
+
+
+def palette_response():
+    """Prepare JSON once per library revision; share the bounded cache with startup."""
+    version = library_version()
+    key = (version, "monomers")
+    token = sha256(repr(version).encode("utf-8")).hexdigest()
+    cached = _rc_get(key)
+    if cached is not None:
+        return Response(cached, media_type="application/json",
+                        headers={"X-Library-Version": token})
+    all_mols, mol_by_abbr = _load_sdf()
+    from pyPept.sequence import get_monomer_info
+    from pyPept.library_quality import quality_for_monomer
+
+    aliases = get_monomer_info(str(library_path())).attrs.get("_degen_aliases", {})
+    monomers = []
+    degen_nterm = {}  # base -> entry with trailing _
+    degen_cterm = {}  # base -> entry with leading _
+    for mol in all_mols:
+        if mol is None:
+            continue
+        p = mol.GetPropsAsDict()
+        abbr = p.get("m_abbr", "") or p.get("symbol", "")
+        if not abbr:
+            continue
+        rgroups = p.get("m_Rgroups", "")
+        slots = [r.strip() for r in rgroups.split(",")]
+        lg_parts = [
+            f"R{i+1}:{slots[i]}"
+            for i in range(len(slots))
+            if slots[i] not in ("None", "", "none")
+        ]
+        sites = attachment_sites(mol)
+        entry = {
+            "abbr": abbr,
+            "name": p.get("m_name", ""),
+            "type": p.get("m_type", ""),
+            "subtype": p.get("m_subtype", ""),
+            "chem_types": ",".join(f"{s['slot']}:{s['chem_type']}" for s in sites),
+            "declared_chem_types": p.get("m_chem_types", ""),
+            "backbone_insertable": {1, 2}.issubset({s["slot"] for s in sites}),
+            "leaving": ", ".join(lg_parts),
+            "quality": quality_for_monomer(mol),
+        }
+        # Collect degenerate cap pairs for merging
+        if abbr.endswith("_") and abbr[:-1] in aliases:
+            degen_nterm[abbr[:-1]] = entry
+            continue
+        if abbr.startswith("_") and abbr[1:] in aliases:
+            degen_cterm[abbr[1:]] = entry
+            continue
+        monomers.append(entry)
+    # Merge degenerate pairs into single entries
+    all_bases = set(degen_nterm) | set(degen_cterm)
+    for base in sorted(all_bases):
+        nt = degen_nterm.get(base)
+        ct = degen_cterm.get(base)
+        primary = nt or ct
+        merged = {
+            "abbr": base,
+            "name": primary["name"],
+            "type": primary["type"],
+            "subtype": primary["subtype"],
+            "chem_types": ",".join(
+                entry["chem_types"] for entry in (nt, ct) if entry
+            ),
+            "backbone_insertable": False,
+            "leaving": primary["leaving"],
+            "degenerate": True,
+            "quality": _merged_quality(nt, ct),
+        }
+        if nt:
+            merged["nterm_abbr"] = nt["abbr"]
+            merged["nterm_leaving"] = nt["leaving"]
+        if ct:
+            merged["cterm_abbr"] = ct["abbr"]
+            merged["cterm_leaving"] = ct["leaving"]
+        monomers.append(merged)
+    # A definition can change without changing its tile labels. Expose its
+    # revision so browser previews can invalidate independently of the body.
+    # Do not certify or cache a response assembled across a library update.
+    response = JSONResponse(monomers)
+    if library_version() == version:
+        _rc_put(key, response.body)
+        response.headers["X-Library-Version"] = token
+    return response
 
 
 def _merged_quality(*entries):

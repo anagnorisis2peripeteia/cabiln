@@ -21,25 +21,50 @@ from pyPept.web.execution import (
 )
 
 
-def test_startup_readiness_checks_selected_library_once(monkeypatch):
+def test_startup_readiness_prepares_selected_library_once(monkeypatch):
     module = importlib.import_module("pyPept.web.app")
     original, calls = module.check_readiness, []
+    encode, palettes = module.JSONResponse.render, []
 
     def checked(directory):
         calls.append(directory)
         return original(directory)
 
+    def encoded(response, content):
+        if isinstance(content, list) and content and "abbr" in content[0]:
+            palettes.append(content)
+        return encode(response, content)
+
     monkeypatch.setattr(module, "check_readiness", checked)
+    monkeypatch.setattr(module.JSONResponse, "render", encoded)
+    cache.clear_render_cache()
     with TestClient(create_app()) as client:
+        # Readiness includes chemistry metadata and its JSON representation;
+        # the first user must not prepare the whole palette on their request.
+        assert len(palettes) == 1
+        initial = client.get("/monomers")
+        assert initial.status_code == 200
+        assert initial.json() == palettes[0]
         for _ in range(3):
             assert client.get("/ready").status_code == 200
             assert client.get("/health").json() == {"status": "ok"}
+            current = client.get("/monomers")
+            assert current.content == initial.content
+            assert current.headers["x-library-version"] == initial.headers["x-library-version"]
     assert len(calls) == 1
+    assert len(palettes) == 1
 
 
-@pytest.mark.parametrize("broken", ["missing", "invalid", "assets"])
+@pytest.mark.parametrize("broken", ["missing", "invalid", "assets", "palette"])
 def test_readiness_fails_without_usable_data_or_assets(monkeypatch, tmp_path, broken):
-    if broken == "assets":
+    if broken == "palette":
+        module = importlib.import_module("pyPept.web.monomers")
+
+        def fail():
+            raise RuntimeError("private-library palette failure")
+
+        monkeypatch.setattr(module, "palette_response", fail)
+    elif broken == "assets":
         module = importlib.import_module("pyPept.web.app")
         monkeypatch.setattr(module, "STATIC_DIR", tmp_path)
     else:
