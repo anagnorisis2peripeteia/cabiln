@@ -245,12 +245,12 @@ def infer_chem_type(mol, attach_idx: int, slot: int = None,
     from pyPept.attachments import _slot_for_attachment
 
     atom = mol.GetAtomWithIdx(attach_idx)
-    sym = atom.GetAtomicNum()
+    atomic_number = atom.GetAtomicNum()
     if slot is None:
         slot = _slot_for_attachment(mol, attach_idx)
     declared = _declared_site_type(mol, slot)
 
-    if sym == 7:
+    if atomic_number == 7:
         kind = nitrogen_chem_type(mol, attach_idx)
         if kind not in ('amine_primary', 'amine_secondary'):
             return kind
@@ -264,7 +264,7 @@ def infer_chem_type(mol, attach_idx: int, slot: int = None,
     # These roles describe the intended partner, which is absent from the free
     # monomer. Accept only declarations on an actual saturated carbon site with
     # an H leaving group, never a declaration contradicting its atom/valence.
-    if (sym == 6 and not atom.GetIsAromatic()
+    if (atomic_number == 6 and not atom.GetIsAromatic()
             and atom.GetHybridization() == Chem.HybridizationType.SP3
             and leaving in (None, '', '[H]')
             and any(nb.GetAtomicNum() == 0 and nb.GetIsotope() == slot
@@ -275,72 +275,53 @@ def infer_chem_type(mol, attach_idx: int, slot: int = None,
                 nb.GetAtomicNum() == 7 for nb in atom.GetNeighbors()):
             return declared
 
-    # Backbone slots (1-indexed: slot 1 = R1, slot 2 = R2, slot 3 = R3)
-    if slot == 1:
-        if sym == 8: return 'backbone_o'
-    if slot == 2:
-        if sym == 6:
-            # Only classify as backbone_c (carbonyl) if the carbon has a =O neighbor.
-            # Saturated carbon roles were validated above; other non-carbonyl
-            # sites continue to functional-group detection.
-            for nb in atom.GetNeighbors():
-                if nb.GetAtomicNum() == 8:
-                    bond = mol.GetBondBetweenAtoms(attach_idx, nb.GetIdx())
-                    if bond and bond.GetBondTypeAsDouble() == 2.0:
-                        return 'backbone_c'
+    has_carbonyl = atomic_number == 6 and any(
+        neighbor.GetAtomicNum() == 8
+        and mol.GetBondBetweenAtoms(attach_idx, neighbor.GetIdx()).GetBondTypeAsDouble()
+        == 2.0
+        for neighbor in atom.GetNeighbors()
+    )
+    if slot == 1 and atomic_number == 8:
+        return 'backbone_o'
+    if slot == 2 and has_carbonyl:
+        return 'backbone_c'
 
-    # Early carboxyl guard — must precede SMARTS loop
-    # Carboxyl C ([4*]C(=O)...) and aldehyde C ([4*]C(=O)...) are
-    # structurally identical in CHUCKLES; the aldehyde infer_smarts
-    # [CX3;H0,H1](=O)[!N] would match both.  Disambiguate via leaving group
-    # before the SMARTS scan to distinguish carboxyl from aldehyde.
-    if sym == 6 and leaving == '[OH]':
-        for _nb in atom.GetNeighbors():
-            if _nb.GetAtomicNum() == 8:
-                _b = mol.GetBondBetweenAtoms(attach_idx, _nb.GetIdx())
-                if _b and _b.GetBondTypeAsDouble() == 2.0:
-                    if any(nb.GetAtomicNum() == 6 and nb.GetIsAromatic()
-                           for nb in atom.GetNeighbors()):
-                        return 'aryl_amide_c'
-                    return 'carboxyl'
+    # Carboxyl and aldehyde sites have the same activated C(=O) graph. Resolve
+    # OH leaving groups before SMARTS can misidentify a carboxyl as an aldehyde.
+    if has_carbonyl and leaving == '[OH]':
+        if any(neighbor.GetAtomicNum() == 6 and neighbor.GetIsAromatic()
+               for neighbor in atom.GetNeighbors()):
+            return 'aryl_amide_c'
+        return 'carboxyl'
 
-    if (sym == 6 and atom.GetHybridization() == Chem.HybridizationType.SP3
+    if (atomic_number == 6 and atom.GetHybridization() == Chem.HybridizationType.SP3
             and leaving in ('[Cl]', '[Br]', '[I]', 'Cl', 'Br', 'I')):
         return 'alkyl_halide_c'
 
     # SMARTS-based detection (covers thiol, selenol, and all exotic types)
-    for patt, ct in _EXOTIC_SMARTS:
-        if patt is None:
+    for pattern, chem_type in _EXOTIC_SMARTS:
+        if pattern is None:
             continue
         # An aryl aldehyde has the same activated C(=O)-aryl graph as an
         # aryl carboxyl slot; its H leaving group identifies the aldehyde.
-        if ct == 'aryl_amide_c' and leaving == '[H]':
+        if chem_type == 'aryl_amide_c' and leaving == '[H]':
             continue
-        for match in mol.GetSubstructMatches(patt):
+        for match in mol.GetSubstructMatches(pattern):
             if match[0] == attach_idx:
-                return ct
+                return chem_type
 
     # Heuristic fallbacks for C and O
-    if sym == 6:
-        has_carbonyl = False
-        for nb in atom.GetNeighbors():
-            if nb.GetAtomicNum() == 8:
-                bond = mol.GetBondBetweenAtoms(attach_idx, nb.GetIdx())
-                if bond.GetBondTypeAsDouble() == 2.0:
-                    has_carbonyl = True
-                    break
+    if atomic_number == 6:
         if has_carbonyl:
-            if leaving == '[OH]':
-                return 'carboxyl'
             if leaving == '[H]' or (leaving is None and atom.GetTotalNumHs()):
                 return 'aldehyde'
             return 'carboxyl'
         return 'carbon'
 
-    if sym == 8:
+    if atomic_number == 8:
         return 'hydroxyl'
 
-    return f'element_{sym}'
+    return f'element_{atomic_number}'
 
 
 def _group_smirks_for_intramol(smirks: str) -> str:

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-pyPept is a CABILN (Chemistry Aware BILN) fork of the Boehringer Ingelheim pyPept library. It converts single-string peptide notations into atomistic RDKit molecules. The fork adds: pinned R-group numbering (R1=backbone_n, R2=backbone_c, R3=backbone_n_mod, R4+=sidechain), SMIRKS-based bond assembly via reactions.yaml, inline cap/crosslink syntax, and a bundled monomer library with SMARTS-based auto-detection.
+pyPept is a CABILN (Chemistry Aware BILN) fork of the Boehringer Ingelheim pyPept library. It converts single-string peptide notations into atomistic RDKit molecules. The fork adds explicit numbered attachment sites, SMIRKS-based bond assembly via reactions.yaml, inline cap/crosslink syntax, and a bundled monomer library with SMARTS-based auto-detection.
 
 ## Build & test commands
 
@@ -108,7 +108,7 @@ Intramolecular ring closure uses RDKit's grouped-reactant syntax: `([A].[B]) >> 
 
 ## Critical invariants
 
-- **R-group numbering is pinned**: R1=backbone_n, R2=backbone_c, R3=backbone_n_mod, R4+=sidechain. Never varies by monomer. All CABILN notation, tests, and the web renderer depend on this.
+- **Preserve declared R-group numbers**: Amino-acid activation conventionally assigns R1=backbone_n, R2=backbone_c, R3=backbone_n_mod and R4+=sidechains. Other monomers can have different numbered sites. Resolve chemistry from each definition and structure; never silently renumber sites or infer reaction compatibility from a slot number alone.
 - **Kekulize before dummy removal**: `molecule.py` Kekulizes the combined mol before removing any dummy atoms. This prevents aromatic-ring sanitization failures on His/Trp/etc. when an aromatic NH loses its dummy neighbour.
 - **Backbone COOH excluded from sidechain scan**: After backbone detection, the backbone carboxyl's hydroxyl O is explicitly excluded so sidechain SMARTS won't re-match it (critical for Asp/Glu which have two COOH groups).
 - **Carboxyl vs aldehyde disambiguation**: Both are `[CX3](=O)` in CHUCKLES. Distinguished by leaving group metadata: `[OH]` → carboxyl, `[H]` → aldehyde.

@@ -131,7 +131,7 @@ def cabiln_to_branch(cabiln):
     branches = []
     search_start = 0
     existing_tags = set(int(x) for x in re.findall(r'!\s*(\d+)', cabiln))
-    _xlink_ctr = [max(existing_tags, default=0) + 1]
+    next_tag = max(existing_tags, default=0) + 1
 
     def _next_bracket(s, start):
         """Return (dot_pos, open_pos, close_pos+1) of the next .[...] or .{...}
@@ -157,12 +157,12 @@ def cabiln_to_branch(cabiln):
 
     def detach_hub(start, end, anchor, arms):
         """Move either supported hub spelling into one crosslinked segment."""
-        nonlocal result
+        nonlocal result, next_tag
         name, host_slot, own_slot = anchor
         used = {int(value) for value in re.findall(r'!(\d+)', result)}
         number = next(i for i in range(1, len(used) + 2) if i not in used)
         tag = f'!{number}'
-        _xlink_ctr[0] = number + 1
+        next_tag = number + 1
         result = result[:start] + f'.{tag}({host_slot},{own_slot})' + result[end:]
         for arm, hub_slot, partner_slot in arms:
             result = re.sub(
@@ -241,16 +241,16 @@ def cabiln_to_branch(cabiln):
         all_1x = cont and all(rp == '1' for rp, rt in cont)
 
         if all_21:
-            tag = f'!{_xlink_ctr[0]}'
-            _xlink_ctr[0] += 1
+            tag = f'!{next_tag}'
+            next_tag += 1
             host_marker = f'.{tag}({r_host},{r_branch})'
             branch_parts = [f'{anchor_abbr}.{tag}'] + [abbr for abbr, _, _ in items[1:]]
             branch_str = '-'.join(branch_parts)
             result = result[:m_start] + host_marker + result[m_end:]
             branches.append(branch_str)
         elif all_1x:
-            tag = f'!{_xlink_ctr[0]}'
-            _xlink_ctr[0] += 1
+            tag = f'!{next_tag}'
+            next_tag += 1
             host_marker = f'.{tag}({r_host},{r_branch})'
             result = result[:m_start] + host_marker + result[m_end:]
             all_12 = all(rt == '2' for _, rt in cont)
@@ -269,8 +269,8 @@ def cabiln_to_branch(cabiln):
                 #   K.!1(4,2)-am%AEEA.!1.!2(1,4)%E.!2.!3(1,2)%C20FA.!3
                 conts = items[1:]
                 n = len(conts)
-                cont_tags = [f'!{_xlink_ctr[0] + i}' for i in range(n)]
-                _xlink_ctr[0] += n
+                cont_tags = [f'!{next_tag + i}' for i in range(n)]
+                next_tag += n
                 rp0, rt0 = conts[0][1], conts[0][2]
                 branches.append(f'{anchor_abbr}.{tag}.{cont_tags[0]}({rp0},{rt0})')
                 for k in range(n - 1):
@@ -285,6 +285,78 @@ def cabiln_to_branch(cabiln):
     if branches:
         result += '%' + '%'.join(branches)
     return result
+
+
+def _normalize_terminal_marker(branch):
+    """Attach a standalone terminal !n to its neighbouring monomer."""
+    parts = [part.strip() for part in re.split(r'(?<!\()[-](?!\))', branch)]
+    if len(parts) >= 2 and re.match(r'^!\d+$', parts[-1]):
+        parts[-2] += '.' + parts[-1]
+        parts.pop()
+    elif len(parts) >= 2 and re.match(r'^!\d+$', parts[0]):
+        parts[1] += '.' + parts[0]
+        parts.pop(0)
+    return '-'.join(parts)
+
+
+def _host_marker(segment, tag):
+    """Match this complete crosslink label with its declared attachment slots."""
+    return re.search(re.escape(f'.{tag}') + r'\((\d+),(\d+)\)', segment)
+
+
+def _fold_crosslink_chains(main, branches, parsed_branches):
+    """Fold linked single-monomer segments used for nonstandard continuations.
+
+    Each segment has one incoming marker and at most one outgoing marker.
+    Consume a path only after it reaches a terminal; incomplete paths stay in
+    their original branch order for the ordinary crosslink conversion.
+    """
+    segments = {}
+    for branch in branches:
+        entries = parsed_branches[branch]
+        if len(entries) != 1 or entries[0].slots is not None:
+            continue
+        entry = entries[0]
+        incoming = [tag for tag, slots in entry.markers if slots is None]
+        outgoing = {tag: slots for tag, slots in entry.markers if slots is not None}
+        if len(incoming) == 1 and len(outgoing) <= 1:
+            segments[branch] = (entry.token, incoming[0], outgoing)
+
+    processed = set()
+    remaining = []
+    for branch in branches:
+        if branch in processed:
+            continue
+        if branch not in segments or not segments[branch][2]:
+            remaining.append(branch)
+            continue
+        token, incoming, outgoing = segments[branch]
+        host = _host_marker(main, incoming)
+        if host is None:
+            remaining.append(branch)
+            continue
+        host_slot, branch_slot = host.groups()
+        chain = [(token, host_slot, branch_slot)]
+        pending = {branch}
+        while outgoing:
+            tag, slots = next(iter(outgoing.items()))
+            next_branch = next((
+                candidate for candidate, (_, incoming, _) in segments.items()
+                if candidate not in processed and candidate not in pending
+                and incoming == tag
+            ), None)
+            if next_branch is None:
+                break
+            token, _, outgoing = segments[next_branch]
+            chain.append((token, *slots))
+            pending.add(next_branch)
+        if outgoing:
+            remaining.append(branch)
+            continue
+        text = bracket_chain(chain, 0, host_slot, branch_slot).text
+        main = main[:host.start()] + text + main[host.end():]
+        processed.update(pending)
+    return main, remaining
 
 
 def cabiln_to_bracket(cabiln):
@@ -323,22 +395,6 @@ def cabiln_to_bracket(cabiln):
     ]
     branch_segs = [branch for branch in branch_segs if branch not in deferred_branches]
 
-    def _normalize_terminal_marker(bs):
-        """Convert standalone terminal !n tokens to inline .!n form.
-
-        'G-G-!1'    -> 'G-G.!1'    (C-terminal marker on last monomer)
-        '!1-G-G-am' -> 'G.!1-G-am' (N-terminal marker on first monomer)
-        """
-        parts = re.split(r'(?<!\()[-](?!\))', bs)
-        parts = [p.strip() for p in parts]
-        if len(parts) >= 2 and re.match(r'^!\d+$', parts[-1]):
-            parts[-2] = parts[-2] + '.' + parts[-1]
-            parts = parts[:-1]
-        elif len(parts) >= 2 and re.match(r'^!\d+$', parts[0]):
-            parts[1] = parts[1] + '.' + parts[0]
-            parts = parts[1:]
-        return '-'.join(parts)
-
     branch_segs = [_normalize_terminal_marker(bs) for bs in branch_segs]
 
     # Only rewrite branches whose full token/annotation syntax is understood.
@@ -375,83 +431,7 @@ def cabiln_to_bracket(cabiln):
         else:
             positional.append(bs)
 
-    # Single-monomer segments connected by crosslinks.
-    # Pattern: main has .!n(r_host, r_branch); branch segments form a linear
-    # chain MONO.!n.!m(a,b) → MONO.!m.!p(c,d) → MONO.!p (terminal).
-    # These are emitted by cabiln_to_branch for non-standard (rt≠2) continuations.
-    def _parse_chain_seg(bs):
-        entries = parsed_branches[bs]
-        if len(entries) != 1:
-            return None
-        entry = entries[0]
-        if entry.slots is not None:
-            return None
-        outgoing = {tag: slots for tag, slots in entry.markers if slots is not None}
-        incoming = [tag for tag, slots in entry.markers if slots is None]
-        if len(incoming) != 1 or len(outgoing) > 1:
-            return None
-        return entry.token, incoming, outgoing
-
-    seg_parse = {}
-    for bs in crosslink:
-        p = _parse_chain_seg(bs)
-        if p is not None:
-            seg_parse[bs] = p
-
-    chain_processed = set()
-    new_crosslink = []
-    for bs in crosslink:
-        if bs in chain_processed:
-            continue
-        if bs not in seg_parse:
-            new_crosslink.append(bs)
-            continue
-        monomer, incoming, outgoing = seg_parse[bs]
-        if not outgoing:
-            new_crosslink.append(bs)
-            continue
-        anchor_tag = None
-        for t in incoming:
-            if re.search(re.escape(f'.{t}') + r'\((\d+),(\d+)\)', main_seg):
-                anchor_tag = t
-                break
-        if anchor_tag is None:
-            new_crosslink.append(bs)
-            continue
-        host_m = re.search(re.escape(f'.{anchor_tag}') + r'\((\d+),(\d+)\)', main_seg)
-        r_host, r_branch = host_m.group(1), host_m.group(2)
-        prev_processed = set(chain_processed)
-        chain = [(monomer, r_host, r_branch)]
-        chain_processed.add(bs)
-        cur_out = outgoing
-        ok = True
-        while cur_out:
-            if len(cur_out) != 1:
-                ok = False
-                break
-            out_tag, (rp, rt) = next(iter(cur_out.items()))
-            next_bs = None
-            for bs2, (m2, inc2, out2) in seg_parse.items():
-                if bs2 not in chain_processed and out_tag in inc2:
-                    next_bs = bs2
-                    break
-            if next_bs is None:
-                ok = False
-                break
-            m2, inc2, out2 = seg_parse[next_bs]
-            chain.append((m2, rp, rt))
-            chain_processed.add(next_bs)
-            cur_out = out2
-        if not ok:
-            chain_processed = prev_processed
-            new_crosslink.append(bs)
-            continue
-        bracket_items = [f'{chain[0][0]}({chain[0][1]},{chain[0][2]})']
-        for mono, rp, rt in chain[1:]:
-            bracket_items.append(f'{mono}({rp},{rt})')
-        bracket_str = '.[' + '.'.join(bracket_items) + ']'
-        main_seg = main_seg[:host_m.start()] + bracket_str + main_seg[host_m.end():]
-    crosslink = new_crosslink
+    main_seg, crosslink = _fold_crosslink_chains(main_seg, crosslink, parsed_branches)
 
     # Crosslink branches with a .!n anchor.
     unconverted_crosslink = []
@@ -468,8 +448,7 @@ def cabiln_to_bracket(cabiln):
             hub_name = entries[0].token
             tag_info = {}
             for tag in unique_tags:
-                host_pat = re.escape(f'.{tag}') + r'\((\d+),(\d+)\)'
-                hm = re.search(host_pat, main_seg)
+                hm = _host_marker(main_seg, tag)
                 if hm:
                     tag_info[tag] = (hm.group(1), hm.group(2))
             if len(tag_info) < len(unique_tags):
@@ -499,8 +478,7 @@ def cabiln_to_bracket(cabiln):
             main_seg = re.sub(host_pat, bracket_str, main_seg, count=1)
             continue
         tag = unique_tags[0]
-        host_pat = re.escape(f'.{tag}') + r'\((\d+),(\d+)\)'
-        host_m = re.search(host_pat, main_seg)
+        host_m = _host_marker(main_seg, tag)
         if not host_m:
             unconverted_crosslink.append(branch_seg)
             continue
@@ -532,11 +510,11 @@ def cabiln_to_bracket(cabiln):
             continue
         r_host, r_branch = host_m.group(1), host_m.group(2)
 
-        bracket_items = []
-        for i, entry in enumerate(parsed_branches[branch_seg]):
-            previous, own = (r_host, r_branch) if i == 0 else entry.slots or ('2', '1')
-            bracket_items.append(f'{entry.token}({previous},{own})')
-        bracket_str = '.[' + '.'.join(bracket_items) + ']'
+        entries = [
+            (entry.token, *(entry.slots or ('2', '1')))
+            for entry in parsed_branches[branch_seg]
+        ]
+        bracket_str = bracket_chain(entries, 0, r_host, r_branch).text
 
         main_seg = (main_seg[:host_m.start()] + bracket_str
                     + main_seg[host_m.end():])

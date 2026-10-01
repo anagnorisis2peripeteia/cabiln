@@ -258,3 +258,30 @@ wheel outside the source tree, so editable imports cannot hide missing resources
 The [browser suite](../tests/browser/README.md) drives actual construction and
 registration with temporary libraries. The [tools index](../tools/README.md)
 separates maintained entry points from retained migration and repair history.
+
+## Keeping changes readable
+
+Use [Google's review checklist](https://google.github.io/eng-practices/review/reviewer/looking-for.html)
+to check design, complexity, names and useful comments. Follow
+[PEP 8](https://peps.python.org/pep-0008/) with this repository's 88-column Python
+formatting and Python 3.9 compatibility. Apply
+[Fowler's refactoring method](https://refactoring.com/) through small changes
+checked against the existing behaviour. Keep
+[Sandi Metz's warning about wrong abstractions](https://sandimetz.com/blog/2016/1/20/the-wrong-abstraction)
+in mind when combining similar code.
+
+- Give each rule and mutable state one owner. A caller should not need to know
+  the owner's internal bookkeeping to use it correctly.
+- Share code when its meaning, inputs and lifetime agree. Similar-looking
+  chemistry and presentation operations can still need different policies.
+- Prefer named facts, early returns and direct data flow. Keep temporary work
+  local and publish it after validation, so failure needs less rollback logic.
+- Explain chemical precedence and compatibility constraints in comments.
+  Remove narration that merely repeats the next statement.
+- Preserve numbering, source spelling and unsupported-input behaviour during
+  refactoring. Use existing chemistry oracles and browser journeys, with a
+  baseline comparison when changing a parser or classifier.
+
+Judge a cleanup by how much a reader must understand to make the next change.
+Moving lines between files or introducing configurable wrappers is not evidence
+of reduced complexity by itself.
