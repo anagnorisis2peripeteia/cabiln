@@ -75,12 +75,14 @@
       <button type="button" id="btn-redo" class="hbtn" title="Redo last edit" disabled><svg class="ui-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M10 3l4 4-4 4M14 7H7a4 4 0 0 0-4 4v2"/></svg>Redo</button>
     </div>
   </div>
-  <div id="draft-notice" class="draft-notice" hidden>
-    <span id="draft-status" role="status" aria-live="polite" aria-atomic="true"></span>
-    <button type="button" id="btn-restore-draft" class="hbtn">Restore saved draft</button>
-    <button type="button" id="btn-dismiss-draft" class="hbtn">Dismiss</button>
+  <div class="sequence-feedback">
+    <div id="cabiln-status" class="statusbar" role="status" aria-live="polite" aria-atomic="true"></div>
+    <div id="draft-notice" class="draft-notice" hidden>
+      <span id="draft-status" role="status" aria-live="polite" aria-atomic="true"></span>
+      <button type="button" id="btn-restore-draft" class="hbtn">Restore saved draft</button>
+      <button type="button" id="btn-dismiss-draft" class="hbtn">Dismiss</button>
+    </div>
   </div>
-  <div id="cabiln-status" class="statusbar" role="status" aria-live="polite" aria-atomic="true"></div>
   <div id="conversion-status" class="statusbar warn" role="status" aria-live="polite" aria-atomic="true" hidden></div>
   <div id="project-status" class="statusbar" role="status" aria-live="polite" aria-atomic="true" hidden></div>
   <details id="import-quality" class="import-quality" hidden>

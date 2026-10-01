@@ -28,7 +28,7 @@
   /* header */
   header {
     flex-shrink: 0;
-    padding: 12px 20px;
+    padding: 8px 16px;
     background: var(--surface-base);
     border-bottom: 1px solid var(--line-soft);
     font-size: 13px;
@@ -38,8 +38,8 @@
     gap: 16px;
     flex-wrap: wrap;
   }
-  header .title { font-size: 18px; font-weight: 650; letter-spacing: -.035em; white-space: nowrap; }
-  header .title span { display: block; margin-top: 2px; color: var(--muted); font-size: 11px; font-weight: 400; letter-spacing: 0; }
+  header .title { font-size: 16px; font-weight: 650; line-height: 1.1; letter-spacing: -.035em; white-space: nowrap; }
+  header .title span { display: block; margin-top: 2px; color: var(--muted); font-size: 10px; font-weight: 400; letter-spacing: 0; }
   .toolbar-group {
     display: flex;
     flex-wrap: wrap;
@@ -102,14 +102,14 @@
     flex-shrink: 0;
     background: var(--surface-panel);
     border-bottom: 1px solid var(--line);
-    padding: 14px 20px 12px;
+    padding: 8px 16px;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 6px;
   }
-  #input-bar-row { display: flex; align-items: stretch; gap: 12px; min-width: 0; }
-  .sequence-format { display: flex; flex-direction: column; justify-content: center; gap: 5px; }
-  #cabiln-input { flex: 1; min-width: 0; }
+  #input-bar-row { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .sequence-format { display: flex; align-items: center; gap: 8px; }
+  #cabiln-input { flex: 1; min-width: 0; height: 44px; }
   .history-controls { display: flex; gap: 5px; flex-shrink: 0; margin-left: auto; }
   .notation-targets { display: flex; gap: 6px; }
   .convert-input { flex-shrink: 0; }
@@ -165,6 +165,8 @@
   .statusbar.warn { color: var(--warning); }
   .statusbar:empty { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
   #residue-chips:empty { display: none; }
+  .sequence-feedback { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 12px; }
+  .sequence-feedback > .statusbar { flex: 1; min-width: 160px; }
   .draft-notice {
     display: flex;
     align-items: center;
@@ -173,6 +175,7 @@
     color: var(--muted);
     font-size: 11px;
     line-height: 1.4;
+    margin-left: auto;
   }
   #draft-status { margin-right: 4px; }
   .draft-notice .hbtn { min-height: 28px; padding: 4px 8px; font-size: 11px; }
@@ -830,7 +833,7 @@
     flex-wrap: wrap;
     gap: 6px;
   }
-  .drawing-toolbar { padding: 8px 20px; gap: 8px 16px; border-bottom: 1px solid var(--line-soft); }
+  .drawing-toolbar { padding: 4px 16px; gap: 6px 16px; border-bottom: 1px solid var(--line-soft); }
   .drawing-toolbar .hbtn { background: transparent; border-color: transparent; color: var(--muted); }
   .drawing-toolbar .hbtn:hover { background: var(--surface-hover); color: var(--text); }
   .drawing-toolbar .hbtn.active { background: var(--selection); border-color: var(--selection-line); color: var(--text); }
@@ -861,7 +864,6 @@
     body { min-height: 100dvh; }
     header, #input-bar, #build-panel { padding-left: 12px; padding-right: 12px; }
     #input-bar-row { flex-wrap: wrap; }
-    .sequence-format { flex-direction: row; align-items: center; gap: 8px; }
     #cabiln-input { order: 2; flex-basis: 100%; }
     #main { flex-direction: column; flex: 1 0 auto; }
     #render-pane { height: 440px; height: max(440px, 55dvh); flex: none; }
@@ -890,7 +892,7 @@
   }
 
   @media (max-width: 520px) {
-    .drawing-toolbar { padding: 8px 12px; gap: 6px 10px; }
+    .drawing-toolbar { padding: 4px 12px; gap: 6px 10px; }
     .drawing-toolbar > .toolbar-group:first-child { flex-basis: 100%; }
     .drawing-toolbar .toolbar-label { display: none; }
     header .title { flex: 1; }
