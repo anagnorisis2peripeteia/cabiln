@@ -23,7 +23,7 @@ assert.ok(completionOrder === null || (Array.isArray(completionOrder) && complet
 const artifacts = process.env.CABILN_FUZZ_ARTIFACTS || path.join(os.tmpdir(), 'cabiln-frontend-fuzz');
 const root = path.resolve(__dirname, '..');
 assert.ok(!process.env.CABILN_FUZZ_CASE || ['editable-history', 'render-completion-order', 'foreground-admission-and-errors', 'registration-preview-and-write-ownership', 'normalization-keeps-redo-and-reference', 'selection-and-library-revisions'].includes(process.env.CABILN_FUZZ_CASE), 'Unknown CABILN_FUZZ_CASE');
-const sourceFiles = ['builder.js', 'document.js', 'project.js', 'requests.js', 'register.js'].map(name => `src/pyPept/web/static/${name}`).concat(['tests/_frontend_harness.js', 'tests/test_frontend_fuzz.js', 'tests/browser/package-lock.json']);
+const sourceFiles = ['builder.js', 'ui.js', 'residues.js', 'library.js', 'document.js', 'project.js', 'requests.js', 'register.js'].map(name => `src/pyPept/web/static/${name}`).concat(['tests/_frontend_harness.js', 'tests/test_frontend_fuzz.js', 'tests/browser/package-lock.json']);
 const source = { commit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(),
   sha256: Object.fromEntries(sourceFiles.map(name => [name, crypto.createHash('sha256').update(fs.readFileSync(path.join(root, name))).digest('hex')])) };
 const tick = () => new Promise(setImmediate);
@@ -497,7 +497,7 @@ property('foreground-admission-and-errors', [foregroundCase], async (example, co
     assert.equal(ui.element('render-inner').innerHTML, `<svg>${source}</svg>`);
     assert.equal(ui.run('lastMolBlock'), `MOL:${source}`);
     assert.equal(ui.run('lastCabiln'), result);
-    assert.deepEqual(JSON.parse(ui.run('JSON.stringify(residueMap)')), residue_map);
+    assert.deepEqual(JSON.parse(ui.run('JSON.stringify(residueView.atoms)')), residue_map);
   }
   if (example.format && example.presentation === 'valid' &&
       waitsForDrawing && example.outcome === 'success') checkRetainedDrawing();
@@ -635,7 +635,7 @@ property('selection-and-library-revisions', [fc.scheduler(), fc.array(fc.integer
   if (invalidate === 'edit') { count('editCancelsSelection'); await ui.input('cabiln-input', 'G'); }
   await ui.element('lib-close').click();
   await scheduler.waitAll(); await Promise.all(responses); await Promise.all(tasks);
-  assert.equal(ui.run('allMonomers[0].abbr'), changedLibrary ? `Revision${selections.length - 1}` : 'K');
+  assert.equal(ui.run('library.monomers[0].abbr'), changedLibrary ? `Revision${selections.length - 1}` : 'K');
   assert.equal(ui.element('lib-panel').classList.contains('open'), false);
   assert.equal(ui.element('lib-preview').style.display, 'none');
   assert.equal(ui.element('build-connect').disabled, true);

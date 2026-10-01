@@ -12,7 +12,7 @@ from pyPept.library_quality import AUDIT_VERSION, quality_manifest
 
 _ASSETS = (
     "index.html", "builder.js", "builder.css", "theme.css",
-    "project.js", "document.js",
+    "project.js", "document.js", "requests.js", "ui.js", "residues.js", "library.js",
     "register.html", "register.js", "register.css", "examples.json",
 )
 

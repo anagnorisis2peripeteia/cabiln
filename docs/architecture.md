@@ -38,8 +38,12 @@ flowchart LR
 
 | Module | Responsibility |
 | --- | --- |
-| `pyPept.sequence` | Parse notation, resolve monomers, validate attachment slots and bonds |
+| `pyPept.sequence` | Resolve monomers and validate attachment slots and bonds; retain the public Sequence interface |
 | `pyPept.notation` | Share library-free bracket grammar, legacy normalization, slot mapping and chain emission |
+| `pyPept.notation_lowering` | Lower bracket scopes, inline attachments and terminal links into explicit chains while retaining source records |
+| `pyPept.notation_conversion` | Preserve the historical library-free BILN/CABILN text conversions, including unsupported-text pass-through |
+| `pyPept.synthetic` | Protect inline SMILES during parsing and construct local monomer definitions in a detached table |
+| `pyPept.pdb_names` | Assign PDB residue and atom names independently of notation parsing |
 | `pyPept.inputs` | Interpret formats, retain normalized source, reuse parsing/assembly within an operation and verify formatting |
 | `pyPept.peptide` | Hold immutable occurrence identities, attachment sites, connections and source layout; serialize with explicit output order |
 | `pyPept.source` | Carry source locations through the existing notation lowering |
@@ -75,6 +79,23 @@ flowchart LR
 notation drafts. `builder.js` passes document transitions to it and updates the
 controls through one display function. Request lifetimes, storage timers and
 the last successful drawing remain separate because they outlive different edits.
+
+`residues.js` owns the accepted drawing's atom maps, residue tabs, group highlights
+and backbone insertion positions. The builder passes drawing data and selection
+policy through its view interface. Clearing or replacing a drawing resets these
+derived facts together. Marker indexes avoid scanning every marker for each tab.
+
+`library.js` owns discovery, library revisions, reaction filtering and hover
+previews. The builder supplies current connection/swap filter facts and receives
+monomer choices and library-change notifications. It does not manage the palette's
+cache or DOM. `requests.js` owns active requests behind start, cancel, pending and
+has operations; callers cannot mutate its request map. `ui.js` contains shared
+zoom/pan and HTML escaping helpers without document state.
+
+Imports of text conversion and PDB naming functions from `pyPept.sequence` remain
+supported. Internal callers use the owning modules. Synthetic definitions share
+one record-construction path, both legacy hub spellings share one detachment path,
+and parsing/PDB naming share selection of the monomer library resource.
 
 `tools/live_renderer.py` is a compatibility launcher. Old conversion imports
 continue to resolve, but new library callers should import `pyPept.smiles`.

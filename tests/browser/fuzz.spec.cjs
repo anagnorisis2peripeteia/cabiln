@@ -19,7 +19,7 @@ fs.mkdirSync(artifacts, { recursive: true });
 assert.ok(!process.env.CABILN_FUZZ_CASE || ['browser-branch-graphs', 'browser-editable-history', 'browser-delayed-ownership', 'browser-cache-revalidation'].includes(process.env.CABILN_FUZZ_CASE), 'Unknown CABILN_FUZZ_CASE');
 const observedApplications = new Map();
 const root = path.resolve(__dirname, '../..');
-const sourceFiles = ['builder.js', 'document.js', 'project.js', 'requests.js', 'register.js'].map(name => `src/pyPept/web/static/${name}`).concat(['tests/browser/fixtures.js', 'tests/browser/fuzz.spec.cjs', 'tests/browser/fuzz.config.js', 'tests/browser/package-lock.json']);
+const sourceFiles = ['builder.js', 'ui.js', 'residues.js', 'library.js', 'document.js', 'project.js', 'requests.js', 'register.js'].map(name => `src/pyPept/web/static/${name}`).concat(['tests/browser/fixtures.js', 'tests/browser/fuzz.spec.cjs', 'tests/browser/fuzz.config.js', 'tests/browser/package-lock.json']);
 const source = { commit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(),
   sha256: Object.fromEntries(sourceFiles.map(name => [name, crypto.createHash('sha256').update(fs.readFileSync(path.join(root, name))).digest('hex')])) };
 
@@ -36,7 +36,7 @@ async function freshPage(browser, app, name, body) {
   page.on('response', response => {
     const url = response.url();
     const asset = new URL(url).pathname;
-    if (!/\/(builder|document|project|requests|register)\.js$/.test(asset)) return;
+    if (!/\/(builder|ui|residues|library|document|project|requests|register)\.js$/.test(asset)) return;
     const status = response.status();
     const captured = (async () => {
       if (status === 304) {

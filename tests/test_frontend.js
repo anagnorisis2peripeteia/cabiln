@@ -23,7 +23,7 @@ const preview = {
 function tabs(ui, symbols, layout, crosslinks = []) {
   const residues = symbols.map((abbr, idx) => ({ abbr, idx }));
   const atoms = Object.fromEntries(symbols.map((_, idx) => [idx, [idx * 2, idx * 2 + 1]]));
-  ui.run(`buildResidueUI(${JSON.stringify(atoms)}, ${JSON.stringify(residues)}, ${JSON.stringify(layout)}, ${JSON.stringify(crosslinks)})`);
+  ui.run(`residueView.render({residue_map: ${JSON.stringify(atoms)}, residues: ${JSON.stringify(residues)}, layout: ${JSON.stringify(layout)}, crosslink_groups: ${JSON.stringify(crosslinks)}}, editor.present.quality)`);
   return ui.element('residue-chips').children;
 }
 
@@ -48,7 +48,7 @@ test('nested group tabs appear once and highlight their own members', async () =
     groups: [branch(0, 1, [4], '{', null, [4, 5]), branch(1, 4, [5], '[', 0)], markers: [],
   });
   assert.deepEqual(chips.map(chip => chip.textContent), ['ac', 'K', '$', '{', 'G', '$', '[', 'A', ']', '}', 'D', 'am']);
-  ui.run('let hovered; highlightGroup = ids => { hovered = ids; }');
+  ui.run('let hovered; residueView.highlightGroup = ids => { hovered = ids; }');
   await chips.find(chip => chip.textContent === '{').dispatchEvent({ type: 'mouseenter' });
   assert.equal(ui.run('JSON.stringify(hovered)'), '[4,5]');
   await chips.find(chip => chip.textContent === '[').dispatchEvent({ type: 'mouseenter' });
@@ -78,7 +78,7 @@ test('terminal link tabs use recorded placement and highlight both ends', async 
     ],
   }, [{ tag: '!ring', members }]);
   assert.deepEqual(chips.map(chip => chip.textContent), ['!ring', 'C', 'A', 'C', '!ring']);
-  ui.run('let hovered; highlightGroup = ids => { hovered = ids; }');
+  ui.run('let hovered; residueView.highlightGroup = ids => { hovered = ids; }');
   for (const chip of chips.filter(chip => chip.textContent === '!ring')) {
     await chip.dispatchEvent({ type: 'mouseenter' });
     assert.equal(ui.run('JSON.stringify(hovered)'), '[0,2]');
@@ -132,7 +132,7 @@ test('an arm containing only a marker keeps its brackets', () => {
 
 test('library metadata waits for the current palette before using the shared worker', async () => {
   const ui = page('builder.js');
-  ui.run('openLib()');
+  ui.run('library.open()');
   assert.deepEqual(ui.requests.map(request => request.url), ['/monomers']);
 
   ui.run("window.dispatchEvent(new Event('focus'))");
@@ -146,38 +146,38 @@ test('library metadata waits for the current palette before using the shared wor
   assert.deepEqual(ui.requests.map(request => request.url), ['/monomers', '/monomers', '/reactions']);
   ui.requests[2].resolve([['backbone_c', 'backbone_n']]);
   await new Promise(setImmediate);
-  assert.equal(ui.run('allMonomers[0].abbr'), 'G');
-  assert.equal(ui.run('reactionPairs[0].join(",")'), 'backbone_c,backbone_n');
+  assert.equal(ui.run('library.monomers[0].abbr'), 'G');
+  assert.equal(ui.run('library.reactionPairs[0].join(",")'), 'backbone_c,backbone_n');
 });
 
 test('reopening the palette discovers new monomers and preserves its search', async () => {
   const ui = page('builder.js');
   const gly = { abbr: 'G', name: 'Glycine', type: 'aa', subtype: 'natural', chem_types: '' };
   const fresh = { ...gly, abbr: 'NewThiol', name: 'New thiol' };
-  const first = ui.run('loadMonomers()');
+  const first = ui.run('library.load()');
   ui.requests[0].resolve([gly]);
   await first;
   ui.element('lib-search').value = 'new';
-  ui.run('openLib()');
+  ui.run('library.open()');
   const refresh = ui.requests.find((r, i) => i > 0 && r.url === '/monomers');
   assert.ok(refresh);
   refresh.resolve([gly, fresh]);
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(ui.element('lib-search').value, 'new');
   assert.match(ui.element('lib-list').innerHTML, /NewThiol/);
-  assert.equal(ui.run('allMonomers.length'), 2);
+  assert.equal(ui.run('library.monomers.length'), 2);
 });
 
 test('older library refresh cannot replace a newer library', async () => {
   const ui = page('builder.js');
-  const old = ui.run('loadMonomers()');
-  ui.run("libPanel.classList.add('open')");
+  const old = ui.run('library.load()');
+  ui.run("library.panel.classList.add('open')");
   ui.run("window.dispatchEvent(new Event('focus'))");
   ui.requests[1].resolve([{ abbr: 'New', name: 'New', type: 'aa', subtype: '', chem_types: '' }]);
   await new Promise(setImmediate);
   ui.requests[0].resolve([]);
   await old;
-  assert.equal(ui.run('allMonomers[0].abbr'), 'New');
+  assert.equal(ui.run('library.monomers[0].abbr'), 'New');
   assert.match(ui.element('lib-list').innerHTML, /New/);
 });
 
@@ -191,9 +191,9 @@ function previewRow(ui) {
 test('hiding a library preview discards its queued response', async () => {
   const ui = page('builder.js');
   previewRow(ui);
-  ui.run('startPreview("G", previewRow)');
+  ui.run('library.startPreview("G", previewRow)');
   await ui.timers();
-  ui.run('hidePreview()');
+  ui.run('library.hidePreview()');
   ui.requests[0].resolve({svg: '<svg>OLD PREVIEW</svg>'});
   await new Promise(setImmediate);
   assert.equal(ui.element('lib-preview').style.display, 'none');
@@ -203,9 +203,9 @@ test('hiding a library preview discards its queued response', async () => {
 test('an older library hover cannot replace the latest preview', async () => {
   const ui = page('builder.js');
   previewRow(ui);
-  ui.run('startPreview("G", previewRow)');
+  ui.run('library.startPreview("G", previewRow)');
   await ui.timers();
-  ui.run('startPreview("A", previewRow)');
+  ui.run('library.startPreview("A", previewRow)');
   await ui.timers();
   ui.requests[1].resolve({svg: '<svg>CURRENT PREVIEW</svg>'});
   await new Promise(setImmediate);
@@ -219,8 +219,8 @@ test('an older library hover cannot replace the latest preview', async () => {
 test('closing a cached preview before its debounce leaves it hidden', async () => {
   const ui = page('builder.js');
   previewRow(ui);
-  ui.run('previewCache.G = {svg: "<svg>CACHED PREVIEW</svg>"}; startPreview("G", previewRow)');
-  ui.run('hidePreview()');
+  ui.run('library.previewCache.G = {svg: "<svg>CACHED PREVIEW</svg>"}; library.startPreview("G", previewRow)');
+  ui.run('library.hidePreview()');
   await ui.timers();
   assert.equal(ui.requests.length, 0);
   assert.equal(ui.element('lib-preview').style.display, 'none');
@@ -228,7 +228,7 @@ test('closing a cached preview before its debounce leaves it hidden', async () =
 
 test('a discovered cap family asks for its attachment form before loading slots', async () => {
   const ui = page('builder.js');
-  ui.run("allMonomers = [{abbr:'NovelCap', degenerate:true, nterm_abbr:'NovelCap_', cterm_abbr:'_NovelCap'}]");
+  ui.run("library.monomers = [{abbr:'NovelCap', degenerate:true, nterm_abbr:'NovelCap_', cterm_abbr:'_NovelCap'}]");
   await ui.run("loadBuildRight('NovelCap')");
   assert.equal(ui.requests.length, 0);
   const choices = ui.element('build-right-rgroups').children;
@@ -393,9 +393,9 @@ test('validated notation conversion keeps the drawing, remaps owners and preserv
   assert.equal(ui.run('lastCabiln'), result.result);
   assert.equal(ui.run('lastSvg'), rendered.svg);
   assert.equal(ui.run('lastMolBlock'), rendered.mol_block);
-  assert.deepEqual(JSON.parse(ui.run('JSON.stringify(residueMap)')), { 0: [2, 3, 4], 1: [0, 1] });
-  assert.deepEqual(JSON.parse(ui.run('JSON.stringify(atomToRes)')), { 0: 1, 1: 1, 2: 0, 3: 0, 4: 0 });
-  assert.equal(ui.run('residueList[0].abbr'), 'G');
+  assert.deepEqual(JSON.parse(ui.run('JSON.stringify(residueView.atoms)')), { 0: [2, 3, 4], 1: [0, 1] });
+  assert.deepEqual(JSON.parse(ui.run('JSON.stringify(residueView.atomOwners)')), { 0: 1, 1: 1, 2: 0, 3: 0, 4: 0 });
+  assert.equal(ui.run('residueView.residues[0].abbr'), 'G');
   assert.equal(ui.run('buildLeftRIdx'), null);
   assert.equal(ui.run('rerollSeed'), 2);
   assert.equal(ui.element('render-inner').style.transform, 'scale(1.5)');
@@ -413,7 +413,7 @@ test('validated notation conversion keeps the drawing, remaps owners and preserv
   await second;
   assert.deepEqual(ui.requests.map(request => request.url), ['/render', '/render', '/convert_notation', '/convert_notation']);
   assert.equal(ui.run('lastMolBlock'), rendered.mol_block);
-  assert.deepEqual(JSON.parse(ui.run('JSON.stringify(residueMap)')), notationDrawing().residue_map);
+  assert.deepEqual(JSON.parse(ui.run('JSON.stringify(residueView.atoms)')), notationDrawing().residue_map);
   assert.equal(ui.run('rerollSeed'), 2);
   ui.run('travelHistory("undo")');
   assert.equal(ui.element('cabiln-input').value, 'G%A');
@@ -433,7 +433,7 @@ test('notation conversion redraws when drawing correspondence is unavailable or 
     if (scenario === 'source') result.source_echo = 'G%A';
     if (scenario === 'target') result.presentation.cabiln_echo = 'A%G';
     if (scenario === 'mapping') result.occurrence_order = [0, 0];
-    if (scenario === 'missing-owner') ui.run('delete residueMap[1]');
+    if (scenario === 'missing-owner') ui.run('delete residueView.atoms[1]');
     if (['library', 'aliases', 'reactions', 'caps'].includes(scenario)) result.context = {
       ...binding, library_binding: { ...binding.library_binding,
         [scenario === 'library' ? 'monomers' : scenario]: 'changed' },
@@ -702,7 +702,7 @@ test('recursive sibling tabs return to their parent and highlight exact descenda
   });
   assert.deepEqual(chips.filter(chip => chip.dataset.residue !== undefined)
     .map(chip => chip.dataset.residue), [0, 2, 3, 4, 5, 1]);
-  ui.run('var hovered = null; highlightGroup = ids => { hovered = ids; }');
+  ui.run('var hovered = null; residueView.highlightGroup = ids => { hovered = ids; }');
   const brackets = chips.filter(chip => chip.textContent === '[');
   for (const [index, members] of [[0, [2, 3, 4, 5]], [1, [3, 4]], [2, [4]], [3, [5]]]) {
     await brackets[index].dispatchEvent({ type: 'mouseenter' });
@@ -838,7 +838,7 @@ test('superseded connection previews cannot publish either a queued proposal or 
         buildMode = true; buildLeftRIdx = 0;
         buildLeft = {abbr: 'G', selectedSlot: 2, rgroups: [{slot: 2, chem_type: 'backbone_c'}]};
         buildRight = {abbr: 'A', selectedSlot: 1, rgroups: [{slot: 1, chem_type: 'backbone_n'}]};
-        libLoaded = true; libraryVersion = 'old';
+        library.loaded = true; library.version = 'old';
       `);
       const validity = ui.run('checkBuildValidity()');
       ui.requests[0].resolve({ valid: true, reaction: 'amide' });
@@ -856,7 +856,7 @@ test('superseded connection previews cannot publish either a queued proposal or 
       if (action === 'edit') await ui.input('cabiln-input', 'G-K');
       if (action === 'hide') await ui.element('build-preview-close').click();
       if (action === 'library') {
-        const refresh = ui.run('loadMonomers()');
+        const refresh = ui.run('library.load()');
         ui.requests.at(-1).resolve([], true, 200, { 'X-Library-Version': 'new' });
         await refresh;
       }
@@ -923,7 +923,7 @@ function swapPage() {
     buildMode = true; buildLeftRIdx = 0;
     buildLeft = {abbr: 'A', rgroups: [{slot: 2, used: true}], selectedSlot: null};
     buildRight = {abbr: 'S', rgroups: [{slot: 2}], selectedSlot: null};
-    libLoaded = true; libraryVersion = 'old';
+    library.loaded = true; library.version = 'old';
     swapState = { source_echo: 'A-G', residue_idx: 0,
       context: { project_version: 1, library_binding: 'library', canonical: {version: 1} },
       requirements: [{slot: 2}], candidate: {abbr: 'S'}, candidates: [], mapping: {2: 2}, preview: null };
@@ -993,7 +993,7 @@ test('cancelled Swap responses cannot restore a mapping, preview or apply an old
       }
       if (action === 'close') await ui.element('build-close').click();
       if (action === 'library') {
-        const refresh = ui.run('loadMonomers()');
+        const refresh = ui.run('library.load()');
         ui.requests.at(-1).resolve([], true, 200, { 'X-Library-Version': 'new' });
         await refresh;
       }
@@ -1238,7 +1238,7 @@ test('cancelling backbone insertion discards the pending insertion result', asyn
   const ui = page('builder.js');
   ui.element('cabiln-input').value = 'A-K';
   ui.run(`
-    chainData = [{residues: [0, 1]}];
+    residueView.render({layout: {segments: [{roots: [0, 1]}]}});
     buildLeftRIdx = 0; buildRightRIdx = 1; insertBetweenActive = true;
   `);
   const pending = ui.run('doInsertBetween("G")');
@@ -1436,7 +1436,7 @@ test('synthetic and opaque occurrences remain selectable and library symbols are
     { idx: 1, abbr: '_SYN0', kind: 'synthetic' },
     { idx: 2, abbr: '_SYN1', kind: 'opaque' },
   ];
-  ui.run(`buildResidueUI({}, ${JSON.stringify(residues)}, {segments: [{roots: [0, 1, 2], members: [0, 1, 2]}], groups: [], markers: []})`);
+  ui.run(`residueView.render({residues: ${JSON.stringify(residues)}, layout: {segments: [{roots: [0, 1, 2], members: [0, 1, 2]}], groups: [], markers: []}}, editor.present.quality)`);
   ui.run('let selected = []; selectBuildResidue = residue => selected.push(residue.idx)');
   const chips = ui.element('residue-chips').children;
   assert.equal(chips[0].dataset.quality, undefined);
@@ -1454,13 +1454,13 @@ test('palette and preview show library quality issues as escaped text', async ()
   const ui = page('builder.js');
   const monomer = { abbr: 'G', name: 'Glycine', type: 'aa', subtype: 'natural', chem_types: '',
     quality: { status: 'review', issues: [{ code: 'curation', message: 'Review <atom> mapping' }] } };
-  const pending = ui.run('loadMonomers()');
+  const pending = ui.run('library.load()');
   latestRequest(ui, '/monomers').resolve([monomer]);
   await pending;
   assert.match(ui.element('lib-list').innerHTML, /lib-quality.*Review &lt;atom&gt; mapping/);
   assert.match(ui.element('lib-list').innerHTML, /aria-label="G: Glycine. Library quality: Review/);
   previewRow(ui);
-  ui.run(`showPreview(${JSON.stringify({ ...preview, quality: monomer.quality })}, previewRow)`);
+  ui.run(`library.showPreview(${JSON.stringify({ ...preview, quality: monomer.quality })}, previewRow)`);
   assert.match(ui.element('lib-preview').innerHTML, /Library quality: Review &lt;atom&gt; mapping/);
   assert.doesNotMatch(ui.element('lib-preview').innerHTML, /<atom>/);
 });
@@ -1469,23 +1469,23 @@ test('informational library notes remain escaped and separate from amber warning
   const ui = page('builder.js');
   const monomer = { abbr: 'G', name: 'Glycine', type: 'aa', subtype: 'natural', chem_types: '',
     quality: { issues: [{ severity: 'info', code: 'legacy_numbering', message: 'Legacy <atom> numbering & labels' }] } };
-  const pending = ui.run('loadMonomers()');
+  const pending = ui.run('library.load()');
   latestRequest(ui, '/monomers').resolve([monomer]);
   await pending;
   assert.doesNotMatch(ui.element('lib-list').innerHTML, /lib-quality|Library quality:/);
   assert.match(ui.element('lib-list').innerHTML, /aria-label="G: Glycine"/);
   previewRow(ui);
-  ui.run(`showPreview(${JSON.stringify({ ...preview, quality: monomer.quality })}, previewRow)`);
+  ui.run(`library.showPreview(${JSON.stringify({ ...preview, quality: monomer.quality })}, previewRow)`);
   assert.match(ui.element('lib-preview').innerHTML,
     /class="prev-meta">Library notes: Legacy &lt;atom&gt; numbering &amp; labels/);
   assert.doesNotMatch(ui.element('lib-preview').innerHTML, /prev-warn|<atom>/);
 
   monomer.quality.issues.push({ severity: 'warning', code: 'uncertain_stereo', message: 'Review <stereo> assignment' });
-  ui.run(`allMonomers = ${JSON.stringify([monomer])}; renderLibList('')`);
+  ui.run(`library.monomers = ${JSON.stringify([monomer])}; library.render('')`);
   assert.match(ui.element('lib-list').innerHTML, /lib-quality.*Review &lt;stereo&gt; assignment/);
   assert.match(ui.element('lib-list').innerHTML, /aria-label="G: Glycine. Library quality: Review &lt;stereo&gt; assignment"/);
   assert.doesNotMatch(ui.element('lib-list').innerHTML, /Legacy/);
-  ui.run(`showPreview(${JSON.stringify({ ...preview, quality: monomer.quality })}, previewRow)`);
+  ui.run(`library.showPreview(${JSON.stringify({ ...preview, quality: monomer.quality })}, previewRow)`);
   assert.match(ui.element('lib-preview').innerHTML, /class="prev-meta">Library notes: Legacy &lt;atom&gt; numbering &amp; labels/);
   assert.match(ui.element('lib-preview').innerHTML, /class="prev-meta prev-warn">Library quality: Review &lt;stereo&gt; assignment/);
   assert.doesNotMatch(ui.element('lib-preview').innerHTML, /<atom>|<stereo>/);
@@ -1724,16 +1724,16 @@ test('persistent overload is visible after two retries and other errors are neve
 
 test('reaction loading failure stays visible and does not poison the retry cache', async () => {
   const ui = page('builder.js');
-  let pending = ui.run('loadReactions()');
+  let pending = ui.run('library.loadReactions()');
   latestRequest(ui, '/reactions').resolve({ error: 'Server remains busy' }, false, 503);
   await pending;
-  assert.equal(ui.run('reactionPairs'), null);
+  assert.equal(ui.run('library.reactionPairs'), null);
   assert.equal(ui.element('lib-status').hidden, false);
   assert.match(ui.element('lib-status').textContent, /Server remains busy/);
-  pending = ui.run('loadReactions()');
+  pending = ui.run('library.loadReactions()');
   latestRequest(ui, '/reactions').resolve([['backbone_n', 'backbone_c']]);
   await pending;
-  assert.equal(ui.run('reactionPairs.length'), 1);
+  assert.equal(ui.run('library.reactionPairs.length'), 1);
   assert.equal(ui.element('lib-status').hidden, true);
 });
 

@@ -2,20 +2,12 @@
 let darkMode   = true;
 let verifyMode = false;
 let hlEnabled  = true;
-let libLoaded  = false;
-let libraryVersion = null;
-let allMonomers = [];
 let cabilnTimer = null;
 let smilesTimer = null;
 let lastCabiln  = '';
 let lastSmiles  = '';
 let lastSvg     = '';
 let lastMolBlock = '';
-let residueMap  = {};
-let atomToRes   = {};
-let residueList = [];
-let previewCache = {};
-let previewTimer = null;
 let buildMode    = false;
 let buildLeft    = null;  // { abbr, rgroups: [{slot, chem_type, used}], selectedSlot }
 let buildRight   = null;  // { abbr, rgroups: [{slot, chem_type, used}], selectedSlot }
@@ -25,8 +17,6 @@ let buildReaction = '';
 let insertBetweenActive = false;
 let swapState = null;  // Current source, eligible definitions, reviewed mapping and preview.
 let rerollSeed   = 0;
-let reactionPairs = null;  // lazy-loaded list of [ct_a, ct_b] pairs
-let rxnFilterActive = false;
 let mainStale = false;
 let hasMainDrawing = false;
 let displayedSource = '';
@@ -38,49 +28,6 @@ let draftCleared = false;
 let referenceOriginal = null;
 let referenceContext = null;
 
-// A response may already be queued when abort() runs. Only the current request
-// in each group may change the UI, even if a cancelled fetch still resolves.
-const activeRequests = new Map();
-function cancelRequests(...keys) {
-  for (const key of keys) {
-    const pending = activeRequests.get(key);
-    if (!pending) continue;
-    activeRequests.delete(key);
-    pending.controller.abort();
-    pending.onEnd();
-  }
-}
-function startRequest(key, onEnd = () => {}) {
-  cancelRequests(key);
-  let settle;
-  const done = new Promise(resolve => { settle = resolve; });
-  const pending = { controller: new AbortController(), done,
-    onEnd() { try { onEnd(); } finally { settle(); } },
-  };
-  activeRequests.set(key, pending);
-  return {
-    signal: pending.controller.signal,
-    done,
-    current: () => activeRequests.get(key) === pending,
-    finish() {
-      if (activeRequests.get(key) !== pending) return;
-      activeRequests.delete(key);
-      pending.onEnd();
-    },
-  };
-}
-
-async function readResponse(response) {
-  const data = await response.json();
-  if (!response.ok && !data.error) {
-    const detail = data.detail;
-    data.error = Array.isArray(detail)
-      ? detail.map(item => item.msg).join('; ')
-      : detail || 'The request could not be completed.';
-  }
-  return data;
-}
-
 function setStatus(element, message, kind = '') {
   element.textContent = message;
   element.title = message;
@@ -90,12 +37,6 @@ function setStatus(element, message, kind = '') {
 function invalidInputResponse(response) {
   return response.status === 400 || response.status === 422;
 }
-
-const RES_COLORS = [
-  '#2a5080','#2a8050','#802a50','#806a2a','#502a80',
-  '#2a6080','#80502a','#2a8070','#6a2a80','#80802a',
-  '#3a6080','#3a8060','#603a50','#706a3a','#403a70',
-];
 
 // ─── elements ─────────────────────────────────────────────────────────────────
 const cabilnInput   = document.getElementById('cabiln-input');
@@ -110,20 +51,12 @@ const smilesInner   = document.getElementById('smiles-inner');
 const compareBar    = document.getElementById('compare-bar');
 const btnDark       = document.getElementById('btn-dark');
 const btnVerify     = document.getElementById('btn-verify');
-const btnLib        = document.getElementById('btn-lib');
 const btnHl         = document.getElementById('btn-hl');
 const btnPng        = document.getElementById('btn-png');
 const btnMol        = document.getElementById('btn-mol');
 const btnToBracket  = document.getElementById('btn-to-bracket');
 const btnToBranch   = document.getElementById('btn-to-branch');
 const notationPolicy = document.getElementById('notation-policy');
-const libPanel      = document.getElementById('lib-panel');
-const libSearch     = document.getElementById('lib-search');
-const libClose      = document.getElementById('lib-close');
-const libList       = document.getElementById('lib-list');
-const libCount      = document.getElementById('lib-count');
-const libStatus     = document.getElementById('lib-status');
-const libPreview    = document.getElementById('lib-preview');
 const btnExamples    = document.getElementById('btn-examples');
 const examplesPanel  = document.getElementById('examples-panel');
 const examplesClose  = document.getElementById('examples-close');
@@ -159,7 +92,6 @@ const buildInsertBtn = document.getElementById('build-insert-btn');
 const btnReroll     = document.getElementById('btn-reroll');
 const btnS2c        = document.getElementById('btn-s2c');
 const btnS2cBracket = document.getElementById('btn-s2c-bracket');
-const btnRxnFilter  = document.getElementById('btn-rxn-filter');
 const notationSelect = document.getElementById('notation-select');
 const btnToCabilnPct     = document.getElementById('btn-to-cabiln-pct');
 const btnToCabilnBracket = document.getElementById('btn-to-cabiln-bracket');
@@ -183,6 +115,22 @@ const qualityDetails = document.getElementById('quality-details');
 const canonicalStatus = document.getElementById('canonical-status');
 const btnHelp = document.getElementById('btn-help');
 const helpPanel = document.getElementById('help-panel');
+
+const residueView = createResidueView({
+  inner: renderInner, chips: resChips,
+  canHighlight: () => hlEnabled && !mainStale,
+  onSelect: residue => selectBuildResidue(residue),
+});
+
+const library = new MonomerLibrary({
+  getFilters: () => ({
+    building: buildMode, left: buildLeft, insertBetween: insertBetweenActive,
+    replacements: buildMode && isSwapMode() ? (swapState?.candidates || []) : null,
+    awaitingSelection: !swapState,
+  }),
+  onUse: (abbr, explicit) => useLibraryMonomer(abbr, explicit),
+  onChanged: () => { if (buildMode) clearBuild(); },
+});
 
 // Document data belongs to the editor; these timers belong to browser storage.
 const DRAFT_KEY = 'cabiln.draft.v1';
@@ -311,7 +259,7 @@ btnRestoreDraft.addEventListener('click', async () => {
   }
 });
 btnDismissDraft.addEventListener('click', () => {
-  cancelRequests('project-open');
+  requests.cancel('project-open');
   finishDraftRecovery();
   saveDraft();
 });
@@ -401,10 +349,10 @@ function acceptReferenceContext(context) {
 function projectChanged(edited = true) {
   projectRevision++;
   if (edited) draftCleared = false;
-  if (activeRequests.has('project-open') || activeRequests.has('project-save')) {
+  if (requests.has('project-open') || requests.has('project-save')) {
     setProjectStatus('The document changed during the project check. Save or open again when ready.', true);
   }
-  cancelRequests('project-open', 'project-save');
+  requests.cancel('project-open', 'project-save');
 }
 
 function setProjectStatus(message, error = false) {
@@ -437,7 +385,7 @@ function downloadProject(project) {
 
 async function restoreBoundDraft(project) {
   const revision = projectRevision;
-  const request = startRequest('project-open');
+  const request = requests.start('project-open');
   setProjectStatus('Checking the saved draft library binding and definitions…');
   try {
     const response = await fetchCalculation('/prepare_project', {
@@ -460,7 +408,7 @@ async function restoreBoundDraft(project) {
 async function saveProject() {
   const revision = projectRevision;
   const project = projectSnapshot();
-  const request = startRequest('project-save', () => { btnProjectSave.disabled = false; });
+  const request = requests.start('project-save', () => { btnProjectSave.disabled = false; });
   btnProjectSave.disabled = true;
   setProjectStatus('Checking project definitions before saving…');
   try {
@@ -487,7 +435,7 @@ btnProjectSave.addEventListener('click', saveProject);
 
 async function validateAndOpenProject(project, successMessage = 'Project opened') {
   const revision = projectRevision;
-  const request = startRequest('project-open');
+  const request = requests.start('project-open');
   setProjectStatus('Checking the project library binding and definitions…');
   try {
     const response = await fetchCalculation('/validate_project', {
@@ -515,7 +463,7 @@ projectUpload.addEventListener('change', async event => {
   projectUpload.value = '';
   if (!file) return;
   const revision = projectRevision;
-  const request = startRequest('project-open');
+  const request = requests.start('project-open');
   setProjectStatus('Reading project…');
   try {
     if (file.size > CabilnProject.MAX_FILE_BYTES) throw new Error('Project files must be no larger than 2 MiB.');
@@ -571,7 +519,7 @@ window.addEventListener('keydown', event => {
   if (event.key === 'Escape' && !helpPanel.hidden) showHelp(false);
 });
 document.getElementById('btn-clear-draft').addEventListener('click', () => {
-  cancelRequests('project-open');
+  requests.cancel('project-open');
   clearTimeout(saveDraftTimer);
   finishDraftRecovery();
   draftCleared = true;
@@ -603,13 +551,13 @@ btnDark.addEventListener('click', () => {
   for (const el of document.querySelectorAll('.canvas-wrap')) {
     el.classList.toggle('dark', darkMode);
   }
-  libPreview.classList.toggle('dark', darkMode);
+  library.setDark(darkMode);
   document.querySelectorAll('.build-box').forEach(el => el.classList.toggle('dark', darkMode));
 });
 // apply dark mode on load
 btnDark.classList.add('active');
 document.querySelectorAll('.canvas-wrap').forEach(el => el.classList.add('dark'));
-libPreview.classList.add('dark');
+library.setDark(true);
 document.querySelectorAll('.build-box').forEach(el => el.classList.add('dark'));
 
 // ─── highlight toggle ─────────────────────────────────────────────────────────
@@ -617,7 +565,7 @@ btnHl.addEventListener('click', () => {
   hlEnabled = !hlEnabled;
   btnHl.classList.toggle('active', hlEnabled);
   btnHl.setAttribute('aria-pressed', String(hlEnabled));
-  if (!hlEnabled) clearHighlight();
+  if (!hlEnabled) residueView.clearHighlight();
 });
 
 // ─── verify mode ──────────────────────────────────────────────────────────────
@@ -630,39 +578,6 @@ btnVerify.addEventListener('click', () => {
   clearComparison();
   if (verifyMode && (smilesInput.value.trim() || referenceOriginal) && !lastSmiles) restoreReferenceDrawing();
   else if (verifyMode) triggerVerify();
-});
-
-// ─── library sidebar (persistent) ────────────────────────────────────────────
-function openLib() {
-  libPanel.classList.add('open');
-  btnLib.classList.add('active');
-  btnLib.setAttribute('aria-expanded', 'true');
-  loadMonomers();
-  libSearch.focus();
-  loadReactions();
-}
-function closeLib() {
-  libPanel.classList.remove('open');
-  btnLib.classList.remove('active');
-  btnLib.setAttribute('aria-expanded', 'false');
-  hidePreview();
-}
-
-btnLib.addEventListener('click', () =>
-  libPanel.classList.contains('open') ? closeLib() : openLib());
-libClose.addEventListener('click', closeLib);
-
-libSearch.addEventListener('input', () => renderLibList(libSearch.value.trim().toLowerCase()));
-
-btnRxnFilter.addEventListener('click', async () => {
-  if (!Array.isArray(reactionPairs)) {
-    await loadReactions();
-    if (!Array.isArray(reactionPairs) || !buildLeft) return;
-  }
-  rxnFilterActive = !rxnFilterActive;
-  btnRxnFilter.classList.toggle('active', rxnFilterActive);
-  btnRxnFilter.setAttribute('aria-pressed', String(rxnFilterActive));
-  renderLibList(libSearch.value.trim().toLowerCase());
 });
 
 // ─── example peptide sidebar ──────────────────────────────────────────────────
@@ -719,140 +634,6 @@ function renderExamples(categories) {
   });
 }
 
-async function loadMonomers() {
-  const request = startRequest('library');
-  if (!libLoaded) libList.innerHTML = '<div class="placeholder">Loading…</div>';
-  try {
-    const res = await fetchCalculation('/monomers', { signal: request.signal });
-    const data = await readResponse(res);
-    if (!request.current()) return;
-    if (!Array.isArray(data)) throw new Error(data.error || 'Invalid monomer library');
-    const version = res.headers?.get('X-Library-Version') || null;
-    if (libLoaded && version && version === libraryVersion) return;
-    if (libLoaded && buildMode) clearBuild();
-    libraryVersion = version;
-    allMonomers = data.map(monomer => ({ ...monomer,
-      searchText: [monomer.abbr, monomer.name, monomer.type, monomer.chem_types].join(' ').toLowerCase(),
-      attachmentTypes: parseCts(monomer.chem_types),
-    }));
-    previewCache = {};
-    hidePreview();
-    libLoaded = true;
-    renderLibList(libSearch.value.trim().toLowerCase());
-  } catch (e) {
-    if (!request.current()) return;
-    if (!libLoaded) libList.innerHTML = '<div class="placeholder err">Failed to load monomers. Close and reopen the library to retry.</div>';
-  } finally {
-    request.finish();
-  }
-}
-
-window.addEventListener('focus', () => {
-  if (libPanel.classList.contains('open')) loadMonomers();
-});
-
-async function loadReactions() {
-  if (reactionPairs !== null) return;
-  const request = startRequest('reactions');
-  libStatus.hidden = true;
-  try {
-    // Both endpoints share one calculation worker. Let the palette finish so
-    // a quick reaction-list request cannot force it into a one-second retry.
-    while (activeRequests.has('library')) {
-      await activeRequests.get('library').done;
-      if (!request.current()) return;
-    }
-    const res = await fetchCalculation('/reactions', { signal: request.signal });
-    const data = await readResponse(res);
-    if (!request.current()) return;
-    if (!Array.isArray(data)) throw new Error(data.error || 'Reaction data is unavailable');
-    reactionPairs = data;
-    if (rxnFilterActive && libLoaded) renderLibList(libSearch.value.trim().toLowerCase());
-  } catch (error) {
-    if (!request.current()) return;
-    reactionPairs = null;
-    libStatus.textContent = 'Reaction filter unavailable. Reopen Library or click Filter to retry. ' + error.message;
-    libStatus.hidden = false;
-  } finally { request.finish(); }
-}
-
-function parseCts(cts) {
-  if (!cts) return [];
-  return cts.split(',').map(p => p.includes(':') ? p.split(':')[1].trim() : p.trim()).filter(Boolean);
-}
-
-function renderLibList(q) {
-  const catalog = buildMode && isSwapMode() ? (swapState?.candidates || []) : allMonomers;
-  let filtered = q
-    ? catalog.filter(m => m.searchText.includes(q))
-    : catalog;
-
-  if (rxnFilterActive && buildLeft && Array.isArray(reactionPairs)) {
-    const pairSet = new Set(reactionPairs.map(([a, b]) => a + '|' + b));
-    let lcts;
-    if (buildLeft.selectedSlot !== null) {
-      const selRg = buildLeft.rgroups.find(r => r.slot === buildLeft.selectedSlot);
-      lcts = selRg && !selRg.used ? [selRg.chem_type] : [];
-    } else {
-      lcts = buildLeft.rgroups.filter(r => !r.used).map(r => r.chem_type);
-    }
-    filtered = filtered.filter(m => {
-      const mcts = m.attachmentTypes;
-      return mcts.some(mct => lcts.some(lct =>
-        pairSet.has(lct + '|' + mct) || pairSet.has(mct + '|' + lct)
-      ));
-    });
-  }
-
-  if (insertBetweenActive) {
-    filtered = filtered.filter(m => m.backbone_insertable);
-  }
-
-  libCount.textContent = buildMode && isSwapMode()
-    ? `${filtered.length} / ${catalog.length} replacements with compatible sites`
-    : `${filtered.length} / ${allMonomers.length} monomers`;
-
-  if (!filtered.length) {
-    libList.innerHTML = `<div class="placeholder">${buildMode && isSwapMode() && !swapState
-      ? 'Select a residue to find replacements' : 'No matches'}</div>`;
-    return;
-  }
-
-  const rows = filtered.map(m => {
-    const badge = m.degenerate
-      ? `<span class="lib-badge cap">N/C cap</span>`
-      : m.subtype === 'modified' || m.subtype === 'natural'
-      ? `<span class="lib-badge aa">${escHtml(m.type)}</span>`
-      : m.type === 'cap' && m.subtype === 'protecting'
-      ? `<span class="lib-badge protect">cap</span>`
-      : `<span class="lib-badge cap">${escHtml(m.type)}</span>`;
-
-    const issues = Array.isArray(m.quality?.issues) ? m.quality.issues : [];
-    const qualityText = issues.filter(issue => issue.severity !== 'info')
-      .map(issue => issue.message || issue.code).filter(Boolean).join(' · ');
-    let lg = m.leaving ? `  LG: ${escHtml(m.leaving)}` : '';
-    if (m.degenerate) {
-      const parts = [];
-      if (m.nterm_abbr) parts.push(`N: ${escHtml(m.nterm_abbr)} (${escHtml(m.nterm_leaving)})`);
-      if (m.cterm_abbr) parts.push(`C: ${escHtml(m.cterm_abbr)} (${escHtml(m.cterm_leaving)})`);
-      lg = '  ' + parts.join(' | ');
-    }
-    const label = m.abbr + ': ' + m.name + (qualityText ? '. Library quality: ' + qualityText : '');
-    return `<div class="lib-row" data-abbr="${escAttr(m.abbr)}" tabindex="0" aria-label="${escAttr(label)}">
-      <div class="lib-abbr">${escHtml(m.abbr)}</div>
-      <div class="lib-info">
-        <div class="lib-name" title="${escAttr(m.name)}">${escHtml(m.name)}</div>
-        <div class="lib-meta">${escHtml(m.chem_types || '')}${lg}</div>
-        ${qualityText ? `<div class="lib-quality" title="${escAttr(qualityText)}">${escHtml(qualityText)}</div>` : ''}
-      </div>
-      ${badge}
-      <button type="button" class="lib-use" aria-label="Use ${escAttr(m.abbr)} in builder" title="Choose this monomer in the builder">Use</button>
-    </div>`;
-  });
-  libList.innerHTML = rows.join('');
-
-}
-
 function useLibraryMonomer(abbr, explicit = false) {
   if (explicit && !buildMode) openBuild();
   if (buildMode && notationSelect.value !== 'cabiln') {
@@ -874,37 +655,6 @@ function useLibraryMonomer(abbr, explicit = false) {
   }
 }
 
-// Keep one set of listeners while search replaces the rows.
-libList.addEventListener('click', event => {
-  const row = event.target.closest('.lib-row');
-  if (row) useLibraryMonomer(row.dataset.abbr, !!event.target.closest('.lib-use'));
-});
-libList.addEventListener('contextmenu', event => {
-  const row = event.target.closest('.lib-row');
-  if (row && buildMode) {
-    event.preventDefault();
-    useLibraryMonomer(row.dataset.abbr, true);
-  }
-});
-libList.addEventListener('keydown', event => {
-  if (event.target.matches('.lib-row') && ['Enter', ' '].includes(event.key)) {
-    event.preventDefault();
-    useLibraryMonomer(event.target.dataset.abbr);
-  }
-});
-for (const type of ['mouseover', 'focusin']) {
-  libList.addEventListener(type, event => {
-    const row = event.target.closest('.lib-row');
-    if (row && !row.contains(event.relatedTarget)) startPreview(row.dataset.abbr, row);
-  });
-}
-for (const type of ['mouseout', 'focusout']) {
-  libList.addEventListener(type, event => {
-    const row = event.target.closest('.lib-row');
-    if (row && !row.contains(event.relatedTarget)) hidePreview();
-  });
-}
-
 function insertAbbr(abbr) {
   const ta = cabilnInput;
   const start = ta.selectionStart;
@@ -920,400 +670,7 @@ function insertAbbr(abbr) {
   ta.focus();
 }
 
-// ─── monomer preview tooltip ──────────────────────────────────────────────────
-function startPreview(abbr, row) {
-  clearTimeout(previewTimer);
-  const request = startRequest('monomer-preview');
-  previewTimer = setTimeout(async () => {
-    try {
-      const data = previewCache[abbr] || await readResponse(await fetchCalculation(
-        `/monomer_svg?abbr=${encodeURIComponent(abbr)}`, { signal: request.signal }
-      ));
-      if (!request.current()) return;
-      if (data.svg) {
-        previewCache[abbr] = data;
-        showPreview(data, row);
-      }
-    } catch (e) { /* silent */ }
-    finally { request.finish(); }
-  }, 200);
-}
-
-function showPreview(data, row) {
-  let html;
-  if (data.degenerate && data.variants) {
-    // Degenerate: variant panels with optional reagent info
-    let panels = data.variants.map(v => {
-      let pane = `<div class="prev-pane"><span class="prev-label">${v.label}</span>${v.svg}`;
-      if (v.reagent) {
-        pane += `<span class="prev-rxn">${v.reagent.reaction} (LG: ${v.reagent.reagent_lg})</span>`;
-      }
-      pane += `</div>`;
-      return pane;
-    }).join('');
-    // Show reagent form from first variant that has one
-    const withReagent = data.variants.find(v => v.svg_reagent);
-    if (withReagent) {
-      panels += `<div class="prev-pane"><span class="prev-label">Reagent</span>${withReagent.svg_reagent}</div>`;
-    }
-    panels += `<div class="prev-pane"><span class="prev-label">R-groups</span>${data.svg}</div>`;
-    html = `<div class="prev-row">${panels}</div>`;
-  } else if (data.degenerate) {
-    // Legacy format fallback
-    html = `<div class="prev-row">
-      <div class="prev-pane"><span class="prev-label">N-term</span>${data.svg_nterm || data.svg}</div>
-      <div class="prev-pane"><span class="prev-label">C-term</span>${data.svg_cterm || data.svg}</div>
-    </div>`;
-  } else {
-    const restored = data.svg_restored || data.svg;
-    let reagentPane = '';
-    let metaLine = '';
-    if (data.svg_reagent) {
-      reagentPane = `<div class="prev-pane"><span class="prev-label">Reagent</span>${data.svg_reagent}</div>`;
-      const r = data.reagent;
-      metaLine = `<div class="prev-meta">${r.reaction}` +
-        (r.reagent_note ? ` — ${r.reagent_note}` : '') +
-        (r.issue ? ` <span class="prev-warn">⚠ ${r.issue}</span>` : '') +
-        `</div>`;
-    }
-    html = `<div class="prev-row">
-      <div class="prev-pane"><span class="prev-label">Monomer</span>${restored}</div>
-      ${reagentPane}
-      <div class="prev-pane"><span class="prev-label">R-groups</span>${data.svg}</div>
-    </div>${metaLine}`;
-  }
-  const quality = data.quality || allMonomers.find(item => item.abbr === row.dataset?.abbr)?.quality;
-  const issues = Array.isArray(quality?.issues) ? quality.issues : [];
-  const notes = issues.filter(issue => issue.severity === 'info');
-  const warnings = issues.filter(issue => issue.severity !== 'info');
-  if (notes.length) html += `<div class="prev-meta">Library notes: ${notes.map(issue => escHtml(issue.message || issue.code)).join(' · ')}</div>`;
-  if (warnings.length) html += `<div class="prev-meta prev-warn">Library quality: ${warnings.map(issue => escHtml(issue.message || issue.code)).join(' · ')}</div>`;
-  libPreview.innerHTML = html;
-  const hasReagent = !!(data.svg_reagent || (data.variants && data.variants.some(v => v.svg_reagent)));
-  libPreview.classList.toggle('has-reagent', hasReagent);
-  const rect = row.getBoundingClientRect();
-  const previewH = hasReagent ? 240 : 202;
-  let top = Math.max(8, rect.top - 40);
-  if (top + previewH > window.innerHeight - 8) {
-    top = window.innerHeight - 8 - previewH;
-  }
-  top = Math.max(8, top);
-  libPreview.style.left = (rect.right + 8) + 'px';
-  libPreview.style.top  = top + 'px';
-  libPreview.style.display = 'block';
-}
-
-function hidePreview() {
-  clearTimeout(previewTimer);
-  cancelRequests('monomer-preview');
-  libPreview.style.display = 'none';
-}
-
-// ─── residue chips + bidirectional highlighting ───────────────────────────────
-let chainData = [];
-let currentBranchSet = new Set();
-let xlinkByRes = {};
-
-function highlightGroup(idxList) {
-  if (!hlEnabled || mainStale) return;
-  clearHighlight();
-  activeRIdx = -999;
-  const svg = document.querySelector('#render-inner svg');
-  if (!svg) return;
-  svg.classList.add('has-highlight');
-  for (const rIdx of idxList) {
-    const atoms = residueMap[rIdx] || [];
-    for (const aidx of atoms) {
-      svg.querySelectorAll(`.atom-${aidx}`).forEach(el =>
-        el.classList.add('res-hl'));
-    }
-  }
-  resChips.classList.add('dimmed');
-  resChips.querySelectorAll('.res-chip').forEach(c => {
-    const ri = parseInt(c.dataset.residue);
-    c.classList.toggle('hover', idxList.includes(ri));
-  });
-  resChips.querySelectorAll('.branch-chip').forEach(c => {
-    const cm = JSON.parse(c.dataset.members || '[]');
-    // Highlight a branch chip only when ALL its members are in the hover set,
-    // not merely "any overlap". Otherwise hovering on one !2 lights up the
-    // sibling [!1] and [!3] brackets too because they share the scaffold
-    // monomer (e.g. TBMB) — overzealous and confusing for tri-arm scaffolds.
-    c.classList.toggle('hover', cm.length > 0 && cm.every(m => idxList.includes(m)));
-  });
-}
-
-function buildResidueUI(resMap, residues, layout, crosslinkGroups) {
-  residueMap = resMap || {};
-  residueList = residues || [];
-  const segments = layout?.segments || [];
-  chainData = segments.map(segment => ({ residues: segment.roots }));
-  atomToRes = {};
-  for (const [rIdx, atoms] of Object.entries(residueMap)) {
-    for (const aidx of atoms) atomToRes[aidx] = parseInt(rIdx);
-  }
-
-  resChips.innerHTML = '';
-  resChips.style.position = '';
-  resChips.style.paddingLeft = '';
-  if (!residueList.length) return;
-
-  const resById = {};
-  residueList.forEach((r, i) => { resById[r.idx] = { ...r, colorIdx: i }; });
-
-  const xlinkByMember = {};
-  (crosslinkGroups || []).forEach(g => {
-    g.members.forEach(mIdx => {
-      if (!xlinkByMember[mIdx]) xlinkByMember[mIdx] = [];
-      xlinkByMember[mIdx].push(g);
-    });
-  });
-  xlinkByRes = xlinkByMember;
-
-  function makeChip(rIdx, simpleHover) {
-    const r = resById[rIdx];
-    if (!r) return null;
-    const chip = document.createElement('button');
-    chip.type = 'button';
-    chip.className = 'res-chip';
-    chip.textContent = r.abbr;
-    chip.dataset.residue = r.idx;
-    chip.title = `Select residue ${r.idx + 1}: ${r.abbr}`;
-    const assignment = editor.present.quality?.assignments?.find(item => item.residue_index === r.idx);
-    const kind = r.kind || r.quality_kind;
-    const preserved = ['opaque', 'synthetic'].includes(kind) ? kind :
-      !kind && (r.is_synthetic || assignment?.recognized === false) ? 'synthetic' : '';
-    if (preserved) {
-      chip.dataset.quality = preserved;
-      chip.title += ` · ${preserved === 'opaque' ? 'Opaque preserved fragment' : 'Synthetic preserved region'}; available sites remain editable`;
-      chip.setAttribute('aria-label', chip.title);
-    }
-    chip.style.background = RES_COLORS[r.colorIdx % RES_COLORS.length];
-    const xlinks = xlinkByMember[r.idx];
-    if (!simpleHover && xlinks && xlinks.length) {
-      const allMembers = [...new Set(xlinks.flatMap(g => g.members))];
-      chip.addEventListener('mouseenter', () => highlightGroup(allMembers));
-    } else {
-      chip.addEventListener('mouseenter', () => highlightResidue(r.idx));
-    }
-    chip.addEventListener('mouseleave', clearHighlight);
-    chip.addEventListener('focus', () => highlightResidue(r.idx));
-    chip.addEventListener('blur', clearHighlight);
-    chip.addEventListener('click', () => selectBuildResidue(r));
-    return chip;
-  }
-
-  function makeSeparator(text, memberIdxs) {
-    const el = document.createElement('span');
-    el.className = 'res-chip branch-chip';
-    el.style.background = '#3a3a50';
-    el.style.fontWeight = '700';
-    el.textContent = text;
-    el.dataset.members = JSON.stringify(memberIdxs || []);
-    if (memberIdxs && memberIdxs.length) {
-      el.tabIndex = 0;
-      el.setAttribute('aria-label', `Highlight ${text} group`);
-      el.addEventListener('mouseenter', () => highlightGroup(memberIdxs));
-      el.addEventListener('mouseleave', clearHighlight);
-      el.addEventListener('focus', () => highlightGroup(memberIdxs));
-      el.addEventListener('blur', clearHighlight);
-    }
-    return el;
-  }
-
-  function makeXlinkChip(tag, members) {
-    const el = document.createElement('span');
-    el.className = 'res-chip branch-chip xlink-chip';
-    el.style.background = '#503a4a';
-    el.style.fontWeight = '700';
-    el.style.fontSize = '0.8em';
-    el.textContent = tag;
-    el.dataset.members = JSON.stringify(members);
-    el.tabIndex = 0;
-    el.setAttribute('aria-label', `Highlight connection ${tag}`);
-    el.addEventListener('mouseenter', () => highlightGroup(members));
-    el.addEventListener('mouseleave', clearHighlight);
-    el.addEventListener('focus', () => highlightGroup(members));
-    el.addEventListener('blur', clearHighlight);
-    return el;
-  }
-
-  const groups = layout?.groups || [];
-  const markers = layout?.markers || [];
-  const groupsByHost = new Map();
-  for (const group of groups) {
-    if (!groupsByHost.has(group.host)) groupsByHost.set(group.host, []);
-    groupsByHost.get(group.host).push(group);
-  }
-  currentBranchSet = new Set(groups.flatMap(group => group.members));
-
-  function expandWithXlinks(ids) {
-    const members = new Set(ids);
-    for (const id of ids) {
-      for (const link of xlinkByMember[id] || []) {
-        link.members.forEach(member => members.add(member));
-      }
-    }
-    return [...members];
-  }
-
-  function groupMembers(group) {
-    return expandWithXlinks([
-      ...group.members,
-      ...markers.filter(marker => marker.group === group.id).flatMap(marker => marker.members),
-    ]);
-  }
-
-  function appendGroup(group) {
-    const members = groupMembers(group);
-    if (group.opening) resChips.appendChild(makeSeparator(group.opening, members));
-    // A marker-only bracket belongs to its host but contains no monomer.
-    if (!group.roots.length) {
-      markers.filter(marker => marker.group === group.id).forEach(marker => {
-        resChips.appendChild(makeXlinkChip(marker.tag, marker.members));
-      });
-    }
-    group.roots.forEach(id => appendOccurrence(id, group.id));
-    if (group.closing) resChips.appendChild(makeSeparator(group.closing, members));
-  }
-
-  function appendOccurrence(id, context = null) {
-    const ownMarkers = markers.filter(marker => marker.residue === id && marker.group === context);
-    ownMarkers.filter(marker => marker.before).forEach(marker => {
-      resChips.appendChild(makeXlinkChip(marker.tag, marker.members));
-    });
-    const links = xlinkByMember[id] || [];
-    const chip = makeChip(id, context !== null || links.length > 1);
-    if (chip) resChips.appendChild(chip);
-    const children = (groupsByHost.get(id) || []).filter(group => group.parent === context);
-    if (children.length || links.length > 1) {
-      const members = expandWithXlinks([id, ...children.flatMap(groupMembers)]);
-      const whole = makeSeparator('$', members);
-      whole.style.background = '#3a5050';
-      resChips.appendChild(whole);
-    }
-    children.forEach(appendGroup);
-    ownMarkers.filter(marker => !marker.before).forEach(marker => {
-      resChips.appendChild(makeXlinkChip(marker.tag, marker.members));
-    });
-  }
-
-  for (const segment of segments) {
-    if (segments.length > 1) {
-      resChips.appendChild(makeSeparator('%', expandWithXlinks(segment.members)));
-    }
-    segment.roots.forEach(id => appendOccurrence(id));
-  }
-
-  wireUpSvgHover();
-}
-
-let activeRIdx = null;
-
-function highlightResidue(rIdx) {
-  if (!hlEnabled || mainStale) return;
-  if (rIdx === activeRIdx) return;
-  clearHighlight();
-  activeRIdx = rIdx;
-  const atoms = residueMap[rIdx] || [];
-  const svg = document.querySelector('#render-inner svg');
-  if (!svg) return;
-
-  svg.classList.add('has-highlight');
-  for (const aidx of atoms) {
-    svg.querySelectorAll(`.atom-${aidx}`).forEach(el =>
-      el.classList.add('res-hl'));
-  }
-
-  resChips.classList.add('dimmed');
-  resChips.querySelectorAll('.res-chip').forEach(c =>
-    c.classList.toggle('hover', parseInt(c.dataset.residue) === rIdx));
-}
-
-function clearHighlight() {
-  activeRIdx = null;
-  const svg = document.querySelector('#render-inner svg');
-  if (svg) {
-    svg.classList.remove('has-highlight');
-    svg.querySelectorAll('.res-hl').forEach(el => el.classList.remove('res-hl'));
-  }
-  resChips.classList.remove('dimmed');
-  resChips.querySelectorAll('.res-chip.hover').forEach(c => c.classList.remove('hover'));
-}
-
-function svgResidueIndex(target, svg) {
-  for (let el = target; el && el !== svg; el = el.parentElement) {
-    const atom = (el.getAttribute('class') || '').match(/atom-(\d+)/);
-    if (atom) {
-      const rIdx = atomToRes[parseInt(atom[1])];
-      if (rIdx !== undefined) return rIdx;
-    }
-  }
-}
-
-function wireUpSvgHover() {
-  const svg = document.querySelector('#render-inner svg');
-  if (!svg) return;
-  svg.addEventListener('mousemove', e => {
-    if (!hlEnabled || mainStale) return;
-    const rIdx = svgResidueIndex(e.target, svg);
-    if (rIdx === undefined) return clearHighlight();
-    const xlinks = xlinkByRes[rIdx];
-    if (xlinks && xlinks.length) {
-      highlightGroup([...new Set(xlinks.flatMap(g => g.members))]);
-    } else {
-      highlightResidue(rIdx);
-    }
-  });
-  svg.addEventListener('mouseleave', clearHighlight);
-  svg.addEventListener('click', e => {
-    if (!buildMode || mainStale) return;
-    const rIdx = svgResidueIndex(e.target, svg);
-    const residue = residueList.find(r => r.idx === rIdx);
-    if (residue) selectBuildResidue(residue);
-  });
-}
-
 // ─── zoom / pan (shared, wired per canvas) ────────────────────────────────────
-function makeZoomable(canvas, inner) {
-  let scale = 1, tx = 0, ty = 0;
-  let dragging = false, startX, startY, startTx, startTy;
-
-  function applyTransform() {
-    inner.style.transform = `translate(${tx}px,${ty}px) scale(${scale})`;
-  }
-
-  canvas.addEventListener('wheel', e => {
-    e.preventDefault();
-    const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
-    scale = Math.min(Math.max(scale * factor, 0.2), 20);
-    applyTransform();
-  }, { passive: false });
-
-  canvas.addEventListener('mousedown', e => {
-    if (e.button !== 0) return;
-    dragging = true;
-    startX = e.clientX; startY = e.clientY;
-    startTx = tx; startTy = ty;
-    canvas.style.cursor = 'grabbing';
-  });
-  window.addEventListener('mousemove', e => {
-    if (!dragging) return;
-    tx = startTx + e.clientX - startX;
-    ty = startTy + e.clientY - startY;
-    applyTransform();
-  });
-  window.addEventListener('mouseup', () => {
-    dragging = false;
-    canvas.style.cursor = 'grab';
-  });
-  canvas.addEventListener('dblclick', () => {
-    scale = 1; tx = 0; ty = 0;
-    applyTransform();
-  });
-  return { reset() { scale = 1; tx = 0; ty = 0; applyTransform(); } };
-}
-
 const mainViewport = makeZoomable(renderCanvas, renderInner);
 makeZoomable(document.getElementById('smiles-canvas'), smilesInner);
 const buildPreviewViewport = makeZoomable(document.getElementById('build-preview-canvas'), buildPreviewInner);
@@ -1360,14 +717,7 @@ function selectBuildResidue(residue) {
   const pending = right
     ? loadBuildRight(residue.abbr, residue.idx)
     : loadBuildLeft(residue.abbr, residue.idx);
-  resChips.querySelectorAll('.res-chip').forEach(chip => {
-    const idx = parseInt(chip.dataset.residue);
-    if (idx === residue.idx) {
-      chip.style.outline = right ? '2px solid #e0a05a' : '2px solid #5a9ae0';
-    } else if (!right || idx !== buildLeftRIdx) {
-      chip.style.outline = '';
-    }
-  });
+  residueView.select(right ? buildLeftRIdx : residue.idx, right ? residue.idx : null);
   return pending;
 }
 
@@ -1376,7 +726,7 @@ function openBuild() {
   buildPanel.classList.add('open');
   btnBuild.classList.add('active');
   btnBuild.setAttribute('aria-expanded', 'true');
-  if (!libPanel.classList.contains('open')) openLib();
+  if (!library.isOpen) library.open();
   clearBuild();
 }
 function closeBuild() {
@@ -1385,11 +735,11 @@ function closeBuild() {
   btnBuild.classList.remove('active');
   btnBuild.setAttribute('aria-expanded', 'false');
   clearBuild();
-  if (libLoaded && isSwapMode()) renderLibList(libSearch.value.trim().toLowerCase());
+  if (library.loaded && isSwapMode()) library.render();
 }
 function clearBuild() {
   clearBuildPreview();
-  cancelRequests('build-left', 'build-right', 'bond-check', 'sequence-edit', 'swap-options');
+  requests.cancel('build-left', 'build-right', 'bond-check', 'sequence-edit', 'swap-options');
   swapState = null;
   swapMapping.hidden = true;
   swapSites.innerHTML = '';
@@ -1417,35 +767,29 @@ function clearBuild() {
     : cabilnInput.value.trim()
     ? 'Select a residue, then choose Use beside a library monomer'
     : 'Choose Use beside a monomer to start a peptide';
-  resChips.querySelectorAll('.res-chip').forEach(c => c.style.outline = '');
-  btnRxnFilter.disabled = true;
-  if (rxnFilterActive) {
-    rxnFilterActive = false;
-    btnRxnFilter.classList.remove('active');
-    btnRxnFilter.setAttribute('aria-pressed', 'false');
-    if (libLoaded) renderLibList(libSearch.value.trim().toLowerCase());
-  }
-  if (libLoaded && buildMode && isSwapMode()) renderLibList(libSearch.value.trim().toLowerCase());
+  residueView.select();
+  const filtered = library.resetFilter();
+  if (library.loaded && (filtered || (buildMode && isSwapMode()))) library.render();
 }
 
 function isSwapMode() { return buildAction.value === 'swap'; }
 
 buildAction.addEventListener('change', () => {
-  const selected = residueList.find(residue => residue.idx === buildLeftRIdx);
+  const selected = residueView.residue(buildLeftRIdx);
   clearBuild();
-  if (libLoaded) renderLibList(libSearch.value.trim().toLowerCase());
+  if (library.loaded) library.render();
   if (selected && !mainStale) selectBuildResidue(selected);
 });
 
 async function loadSwapOptions() {
-  const request = startRequest('swap-options');
+  const request = requests.start('swap-options');
   const source = cabilnInput.value.trim();
   const index = buildLeftRIdx;
   buildStatus.textContent = 'Finding replacements for all connected sites…';
   try {
-    while (activeRequests.has('library') || activeRequests.has('reactions')) {
-      const pending = activeRequests.get('library') || activeRequests.get('reactions');
-      await Promise.race([pending.done, request.done]);
+    while (requests.has('library') || requests.has('reactions')) {
+      const pending = requests.pending('library', 'reactions');
+      await Promise.race([pending, request.done]);
       if (!request.current()) return;
     }
     const data = await readResponse(await fetchCalculation('/replacement_options', {
@@ -1457,13 +801,13 @@ async function loadSwapOptions() {
     if (data.source_echo !== source || data.residue_idx !== index || !data.context) {
       throw new Error('The replacement list is out of date. Select the residue again.');
     }
-    const quality = new Map(allMonomers.map(m => [m.abbr, m.quality]));
+    const quality = new Map(library.monomers.map(m => [m.abbr, m.quality]));
     const candidates = data.candidates.map(m => ({ ...m, quality: quality.get(m.abbr),
       searchText: [m.abbr, m.name, m.type, m.chem_types].join(' ').toLowerCase() }));
     swapState = { ...data, candidates, candidate: null, mapping: {}, preview: null };
     buildStatus.textContent = 'Choose a replacement from the filtered library';
     buildHint.textContent = 'Only monomers with compatible sites for every connection are shown';
-    renderLibList(libSearch.value.trim().toLowerCase());
+    library.render();
   } catch (error) {
     if (request.current()) {
       buildStatus.textContent = error.message || 'Could not find replacements. Select the residue to retry.';
@@ -1505,7 +849,7 @@ function renderSwapMapping() {
     }
     select.value = swapState.mapping[need.slot];
     select.addEventListener('change', () => {
-      cancelRequests('sequence-edit');
+      requests.cancel('sequence-edit');
       swapState.mapping[need.slot] = Number(select.value);
       checkBuildValidity();
       if (buildRight) renderRgroupButtons(buildRightRg, buildRight, 'right');
@@ -1534,27 +878,14 @@ function swapRequest() {
 btnBuild.addEventListener('click', () => buildMode ? closeBuild() : openBuild());
 buildClose.addEventListener('click', closeBuild);
 
-function selectedBackbone() {
-  return chainData.find(chain =>
-    chain.residues.includes(buildLeftRIdx) && chain.residues.includes(buildRightRIdx)
-  )?.residues;
-}
-
 function checkAdjacentBackbone() {
-  if (buildLeftRIdx == null || buildRightRIdx == null) return false;
-  if (buildLeftRIdx === buildRightRIdx) return false;
-  const main = selectedBackbone();
-  if (!main) return false;
-  if (currentBranchSet.has(buildLeftRIdx) || currentBranchSet.has(buildRightRIdx)) return false;
-  const posL = main.indexOf(buildLeftRIdx);
-  const posR = main.indexOf(buildRightRIdx);
-  return Math.abs(posL - posR) === 1;
+  return residueView.insertionAnchor(buildLeftRIdx, buildRightRIdx) !== null;
 }
 
 function updateInsertBetweenUI() {
   if (buildMode && !isSwapMode() && checkAdjacentBackbone()) {
-    const la = (residueList.find(r => r.idx === buildLeftRIdx) || {}).abbr || '?';
-    const ra = (residueList.find(r => r.idx === buildRightRIdx) || {}).abbr || '?';
+    const la = (residueView.residue(buildLeftRIdx) || {}).abbr || '?';
+    const ra = (residueView.residue(buildRightRIdx) || {}).abbr || '?';
     buildInsertInfo.textContent = `${la} and ${ra} are adjacent on the backbone`;
     buildInsertRow.style.display = 'flex';
   } else {
@@ -1562,38 +893,35 @@ function updateInsertBetweenUI() {
     if (insertBetweenActive) {
       insertBetweenActive = false;
       buildInsertBtn.textContent = '⊕ Insert Between';
-      if (libLoaded) renderLibList(libSearch.value.trim().toLowerCase());
+      if (library.loaded) library.render();
     }
   }
 }
 
 buildInsertBtn.addEventListener('click', () => {
   clearBuildPreview();
-  cancelRequests('sequence-edit');
+  requests.cancel('sequence-edit');
   if (insertBetweenActive) {
     insertBetweenActive = false;
     buildInsertBtn.textContent = '⊕ Insert Between';
     buildHint.textContent = 'Select a residue, then choose Use beside a library monomer';
-    if (libLoaded) renderLibList(libSearch.value.trim().toLowerCase());
+    if (library.loaded) library.render();
     return;
   }
   if (!checkAdjacentBackbone()) return;
   insertBetweenActive = true;
   buildInsertBtn.textContent = '✕ Cancel';
   buildHint.textContent = 'Click a backbone monomer in the library to insert between the selected residues';
-  if (!libPanel.classList.contains('open')) openLib();
-  if (libLoaded) renderLibList(libSearch.value.trim().toLowerCase());
+  if (!library.isOpen) library.open();
+  if (library.loaded) library.render();
 });
 
 async function doInsertBetween(abbr) {
   clearBuildPreview();
-  const main = selectedBackbone();
-  if (!main) return;
-  const posL = main.indexOf(buildLeftRIdx);
-  const posR = main.indexOf(buildRightRIdx);
-  const after_idx = posL < posR ? buildLeftRIdx : buildRightRIdx;
+  const after_idx = residueView.insertionAnchor(buildLeftRIdx, buildRightRIdx);
+  if (after_idx === null) return;
   const val = cabilnInput.value.trim();
-  const request = startRequest('sequence-edit');
+  const request = requests.start('sequence-edit');
   buildHint.textContent = 'Inserting…';
   try {
     const res = await fetchCalculation('/insert_backbone', {
@@ -1610,7 +938,7 @@ async function doInsertBetween(abbr) {
     }
     commitDocument(data.result, 'cabiln');
     buildHint.textContent = `${abbr} inserted — select chips to continue building`;
-    if (libLoaded) renderLibList(libSearch.value.trim().toLowerCase());
+    if (library.loaded) library.render();
   } catch (e) {
     if (!request.current()) return;
     buildHint.textContent = 'Insert failed';
@@ -1623,9 +951,9 @@ document.getElementById('build-right-change').addEventListener('click', clearBui
 
 async function loadBuildLeft(abbr, rIdx) {
   clearBuildPreview();
-  cancelRequests('bond-check', 'sequence-edit', 'swap-options');
+  requests.cancel('bond-check', 'sequence-edit', 'swap-options');
   if (isSwapMode()) {
-    cancelRequests('build-right');
+    requests.cancel('build-right');
     swapState = null;
     swapMapping.hidden = true;
     buildRight = null;
@@ -1634,9 +962,9 @@ async function loadBuildLeft(abbr, rIdx) {
     buildRightSvg.innerHTML = '<div class="box-placeholder">Choose a replacement in the library</div>';
     buildRightRg.innerHTML = '';
     buildRightSite.hidden = true;
-    renderLibList(libSearch.value.trim().toLowerCase());
+    library.render();
   }
-  const request = startRequest('build-left');
+  const request = requests.start('build-left');
   const sequence = cabilnInput.value.trim();
   buildLeftRIdx = rIdx;
   buildLeftAbbr.textContent = abbr;
@@ -1659,8 +987,8 @@ async function loadBuildLeft(abbr, rIdx) {
     buildLeft = { abbr, rgroups: data.rgroups || [], selectedSlot: null };
     renderRgroupButtons(buildLeftRg, buildLeft, 'left');
     buildHint.textContent = buildRight ? 'Choose an attachment site on each side' : 'Choose Use beside a library monomer';
-    btnRxnFilter.disabled = isSwapMode();
-    if (rxnFilterActive && libLoaded) renderLibList(libSearch.value.trim().toLowerCase());
+    library.setFilterEnabled(!isSwapMode());
+    if (library.filterActive && library.loaded) library.render();
     updateInsertBetweenUI();
     if (isSwapMode()) loadSwapOptions();
     else checkBuildValidity();
@@ -1674,8 +1002,8 @@ async function loadBuildLeft(abbr, rIdx) {
 
 async function loadBuildRight(abbr, rIdx) {
   clearBuildPreview();
-  cancelRequests('bond-check', 'sequence-edit');
-  const request = startRequest('build-right');
+  requests.cancel('bond-check', 'sequence-edit');
+  const request = requests.start('build-right');
   const sequence = cabilnInput.value.trim();
   buildRightRIdx = rIdx !== undefined ? rIdx : null;
   buildRightAbbr.textContent = abbr;
@@ -1688,7 +1016,7 @@ async function loadBuildRight(abbr, rIdx) {
   setBuildReady(false);
   buildStatus.textContent = '';
 
-  const family = !isSwapMode() && rIdx === undefined && allMonomers.find(m => m.abbr === abbr && m.degenerate);
+  const family = !isSwapMode() && rIdx === undefined && library.monomers.find(m => m.abbr === abbr && m.degenerate);
   if (family) {
     buildRightSvg.innerHTML = '<div class="box-placeholder">Choose the attachment form</div>';
     for (const [label, symbol] of [['N-terminal', family.nterm_abbr], ['C-terminal', family.cterm_abbr]]) {
@@ -1769,11 +1097,11 @@ function renderRgroupButtons(container, state, side) {
 }
 
 function selectRgroup(side, slot) {
-  cancelRequests('sequence-edit');
+  requests.cancel('sequence-edit');
   if (side === 'left' && buildLeft) {
     buildLeft.selectedSlot = buildLeft.selectedSlot === slot ? null : slot;
     renderRgroupButtons(buildLeftRg, buildLeft, 'left');
-    if (rxnFilterActive && libLoaded) renderLibList(libSearch.value.trim().toLowerCase());
+    if (library.filterActive && library.loaded) library.render();
   } else if (side === 'right' && buildRight) {
     buildRight.selectedSlot = buildRight.selectedSlot === slot ? null : slot;
     renderRgroupButtons(buildRightRg, buildRight, 'right');
@@ -1783,7 +1111,7 @@ function selectRgroup(side, slot) {
 
 async function checkBuildValidity() {
   clearBuildPreview();
-  cancelRequests('bond-check');
+  requests.cancel('bond-check');
   buildReaction = '';
   setBuildReady(false);
   if (isSwapMode()) {
@@ -1808,7 +1136,7 @@ async function checkBuildValidity() {
   const rightRg = buildRight.rgroups.find(r => r.slot === buildRight.selectedSlot);
   if (!leftRg || !rightRg) return;
 
-  const request = startRequest('bond-check');
+  const request = requests.start('bond-check');
 
   buildStatus.textContent = 'Checking bond...';
   buildStatus.className = 'build-status';
@@ -1870,8 +1198,8 @@ function buildConnection() {
 function clearBuildPreview() {
   if (swapState) swapState.preview = null;
   if (isSwapMode()) buildConnect.disabled = true;
-  const pending = activeRequests.has('build-preview');
-  cancelRequests('build-preview');
+  const pending = requests.has('build-preview');
+  requests.cancel('build-preview');
   if (pending) setBuildReady(true);
   buildPreviewPanel.hidden = true;
   buildPreviewInner.innerHTML = '';
@@ -1891,7 +1219,7 @@ buildPreviewButton.addEventListener('click', async () => {
   const connection = swapping ? swapRequest() : buildConnection();
   if (!connection || buildPreviewButton.disabled) return;
   clearBuildPreview();
-  const request = startRequest('build-preview', () => buildPreviewPanel.setAttribute('aria-busy', 'false'));
+  const request = requests.start('build-preview', () => buildPreviewPanel.setAttribute('aria-busy', 'false'));
   const left = swapping ? `${buildLeft.abbr} (residue ${connection.residue_idx + 1})`
     : `${buildLeft.abbr} (residue ${connection.host_residue_idx + 1}) R${connection.r_host}`;
   const right = swapping ? buildRight.abbr
@@ -1912,11 +1240,10 @@ buildPreviewButton.addEventListener('click', async () => {
     // Drawing and verification share one worker. Do not spend preview retries
     // competing with work that is already running for this page.
     while (request.current()) {
-      const pending = ['main-render', 'reference-render', 'verify']
-        .map(key => activeRequests.get(key)).find(Boolean);
+      const pending = requests.pending('main-render', 'reference-render', 'verify');
       if (!pending) break;
       buildPreviewStatus.textContent = `${pair} · Waiting for the current drawing or verification…`;
-      await Promise.race([pending.done, request.done]);
+      await Promise.race([pending, request.done]);
     }
     if (!request.current()) return;
     buildPreviewStatus.textContent = `${pair} · Preparing preview…`;
@@ -1970,7 +1297,7 @@ buildConnect.addEventListener('click', async () => {
   const connection = swapping ? reviewed?.request : buildConnection();
   if (!connection) return;
   clearBuildPreview();
-  const request = startRequest('sequence-edit');
+  const request = requests.start('sequence-edit');
 
   setBuildReady(false);
   buildStatus.textContent = swapping ? 'Checking and applying swap…' : 'Inserting...';
@@ -2014,10 +1341,9 @@ async function settleDrawingsForConversion(request) {
   // Aborting a running drawing retires the server's chemistry worker. Let the
   // current drawing (and its automatic Verify) finish before competing with it.
   while (request.current()) {
-    const pending = ['main-render', 'reference-render', 'verify']
-      .map(key => activeRequests.get(key)).find(Boolean);
+    const pending = requests.pending('main-render', 'reference-render', 'verify');
     if (pending) {
-      await Promise.race([pending.done, request.done]);
+      await Promise.race([pending, request.done]);
       continue;
     }
     if (cabilnTimer !== null) {
@@ -2046,7 +1372,7 @@ function drawingForNotation(snapshot, data) {
   const presentation = data.presentation;
   const order = data.occurrence_order;
   if (!snapshot || snapshot !== cabilnDrawing || mainStale ||
-      activeRequests.has('main-render') || displayedNotation !== 'cabiln' ||
+      requests.has('main-render') || displayedNotation !== 'cabiln' ||
       displayedSource !== snapshot.source || data.source_echo !== snapshot.source ||
       !lastSvg || !lastMolBlock || view.w !== snapshot.canvas.w || view.h !== snapshot.canvas.h ||
       !CabilnProject.sameContext(snapshot.data.context, data.context) ||
@@ -2072,18 +1398,18 @@ async function convertNotation(target) {
   if (!original) return;
   const canonical = notationPolicy.value === 'canonical';
   let deferredDrawing = false;
-  const request = startRequest('sequence-edit', () => {
+  const request = requests.start('sequence-edit', () => {
     // Let the cancelling action schedule its own drawing or formatter first.
     Promise.resolve().then(() => {
       if (deferredDrawing && mainStale && cabilnTimer === null &&
-          !activeRequests.has('main-render') && !activeRequests.has('sequence-edit') &&
+          !requests.has('main-render') && !requests.has('sequence-edit') &&
           notationSelect.value === 'cabiln' && cabilnInput.value.trim() === original) renderDocument();
     });
   });
   // The formatter validates and normalizes unsent input. Draw its result once,
   // or draw the original input if formatting fails. Stale input also covers a
   // second formatter click taking over the first click's deferred drawing.
-  deferredDrawing = cabilnTimer !== null || (mainStale && !activeRequests.has('main-render'));
+  deferredDrawing = cabilnTimer !== null || (mainStale && !requests.has('main-render'));
   clearTimeout(cabilnTimer);
   cabilnTimer = null;
   let conversionError = '';
@@ -2110,7 +1436,7 @@ async function convertNotation(target) {
       if (drawing) {
         clearComparison();
         clearBuild();
-        clearHighlight();
+        residueView.clearHighlight();
         acceptCabilnDrawing(drawing, data.result, snapshot);
         setMainProgress(false);
       } else renderDocument(true);
@@ -2140,9 +1466,9 @@ btnReroll.addEventListener('click', () => {
 
 // ─── SMILES → CABILN conversion ───────────────────────────────────────────────
 function startConversion(button) {
-  cancelRequests('sequence-edit');
+  requests.cancel('sequence-edit');
   const label = button.textContent;
-  const request = startRequest('sequence-edit', () => {
+  const request = requests.start('sequence-edit', () => {
     button.textContent = label;
     button.disabled = false;
     conversionProgress.hidden = true;
@@ -2159,7 +1485,7 @@ function useConvertedCabiln(sequence, warning = '', result = {}) {
 }
 
 async function doS2c(notation) {
-  if (!smilesInput.value.trim() && !activeRequests.has('reference-render')) return;
+  if (!smilesInput.value.trim() && !requests.has('reference-render')) return;
   const btn = notation === 'bracket' ? btnS2cBracket : btnS2c;
   const request = startConversion(btn);
   setStatus(smilesStatus, '');
@@ -2295,18 +1621,16 @@ function setMainProgress(pending) {
 function invalidateDocument() {
   clearTimeout(cabilnTimer);
   cabilnTimer = null;
-  cancelRequests('main-render', 'sequence-edit');
+  requests.cancel('main-render', 'sequence-edit');
   clearComparison();
   clearBuild();
-  clearHighlight();
+  residueView.clearHighlight();
   clearExports();
   cabilnDrawing = null;
   lastCabiln = '';
   mainStale = true;
   renderCanvas.classList.add('stale');
-  resChips.classList.add('stale');
-  resChips.setAttribute('aria-disabled', 'true');
-  resChips.querySelectorAll('button').forEach(button => { button.disabled = true; });
+  residueView.setStale(true);
   rerollSeed = 0;
   btnReroll.disabled = true;
   btnReroll.textContent = '⟳ Layout';
@@ -2339,8 +1663,7 @@ function acceptMainDrawing(svg, source, notation) {
   displayedSource = source;
   displayedNotation = notation;
   renderCanvas.classList.remove('stale');
-  resChips.classList.remove('stale');
-  resChips.setAttribute('aria-disabled', 'false');
+  residueView.setStale(false);
 }
 
 function mainRenderError(message, invalidInput = false) {
@@ -2351,7 +1674,7 @@ function mainRenderError(message, invalidInput = false) {
 }
 
 async function doRenderForeign(txt) {
-  const request = startRequest('main-render');
+  const request = requests.start('main-render');
   const mode = notationSelect.value;
   lastCabiln = '';
   clearExports();
@@ -2373,8 +1696,7 @@ async function doRenderForeign(txt) {
     } else {
       acceptDocumentContext(data.context);
       acceptMainDrawing(data.svg, txt, mode);
-      resChips.innerHTML = '';
-      residueMap = {}; atomToRes = {}; residueList = [];
+      residueView.clear();
       setStatus(cabilnStatus, `${data.format}: ${data.info || ''}`, 'ok');
       cabilnInput.className = 'ok';
     }
@@ -2393,14 +1715,10 @@ function resetCabiln() {
   mainStale = false;
   displayedSource = displayedNotation = '';
   renderCanvas.classList.remove('stale');
-  resChips.classList.remove('stale');
-  resChips.setAttribute('aria-disabled', 'false');
+  residueView.setStale(false);
   mainViewport.reset();
   setInner(renderInner, '<div class="placeholder">Start typing a sequence…</div>');
-  resChips.innerHTML = '';
-  residueMap = {}; atomToRes = {}; residueList = [];
-  chainData = [];
-  currentBranchSet = new Set();
+  residueView.clear();
   setMainProgress(false);
 }
 
@@ -2420,23 +1738,17 @@ function acceptCabilnDrawing(data, source, view, sameDocument = false) {
   cabilnInput.className = 'ok';
   btnReroll.disabled = false;
   setExportReady(data.svg, data.mol_block);
-  buildResidueUI(data.residue_map, data.residues, data.layout, data.crosslink_groups);
+  residueView.render(data, editor.present.quality);
   // Tabs can change the canvas height on the first render. Detect later resizes
   // against the accepted view, while retaining the dimensions of the SVG itself.
   cabilnDrawing = { source: displayedSequence, data, w: view.w, h: view.h,
     seed: view.seed, canvas: canvasSize(renderCanvas) };
-  if (sameDocument) {
-    resChips.querySelectorAll('.res-chip').forEach(chip => {
-      const idx = parseInt(chip.dataset.residue);
-      if (idx === buildLeftRIdx) chip.style.outline = '2px solid #5a9ae0';
-      else if (idx === buildRightRIdx) chip.style.outline = '2px solid #e0a05a';
-    });
-  }
+  if (sameDocument) residueView.select(buildLeftRIdx, buildRightRIdx);
   if (verifyMode && lastSmiles) triggerVerify();
 }
 
 async function doRenderCabiln(seq) {
-  const request = startRequest('main-render');
+  const request = requests.start('main-render');
   const sameDocument = seq === displayedSource && displayedNotation === 'cabiln';
   lastCabiln = '';
   clearExports();
@@ -2475,7 +1787,7 @@ async function doRenderCabiln(seq) {
 function clearReference() {
   clearTimeout(smilesTimer);
   smilesTimer = null;
-  cancelRequests('reference-render', 'sequence-edit');
+  requests.cancel('reference-render', 'sequence-edit');
   lastSmiles = '';
   smilesInput.className = '';
   setStatus(smilesStatus, '');
@@ -2513,7 +1825,7 @@ molUpload.addEventListener('change', async (e) => {
   // The selected File is retained locally; allow choosing it again after cancel.
   molUpload.value = '';
   clearReference();
-  const request = startRequest('reference-render');
+  const request = requests.start('reference-render');
   showSpinner(smilesInner);
   setStatus(smilesStatus, `Loaded: ${file.name}`, 'ok');
   try {
@@ -2526,7 +1838,7 @@ molUpload.addEventListener('change', async (e) => {
   } finally { request.finish(); }
 });
 
-async function renderMolReference(text, name, request = startRequest('reference-render')) {
+async function renderMolReference(text, name, request = requests.start('reference-render')) {
   if (referenceOriginal?.kind !== 'mol' || referenceOriginal.content !== text ||
       referenceOriginal.name !== name) {
     projectChanged(false);
@@ -2566,7 +1878,7 @@ async function renderMolReference(text, name, request = startRequest('reference-
 }
 
 async function doRenderRef(txt) {
-  const request = startRequest('reference-render');
+  const request = requests.start('reference-render');
   lastSmiles = '';
   clearComparison();
   const { w, h } = canvasSize(document.getElementById('smiles-canvas'));
@@ -2602,14 +1914,14 @@ async function doRenderRef(txt) {
 
 // ─── verify comparison ────────────────────────────────────────────────────────
 function clearComparison() {
-  cancelRequests('verify');
+  requests.cancel('verify');
   compareBar.innerHTML = '';
 }
 
 async function triggerVerify() {
   clearComparison();
   if (!verifyMode || !lastSmiles || !lastCabiln) return;
-  const request = startRequest('verify');
+  const request = requests.start('verify');
   const smiles = lastSmiles;
   const cabiln = lastCabiln;
   try {
@@ -2646,11 +1958,6 @@ async function triggerVerify() {
     request.finish();
   }
 }
-
-function escHtml(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
-function escAttr(s) { return escHtml(s); }
 
 offerSavedDraft();
 updateHistoryControls();
