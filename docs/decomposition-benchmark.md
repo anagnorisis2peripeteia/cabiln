@@ -149,7 +149,7 @@ the working tree:
 
 ```bash
 baseline=$(mktemp -d /tmp/cabiln-baseline.XXXXXX)
-git archive f6c0423 | tar -x -C "$baseline"
+git archive df17590 | tar -x -C "$baseline"
 .venv/bin/python tools/benchmarks/decomposition.py \
   --source-root "$baseline" --revision-label f6c0423 --permutations 1
 .venv/bin/python tools/benchmarks/decomposition.py \

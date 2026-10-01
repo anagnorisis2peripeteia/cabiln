@@ -89,11 +89,11 @@ the latest eight Python observations in `active.json`, alongside the captured CI
 ## Historical scripts
 
 Dataset repair recipes, monomer batches and scratch probes are preserved in
-[commit 8721900](https://github.com/anagnorisis2peripeteia/pyPept/tree/872190083427bef49f2e8d94af827eea74080775/tools).
+[commit c67df6f](https://github.com/anagnorisis2peripeteia/pyPept/tree/c67df6fdc57e875cf6001ad9e5178a22188eb7d1/tools).
 To inspect an original recipe:
 
 ```sh
-git show 8721900:tools/add_monomers_batch6.py
+git show c67df6f:tools/add_monomers_batch6.py
 ```
 
 The former `validate_monomers.py` and `full_library_roundtrip.py` diagnostics are
