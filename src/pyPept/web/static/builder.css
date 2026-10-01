@@ -25,7 +25,7 @@
     overflow: hidden;
   }
 
-  /* ── header ── */
+  /* header */
   header {
     flex-shrink: 0;
     padding: 10px 16px;
@@ -92,7 +92,7 @@
   .res-chip[data-quality="synthetic"]::after { content: ' · synthetic'; font-family: var(--font-ui); }
   .res-chip[data-quality="opaque"]::after { content: ' · opaque'; font-family: var(--font-ui); }
 
-  /* ── input bar ── */
+  /* input bar */
   #input-bar {
     flex-shrink: 0;
     background: var(--surface-panel);
@@ -194,10 +194,10 @@
   #render-canvas.stale .canvas-inner { opacity: .6; }
   #residue-chips.stale { opacity: .55; pointer-events: none; }
 
-  /* ── main area ── */
+  /* main area */
   #main { flex: 1; display: flex; min-height: 0; min-width: 0; position: relative; }
 
-  /* ── render mode ── */
+  /* render mode */
   #render-pane {
     flex: 1;
     display: flex;
@@ -206,7 +206,7 @@
     position: relative;
   }
 
-  /* ── verify mode ── */
+  /* verify mode */
   #verify-pane {
     flex: 1;
     display: flex;
@@ -228,7 +228,7 @@
   .reference-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
   .upload-trigger { position: relative; cursor: pointer; }
 
-  /* ── canvas (shared) ── */
+  /* canvas (shared) */
   .canvas-wrap {
     flex: 1;
     background: #fff;
@@ -277,7 +277,7 @@
   }
   @keyframes spin { to { transform: rotate(360deg); } }
 
-  /* ── verify comparison bar ── */
+  /* verify comparison bar */
   #compare-bar {
     flex-shrink: 0;
     padding: 5px 16px;
@@ -297,7 +297,7 @@
                           font-family: var(--font-code);
                           overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-  /* ── monomer library sidebar ── */
+  /* monomer library sidebar */
   #lib-panel {
     width: 420px;
     max-width: 50%;
@@ -310,7 +310,7 @@
   }
   #lib-panel.open { display: flex; }
 
-  /* ── example peptide sidebar (right) ── */
+  /* example peptide sidebar (right) */
   #examples-panel {
     width: 340px;
     max-width: 50%;
@@ -510,7 +510,7 @@
   .lib-badge.cap     { background: #281a1a; color: #e7aa78; }
   .lib-badge.protect { background: #28281a; color: #d1cc79; }
 
-  /* ── monomer preview tooltip ── */
+  /* monomer preview tooltip */
   #lib-preview {
     position: fixed;
     z-index: 200;
@@ -567,7 +567,7 @@
     z-index: 1;
   }
 
-  /* ── build panel ── */
+  /* build panel */
   #build-panel {
     display: none;
     flex-shrink: 0;
@@ -763,7 +763,7 @@
   #build-insert-row { align-items: center; gap: 10px; padding: 8px 2px 0; }
   #build-insert-info { font-size: 11px; color: var(--muted); flex: 1; }
 
-  /* ── residue chips ── */
+  /* residue chips */
   #residue-chips {
     display: flex;
     flex-wrap: wrap;
@@ -794,7 +794,7 @@
   .res-chip:focus-visible { box-shadow: 0 0 0 2px var(--surface-inset); }
   #residue-chips.dimmed .res-chip:not(.hover) { opacity: .35; }
 
-  /* ── SVG residue highlighting ── */
+  /* SVG residue highlighting */
   #render-inner svg.has-highlight path:not(.res-hl),
   #render-inner svg.has-highlight text:not(.res-hl) {
     opacity: .12;

@@ -46,7 +46,7 @@ from rdkit.Chem.Draw import rdMolDraw2D
 from rdkit.Chem import rdDepictor
 
 
-# ── Thresholds and constants ────────────────────────────────────────────────
+# Thresholds and constants
 
 _ASCII_WARN_RESIDUES = 8    # warn about crowding
 _ASCII_MAX_RESIDUES  = 20   # suggest switching format
@@ -58,7 +58,7 @@ _TERMINAL_RENDERERS = [
 ]
 
 
-# ── Public entry point ───────────────────────────────────────────────────────
+# Public entry point
 
 def show(source, fmt='auto', output=None, open_after=True, size=(600, 400)):
     """Render a peptide sequence or molecule.
@@ -100,7 +100,7 @@ def show(source, fmt='auto', output=None, open_after=True, size=(600, 400)):
                     open_after=open_after, size=size)
 
 
-# ── Input normalisation ──────────────────────────────────────────────────────
+# Input normalisation
 
 def _to_rdmol(source):
     """Return (RDKit ROMol, n_residues_estimate).  n_residues may be None."""
@@ -121,7 +121,7 @@ def _to_rdmol(source):
     return parsed.molecule, count
 
 
-# ── Format detection ─────────────────────────────────────────────────────────
+# Format detection
 
 def _detect_best_fmt():
     for name, cmd in _TERMINAL_RENDERERS:
@@ -137,8 +137,7 @@ def _find_terminal_renderer():
     return None, None
 
 
-
-# ── Renderers ────────────────────────────────────────────────────────────────
+# Renderers
 
 def _render_ascii(rdmol, *, n_residues=None, output=None, open_after=True, size=(600, 400)):
     """Render as ASCII block art in the terminal."""
@@ -340,7 +339,7 @@ def _render_cdxml(rdmol, *, n_residues=None, output=None, open_after=True, size=
     print("  Open with: ChemDraw (File > Open, or double-click if .cdxml is registered).")
 
 
-# ── Helpers ──────────────────────────────────────────────────────────────────
+# Helpers
 
 def _write_png(rdmol, path, size=(600, 400)):
     w, h = size

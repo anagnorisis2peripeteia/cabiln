@@ -9,34 +9,20 @@ From presentation: Modelling a (New) Modality: Computational Tools for Peptide D
 Certara User Group Meeting, Frankfurt, 2025
 """
 
-################################################################################
-# Authorship
-################################################################################
 
 __credits__ = ["J.B. Brown", "Thomas Fox"]
 __license__ = "MIT"
 
 
-################################################################################
-# Modules
-################################################################################
-
-# System libraries
 import logging
 from importlib.resources import files
 
-# Third-party libraries
 from rdkit import Chem
 from rdkit.Chem import PandasTools
 
 from pyPept.monomer_store import _index_monomer_names, library_path
 
 
-##########################################################################
-# Functions and classes
-##########################################################################
-
-############################################################
 class MonomerConstants:
     """
     A container class to hold defaults values related to loading of monomers
@@ -49,16 +35,13 @@ class MonomerConstants:
     attr_monomer_symbol = "m_abbr"
     attr_linkable_R_groups = "m_Rgroups"
 
-############################################################
 
-############################################################
 class MonomerLibrary:
     """
     A class that contains functionality related to loading or forming a monomer
     library and querying it for information.
     """
 
-    ############################################################
     def __init__(self,
                 data_dir=MonomerConstants.def_path,
                 monomer_lib_file=MonomerConstants.def_lib_filename,
@@ -90,13 +73,11 @@ class MonomerLibrary:
                     "Loading monomer library, cannot %s . Stopping." % (
                         backup_path))
                 raise RuntimeError("Failed to find monomer library.")
-            else: # Backup was still available
+            else:
                 monomer_df_filepath = backup_path
 
         self.monomer_df = self._load_monomer_sdf(str(monomer_df_filepath))
-    ############################################################
 
-    ############################################################
     def _load_monomer_sdf(self, path):
         """
         Read a monomer SDF file and store it as a Pandas dataframe object.
@@ -115,9 +96,8 @@ class MonomerLibrary:
             for symbol, abbr in zip(symbols, abbreviations)
         ]
 
-        # Only m_Rgroups needs parsing; m_RgroupIdx and m_attachmentPointIdx
-        # are vestigial sidecar properties — attachment points are now read
-        # directly from mol isotope labels in sequence assembly.
+        # Assembly reads attachment sites from dummy isotopes; only the
+        # leaving-group list needs parsing from sidecar metadata.
         rg_col = MonomerConstants.attr_linkable_R_groups
         df_group[rg_col] = df_group[rg_col].astype(object)
         for idx in df_group.index:
@@ -127,9 +107,7 @@ class MonomerLibrary:
         df_group = df_group.rename(columns={"ROMol": "m_romol"})
 
         return df_group
-    ############################################################
 
-    ############################################################
     def __getitem__(self, library_attribute):
         """
         Retrieve the monomer dictionary attribute requested.
@@ -142,18 +120,14 @@ class MonomerLibrary:
         :type library_attribute: str
         """
         return self.monomer_df[library_attribute]
-    ############################################################
 
-    ############################################################
     def GetMonomerNames(self):
         """Return the list of monomer names in this library.
 
         :return: a tuple of str
         """
         return tuple(self[MonomerConstants.attr_monomer_symbol])
-    ############################################################
 
-    ############################################################
     @staticmethod
     def chuckles_smiles(monomer_row):
         """Return the CHUCKLES unit SMILES for a monomer row.
@@ -173,7 +147,6 @@ class MonomerLibrary:
             return ''
         return Chem.MolToSmiles(mol)
 
-    ############################################################
     def GetRGroups(self, monomer):
         """Return the valid R-group identifiers for a given monomer.
 
@@ -199,11 +172,8 @@ class MonomerLibrary:
             if group is not None:
                 validR.append("R%i" % idx)
         return tuple(validR)
-    ############################################################
 
-## end of MonomerLibrary class ##############################
 
-## Verify that the module's interfaces work as the doctests demonstrate.
 if __name__ == "__main__":
 
     import doctest, os, sys, __main__
@@ -218,7 +188,3 @@ if __name__ == "__main__":
     else:
         print("%s : WARNING - No doctests defined." % modulePath)
         sys.exit(1)
-
-############################################################
-# End of monomerlib.py
-############################################################

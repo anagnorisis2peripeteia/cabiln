@@ -90,7 +90,7 @@ def _bond_chemistry_diagnostic(mol1, at1, mol2, at2, bond_label='', warning_sink
     if pair == frozenset([7, 6]):
         c_mol, c_atom = (mol1, a1) if sym1 == 6 else (mol2, a2)
         if _is_carbonyl_carbon(c_mol, c_atom):
-            return  # standard amide bond
+            return
         _emit_warning(
             f"Bond {bond_label}: N–C join where C is not a carbonyl carbon. "
             "This forms a C–N bond without amide character (e.g. reductive amination "
@@ -101,13 +101,13 @@ def _bond_chemistry_diagnostic(mol1, at1, mol2, at2, bond_label='', warning_sink
 
     # S(16)–S(16): disulfide
     if pair == frozenset([16]):
-        return  # standard disulfide
+        return
 
     # O(8)–C(6): ester — C must be carbonyl
     if pair == frozenset([8, 6]):
         c_mol, c_atom = (mol1, a1) if sym1 == 6 else (mol2, a2)
         if _is_carbonyl_carbon(c_mol, c_atom):
-            return  # standard ester
+            return
         _emit_warning(
             f"Bond {bond_label}: O–C join where C is not a carbonyl carbon. "
             "This forms an ether, not an ester. Intentional?",
@@ -268,7 +268,6 @@ class Sequence:
     parsing monomer and bond information.
     """
 
-    ############################################################
     def __init__(self, input_biln, path=SequenceConstants.def_path,
                  monomer_lib=SequenceConstants.def_lib_filename, fmt=None, *, warning_sink=None, track_source=False):
         """
@@ -297,7 +296,6 @@ class Sequence:
         if fmt not in (None, 'cabiln', 'biln'):
             raise ValueError(f"Unknown sequence format: {fmt!r}")
 
-        # Variables to store the monomers and bonds
         self.s_inputbiln = input_biln
         self._warning_sink = warning_sink
         self.s_mid = -1
@@ -335,11 +333,9 @@ class Sequence:
         if any(not token.strip() for token in seq):
             raise ValueError("Empty monomer between backbone separators.")
         seq = _source_join(SequenceConstants.monomer_join, seq)
-        # Remove dangling '-' around chain breaks
         self.s_biln = _source_sub(r'[-]*\.[-]*',
                              SequenceConstants.chain_separator, seq)
 
-        # Read the monomer dictionary
         monomer_df_filepath = library_resource(path, monomer_lib)
         self.monomer_df = get_monomer_info(str(monomer_df_filepath))
 
@@ -348,7 +344,6 @@ class Sequence:
         self.__parse_biln()
         self.__parse_biln_bonds()
 
-    ########################################################################################
     def __parse_biln(self):
         """Split BILN string into individual monomers, do some basic checks,
         then construct the monomers and store the chemical representations
@@ -366,7 +361,6 @@ class Sequence:
         self.s_chains["s_monomerIDs"] = [None] * len(chains)
 
         m_idx = 0
-        # Iterate over the chains
         for num_chain, chain in enumerate(chains):
             residues = split_outside(chain,
                                      by_element=SequenceConstants.monomer_join,
@@ -374,14 +368,12 @@ class Sequence:
             monomer_types = set()
             monomer_ids = []
             for _res_pos, res in enumerate(residues):
-                # Extract the residue information
                 # Strip bond annotations: (n,m) and (!n,m) crosslink IDs
                 resname = _source_sub(r'\((?:!\w+|\d+),\d+\)', '', res)
                 if isinstance(resname, SourceText):
                     self.s_sources.append(resname.tracker.occurrence(resname))
                 resname = re.sub(r'^[\[{](.*?)[\]}]$', '\\1', resname)
 
-                # Check if name exists in MonomerDic — with degeneracy resolution
 
                 if resname not in self.monomer_df.index:
                     if resname in self.monomer_df.attrs.get('_ambiguous_aliases', {}):
@@ -420,21 +412,18 @@ class Sequence:
                         raise ValueError(
                             f"Monomer {resname!r} is not in the monomer library.")
 
-                # Add additional information of the monomers
                 mm_info = self.monomer_df.loc[resname, :].to_dict()
                 mm_value = {'m_name': resname,
                             'm_name_in_biln': res,
                             'm_chainID': num_chain}
                 mm_value.update(mm_info)
 
-                # Append the monomer in the sequence object
                 self.__append_monomer(mm_value)
 
                 monomer_ids.append(m_idx)
                 monomer_types.add(mm_info['m_type'])
                 m_idx += 1
 
-            # Save the type of monomer
             if len(monomer_types) == 1:
                 if monomer_types == {'aa'}:
                     self.s_chains["s_cType"][num_chain] = 'peptide'
@@ -445,12 +434,7 @@ class Sequence:
 
             self.s_chains["s_monomerIDs"][num_chain] = monomer_ids
 
-            # end of looping over each residue in a chain
-        # end of looping over all chains in the peptide
 
-    # end of internal-use method for parsing BILN.
-
-    ########################################################################################
     def __append_monomer(self, monomer):
         """Place a new monomer at the end of the sequence, i.e.
         append the current monomer to the monomer list.
@@ -460,33 +444,27 @@ class Sequence:
         """
         self.s_mid += 1
 
-        # Fields required for the addition of the monomer
         keys_needed = ['m_name', 'm_abbr', 'm_name_in_biln', 'm_type',
                        'm_subtype', 'm_chainID', 'm_Rgroups', 'm_romol',
                        'm_chem_types']
 
-        # check if all necessary keys are available in the monomer definition
         for key in keys_needed:
             try:
                 monomer[key]
             except KeyError:
                 raise ValueError(f'Key {key} missing in monomer description')
 
-        # Construct the monomer dictionary
         m_dict = {}
         m_dict.update({key: monomer[key] for key in keys_needed})
 
-        # Update class variables
         self.s_nmonomers += 1
         self.s_monomers.append(m_dict)
 
-    ########################################################################################
     def __parse_biln_bonds(self):
         """
         Function to parse bond information from the BILN string
         """
 
-        # Local variable to store bond information
         bond_info = []
         bond_info_helm = []
 
@@ -494,13 +472,11 @@ class Sequence:
                                  SequenceConstants.chain_separator +
                                  SequenceConstants.monomer_join, '[]')
         nres = len(residues)
-        # Iterate over residues
         for num_res, res in enumerate(residues):
 
             if num_res < nres - 1:
                 if self.__get_monomer_prop('m_chainID', num_res) == \
                         self.__get_monomer_prop('m_chainID', num_res + 1):
-                    # We have a bond between the two monomers.
                     # Read attachment points directly from the mol via isotope labels
                     # (CHUCKLES convention) rather than the sidecar index property.
                     mol1 = self.__get_monomer_prop('m_romol', num_res)
@@ -559,7 +535,6 @@ class Sequence:
                 bond_info_helm.append([b1_idx, num_res, rgrp1_idx])
                 bond_info_helm.append([b2_idx, num_res, rgrp2_idx])
 
-        # Now that we have the bond info we collect additional information
         nbonds = int(len(bond_info))
 
         if (nbonds % 2) == 1:
@@ -579,7 +554,6 @@ class Sequence:
                         "expected exactly 2 (one on each partner residue).")
                 bond.append(entries)
 
-            # Collect the data needed to add to bond information in Sequence
             for bondx in bond:
 
                 if bondx[0][1] > bondx[1][1]:
@@ -600,12 +574,9 @@ class Sequence:
                     warning_sink=self._warning_sink)
                 self.__add_bond(m1, at1, m2, at2, slot1=slot1, slot2=slot2)
 
-        # Filter unique bonds
         self.__only_unique_bonds()
 
-    ## end of Sequence.__parse_biln_bonds()
 
-    ########################################################################################
     def __add_bond(self, m_id1, atom1, m_id2, atom2, slot1=None, slot2=None):
         """
         Add an entry in the bond list
@@ -637,7 +608,6 @@ class Sequence:
             entry.extend([slot1, slot2])
         self.s_bonds.append(entry)
 
-    ########################################################################################
     def get_monomer(self, idx):
         """
         Return the dictionary of ith monomer by index
@@ -654,7 +624,6 @@ class Sequence:
 
         return mon
 
-    ########################################################################################
     def __get_monomer_prop(self, property_val, idx):
         """
         Return a property of the i-th monomer
@@ -680,21 +649,18 @@ class Sequence:
 
         return m_prop
 
-    ############################################################################
     def length(self):
         """
         Return the length of the sequence
         """
         return len(self.s_monomers)
 
-    ############################################################################
     def __len__(self):
         """
         Return the length of the sequence.
         """
         return self.length()
 
-    ############################################################################
     def __only_unique_bonds(self):
         """
         In __parseBILNBonds it might happen that a bond is added twice
@@ -713,7 +679,6 @@ class Sequence:
                 unique.append(b)
         self.s_bonds = unique
 
-    ############################################################################
     def is_valid(self):
         """Flag if the initialized pyPept.Sequence is valid.
         This includes check of R-groups present in the monomer dictionary,
@@ -723,7 +688,6 @@ class Sequence:
         """
         return self.__is_valid
 
-    ############################################################################
     @classmethod
     def validate(cls, biln, path=SequenceConstants.def_path,
                  monomer_lib=SequenceConstants.def_lib_filename, fmt=None):
@@ -765,7 +729,6 @@ class Sequence:
         report._seq = seq
         return report
 
-    ############################################################################
     def __bool__(self):
         """
         Returns if a pyPept.Sequence object has been constructed with a valid

@@ -80,10 +80,9 @@ class ActivationResult:
 RDLogger.DisableLog('rdApp.warning')
 
 
-# ── Standard amino acid lookup (FASTA / BILN token → SMILES) ─────────────
+# Standard amino acid lookup (FASTA / BILN token → SMILES)
 # Used by normalize_input() to convert single-letter or token-name inputs.
 _AA_SMILES = {
-    # FASTA single-letter codes
     'G': 'NCC(=O)O',
     'A': 'N[C@@H](C)C(=O)O',
     'V': 'N[C@@H](C(C)C)C(=O)O',
@@ -182,7 +181,7 @@ def normalize_input(raw):
     )
 
 
-# ── Leaving group inference rules ─────────────────────────────────────────
+# Leaving group inference rules
 # Each entry: (SMARTS with attachment atom mapped :1, leaving_group_smiles)
 # First match wins; more specific rules must come first.
 LEAVING_GROUP_RULES = [
@@ -209,11 +208,10 @@ LEAVING_GROUP_RULES = [
     ('[CX4;H1,H2,H3:1]',  '[H]'),   # sp3 C-H
 ]
 
-# Compiled once at import time.
 _LG_PATTERNS = [(Chem.MolFromSmarts(s), lg) for s, lg in LEAVING_GROUP_RULES]
 
 
-# ── Backbone detection — topology patterns ────────────────────────────────
+# Backbone detection — topology patterns
 # Atom-type patterns for the graph-distance backbone search.
 # N: trivalent N with at least one H (covers primary amine, Pro ring N,
 #    secondary N, but excludes tertiary amines like NMe2 which can't donate H).
@@ -240,7 +238,7 @@ _SC_PATTERNS  = [(Chem.MolFromSmarts(s), lg, ct, lo) for s, lg, ct, lo in _SIDEC
 _SECOND_H_PAT = Chem.MolFromSmarts('[NX3;H2:1]')
 
 
-# ── Public API ────────────────────────────────────────────────────────────
+# Public API
 
 def _backbone_n_indices(mol):
     return sorted({match[0] for pattern in (_BB_N_PAT, _BB_LACTAM_N_PAT)
@@ -264,8 +262,8 @@ def find_backbone_slots(mol):
     c_idxs = [m[0] for m in mol.GetSubstructMatches(_BB_COOH_PAT)]
 
     # Depsipeptide / hydroxy acid: no amine but has COOH and a separate OH.
-    # Must check BEFORE the C-terminal fallback (which would put an alcohol
-    # in c_idxs and collide with the depsipeptide O search).
+    # Check before the C-terminal fallback, which would put an alcohol
+    # in c_idxs and collide with the depsipeptide O search.
     if not n_idxs and c_idxs:
         cooh_o_idxs = set()
         for c_idx in c_idxs:
@@ -676,7 +674,6 @@ def pre_activate(smiles, slot_overrides=None, leaving_overrides=None,
                     _bb_excluded.add(_nb.GetIdx())
 
     if _sidechain_only:
-        # All slots already determined — skip further sidechain detection
         sidechain = {}
         sidechain_leaving = {s: _sc_all[s][1] for s in _sc_all}
     else:
@@ -699,7 +696,6 @@ def pre_activate(smiles, slot_overrides=None, leaving_overrides=None,
     if slot_overrides:
         slots.update(slot_overrides)
 
-    # Resolve leaving groups
     leaving = {}
     for slot, attach_idx in slots.items():
         if leaving_overrides and slot in leaving_overrides:
@@ -719,10 +715,8 @@ def pre_activate(smiles, slot_overrides=None, leaving_overrides=None,
                 )
         leaving[slot] = lg
 
-    # Build pre-activated fragment.
-    # Process slots in order so that when the same atom appears in two slots
-    # (e.g. backbone N in R1 and backbone-N modification slot), the second call
-    # picks the OTHER H — not the one already claimed by the first slot.
+    # Process slots in order so a shared attachment atom uses a different H
+    # for each slot, including backbone N with both R1 and a modification site.
     emol = Chem.RWMol(mol)
     atoms_to_remove = []
     _already_claimed = set()
@@ -762,7 +756,7 @@ def pre_activate(smiles, slot_overrides=None, leaving_overrides=None,
     )
 
 
-# ── CSV authoring pipeline ────────────────────────────────────────────────
+# CSV authoring pipeline
 
 _CSV_COLUMNS = [
     'token', 'input', 'name', 'type', 'synonyms',
@@ -980,7 +974,7 @@ def import_helm_sdf(helm_sdf_path, csv_out_path, peptide_only=True):
     return len(rows), skipped
 
 
-# ── Private helpers ───────────────────────────────────────────────────────
+# Private helpers
 
 def _find_leaving_atoms(mol, attach_idx, leaving_smiles, exclude=None):
     """Return atom indices to remove from mol for this leaving group.

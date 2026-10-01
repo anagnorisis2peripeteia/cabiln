@@ -50,7 +50,7 @@ def biln_to_cabiln(biln):
             continue
         m1, m2 = endpoints
         tok1, tok2 = m1.group(1), m2.group(1)
-        # This text adapter historically preserves noncanonical numeric spelling.
+        # Preserve numeric spelling in this compatibility adapter.
         rg1, rg2 = (
             str(legacy_attachment_slot(3)) if value == "3" else value
             for value in (m1.group(3), m2.group(3))
@@ -184,9 +184,8 @@ def cabiln_to_branch(cabiln):
 
         bracket_content = result[open_pos + 1:close_pos - 1]
 
-        # Sub-bracket arms present: check if they are all pure crosslink annotations
-        # (e.g., .[TBMB(4,4)[.!2(5,4)][.!3(6,4)]]).  If so, convert to branch.
-        # If arms have residue tokens, there is no clean % equivalent — skip.
+        # This adapter handles crosslink-only arms, such as
+        # .[TBMB(4,4)[.!2(5,4)][.!3(6,4)]]. Leave residue arms unchanged.
         if '[' in bracket_content:
             flat_end = bracket_content.index('[')
             flat_part = bracket_content[:flat_end]
@@ -194,7 +193,6 @@ def cabiln_to_branch(cabiln):
             if not hub_m:
                 search_start = m_end
                 continue
-            # Extract sub-bracket arm contents
             sub_arms = []
             j = flat_end
             while j < len(bracket_content):
@@ -231,8 +229,7 @@ def cabiln_to_branch(cabiln):
             search_start = m_end
             continue
 
-        # Flat multi-crosslink form: [TBMB(4,4).!2(5,4).!3(6,4)]
-        # All non-anchor items are bare !n tags — same processing as sub-bracket form.
+        # Flat form of the same crosslink hub: [TBMB(4,4).!2(5,4).!3(6,4)].
         _xpat = re.compile(r'^!\d+$')
         if all(_xpat.match(abbr) for abbr, rp, rt in items[1:]):
             detach_hub(m_start, m_end, items[0], items[1:])
@@ -370,7 +367,6 @@ def cabiln_to_bracket(cabiln):
     if any(count > 2 for count in endpoint_counts.values()):
         return cabiln
 
-    # Separate branches: crosslink-connected vs positional.
     positional = []
     crosslink = []
     for bs in branch_segs:
@@ -379,7 +375,7 @@ def cabiln_to_bracket(cabiln):
         else:
             positional.append(bs)
 
-    # --- Phase 0: single-monomer chain segments connected by crosslinks ---
+    # Single-monomer segments connected by crosslinks.
     # Pattern: main has .!n(r_host, r_branch); branch segments form a linear
     # chain MONO.!n.!m(a,b) → MONO.!m.!p(c,d) → MONO.!p (terminal).
     # These are emitted by cabiln_to_branch for non-standard (rt≠2) continuations.
@@ -457,7 +453,7 @@ def cabiln_to_bracket(cabiln):
         main_seg = main_seg[:host_m.start()] + bracket_str + main_seg[host_m.end():]
     crosslink = new_crosslink
 
-    # --- Phase 1: crosslink branches (.!n anchor in the branch) ---
+    # Crosslink branches with a .!n anchor.
     unconverted_crosslink = []
     for branch_seg in crosslink:
         entries = parsed_branches[branch_seg]
@@ -485,7 +481,8 @@ def cabiln_to_bracket(cabiln):
             for tag in unique_tags[1:]:
                 th, tb = tag_info[tag]
                 remaining.append(f'{tag}({tb},{th})')
-            # Simplify remaining host tags BEFORE inserting bracket
+            # Simplify host tags before inserting the bracket,
+            # which can contain its own tags.
             for tag in unique_tags[1:]:
                 main_seg = re.sub(
                     re.escape(f'.{tag}') + r'\(\d+,\d+\)',
@@ -526,7 +523,7 @@ def cabiln_to_bracket(cabiln):
         main_seg = (main_seg[:host_m.start()] + bracket_str
                     + main_seg[host_m.end():])
 
-    # --- Phase 2: positional branches (.(r,r) marker) ---
+    # Positional branches with a .(r,r) marker.
     unconverted_positional = []
     for branch_seg in positional:
         host_m = re.search(r'\.\((\d+),(\d+)\)', main_seg)

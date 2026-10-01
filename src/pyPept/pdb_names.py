@@ -24,7 +24,7 @@ def greekify(mol, name_aa):
     :type name_aa: str
     """
 
-    # Some local fixes to name correctly the natural amino acids if required
+    # Standard PDB names that differ from the distance-based Greek assignment.
     fix_aa = {'W': {'CE1': 'CE2', 'NE2': 'NE1', 'CZ1': 'CZ3', 'CH': 'CH2',
                     'CD1': 'CD2', 'CD2': 'CD1'},
               'N': {'OD2': 'OD1', 'ND1': 'ND2'},
@@ -36,7 +36,6 @@ def greekify(mol, name_aa):
     greekdex = defaultdict(list)
     ca_atom = get_atom_by_name(mol, 'CA')
 
-    # Recognize if the atom is not part of the backbone
     for atom in mol.GetAtoms():
         is_backbone = (atom.GetPDBResidueInfo() is not None and
                        atom.GetPDBResidueInfo().GetName().strip() in (
@@ -48,14 +47,12 @@ def greekify(mol, name_aa):
                 Chem.GetShortestPath(mol, ca_atom.GetIdx(), atom.GetIdx())) - 1
             greekdex[n_atom].append(atom)
 
-    # Iterate over the list of atoms and the greek letters
     for k in greekdex:
         if len(greek) <= k:
             pass
         elif len(greekdex[k]) == 0:
             pass
         elif len(greekdex[k]) == 1:
-            # Special case
             new_name = f'{greekdex[k][0].GetSymbol()}{greek[k]}'
             if name_aa in fix_aa:
                 if new_name in fix_aa[name_aa]:
@@ -120,7 +117,6 @@ def get_monomer_codes(df_name):
 
     :return: dictionary with the monomer PDB codes
     """
-    # Get the values from the monomer dictionary
     monomers = {}
     for idx in df_name.index:
         symbol = df_name.at[idx, 'm_abbr']
@@ -143,7 +139,6 @@ def correct_pdb_atoms(seq, path="pyPept.data",
     # Special case two main N- and C- terminal caps
     names_cap = {'ac': ['CH3', 'C', 'O'], 'am': ['N']}
 
-    # Read the monomer dataframe
     monomer_df_filepath = library_resource(path, monomer_lib)
     new_df = monomer_table(str(monomer_df_filepath))
     if 'pdbName' not in new_df.columns:
@@ -153,10 +148,8 @@ def correct_pdb_atoms(seq, path="pyPept.data",
             "names, or use --noconf for 2D output."
         )
 
-    # Get monomer codes
     monomers = get_monomer_codes(new_df)
 
-    # Iterate over the monomers
     mm_list = seq.s_monomers
     for i, monomer in enumerate(mm_list):
         mol = monomer['m_romol']
@@ -172,7 +165,6 @@ def correct_pdb_atoms(seq, path="pyPept.data",
             if type_mon == 'aa':
                 aa_flag = 1
 
-        # Iterate over the atoms
         counter = 0
         counter_non = 0
         for j, atom in enumerate(mol.GetAtoms()):
@@ -194,7 +186,6 @@ def correct_pdb_atoms(seq, path="pyPept.data",
                     counter += 1
                     atomname = f' {atom.GetSymbol()}{counter} '
             else:
-                # Special case for main capping groups
                 if name in ('ac', 'am'):
                     if atom.GetSymbol()[0] != 'R':
                         if names_cap[name][j] == 'CH3':
@@ -208,7 +199,6 @@ def correct_pdb_atoms(seq, path="pyPept.data",
                     else:
                         atomname = f' {atom.GetSymbol()}{counter_non}'
 
-            # Assign the atom object to the peptide molecule
             info = atom.GetPDBResidueInfo()
             if info is None:
                 atom.SetMonomerInfo(Chem.AtomPDBResidueInfo(atomName=atomname,
@@ -217,7 +207,6 @@ def correct_pdb_atoms(seq, path="pyPept.data",
                                                             residueNumber=i + 1,
                                                             chainId="A"))
 
-        # Rename atoms using the greek nomenclature
         if aa_flag == 1:
             greekify(mol, name)
 

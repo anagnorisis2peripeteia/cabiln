@@ -5,32 +5,21 @@ From publication: pyPept: a python library to generate atomistic 2D and 3D repre
 Journal of Cheminformatics, 2023
 """
 
-########################################################################################
-# Authorship
-########################################################################################
 
 __credits__ = ["Rodrigo Ochoa", "J.B. Brown", "Thomas Fox"]
 __license__ = "MIT"
 __version__ = "1.0"
 
-########################################################################################
-# Modules
-########################################################################################
 # pylint: disable=E1101
 
-# System libraries
 import copy
 import re
 import warnings
 
-# pyPept functions
 from pyPept.sequence import SequenceConstants
 from pyPept.notation import split_outside
 from pyPept.notation import legacy_attachment_slot
 
-##########################################################################
-# Main class
-##########################################################################
 class Converter:
     """
     Class to convert between BILN and HELM (and viceversa)
@@ -60,7 +49,6 @@ class Converter:
         elif chuckles is not None:
             self.eval_chuckles(chuckles=chuckles)
 
-    ############################################################
     @staticmethod
     def __remove_brackets(sequence):
         """Remove brackets around individual residues
@@ -73,12 +61,11 @@ class Converter:
         """
         newseq = []
         for residue in sequence:
-            pat = re.sub(r'\[(.*)\]', r'\1', residue)  # remove brackets if necessary
+            pat = re.sub(r'\[(.*)\]', r'\1', residue)
             newseq.append(pat)
 
         return newseq
 
-    ############################################################
     @staticmethod
     def __split_helm(helm):
         """split HELM string into parts
@@ -94,19 +81,18 @@ class Converter:
         while len(helm):
             match = re.search(r'\$[^,;]', helm)  # this excludes any $ signs in the cxsmiles
             if match is None:
-                match = re.search(r'\$', helm)  # search for all other $ signs
+                match = re.search(r'\$', helm)
 
             if match is None:
-                helm_parts.append(helm)  # done, no more parts
+                helm_parts.append(helm)
                 break
 
             helm_parts.append(helm[:match.span()[0]])
-            helm = helm[match.span()[0] + 1:]  # remove the current part from helm
+            helm = helm[match.span()[0] + 1:]
 
         if len(helm_parts) == 4:
             helm_parts.append('')
 
-        # helm part 1 == list of simple polymers - split further
         list_of_simple_polymers = helm_parts[0]
         if SequenceConstants.helm_polymer in list_of_simple_polymers:
             list_of_simple_polymers = list_of_simple_polymers.split(
@@ -115,7 +101,6 @@ class Converter:
             list_of_simple_polymers = [list_of_simple_polymers]
         helm_parts[0] = list_of_simple_polymers
 
-        # split the bond information into individual chunks
         list_of_connections = helm_parts[1]
         if list_of_connections != '':
             if SequenceConstants.helm_polymer in list_of_connections:
@@ -130,7 +115,6 @@ class Converter:
 
         return helm_parts
 
-    ############################################################
     def __to_biln(self):
         """Generate BILN from polymerInfo
 
@@ -152,7 +136,6 @@ class Converter:
             chains[c2_value][res2] = (
                 f"{chains[c2_value][res2]}.!{bid}")
 
-        # chain everything together
         list_ofsimple_polymers = []
         for chain in chains:
             poly = SequenceConstants.monomer_join.join(chain)
@@ -165,7 +148,6 @@ class Converter:
 
         return biln
 
-    ############################################################
     def __to_helm(self):
         """Generate a HELM from an internal PolymerInfo dictionary.
 
@@ -176,20 +158,16 @@ class Converter:
         chains = copy.deepcopy(self.polymerinfo["chains"])
         bonds = copy.deepcopy(self.polymerinfo["bonds"])
 
-        # brackets around residues if necessary
         for count_chain, chain in enumerate(chains):
             for count_res, res in enumerate(chain):
                 if len(res) > 1:
                     chains[count_chain][count_res] = f"[{res}]"
 
-        # generate HELM elements
-        # compile chains
         list_of_simple_polymers = []
         for count_chain, chain in enumerate(chains):
             poly = ".".join(chain)
             list_of_simple_polymers.append(f'PEPTIDE{count_chain + 1}{{{poly}}}')
 
-        # compile bondinfo
         list_of_connections = []
         for bond in bonds:
             c1_val, r1_val, g1_val, c2_val, r2_val, g2_val = bond
@@ -206,7 +184,6 @@ class Converter:
 
         return helm
 
-    ############################################################
     def eval_helm(self, helm):
         """Generate internal PolymerInfo dictionary from a HELM string.
 
@@ -222,7 +199,6 @@ class Converter:
 
         if not isinstance(helm, str) or not helm.strip():
             raise ValueError("HELM must be a non-empty string.")
-        # split the helm string into its individual parts
         try:
             list_of_simple_polymers, list_of_connections, groups, annotations,\
             version = self.__split_helm(helm)
@@ -233,8 +209,6 @@ class Converter:
         if not list_of_simple_polymers:
             raise ValueError("HELM contains no simple polymers.")
 
-        # go through the list of simple polymers (first component of HELM string),
-        # parse them and put them into polymerinfo["chains"]
 
         pattern = re.compile(r'{.*}')
 
@@ -243,29 +217,24 @@ class Converter:
 
         for idx, chain in enumerate(list_of_simple_polymers):
 
-            # remove any whitespace
             chain = chain.strip()
-            # split each polymer into name/identifier and sequence
             match = pattern.search(chain)
             if match is None:
                 raise ValueError(f"HELM polymer contains no sequence: {chain!r}")
 
-            # split each polymer into name/identifier and sequence
             seq = match.span()
-            id_chain = chain[:seq[0]]  # identifier
+            id_chain = chain[:seq[0]]
             if not re.fullmatch(r'PEPTIDE[1-9]\d*', id_chain):
                 raise ValueError(f"Unsupported HELM polymer identifier: {id_chain!r}")
             id_chain = int(re.sub('PEPTIDE', '', id_chain))
 
-            poly = chain[seq[0] + 1:seq[1] - 1]  # sequence
+            poly = chain[seq[0] + 1:seq[1] - 1]
 
             if not poly:
                 raise ValueError(f"HELM polymer PEPTIDE{id_chain} contains no residues.")
 
-            # split into individual monomers.
             poly = split_outside(poly, SequenceConstants.chain_separator, '[]')
 
-            # remove brackets around monomer abbreviations with more than 1 letter
             poly = self.__remove_brackets(poly)
 
             if id_chain in id_val:
@@ -273,7 +242,6 @@ class Converter:
             id_val.append(id_chain)
             polymer.append(poly)
 
-        # parse the bond information
 
         # bond information is of the type: 'PEPTIDE1,PEPTIDE2,1:R1-4:R3'
         # split into individual parts 'id1, id2, res1:rgroup1-res2:rgroup2'
@@ -284,7 +252,6 @@ class Converter:
 
                 res1, rgroup1, res2, rgroup2 = re.split(r'[-:]', bond)
 
-                # need some reformatting
                 id1 = int(id1.replace('PEPTIDE', ''))
                 id2 = int(id2.replace('PEPTIDE', ''))
 
@@ -308,7 +275,6 @@ class Converter:
 
         self.polymerinfo = {"chains": polymer, "bonds": bonds}
 
-    ############################################################
     def eval_chuckles(self, chuckles):
         """Generate internal PolymerInfo dictionary from a CHUCKLES sequence.
 
@@ -328,7 +294,6 @@ class Converter:
         """
         self._read_legacy(chuckles, "|", ".", "CHUCKLES")
 
-    ############################################################
     def __to_chuckles(self):
         """Generate a CHUCKLES sequence string from polymerinfo.
 
@@ -349,7 +314,6 @@ class Converter:
         chuckles = '|'.join(chain_strings)
         return chuckles if chuckles else None
 
-    ############################################################
     def eval_biln(self, biln):
         """Generate internal PolymerInfo dictionary from a BILN string.
 
@@ -392,7 +356,6 @@ class Converter:
                 raise ValueError(f"{kind} bond {bond_id} must have exactly two endpoints.")
         self.polymerinfo["bonds"] = list(endpoints.values())
 
-    ############################################################
     def get_helm(self):
         """Return a HELM string from the PolymerInfo generated at
         instantiation.
@@ -401,7 +364,6 @@ class Converter:
         helm = self.__to_helm()
         return helm
 
-    ############################################################
     def get_biln(self):
         """Return CABILN text under the retained historical method name.
 
@@ -412,7 +374,6 @@ class Converter:
         biln = self.__to_biln()
         return biln
 
-    ############################################################
     def get_chuckles(self):
         """Return a CHUCKLES sequence string from the PolymerInfo generated
         at instantiation.
@@ -420,9 +381,3 @@ class Converter:
         :return: str or None
         """
         return self.__to_chuckles()
-
-    # End of Converter pipeline functions.
-
-############################################################
-# End of converter.py
-############################################################

@@ -113,7 +113,6 @@ def _infer_synth_chem_type(mol, slot):
                     and atom.GetAtomMapNum() == 99):
                 return ('backbone_c', '[H]')
         return ('backbone_c', '[OH]')
-    # Find the dummy atom and its neighbour
     for atom in mol.GetAtoms():
         if atom.GetAtomicNum() == 0 and atom.GetIsotope() == slot:
             nbs = atom.GetNeighbors()
@@ -121,7 +120,6 @@ def _infer_synth_chem_type(mol, slot):
                 return (None, None)
             anchor = nbs[0]
             sym = anchor.GetSymbol()
-            # Quick chem_type inference by neighbour atom type and context
             if sym == 'S':
                 return ('thiol', '[H]')
             if sym == 'Se':
@@ -136,18 +134,14 @@ def _infer_synth_chem_type(mol, slot):
                         return ('aryl_phenol_o', '[H]')
                 return ('hydroxyl', '[H]')
             if sym == 'C':
-                # carbonyl C → carboxyl; alkyl halide neighbour; alkene; etc.
-                # Look for =O neighbour → carboxyl
                 for nb2 in anchor.GetNeighbors():
                     if nb2.GetAtomicNum() == 8:
                         b = mol.GetBondBetweenAtoms(anchor.GetIdx(), nb2.GetIdx())
                         if b and b.GetBondTypeAsDouble() == 2.0:
                             return ('carboxyl', '[OH]')
-                # Alkyl halide
                 for nb2 in anchor.GetNeighbors():
                     if nb2.GetSymbol() in ('Cl', 'Br', 'I'):
                         return ('alkyl_halide_c', None)
-                # Default carbon anchor
                 return ('carbon', '[H]')
             return (None, None)
     return (None, None)

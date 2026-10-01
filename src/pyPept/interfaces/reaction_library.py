@@ -25,7 +25,6 @@ from rdkit.Chem import AllChem
 _YAML_PATH = Path(__file__).parent.parent / 'data' / 'reactions.yaml'
 
 
-
 def _load_reactions():
     with open(_YAML_PATH, encoding='utf-8') as f:
         entries = yaml.safe_load(f)
@@ -34,10 +33,7 @@ def _load_reactions():
 
 REACTIONS = _load_reactions()
 
-# ── Reaction routing — built from reactant_pairs in reactions.yaml ────────────
-# Each YAML entry with a reactant_pairs field defines which chem_type pairs
-# trigger it.  No separate _BOND_TABLE needed — add a reaction to YAML and the
-# routing is automatic.
+# Route declared chem_type pairs through their reactions in reactions.yaml.
 REACTION_INDEX: dict = {}
 for _entry in REACTIONS.values():
     for _pair in _entry.get('reactant_pairs', []):
@@ -46,7 +42,7 @@ for _entry in REACTIONS.values():
         if _ct_a != _ct_b:
             REACTION_INDEX[(_ct_b, _ct_a)] = _entry
 
-# ── Functional-group registry — single source of truth ───────────────────────
+# Functional-group registry
 # Derives both _EXOTIC_SMARTS (assembly-time infer_chem_type) and
 # _SIDECHAIN_RULES (pre_activate monomer labelling).
 #
@@ -67,13 +63,13 @@ for _entry in REACTIONS.values():
 #
 # (chem_type, pre_smarts, pre_lg, infer_smarts, label_only)
 _CHEM_TYPE_REGISTRY = [
-    # ── Sulfur / selenium ────────────────────────────────────────────────────
+    # Sulfur / selenium
     ('thiol',             '[SX2H1:1]',                              '[H]',  '[SX2;H0,H1:1]',                          False),
     ('selenol',           '[SeX2H1:1]',                             '[H]',  '[SeX2;H0,H1:1]',                         False),
     # The precursor contains halide; an activated substitution handle replaces
     # that halide. A retained C-halogen bond does not identify the selected site.
     ('alkyl_halide_c',    '[CX4;!H0:1][Cl,Br,I]',                  None,   None,                                    False),
-    # ── Nitrogen nucleophiles — most-specific first ───────────────────────────
+    # Nitrogen nucleophiles — most-specific first
     # aminooxy:  NH2 (pre) → NH1 after dummy
     ('aminooxy',          '[NH2:1][OX2H0]',                         '[H]',  '[NX3;H0,H1,H2:1][OX2H0]',                False),
     # hydrazide: NH1 (pre) → NH0 after dummy; C(=O) guard vs plain hydrazine
@@ -81,7 +77,7 @@ _CHEM_TYPE_REGISTRY = [
     ('amine_primary',     '[NX3;H2:1]',                             '[H]',  '[NX3;H2:1]',                             False),
     ('guanidinium',       '[NX3;H1:1][CX3](=N)',                   '[H]',  '[NX3:1][CX3](=[#7])',                    True),
     ('guanidinium_imine', '[NX2H1:1]=[CX3]([NX3])[NX3]',           '[H]',  '[NX2;H0,H1:1]=[CX3]([NX3])[NX3]',       False),
-    # ── Carboxyl / oxygen ────────────────────────────────────────────────────
+    # Carboxyl / oxygen
     # Sidechain COOH: dummy on carbonyl C (same convention as backbone R2).
     # LG=[OH] removes the hydroxyl.  infer_smarts is intentionally None —
     # carboxyl vs aldehyde C atoms are structurally identical in CHUCKLES,
@@ -118,12 +114,12 @@ _CHEM_TYPE_REGISTRY = [
     # (CH2-NH style backbone, no carbonyl). Detected by element + slot in
     # infer_chem_type heuristic (SMARTS can't disambiguate from generic methyls).
     ('backbone_c_red',    '[CX4;H2,H3:1][NX3;!$(N-C=O)]',         '[H]',  '[CX4;H1,H2,H3:1][NX3;!$(N-C=O)]',        False),
-    # ── Aromatic / amide N-H (label-only) ────────────────────────────────────
+    # Aromatic / amide N-H (label-only)
     ('aromatic_nh',       '[nH:1]',                                 '[H]',  '[n:1]',                                  True),
     ('amide_nh',          '[NX3;H1:1][CX3]=O',                     '[H]',  '[NX3:1][CX3]=[O,S]',                    True),
-    # ── Phosphate (P(V) electrophile) ────────────────────────────────────────
+    # Phosphate (P(V) electrophile)
     ('phosphate_p',       '[P:1](=O)([OH])[OH]',                  '[OH]',  '[PX4:1](=[OX1])([O])([O])[#0]',          False),
-    # ── Bioorthogonal click ───────────────────────────────────────────────────
+    # Bioorthogonal click
     ('cyclooctyne_c',     '[CX4;!H0:1][C;r]#[C;r]',               '[H]',  '[CX4;!H0:1][C;r]#[C;r]',                False),
     ('alkyne_c',          '[CX4;!H0:1]C#[CH]',                    '[H]',  '[CX4;!H0:1]C#[CH]',                     False),
     ('azide_alpha_c',     '[CX4;!H0:1][N]=[N+]=[N-]',             '[H]',  '[CX4;!H0:1][N]=[N+]=[N-]',              False),
@@ -132,7 +128,7 @@ _CHEM_TYPE_REGISTRY = [
     ('tetrazine_c',       '[CX4;!H0:1][c]1[n][n][c][n][n]1',     '[H]',  '[CX4;!H0:1][c]1[n][n][c][n][n]1',       False),
     # tco_c: !r in both — pre_activate never labels in-ring C; no hand-crafted entries
     ('tco_c',             '[CX4;!H0;!r:1][C;r]=[C;r]',           '[H]',  '[CX4;!H0;!r:1][C;r]=[C;r]',             False),
-    # ── Condensation bioorthogonal ────────────────────────────────────────────
+    # Condensation bioorthogonal
     # aldehyde: CH1 (pre, requires H to distinguish from ketone) → CH0 after dummy + chain + O
     ('aldehyde',          '[CX3H1:1](=O)[!#7;!#1;!#0]',           '[H]',  '[CX3;H0,H1:1](=O)[!#7;!#1;!#0]',        False),
     # formamide_c: formyl (N-CHO) — distinct from amide (N-CO-C, no H)
@@ -158,7 +154,7 @@ _EXOTIC_SMARTS = [
     if not label_only
 ]
 
-# Enforce every _BOND_TABLE chem_type has SMARTS detection or a known element heuristic.
+# Every reaction type needs a SMARTS detector or a supported element heuristic.
 _HEURISTIC_TYPES = frozenset({
     'backbone_n', 'backbone_c', 'backbone_o', 'backbone_n_mod',
     'amine_secondary',  # nitrogen context counts non-dummy substituents
@@ -279,7 +275,7 @@ def infer_chem_type(mol, attach_idx: int, slot: int = None,
                 nb.GetAtomicNum() == 7 for nb in atom.GetNeighbors()):
             return declared
 
-    # ── Backbone slots (1-indexed: slot 1 = R1, slot 2 = R2, slot 3 = R3) ────
+    # Backbone slots (1-indexed: slot 1 = R1, slot 2 = R2, slot 3 = R3)
     if slot == 1:
         if sym == 8: return 'backbone_o'
     if slot == 2:
@@ -293,11 +289,11 @@ def infer_chem_type(mol, attach_idx: int, slot: int = None,
                     if bond and bond.GetBondTypeAsDouble() == 2.0:
                         return 'backbone_c'
 
-    # ── Early carboxyl guard — must precede SMARTS loop ─────────────────────
+    # Early carboxyl guard — must precede SMARTS loop
     # Carboxyl C ([4*]C(=O)...) and aldehyde C ([4*]C(=O)...) are
     # structurally identical in CHUCKLES; the aldehyde infer_smarts
     # [CX3;H0,H1](=O)[!N] would match both.  Disambiguate via leaving group
-    # BEFORE the SMARTS scan so carboxyl is never misclassified as aldehyde.
+    # before the SMARTS scan to distinguish carboxyl from aldehyde.
     if sym == 6 and leaving == '[OH]':
         for _nb in atom.GetNeighbors():
             if _nb.GetAtomicNum() == 8:
@@ -312,7 +308,7 @@ def infer_chem_type(mol, attach_idx: int, slot: int = None,
             and leaving in ('[Cl]', '[Br]', '[I]', 'Cl', 'Br', 'I')):
         return 'alkyl_halide_c'
 
-    # ── SMARTS-based detection (covers thiol, selenol, and all exotic types) ───
+    # SMARTS-based detection (covers thiol, selenol, and all exotic types)
     for patt, ct in _EXOTIC_SMARTS:
         if patt is None:
             continue
@@ -324,7 +320,7 @@ def infer_chem_type(mol, attach_idx: int, slot: int = None,
             if match[0] == attach_idx:
                 return ct
 
-    # ── Heuristic fallbacks for C and O ─────────────────────────────────────
+    # Heuristic fallbacks for C and O
     if sym == 6:
         has_carbonyl = False
         for nb in atom.GetNeighbors():

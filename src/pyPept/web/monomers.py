@@ -76,7 +76,6 @@ def palette_response():
             "leaving": ", ".join(lg_parts),
             "quality": quality_for_monomer(mol),
         }
-        # Collect degenerate cap pairs for merging
         if abbr.endswith("_") and abbr[:-1] in aliases:
             degen_nterm[abbr[:-1]] = entry
             continue
@@ -84,7 +83,6 @@ def palette_response():
             degen_cterm[abbr[1:]] = entry
             continue
         monomers.append(entry)
-    # Merge degenerate pairs into single entries
     all_bases = set(degen_nterm) | set(degen_cterm)
     for base in sorted(all_bases):
         nt = degen_nterm.get(base)
@@ -155,7 +153,6 @@ def monomer_svg(
 
         _all_mols, mol_by_abbr = _load_sdf()
 
-        # Direct match
         if abbr in mol_by_abbr:
             mol = Chem.Mol(mol_by_abbr[abbr])
             svg = _draw_mol(mol, width, height)
@@ -163,7 +160,6 @@ def monomer_svg(
             svg_restored = _draw_mol(restored, width, height)
             result = {"svg": svg, "svg_restored": svg_restored}
 
-            # Add reagent form if cap has reaction metadata
             reagent_mol, reagent_meta = _restore_reagent_form(mol, abbr)
             if reagent_mol is not None:
                 result["svg_reagent"] = _draw_mol(reagent_mol, width, height)
@@ -182,7 +178,6 @@ def monomer_svg(
             variants_found.append(cterm_key)
 
         if len(variants_found) >= 2:
-            # This is a degenerate base name — render all variants
             panels = []
             for vkey in variants_found:
                 vmol = mol_by_abbr[vkey]
@@ -197,7 +192,6 @@ def monomer_svg(
                     panel["svg_reagent"] = _draw_mol(reagent_mol, width, height)
                     panel["reagent"] = reagent_meta
                 panels.append(panel)
-            # R-group panel from first variant
             rgroup_svg = _draw_mol(
                 Chem.Mol(mol_by_abbr[variants_found[0]]), width, height
             )

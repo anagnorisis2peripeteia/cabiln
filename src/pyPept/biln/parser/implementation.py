@@ -22,28 +22,17 @@ From presentation: Modelling a (New) Modality: Computational Tools for Peptide D
 Certara User Group Meeting, Frankfurt, 2025
 """
 
-################################################################################
-# Authorship
-################################################################################
 
 __credits__ = ["J.B. Brown", "Thomas Fox"]
 __license__ = "MIT"
 
 
-################################################################################
-# Modules
-################################################################################
-
-# System libraries needed by this module.
-import logging   # For messages and debugging.
+import logging
 import re
 from collections import defaultdict
 import itertools
 
-# Third-party libraries needed by this module, e.g. numpy.
 
-
-# Project-specific modules additionally needed.
 from pyPept.biln.bits.abstractions import (
     NumberedChain,
     NumberedMonomer, MonomerPair,
@@ -54,24 +43,15 @@ from pyPept.biln.bits.abstractions import (
 from pyPept.biln.bits.defaults import BILNConstants, _installedMonoLib
 from pyPept.monomerlib import MonomerLibrary
 
-# ----- Begin code for this module. -----
+
+sortMonomers = lambda m: (m.chain, m.number)
 
 
-# Convenience function used in different parts of the parser.
-sortMonomers = lambda m: (m.chain, m.number)    # Reliant on type-checking
-
-
-##########################################################################
-# Functions and classes
-##########################################################################
-
-############################################################
 class BILNParser():
     """
     A class which provides information services and parsing on BILN strings.
     """
 
-    ############################################################
     @staticmethod
     def IsStandardAA(seq):
         """Returns whether or not a given string is a monomer representing
@@ -94,9 +74,7 @@ class BILNParser():
         stripped = re.sub("\\" + BILNConstants.GetDefaultNNAAEndDelimiter(),
                     str(), stripped)
         return stripped in BILNConstants._GetStandardAAs_1L()
-    ############################################################
 
-    ############################################################
     @staticmethod
     def GetPlainMonomerCode(seq):
         """Strips a monomer of potential branch and non-standard AA notation.
@@ -127,9 +105,7 @@ class BILNParser():
         no_branch = re.sub("\\" + BILNConstants.GetDefaultNNAAEndDelimiter(),
                         str(), no_branch)
         return no_branch
-    ############################################################
 
-    ############################################################
     @staticmethod
     def IsValidMonomer(seq, raiseError=False, monomer_library=None,
         ):
@@ -185,7 +161,7 @@ class BILNParser():
         if monomer_library is not None:
             useLib = monomer_library
         else:
-            useLib = _installedMonoLib  # default
+            useLib = _installedMonoLib
         assert isinstance(useLib, MonomerLibrary)
 
         errors = list()
@@ -193,16 +169,15 @@ class BILNParser():
         basename = BILNParser.GetPlainMonomerCode(seq)
         if basename not in validMonomers:
             errors.append(InvalidMonomerName(seq))
-        else: # monomer valid, any R-group error?
+        else:
             branchTexts = re.findall(BILNConstants.GetBranchingRegex(), seq)
-            if branchTexts: # R groups listed valid?
+            if branchTexts:
                 brNums = [b.split(",")[-1].replace(")","") for b in branchTexts]
-                if len(brNums) != len(set(brNums)):  # Duplicate R-group
+                if len(brNums) != len(set(brNums)):
                     errors.append(RepeatRGroupMonomer(seq))
-                for brNum in brNums: # Check R-groups exist
+                for brNum in brNums:
                     if 'R'+brNum not in useLib.GetRGroups(basename):
                         errors.append(InvalidMonomerRGroup(seq))
-        # Checked monomer name and R-groups, report valid or not
         if errors:
             if raiseError:
                 if len(errors) > 1:
@@ -213,9 +188,7 @@ class BILNParser():
                 return False
         else:
             return True
-    ############################################################
 
-    ############################################################
     @staticmethod
     def GetInvalidMonomers(seq,
             chainSep=BILNConstants.GetDefaultChainSeparator(),
@@ -233,9 +206,7 @@ class BILNParser():
                 if not BILNParser.IsValidMonomer(mon):
                     retMonomers.append(mon)
         return tuple(retMonomers)
-    ############################################################
 
-    ############################################################
     @staticmethod
     def _GetBranchIDs(seq,
             chainSep=BILNConstants.GetDefaultChainSeparator(),
@@ -269,9 +240,7 @@ class BILNParser():
         branchPairs = re.findall(BILNConstants.GetBranchingRegex(), seq)
         branchNums = [int(pair[1]) for pair in branchPairs]
         return tuple(sorted(set(branchNums)))
-    ############################################################
 
-    ############################################################
     @staticmethod
     def SplitToNumberedChains(seq, start=1,
             chainSep=BILNConstants.GetDefaultChainSeparator(),
@@ -348,15 +317,13 @@ class BILNParser():
         else:
             raise ValueError("Unaccepted ordering scheme: %s" % orderCriteria)
 
-        largestMol = NumberedChain(start, sizes_splitMols.pop()[1]) # Back largest
+        largestMol = NumberedChain(start, sizes_splitMols.pop()[1])
         return [largestMol,] + \
                 BILNParser.SplitToNumberedChains(
                 chainSep.join([pair[1] for pair in sizes_splitMols]),
                 start=start+1, chainSep=chainSep, monoSep=monoSep,
                 orderCriteria=orderCriteria)
-    ############################################################
 
-    ############################################################
     @staticmethod
     def Length(seq,
             chainSep=BILNConstants.GetDefaultChainSeparator(),
@@ -382,10 +349,8 @@ class BILNParser():
         chains = BILNParser.SplitToNumberedChains(
                     seq=seq, chainSep=chainSep, monoSep=monoSep)
         return sum([len(c.BILN.split(monoSep)) for c in chains])
-    ############################################################
 
 
-    ############################################################
     @staticmethod
     def HasValidBranchAnnotations(seq,
             chainSep=BILNConstants.GetDefaultChainSeparator(),
@@ -476,7 +441,6 @@ class BILNParser():
         for branchID in sorted(set(branchNums)):
             if branchNums.count(branchID) != 2:
                 errors.append(AmbiguousBranchIDs(branchID))
-        # Now, check to be sure that branch annotation context is correct.
         #   Cannot have R-group R2 at front of chain, nor R1 at end of chain,
         #   nor R1/R2 in middle of chain.
         for chain in BILNParser.SplitToNumberedChains(seq,
@@ -499,7 +463,6 @@ class BILNParser():
                                                 1 < pos < len(monomers):
                         errors.append(InvalidChainMiddleRGroup(
                             "%s" % chain.BILN))
-        # End of error checking
         if errors:
             if raiseError:
                 if len(errors) > 1:
@@ -510,9 +473,7 @@ class BILNParser():
                 return False
         else:
             return True
-    ############################################################
 
-    ########################################
     @staticmethod
     def GetNNAAMonomers(
             biln,
@@ -532,9 +493,7 @@ class BILNParser():
             chainSep=chainSep, monoSep=monoSep, returnFormat='monomerobj')
         return tuple([m for m in monomerObjs
             if not BILNParser.IsStandardAA(m.monomer)])
-    ########################################
 
-    ############################################################
     @staticmethod
     def GetNumberedBILN(seq, raiseError=False,
             start=1, resetMonomerNumbers=False,
@@ -627,8 +586,8 @@ class BILNParser():
                     if len(mon) >= 3 and \
                             mon[0] == nonStdLeft and mon[-1] == nonStdRight:
                         useText = mon
-                    else: # Add standardizing notation
-                        useText = nonStdLeft + mon + nonStdRight # Should be in standardize() or similar!
+                    else:
+                        useText = nonStdLeft + mon + nonStdRight
 
                 if chainID:
                     chainResidues.append(annoSep.join(
@@ -637,14 +596,11 @@ class BILNParser():
                     if monomerID:
                         chainResidues.append(annoSep.join(
                             (str(resNum), useText)))
-                    else: # Just getting flat, unified text
+                    else:
                         chainResidues.append(useText)
-                # Store NumberedMonmer format in case requested.
                 asNumbered.append(NumberedMonomer(chain=chain.chain,
                     number=resNum, monomer=useText))
-            # Finished monomers in chain, store
             retChains.append(monoSep.join(chainResidues))
-        # Finished re-constructing chains, now join all chains
         if returnFormat == 'monomerobj':
             if not monomerContext:
                 asNumbered = [NumberedMonomer(chain=m.chain, number=m.number,
@@ -653,11 +609,8 @@ class BILNParser():
             return tuple(asNumbered)
         else:
             return chainSep.join(retChains)
-    ########################################
 
 
-
-    ############################################################
     @staticmethod
     def GetCompressedMonomerDetectionRegex():
         """
@@ -669,9 +622,7 @@ class BILNParser():
             return "\\d+" + defDelim
         else:
             return "\\d+\\" + defDelim
-    ############################################################
 
-    ############################################################
     @staticmethod
     def CompressBILN(seq,
             minRepeat=2,
@@ -728,14 +679,12 @@ class BILNParser():
                     if repCount >= minRepeat:
                         addChain.append("%i%s%s" %
                                         (repCount, joinChar, symbol))
-                    else: # Not enough replicates
+                    else:
                         addChain.append(monoSep.join([symbol]*repCount))
             retChains.append(addChain)
         retBILN = chainSep.join([monoSep.join(c) for c in retChains])
         return retBILN
-    ############################################################
 
-    ############################################################
     @staticmethod
     def DecompressBILN(seq,
             joinChar=BILNConstants.GetDefaultCompressedBILNDelimiter(),
@@ -776,9 +725,7 @@ class BILNParser():
                     monomers.append(m)
             chains.append(monoSep.join(monomers))
         return chainSep.join(chains)
-    ############################################################
 
-    ############################################################
     @staticmethod
     def HasCompressedBILN(seq,
             joinChar=BILNConstants.GetDefaultCompressedBILNDelimiter(),
@@ -809,9 +756,7 @@ class BILNParser():
                 if counter:
                     return True
         return False
-    ############################################################
 
-    ############################################################
     @staticmethod
     def IsValidSequence(seq, raiseError=False,
             onlyMonoDictMonomers=True,
@@ -910,14 +855,12 @@ class BILNParser():
                 joinChar=joinChar, chainSep=chainSep,
                 monoSep=monoSep, logger=logger)
 
-        # Step 1 -- valid branch notations?
         errors = list()
         try:
             BILNParser.HasValidBranchAnnotations(
                 seq=seq, chainSep=chainSep, monoSep=monoSep, raiseError=True)
         except Exception as e:
             errors.append(e)
-        # Step 2 -- monomer checking
         if onlyMonoDictMonomers:
             asMonomers = BILNParser.GetNumberedBILN(seq=seq,
                 chainSep=chainSep, monoSep=monoSep, returnFormat="monomerobj")
@@ -926,12 +869,10 @@ class BILNParser():
                     BILNParser.IsValidMonomer(m.monomer, raiseError=True)
                 except Exception as e:
                     errors.append(e)
-        # Step 3 -- does branch IDs detected match number of branches in mol?
-        #   Needed to catch something like: A-A-C.K
+        # Multiple chains without branch IDs are ambiguous, as in A-A-C.K.
         if len(BILNParser._GetBranchIDs(seq)) == 0 and \
             len(BILNParser.SplitToNumberedChains(seq)) > 1:
                 errors.append(AmbiguousBranchIDs(seq))
-        # Now final error handling.
         if errors:
             if raiseError:
                 if len(errors) > 1:
@@ -947,9 +888,7 @@ class BILNParser():
                 return False
         else:
             return True
-    ## end of IsValidSequence static method ####################
 
-    ############################################################
     @staticmethod
     def GetMonomerBranchIDs(seq):
         """
@@ -977,9 +916,7 @@ class BILNParser():
         elif len(matches) > 1:
             retValue = tuple([int(m[1]) for m in matches])
         return retValue
-    ############################################################
 
-    ############################################################
     @staticmethod
     def GetMonomerBranchRGroup(seq):
         """
@@ -1007,9 +944,7 @@ class BILNParser():
         elif len(matches) > 1:
             retValue = tuple([int(m[3]) for m in matches])
         return retValue
-    ############################################################
 
-    ############################################################
     @staticmethod
     def GetMainPeptide(seq, minLength=3,
             chainSep=BILNConstants.GetDefaultChainSeparator(),
@@ -1052,19 +987,17 @@ class BILNParser():
         >>> BILNParser.GetMainPeptide(biln, orderCriteria=BILNConstants.labelSortAAFrac)
         NumberedChain(chain=1, BILN='K-E-K(1,3)')
         """
-        # Some state recording variables
         longest, longestNatAAs, largestFrac, doUpdate = None, None, None, False
 
         chains = BILNParser.SplitToNumberedChains(seq=seq, chainSep=chainSep,
             monoSep=monoSep, orderCriteria=orderCriteria)
         for chain in chains:
             doUpdate, chainLength = False, BILNParser.Length(chain.BILN)
-            # Otherwise, already a longest chain, compare
             numNatAAs = len([m for m in chain.BILN.split(monoSep)
                             if BILNParser.IsStandardAA(m)])
             fracAAs = numNatAAs / chainLength
 
-            if chainLength >= minLength: # Consider it as potential longest
+            if chainLength >= minLength:
                 if longest is None:
                     doUpdate = True
                 else:
@@ -1084,9 +1017,7 @@ class BILNParser():
                         longest.BILN.split(monoSep)]))
         else:
             return longest
-    ############################################################
 
-    ############################################################
     @staticmethod
     def ReconstructSequence(numberedMonomers,
             chainSep=BILNConstants.GetDefaultChainSeparator(),
@@ -1130,9 +1061,7 @@ class BILNParser():
                 sorted(chainToResidues[chain], key=lambda r: r.number)]
             chainBILNs.append(monoSep.join(chainResidues))
         return chainSep.join(chainBILNs)
-    ############################################################
 
-    ############################################################
     @staticmethod
     def StripContext(
             biln,
@@ -1152,9 +1081,7 @@ class BILNParser():
             monomerContext=False)
         return BILNParser.ReconstructSequence(numberedMonomers,
             chainSep=chainSep, monoSep=monoSep)
-    ############################################################
 
-    ############################################################
     @staticmethod
     def _BILNToJoinPointNumberedMonomers(seq,
             chainSep=BILNConstants.GetDefaultChainSeparator(),
@@ -1201,7 +1128,6 @@ class BILNParser():
             orderCriteria=orderCriteria)
         monomers = [m for m in monomers if
             re.findall(BILNConstants.GetBranchingRegex(), m.monomer)]
-        # Separate monomers into the branches they represent.
         branchID_to_monomers = defaultdict(list)
         while monomers:
             m = monomers.pop()
@@ -1212,7 +1138,6 @@ class BILNParser():
                 newM = nonStdLeft  + monBasename + newM + nonStdRight
                 branchID_to_monomers[brID].append(NumberedMonomer(
                     chain=m.chain, number=m.number, monomer=newM,))
-        # Sanity check
         failedIDs = [ID for ID,monomers in branchID_to_monomers.items() \
                         if len(monomers) != 2]
         if failedIDs:
@@ -1222,9 +1147,7 @@ class BILNParser():
         for brID, monomers in branchID_to_monomers.items():
             branchID_to_monomers[brID] = sorted(monomers)
         return branchID_to_monomers
-    ############################################################
 
-    ############################################################
     @staticmethod
     def GetBranchMonomers(seq,
             chainSep=BILNConstants.GetDefaultChainSeparator(),
@@ -1339,7 +1262,7 @@ class BILNParser():
                 dropIDs.append(ID)
         for ID in dropIDs:
             del branchID_to_monomers[ID]
-        if monomerContext is False:  # drop annotation from monomers
+        if monomerContext is False:
             for branchID in branchID_to_monomers.keys():
                 branchID_to_monomers[branchID] = [
                     NumberedMonomer(chain=m.chain, number=m.number,
@@ -1352,7 +1275,6 @@ class BILNParser():
             monomer1=branchID_to_monomers[ID][0],
             monomer2=branchID_to_monomers[ID][1]) for
             ID in sorted(branchID_to_monomers.keys())])
-    ############################################################
 
     @staticmethod
     def GetIntraChainCycleMonomers(seq,
@@ -1447,7 +1369,7 @@ class BILNParser():
                 dropIDs.append(ID)
         for ID in dropIDs:
             del branchID_to_monomers[ID]
-        if monomerContext is False:  # drop annotation from monomers
+        if monomerContext is False:
             for branchID in branchID_to_monomers.keys():
                 branchID_to_monomers[branchID] = [
                     NumberedMonomer(chain=m.chain, number=m.number,
@@ -1458,9 +1380,7 @@ class BILNParser():
             branchID_to_monomers[branchID] = sorted(monomers, key=sortMonomers)
         return tuple([MonomerPair(monomer1=pair[0], monomer2=pair[1]) for
             pair in branchID_to_monomers.values()])
-    ############################################################
 
-    ############################################################
     @staticmethod
     def GetIntraChainPath(numberedChain, monomer1, monomer2,
             chainSep=BILNConstants.GetDefaultChainSeparator(),
@@ -1531,7 +1451,7 @@ class BILNParser():
         if not isinstance(numberedChain, NumberedChain):
             raise TypeError(
                 "Expecting NumberedChain, got %s" % type(numberedChain))
-        # TEMP: skip monomer type check...
+        # Monomer types are unchecked; chain and residue IDs are validated below.
         if len(set((numberedChain.chain, monomer1.chain, monomer2.chain))) != 1:
             raise ValueError("Chain IDs do not match.")
         posLow = min(monomer1.number, monomer2.number)
@@ -1546,14 +1466,8 @@ class BILNParser():
         if keepEnds:
             keepResidues += [monomer1, monomer2]
         return tuple(sorted(keepResidues, key=lambda m: m.number))
-    ########################################
 
 
-# end of BILNParser object implementation.
-############################################################
-
-
-## Verify that the module's interfaces work as the doctests demonstrate.
 if __name__ == "__main__":
 
     import doctest, os, sys, __main__

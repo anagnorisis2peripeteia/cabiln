@@ -188,8 +188,7 @@ def _expand_inline_caps(biln):
             bracket, host=host, opening=scope.opening, closing=scope.closing,
             protected=protected,
         )
-        # Each frame retains its own current monomer. Closing a child simply
-        # pops that frame, so following children resume at the parent's cursor.
+        # Closing a child restores its parent's cursor for subsequent siblings.
         stack = [{
             'scope': scope, 'position': 0, 'current': -1, 'parent': None,
             'protected': protected, 'first': None,

@@ -144,7 +144,6 @@ examples:
 
     args = parser.parse_args()
 
-    # --- Resolve input SMILES ---
     if args.from_cabiln:
         try:
             smiles = smiles_from_cabiln(args.from_cabiln)
@@ -157,7 +156,6 @@ examples:
 
     sdf_path = Path(args.sdf) if args.sdf else None
 
-    # --- Register ---
     try:
         result = register_monomer(
             smiles,

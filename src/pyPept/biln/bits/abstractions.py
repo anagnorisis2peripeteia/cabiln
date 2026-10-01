@@ -10,33 +10,14 @@ From presentation: Modelling a (New) Modality: Computational Tools for Peptide D
 Certara User Group Meeting, Frankfurt, 2025
 """
 
-################################################################################
-# Authorship
-################################################################################
 
 __credits__ = ["J.B. Brown", "Thomas Fox"]
 __license__ = "MIT"
 
 
-################################################################################
-# Modules
-################################################################################
-
-# System libraries needed by this module.
 from collections import namedtuple
 
-# Third-party libraries needed by this module, e.g. numpy.
 
-# Project-specific modules additionally needed.
-
-
-# ----- Begin code for this module. -----
-
-##########################################################################
-# Functions and classes
-##########################################################################
-
-# Named tuple classes
 NumberedMonomer = namedtuple('NumberedMonomer', ('chain', 'number', 'monomer'))
 TitledBILNExample = namedtuple('TitledBILNExample', ('title', 'BILN'))
 NumberedChain = namedtuple('NumberedChain', ('chain', 'BILN'))
@@ -44,7 +25,6 @@ HLELinker = namedtuple('HLELinker', ('chain', 'BILN'))
 HLE = namedtuple('HLE', ('chain', 'branchmonomer', 'linkers', 'FA', 'BILN'))
 MonomerPair = namedtuple('MonomerPair', ('monomer1', 'monomer2'))
 
-# Error classes that need to be raised.
 class BILNSequenceError(ValueError):
     """An error class that serves as a parent class to all types of
     BILN errors that can occur.
@@ -73,7 +53,6 @@ class BILNMultiError(BILNSequenceError):
     pass
 
 
-## Verify that the module's interfaces work as the doctests demonstrate.
 if __name__ == "__main__":
 
     import doctest, os, sys, __main__

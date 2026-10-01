@@ -1,6 +1,4 @@
-// The palette owns discovery, revision changes, filtering and hover previews.
-// Build supplies current filter facts and receives user choices; it never edits
-// the palette's request, cache or DOM state.
+// Monomer discovery, library revisions, filtering and hover previews.
 class MonomerLibrary {
   constructor({ getFilters, onUse, onChanged }) {
     this.getFilters = getFilters;
@@ -236,7 +234,7 @@ class MonomerLibrary {
           this.previewCache[abbr] = data;
           this.showPreview(data, row);
         }
-      } catch (e) { /* silent */ }
+      } catch (e) { /* Hover previews are optional. */ }
       finally { request.finish(); }
     }, 200);
   }
@@ -244,7 +242,6 @@ class MonomerLibrary {
   showPreview(data, row) {
     let html;
     if (data.degenerate && data.variants) {
-      // Degenerate: variant panels with optional reagent info
       let panels = data.variants.map(v => {
         let pane = `<div class="prev-pane"><span class="prev-label">${v.label}</span>${v.svg}`;
         if (v.reagent) {
@@ -253,7 +250,6 @@ class MonomerLibrary {
         pane += `</div>`;
         return pane;
       }).join('');
-      // Show reagent form from first variant that has one
       const withReagent = data.variants.find(v => v.svg_reagent);
       if (withReagent) {
         panels += `<div class="prev-pane"><span class="prev-label">Reagent</span>${withReagent.svg_reagent}</div>`;

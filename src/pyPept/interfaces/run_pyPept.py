@@ -6,40 +6,27 @@ From the publication:
 Journal of Cheminformatics, 2023
 """
 
-################################################################################
-# Authorship
-################################################################################
 
 __credits__ = ["Rodrigo Ochoa", "J.B. Brown", "Thomas Fox"]
 __license__ = "MIT"
 __version__ = "1.0"
 
-################################################################################
-# Modules
-################################################################################
 
-# System libraries
 import argparse
 import logging
 import sys
 import warnings
 
-# RDKit
 from rdkit import Chem
 from rdkit.Chem import Draw
 
-# PyPept modules
 from pyPept.inputs import read_input
 from pyPept.pdb_names import correct_pdb_atoms
 from pyPept.conformer import Conformer, ConformerConstants, SecStructPredictor
 
 
-################################################################################
-# Declarations and argument parsing setup
-################################################################################
 _def_image_size = (1200, 1200)
 
-##########################################################################
 def get_inputs_parser():
     """Constructs parser for inputs."""
 
@@ -101,13 +88,8 @@ def get_inputs_parser():
         help="Increase output verbosity")
 
     return parser
-# end of CLI interface and argument parser declaration.
 
-################################################################################
-# Main function
-################################################################################
 def main():
-    # Read arguments
     useParser = argparse.ArgumentParser(
         description="""Generate atomistic 2D and 3D representations of peptides
         from given monomer sequences.""",
@@ -115,7 +97,6 @@ def main():
                  ))
     args = useParser.parse_args()
 
-    # Setup typical logger for messages to stderr.
     log_stream = logging.StreamHandler(
         open(args.logfile, "w", encoding='utf-8') 
         if args.logfile else sys.stderr)
@@ -129,9 +110,6 @@ def main():
 
     outFileList = list()
 
-    ########################################
-    # What flavor of input to handle?
-    ########################################
     selected = next(
         ((kind, getattr(args, kind)) for kind in ("biln", "helm", "fasta")
          if getattr(args, kind)),
@@ -154,7 +132,6 @@ def main():
     if not args.noconf:
         parsed.sequence = seq = correct_pdb_atoms(seq)
 
-    # Generate the RDKit object
     logger.info("2. Creating the RDKit object")
     if args.depiction in ["local", "rdkit"]:
         romol = parsed.assemble(depiction=args.depiction)
@@ -167,9 +144,7 @@ def main():
     if args.sdf2D:
         mol.write_molecule(fmt='SDF', out_file=f'{args.prefix}.sdf')
 
-    ########################################
     # Render peptide to an image file.
-    ########################################
     outImage = f'{args.prefix}.png'
     Draw.MolToFile(romol, outImage, size=args.imagesize)
     outFileList.append(outImage)
@@ -182,7 +157,6 @@ def main():
         if args.secstruct is None:
             ss_input = SecStructPredictor.predict_active_ss(fasta)
         else:
-            # Sanity check on secondary structure symbols:
             invalid = [v for v in args.secstruct
                        if v not in ConformerConstants.expected_ss_symbols]
             if len(invalid) > 0:
@@ -207,9 +181,6 @@ def main():
                     generate_pdb=True, output_name=args.prefix)
         outFileList.append(f'{args.prefix}.pdb')
     
-    ########################################
-    # Report what was output for easy understanding.
-    ########################################
     for f in outFileList:
         logger.info(f"File generated: {f}.")
 

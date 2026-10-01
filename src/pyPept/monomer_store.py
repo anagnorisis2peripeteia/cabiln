@@ -436,10 +436,8 @@ def _read_monomer_table(path):
     df_group = df_group.set_index("symbol")
     df_group = df_group.rename(columns={"ROMol": "m_romol"})
 
-    # Propagate m_chem_types from SDF into each m_romol as an rdkit property
-    # so downstream infer_chem_type can opt-in to SDF-declared chem types
-    # (e.g. backbone_c_red for reduced-amide peptidomimetics) instead of
-    # relying solely on structural heuristics.
+    # Site inference needs declared roles that structure alone cannot identify,
+    # such as backbone_c_red in reduced-amide peptidomimetics.
     if "m_chem_types" in df_group.columns:
         for sym in df_group.index:
             mol = df_group.at[sym, "m_romol"]
@@ -447,17 +445,14 @@ def _read_monomer_table(path):
             if mol is not None and isinstance(ct, str) and ct:
                 mol.SetProp("m_chem_types", ct)
 
-    # --- Structural degeneracy detection for paired caps ---
-    # Group cap monomers by their core structure (dummy atoms stripped).
-    # Paired caps like Bn_/_Bn are structurally identical minus dummies;
-    # we derive the base name and store it as a degenerate alias.
+    # Cap pairs such as Bn_/_Bn share a core after dummy removal.
+    # Group those definitions under a shared base-name alias.
     caps = df_group[df_group["m_type"] == "cap"]
     core_map = {}  # canonical SMILES -> list of symbol names
     for sym in caps.index:
         mol = caps.at[sym, "m_romol"]
         if mol is None:
             continue
-        # Strip dummy atoms (atomic num == 0) to get core
         emol = Chem.RWMol(mol)
         dummies = [a.GetIdx() for a in emol.GetAtoms() if a.GetAtomicNum() == 0]
         for idx in sorted(dummies, reverse=True):
@@ -470,23 +465,19 @@ def _read_monomer_table(path):
             core_map[core_smi] = []
         core_map[core_smi].append(sym)
 
-    # For each group with >1 member, derive the base name and add alias
     degen_aliases = {}  # base_name -> list of variant symbols
     for smi, variants in core_map.items():
         if len(variants) < 2:
             continue
-        # Derive base name: strip leading/trailing '_' from each variant
         bases = set()
         for v in variants:
             base = v.strip("_")
             bases.add(base)
         if len(bases) == 1:
             base_name = bases.pop()
-            # Only create alias if base_name is not already an entry
             if base_name not in name_index:
                 degen_aliases[base_name] = variants
 
-    # Store aliases as a module-level accessible dict on the DataFrame
     df_group.attrs["_degen_aliases"] = degen_aliases
 
     # Stored symbols and abbreviations take precedence over CSV aliases.

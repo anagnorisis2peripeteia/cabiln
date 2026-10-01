@@ -1,4 +1,4 @@
-// ─── state ────────────────────────────────────────────────────────────────────
+// state
 let darkMode   = true;
 let verifyMode = false;
 let hlEnabled  = true;
@@ -38,7 +38,7 @@ function invalidInputResponse(response) {
   return response.status === 400 || response.status === 422;
 }
 
-// ─── elements ─────────────────────────────────────────────────────────────────
+// elements
 const cabilnInput   = document.getElementById('cabiln-input');
 const cabilnStatus  = document.getElementById('cabiln-status');
 const conversionStatus = document.getElementById('conversion-status');
@@ -253,7 +253,7 @@ btnRestoreDraft.addEventListener('click', async () => {
     // Preparation checks their stored binding before stamping the current text.
     await restoreBoundDraft(project);
   } else {
-    // Earlier releases did not bind drafts. Never imply their definitions were checked.
+    // Drafts without a library binding require verification.
     applyProject(project);
     setProjectStatus('Older draft restored without a library binding. Check any custom monomer definitions before using it.', true);
   }
@@ -543,7 +543,7 @@ async function loadCapabilities() {
 }
 loadCapabilities();
 
-// ─── dark mode ────────────────────────────────────────────────────────────────
+// dark mode
 btnDark.addEventListener('click', () => {
   darkMode = !darkMode;
   btnDark.classList.toggle('active', darkMode);
@@ -554,13 +554,12 @@ btnDark.addEventListener('click', () => {
   library.setDark(darkMode);
   document.querySelectorAll('.build-box').forEach(el => el.classList.toggle('dark', darkMode));
 });
-// apply dark mode on load
 btnDark.classList.add('active');
 document.querySelectorAll('.canvas-wrap').forEach(el => el.classList.add('dark'));
 library.setDark(true);
 document.querySelectorAll('.build-box').forEach(el => el.classList.add('dark'));
 
-// ─── highlight toggle ─────────────────────────────────────────────────────────
+// highlight toggle
 btnHl.addEventListener('click', () => {
   hlEnabled = !hlEnabled;
   btnHl.classList.toggle('active', hlEnabled);
@@ -568,7 +567,7 @@ btnHl.addEventListener('click', () => {
   if (!hlEnabled) residueView.clearHighlight();
 });
 
-// ─── verify mode ──────────────────────────────────────────────────────────────
+// verify mode
 btnVerify.addEventListener('click', () => {
   verifyMode = !verifyMode;
   btnVerify.classList.toggle('active', verifyMode);
@@ -580,7 +579,7 @@ btnVerify.addEventListener('click', () => {
   else if (verifyMode) triggerVerify();
 });
 
-// ─── example peptide sidebar ──────────────────────────────────────────────────
+// example peptide sidebar
 let examplesLoaded = false;
 
 function openExamples() {
@@ -670,12 +669,12 @@ function insertAbbr(abbr) {
   ta.focus();
 }
 
-// ─── zoom / pan (shared, wired per canvas) ────────────────────────────────────
+// zoom / pan (shared, wired per canvas)
 const mainViewport = makeZoomable(renderCanvas, renderInner);
 makeZoomable(document.getElementById('smiles-canvas'), smilesInner);
 const buildPreviewViewport = makeZoomable(document.getElementById('build-preview-canvas'), buildPreviewInner);
 
-// ─── PNG download (client-side SVG → canvas → PNG) ────────────────────────────
+// PNG download (client-side SVG → canvas → PNG)
 btnPng.addEventListener('click', () => {
   if (!lastSvg) return;
   const blob = new Blob([lastSvg], { type: 'image/svg+xml;charset=utf-8' });
@@ -700,7 +699,7 @@ btnPng.addEventListener('click', () => {
   img.src = url;
 });
 
-// ─── MOL download (server-side mol block) ────────────────────────────────────
+// MOL download (server-side mol block)
 btnMol.addEventListener('click', async () => {
   if (!lastMolBlock) return;
   const blob = new Blob([lastMolBlock], { type: 'chemical/x-mdl-molfile' });
@@ -710,7 +709,7 @@ btnMol.addEventListener('click', async () => {
   a.click();
 });
 
-// ─── build mode ──────────────────────────────────────────────────────────────
+// build mode
 function selectBuildResidue(residue) {
   if (!buildMode || mainStale) return;
   const right = !isSwapMode() && buildLeft && buildLeftRIdx !== residue.idx;
@@ -1336,7 +1335,7 @@ buildConnect.addEventListener('click', async () => {
   }
 });
 
-// ─── notation conversion ──────────────────────────────────────────────────────
+// notation conversion
 async function settleDrawingsForConversion(request) {
   // Aborting a running drawing retires the server's chemistry worker. Let the
   // current drawing (and its automatic Verify) finish before competing with it.
@@ -1464,7 +1463,7 @@ btnReroll.addEventListener('click', () => {
   doRenderCabiln(lastCabiln);
 });
 
-// ─── SMILES → CABILN conversion ───────────────────────────────────────────────
+// SMILES → CABILN conversion
 function startConversion(button) {
   requests.cancel('sequence-edit');
   const label = button.textContent;
@@ -1525,7 +1524,7 @@ async function doS2c(notation) {
 btnS2c.addEventListener('click', () => doS2c('percent'));
 btnS2cBracket.addEventListener('click', () => doS2c('bracket'));
 
-// ─── main input → CABILN convert buttons ─────────────────────────────────────
+// main input → CABILN convert buttons
 async function doToCabiln(notation) {
   if (!cabilnInput.value.trim()) return;
   const btn = notation === 'bracket' ? btnToCabilnBracket : btnToCabilnPct;
@@ -1574,7 +1573,7 @@ function clearExports() {
   btnMol.disabled = true;
 }
 
-// ─── render helpers ───────────────────────────────────────────────────────────
+// render helpers
 function canvasSize(el) {
   return { w: Math.max(el.clientWidth || 600, 400),
            h: Math.max(el.clientHeight || 500, 300) };
@@ -1588,7 +1587,7 @@ function showSpinner(inner) {
   setInner(inner, '<div class="spinner"></div>');
 }
 
-// ─── notation selector ────────────────────────────────────────────────────────
+// notation selector
 const NOTATION_PLACEHOLDER = {
   cabiln: 'e.g.  fmoc-A-G-L-am\nfmoc-C.trt(4,2)-A-K.boc(4,2)-am\nfmoc-K.!1(4,4)-G-G-E.!1-am',
   smiles: 'Paste SMILES here… e.g. O=C1CNC(=O)[C@@H](C)N1',
@@ -1601,7 +1600,7 @@ notationSelect.addEventListener('change', () => {
   commitDocument(draft?.text || '', notationSelect.value, draft?.warning || '', draft || {});
 });
 
-// ─── CABILN render ────────────────────────────────────────────────────────────
+// CABILN render
 cabilnInput.addEventListener('input', () => {
   recordDocument({ ...editor.present, text: cabilnInput.value,
     notation: notationSelect.value, warning: '', quality: null, canonical: null }, true);
@@ -1783,7 +1782,7 @@ async function doRenderCabiln(seq) {
   }
 }
 
-// ─── reference render (verify mode) — auto-detects SMILES / BILN / HELM ─────
+// reference render (verify mode) — auto-detects SMILES / BILN / HELM
 function clearReference() {
   clearTimeout(smilesTimer);
   smilesTimer = null;
@@ -1912,7 +1911,7 @@ async function doRenderRef(txt) {
   }
 }
 
-// ─── verify comparison ────────────────────────────────────────────────────────
+// verify comparison
 function clearComparison() {
   requests.cancel('verify');
   compareBar.innerHTML = '';

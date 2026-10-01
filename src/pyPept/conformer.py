@@ -5,20 +5,13 @@ From publication: pyPept: a python library to generate atomistic 2D and 3D repre
 Journal of Cheminformatics, 2023
 """
 
-#############################################################################
-# Authorship
-#############################################################################
 
 __credits__ = ["Rodrigo Ochoa", "J.B. Brown", "Thomas Fox"]
 __license__ = "MIT"
 
 
-#############################################################################
-# Modules
-#############################################################################
 # pylint: disable=E1101
 
-# System and Third-party libraries
 import re
 import warnings
 import math
@@ -26,7 +19,6 @@ import os
 import sys
 from importlib.resources import files
 
-# RDKit modules
 from rdkit import Chem
 from rdkit.Chem import AllChem
 from rdkit import DataStructs
@@ -34,18 +26,13 @@ from rdkit.Chem.Fingerprints import FingerprintMols
 from rdkit import DistanceGeometry
 from rdkit.Chem import rdDistGeom
 
-# Biopython
 from Bio.PDB import PDBParser
 from Bio.PDB import PDBIO
 
-# pyPept modules
 from pyPept.sequence import Sequence
 from pyPept.molecule import Molecule
 from pyPept.sequence import SequenceConstants
 
-##########################################################################
-# Functions and classes
-##########################################################################
 
 class ConformerConstants:
     """
@@ -67,15 +54,12 @@ class ConformerConstants:
         'G', 'T', 'S', 'I', 'B',
         blank_symbol)
 
-# End of Conformer class-related constants definition.
-##########################################################################
 
 class Conformer:
     """
     Class with static methods to complement the prediction of conformers
     """
 
-    ########################################################################################
     @staticmethod
     def get_peptide(biln, path=SequenceConstants.def_path,
                           monomer_lib=SequenceConstants.def_lib_filename):
@@ -123,14 +107,12 @@ class Conformer:
             if mon in aa_dict:
                 total_monomers.append(mon)
             else:
-                # Check if a natural analog is available in the dataframe
                 type_mon = new_df.loc[new_df['m_abbr'] == mon, 'm_type'].item()
                 if type_mon != 'cap':
                     nat_analog = new_df.loc[mon].get('natAnalog', 'X')
                     if nat_analog in aa_dict:
                         total_monomers.append(nat_analog)
                     else:
-                        # Run a similarity calculation to chek the most similar AAs
                         if mon in sequence._synthetic_aa_smiles:
                             monomer_biln = f'<{sequence._synthetic_aa_smiles[mon]}>'
                         else:
@@ -155,7 +137,6 @@ class Conformer:
                         if val >= 0.5:
                             total_monomers.append(aa_value)
                         else:
-                            # Assign an alanine if no similar AAs are found
                             total_monomers.append("A")
                             warnings.warn(f"Because no natural amino acids were \
                             mapped, an alanine was assigned instead \
@@ -164,7 +145,6 @@ class Conformer:
         fasta = ''.join(total_monomers)
         return fasta
 
-    ########################################################################################
     @staticmethod
     def fix_hydrogen_atom_names(romol):
         """
@@ -174,11 +154,9 @@ class Conformer:
         :type romol: RDKit molecule
         """
 
-        # Check the number of hydrogens at each heavy atom
         num_hydrogens = [None] * romol.GetNumAtoms()
         count_hydrogens = [None] * romol.GetNumAtoms()
 
-        # For each heavy atom count the number of hydrogens present and store in numH
         for atom in romol.GetAtoms():
 
             if atom.GetSymbol() != 'H':
@@ -194,7 +172,6 @@ class Conformer:
                     if name.strip() in ['NH1', 'NH2']:
                         count_hydrogens[idx] = 0
 
-        # For each hydrogen, get the name of the atom and modify its own name
         for atom in romol.GetAtoms():
             if atom.GetSymbol() == "H":
                 bond = atom.GetBonds()[0]
@@ -222,7 +199,6 @@ class Conformer:
                 atomname = f'{atomname:>4}'
                 atom.GetPDBResidueInfo().SetName(atomname)
 
-    ########################################################################################
     @staticmethod
     def generate_conformer(romol, ss_value, generate_pdb=False,
                            output_name='structure'):
@@ -241,7 +217,6 @@ class Conformer:
         :return: RDKit mol object with the conformer following SS restraints and correct atom names
         """
         
-        # Sanity check on SS symbols:
         invalid = [v for v in ss_value 
                     if v not in ConformerConstants.expected_ss_symbols]
         if len(invalid) > 0:
@@ -251,7 +226,6 @@ class Conformer:
                  " ".join(ConformerConstants.expected_ss_symbols),
                  " ".join(invalid)))
 
-        # Fix hydrogen atom names
         romol = Chem.AddHs(romol)
         Conformer.fix_hydrogen_atom_names(romol)
 
@@ -263,7 +237,7 @@ class Conformer:
         # Assignment of helical conformation
         for i, ele in enumerate(ss_value):
             if i < len(ss_value) - 4:
-                if ele == 'H':  # and ss[i + 4] == 'H':
+                if ele == 'H':
                     ind_o = backbone_atoms[i][-1]
                     ind_n = backbone_atoms[i + 4][0]
                     bounds[ind_o, ind_n] = 3.2
@@ -294,7 +268,6 @@ class Conformer:
                     continue
                 bounds[ind_o, ind_n] = 3.2
 
-        # Generate the new distance matrix and predict the conformer
         try:
             DistanceGeometry.DoTriangleSmoothing(bounds)
             parameters = AllChem.ETKDGv3()
@@ -302,13 +275,11 @@ class Conformer:
             parameters.SetBoundsMat(bounds)
             parameters.useRandomCoords = True
             AllChem.EmbedMolecule(romol, parameters)
-            # AllChem.UFFOptimizeMolecule(romol)
             pdb_mol = Chem.MolToPDBBlock(romol)
         except FileExistsError:
             warnings.warn("Failed to generate the conformer in RDKit")
             sys.exit(1)
 
-        # Store the conformer in a new pdb file
         if generate_pdb:
             # Saving the RDKit PDB file to correct the hydrogens later with BioPython
             pdb_predict = open(f'{output_name}.pdb', 'w', encoding="utf8")
@@ -331,22 +302,18 @@ class Conformer:
             for i in ids:
                 chain[len(ss_value)].detach_child(i)
 
-            # Saving the new structure
             io_output = PDBIO()
             io_output.set_structure(reference)
             io_output.save(f"{output_name}.pdb")
 
         return romol
 
-    ## End of the Conformer class declaration.
 
-########################################################################################
 class SecStructPredictor:
     """
     Class with static methods to predict the secondary structure
     """
 
-    ########################################################################################
     @staticmethod
     def get_matrix(path):
         """
@@ -365,7 +332,6 @@ class SecStructPredictor:
 
         return matrix_temp
 
-    ########################################################################################
     @staticmethod
     def align_position_matrix(peptide1, peptide2,
                               path=ConformerConstants.def_path,
@@ -386,7 +352,6 @@ class SecStructPredictor:
         """
 
 
-        # Read the matrix file
         default_matrix_lib_filepath = files(ConformerConstants.def_path).joinpath(ConformerConstants.def_matrix_filename)
         matrix_lib_filepath = files(path).joinpath(matrix_lib)
 
@@ -398,11 +363,9 @@ class SecStructPredictor:
         score_matrix = 0
 
         for i, pep_seq in enumerate(peptide1):
-            # Generate the tuples with the pair of amino acids to compare
             pair1 = (pep_seq, peptide2[i])
             pair2 = (peptide2[i], pep_seq)
 
-            # Obtain the score from the matrix and sum up the values
             if pair1 in matrix:
                 value = matrix[pair1]
             else:
@@ -412,7 +375,6 @@ class SecStructPredictor:
 
         return score_matrix
 
-    ########################################################################################
     @staticmethod
     def similarity_pair(peptide1, peptide2, path = ConformerConstants.def_path,
                         matrix_lib = ConformerConstants.def_matrix_filename):
@@ -431,7 +393,6 @@ class SecStructPredictor:
         :return: Similarity value - float
         """
 
-        # Alignment between peptide1 and peptide2
         score1_2 = SecStructPredictor.align_position_matrix(peptide1, peptide2,
                                             path=path, matrix_lib=matrix_lib)
         score1_1 = SecStructPredictor.align_position_matrix(peptide1, peptide1,
@@ -439,13 +400,10 @@ class SecStructPredictor:
         score2_2 = SecStructPredictor.align_position_matrix(peptide2, peptide2,
                                             path=path, matrix_lib=matrix_lib)
 
-        # Calculate similarity value
         sim_val = float(score1_2) / math.sqrt(float(score1_1 * score2_2))
 
-        # Return similarity
         return sim_val
 
-    ############################################################################
     @staticmethod
     def predict_active_ss(sequence, threshold=0.6, frag_size=5,
                           path = ConformerConstants.def_path,
@@ -470,7 +428,6 @@ class SecStructPredictor:
         :return: The predicted Secondary Structure in a string format - str
         """
 
-        # Read the file with the active peptides Secondary Structure info
         default_ss_filepath = files(ConformerConstants.def_path).joinpath(ConformerConstants.def_ss_filename)
         ss_filepath = files(path).joinpath(ss_lib)
 
@@ -480,7 +437,6 @@ class SecStructPredictor:
         total_ss = [x.strip() for x in open(str(ss_filepath),encoding="utf8")]
 
         if len(sequence) >= 5:
-            # Store and filter based on peptides bigger than a particular size
             peptides = {}
             for line in total_ss:
                 info = line.split()
@@ -495,9 +451,7 @@ class SecStructPredictor:
                         if len(peptide) >= frag_size:
                             peptides[peptide] = ss_value
 
-            # Store the Secondary Structure profiles from similar peptides on the dataset
             profiles = []
-            # Loop to match all possible fragments
             for seq in peptides:
                 if len(seq) > len(sequence):
                     for i in range(0, len(seq) - len(sequence) + 1):
@@ -559,9 +513,3 @@ class SecStructPredictor:
         print(f"Predicted Secondary Structure: {final_ss} for main chain: {sequence}")
 
         return final_ss
-    # end of Conformer.predict_active_ss()
-# End of SecStructPredictor class.
-
-############################################################
-# End of conformer.py
-############################################################

@@ -11,36 +11,24 @@ From presentation: Modelling a (New) Modality: Computational Tools for Peptide D
 Certara User Group Meeting, Frankfurt, 2025
 """
 
-################################################################################
-# Authorship
-################################################################################
 
 __credits__ = ["J.B. Brown", "Thomas Fox"]
 __license__ = "MIT"
 
 
-################################################################################
-# Modules
-################################################################################
-
-# System libraries needed by this module.
-import argparse  # If used as standalone application.
-import logging   # For messages and debugging.
+import argparse
+import logging
 import __main__
 import sys
 
-# Third-party libraries needed to execute CLI, e.g. numpy.
 
-# Project-specific modules additionally needed.
 from pyPept.biln import BILNConstants, BILNParser
 from pyPept.biln import BILNSequenceError, BILNMultiError
 from pyPept.sequence import Sequence
 
-# ----- Begin code for this module. -----
 _defColMolID = 1
 _defColBILN = 2
 
-############################################################
 def get_required_inputs_parser():
     """Constructs parser for absolute minimum required inputs."""
 
@@ -56,10 +44,8 @@ def get_required_inputs_parser():
         required=False,
         help="Table containing BILN strings and molecule IDs.")
     return parser
-############################################################
 
 
-############################################################
 def get_optional_inputs_parser():
     """Constructs parser for optional arguments."""
 
@@ -96,7 +82,6 @@ def get_optional_inputs_parser():
         '--noheader', action='store_false', dest='header',
         help="Table has no header, and begin BILN conversion from first line.")
 
-    # A repeated-use log option parser.
     log_options = parser.add_argument_group('Logging options')
     log_options.add_argument(
         '--logfile', type=str, metavar='filename',
@@ -107,10 +92,8 @@ def get_optional_inputs_parser():
         help="Increase output verbosity")
 
     return parser
-############################################################
 
 
-############################################################
 def get_standalone_parser():
     """Constructs parser to run this script as standalone application."""
 
@@ -121,9 +104,7 @@ def get_standalone_parser():
             ))
 
     return parser
-############################################################
 
-############################################################
 def commonPrint(title: str, validity: bool, valid_branching: bool,
         invalid_monomers: tuple, failed_reason: object,
         out_delimiter="\t"):
@@ -142,14 +123,7 @@ def commonPrint(title: str, validity: bool, valid_branching: bool,
         " ".join(sorted(set(invalid_monomers))) or "None",
         error_str
         ]))
-############################################################
 
-
-###############################################################################
-###############################################################################
-###############################################################################
-###############################################################################
-###############################################################################
 
 def run_as_standalone():
     """Contains script execution flow as main standalone application.
@@ -158,7 +132,6 @@ def run_as_standalone():
     useParser = get_standalone_parser()
     args = useParser.parse_args()
 
-    # Setup typical logger for messages to stderr.
     logStream = logging.StreamHandler(
         open(args.logfile, "w") if args.logfile else sys.stderr)
     logStream.setFormatter(logging.Formatter(
@@ -169,10 +142,6 @@ def run_as_standalone():
     logger.addHandler(logStream)
     logger.debug("Invocation arguments: %s" % args)
 
-    ########################################
-    ## Begin main driver execution #########
-    ########################################
-    # Workflow
     testPairs = list()
     if args.biln:
         testPairs.append((args.title, args.biln))
@@ -189,7 +158,6 @@ def run_as_standalone():
                 except Exception as e:
                     logger.warning("Failed to process %s: %s" % (tokens, e))
 
-    # Data extracted, handle uniformly
     print("\t".join(("MolTitle", "Valid?",
         "ValidBranchAnnotations?", "Non-Dict-Monomers", "Failure-Reason")))
 
@@ -220,12 +188,7 @@ def run_as_standalone():
     if any_invalid:
         raise SystemExit(1)
 
-# end of running script as standalone application.
 
-
-# What to do if script is run as a main driver program.
 if __name__ == "__main__":
 
     run_as_standalone()
-
-# ----- End code for this module. -----

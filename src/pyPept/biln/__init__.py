@@ -10,17 +10,9 @@ From presentation: Modelling a (New) Modality: Computational Tools for Peptide D
 Certara User Group Meeting, Frankfurt, 2025
 """
 
-################################################################################
-# Authorship
-################################################################################
 
 __credits__ = ["J.B. Brown", "Thomas Fox"]
 __license__ = "MIT"
-
-
-################################################################################
-# Modules
-################################################################################
 
 
 from .parser import BILNParser

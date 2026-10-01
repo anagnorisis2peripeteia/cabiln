@@ -55,18 +55,17 @@ def _restore_reagent_form(mol, abbr):
     rgroups = props.get("m_Rgroups", "")
     slots = [r.strip() for r in rgroups.split(",")]
 
-    # Determine which slot is the bonding slot for this cap type
     # R2 caps (N-terminal/electrophilic): slot 2 bonds to the amine
     # R1 caps (C-terminal/nucleophilic): slot 1 bonds to the carbonyl
     # Sidechain caps: slot 1 bonds to the sidechain
     # We detect by checking which slot has the conventional LG ([OH] or [H])
     bonding_slot = None
     if len(slots) >= 2 and slots[1] in ("[OH]", "[H]"):
-        bonding_slot = 2  # R2 cap
+        bonding_slot = 2
     elif len(slots) >= 1 and slots[0] in ("[OH]", "[H]"):
-        bonding_slot = 1  # R1 cap
+        bonding_slot = 1
     else:
-        bonding_slot = 2  # Default to R2
+        bonding_slot = 2
 
     leaving_by_slot = {index + 1: leaving for index, leaving in enumerate(slots)}
     leaving_by_slot[bonding_slot] = lg_smi

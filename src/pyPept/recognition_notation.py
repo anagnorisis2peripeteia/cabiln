@@ -389,7 +389,7 @@ def opaque_encodings(fragment, ring_tag=1, max_breaks=16):
     ]
     if free_nitrogens and acid_oxygens:
         # Replace the acid OH; adding another substituent to its carbonyl C
-        # would produce pentavalent carbon (the former fallback did exactly that).
+        # would produce pentavalent carbon.
         rw = Chem.RWMol(fragment)
         dummy = Chem.Atom(0)
         dummy.SetIsotope(2)

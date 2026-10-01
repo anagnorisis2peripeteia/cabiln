@@ -5,23 +5,15 @@ From publication: pyPept: a python library to generate atomistic 2D and 3D repre
 Journal of Cheminformatics, 2023
 """
 
-########################################################################################
-# Authorship
-########################################################################################
 
 __credits__ = ["Rodrigo Ochoa", "J.B. Brown", "Thomas Fox"]
 __license__ = "MIT"
 
 
-########################################################################################
-# Modules
-########################################################################################
 # pylint: disable=E1101
 
-# System libraries
 import warnings
 
-# Third-party libraries
 from rdkit import Chem, RDLogger
 from rdkit.Chem import AllChem
 from rdkit.Chem.Draw import rdDepictor
@@ -36,9 +28,6 @@ from pyPept.structure import require_supported_stereo
 # molecule is chemically correct; suppress the noise.
 RDLogger.DisableLog('rdApp.warning')
 
-##########################################################################
-# Functions and classes
-##########################################################################
 
 class Molecule:
     """
@@ -46,7 +35,6 @@ class Molecule:
     peptides.
     """
 
-    ############################################################################
     def __init__(self, sequence=None, depiction='local'):
         """
         Initialize from a Sequence or an already resolved Peptide.
@@ -68,14 +56,12 @@ class Molecule:
                 f"Depiction was {depiction}, expected 'rdkit', 'local', or None.")
         self.depiction = depiction
 
-        # Main function, will modify data members defined above.
         self.__from_sequence(sequence)
 
         if not isinstance(self.mol, Chem.rdchem.Mol):
             raise RuntimeError('pyPept.Molecule initialization failure: ' +
                 'problem initializing rdkit.ROMol')
 
-    ############################################################################
     def __assemble(self, peptide):
         """Join resolved endpoints and restore their unconsumed leaving groups.
 
@@ -156,7 +142,6 @@ class Molecule:
             combined = Chem.CombineMols(combined, fragment)
         return restore_leaving_groups(combined, leaving_groups, sanitize=False)
 
-    ########################################################################################
     def __fixDihedrals(self):
         """
         Fast fix to get a reasonable 2D representation of the Molecule.
@@ -164,7 +149,6 @@ class Molecule:
         :return: None
         """
 
-        # Define a number of substructures for phi, psi, amide group and sidechains
         psi_mol = Chem.MolFromSmiles('NCC(=O)N')
         phi_mol = Chem.MolFromSmiles('C(=O)NCC(=O)')
         amid_mol = Chem.MolFromSmiles('CC(=O)NC')
@@ -193,8 +177,6 @@ class Molecule:
 
         [all_angles.append(sm1) for sm1 in all_angle1]
 
-        # Search for atoms that have 4 connection points, then remove these
-        #   from the all_angles list
         bond4 = Chem.MolFromSmarts('[*D4]')
         bond4 = list(self.mol.GetSubstructMatches(bond4))
         new_angles = []
@@ -210,12 +192,10 @@ class Molecule:
 
         new_angles = set(new_angles)
 
-        # Get conformers
         confs = self.mol.GetConformers()
         if len(confs) != 1:
             warnings.warn(f"{len(confs)} conformers for molecule, expected one.")
 
-        # Update the dihedrals
         count_error = 0
         for conf in confs:
             for pm in psi_matches:
@@ -251,9 +231,7 @@ class Molecule:
                     Chem.rdMolTransforms.SetAngleDeg(conf, *am, 120.)
                 except:
                     count_error+=1
-    # end of Molecule.__fixDihedrals()
 
-    ########################################################################################
     def __from_sequence(self, sequence):
         """
         Convert parsed source or a resolved peptide into a rdkit mol object.
@@ -289,7 +267,6 @@ class Molecule:
                 f"in the BILN sequence. RDKit detail: {exc}"
             ) from exc
 
-        # Compute 2D coordinates
         if self.depiction == 'rdkit':
             rdDepictor.SetPreferCoordGen(True)
             rdDepictor.Compute2DCoords(self.mol, clearConfs=True)
@@ -301,7 +278,6 @@ class Molecule:
 
         return self.mol
 
-    ########################################################################################
     def write_molecule(self, fmt=None, out_file=None):
         """
         Write a molecule to a file or stream in a supported format.
@@ -327,7 +303,6 @@ class Molecule:
             with open(out_file, 'w', encoding='utf-8') as out_f:
                 out_f.write(mol)
 
-    ########################################################################################
     def get_molecule(self, fmt=None):
         """
         Get a molecule representation of the initialized Sequence object.
@@ -356,7 +331,6 @@ class Molecule:
 
         return mol
 
-    ########################################################################################
     def get_residue_atom_map(self):
         """
         Return {occurrence_id: [atom_indices]} for the assembled molecule.
@@ -375,9 +349,3 @@ class Molecule:
             if atom.HasProp('_residue_idx'):
                 mapping.setdefault(atom.GetIntProp('_residue_idx'), []).append(atom.GetIdx())
         return mapping
-
-    # End of the Molecule class declaration.
-
-############################################################
-# End of molecule.py
-############################################################

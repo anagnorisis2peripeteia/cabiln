@@ -57,10 +57,9 @@ class PeptideDocument:
         return self.select(selection.index).index
 
     def _editable_brackets(self, *indices):
-        # Legacy [[anchor.arm].arm] lowers sibling entries into generated arms.
-        # Extending such an entry in the old spelling would attach to its hub.
-        # Use that SAME lowering helper on the selected bracket first, checking
-        # that node order, templates and connections remain identical.
+        # Lower legacy [[anchor.arm].arm] before extending a sibling; editing
+        # that spelling directly would attach to its hub. Verify that lowering
+        # preserves occurrence order, templates and connections.
         brackets = set()
         for index in indices:
             occurrence = self.sequence.s_sources[index]
@@ -161,7 +160,7 @@ class PeptideDocument:
                     if need.get("internal") and need["slot"] < need["partner_slot"]]
 
         def match_internal(pairs, fixed):
-            # A closure wholly inside the replaced monomer depends on BOTH new
+            # A closure wholly inside the replaced monomer depends on both new
             # sites. Fix compatible pairs before matching its external bonds.
             if not pairs:
                 return match(fixed)

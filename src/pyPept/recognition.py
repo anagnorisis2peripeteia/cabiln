@@ -843,7 +843,7 @@ def _search_admissible(molecule, candidates, budgets, accept_cover, connection_p
         for index in boundary_owners:
             boundary_mask |= groups[index].mask
         region_mask = sum(1 << atom for atom in region)
-        # Use ALL compiled candidate groups, not just those left in this search
+        # Check every compiled candidate group, including those excluded from this search
         # state. If one could claim any region atom without these boundary owners,
         # rejecting a distant choice might still repair the partition.
         potential = 0
