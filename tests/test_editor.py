@@ -1,6 +1,7 @@
 """Source identity and requested topology, beyond mere product buildability."""
 
 import pytest
+from hypothesis import given, strategies as st
 from fastapi.testclient import TestClient
 from rdkit import Chem
 
@@ -8,9 +9,147 @@ from pyPept.editor import EditError, PeptideDocument
 from pyPept.molecule import Molecule
 from pyPept.sequence import Sequence
 from pyPept.web.app import app
+from _fuzzing import fuzz_settings, record
 
 CHARGED = "<[1*]N[C@@H](C[O-])C([2*])=O>"
 RING = "<[1*]N[C@@H](CC%10CCCCC%10)C([2*])=O>"
+
+
+@pytest.mark.parametrize("source,index,symbol,mapping,expected", [
+    ("ac-A-G-am", 1, "S", {1: 1, 2: 2}, "ac-S-G-am"),
+    ("ac-K.G(4,2)-am", 1, "Orn", {1: 1, 2: 2, 4: 4}, "ac-Orn.G(4,2)-am"),
+    ("ac-K.{G(4,2)[.A(1,2)]}-am", 3, "S", {1: 1, 2: 2}, "ac-K.{S(4,2)[.A(1,2)]}-am"),
+    ("ac-C.!r(4,4)-A-C.!r-am", 1, "dC", {1: 1, 2: 2, 4: 4}, "ac-dC.!r(4,4)-A-C.!r-am"),
+    ("!r-A-G-K-!r", 0, "S", {1: 1, 2: 2}, "!r-S-G-K-!r"),
+    ("ac-A-G-am%G", 4, "S", {}, "ac-A-G-am%S"),
+    ("ac-A-am", 0, "fmoc", {2: 2}, "fmoc-A-am"),
+    ("K.!ring(2,4).!ring(4,2)", 0, "Orn", {2: 2, 4: 4}, "Orn.!ring(2,4).!ring(4,2)"),
+])
+def test_swapping_keeps_the_selected_occurrence_neighbours_and_source_layout(
+    source, index, symbol, mapping, expected
+):
+    document = PeptideDocument(source)
+    result = document.replace_monomer(document.select(index), symbol, mapping)
+    assert result == expected
+    assert document.source == source
+
+
+@pytest.mark.parametrize("symbol,mapping,reason", [
+    ("Orn", {1: 1, 2: 2}, "every occupied"),
+    ("Orn", {1: 1, 2: 2, 4: 1}, "different replacement"),
+    ("Orn", {1: 1, 2: 2, 4: 2}, "different replacement"),
+    ("Orn", {1: 1, 2: 2, 4: 99}, "incompatible"),
+    ("Orn", {1: 1, 2: 2, 4: 4, 3: 3}, "only occupied"),
+    ("G-A", {1: 1, 2: 2, 4: 4}, "single replacement"),
+])
+def test_swap_rejects_incomplete_duplicate_extra_and_incompatible_mappings(symbol, mapping, reason):
+    document = PeptideDocument("ac-K.G(4,2)-am")
+    with pytest.raises(ValueError, match=reason):
+        document.replace_monomer(document.select(1), symbol, mapping)
+    assert document.source == "ac-K.G(4,2)-am"
+
+
+def test_swap_matches_all_sites_together_and_detects_effective_chemistry():
+    document = PeptideDocument("ac-C.!r(4,4)-A-C.!r-am")
+    requirements = document.replacement_requirements(document.select(1))
+    assert [(r['slot'], r['partner_idx'], r['partner_slot']) for r in requirements] == [(1, 0, 2), (2, 2, 1), (4, 3, 4)]
+    thiol = document.replacement_options(requirements, [
+        {'slot': 7, 'chem_type': 'backbone_n'}, {'slot': 8, 'chem_type': 'backbone_c'},
+        {'slot': 9, 'chem_type': 'thiol'},
+    ])
+    assert thiol['mapping'] == {1: 7, 2: 8, 4: 9}
+    assert document.replacement_options(requirements, [
+        {'slot': 7, 'chem_type': 'backbone_n'}, {'slot': 8, 'chem_type': 'backbone_c'},
+        {'slot': 9, 'chem_type': 'hydroxyl'},
+    ]) is None
+    two_amides = PeptideDocument("ac-K.G(4,2)-am")
+    assert two_amides.replacement_options(two_amides.replacement_requirements(two_amides.select(1)), [
+        {'slot': 1, 'chem_type': 'backbone_n'}, {'slot': 2, 'chem_type': 'backbone_c'},
+    ]) is None  # R1 alone cannot serve both ac and the branch carbonyl.
+
+
+def test_internal_ring_replacement_checks_both_new_sites_together():
+    document = PeptideDocument('K.!ring(2,4).!ring(4,2)')
+    requirements = document.replacement_requirements(document.select(0))
+    assert all(r['internal'] for r in requirements)
+    # The original was a lactam. A new closure must compare the two new sites,
+    # not require each thiol to react with the original amine/carboxyl.
+    options = document.replacement_options(requirements, [
+        {'slot': 7, 'chem_type': 'thiol'}, {'slot': 8, 'chem_type': 'thiol'},
+    ])
+    assert set(options['mapping'].values()) == {7, 8}
+    assert document.replacement_options(requirements, [
+        {'slot': 7, 'chem_type': 'thiol'}, {'slot': 8, 'chem_type': 'hydroxyl'},
+    ]) is None
+
+
+@pytest.mark.fuzz
+@fuzz_settings(examples=150)
+@given(
+    partners=st.lists(st.sampled_from(['backbone_n', 'backbone_c', 'thiol', 'hydroxyl']), max_size=4),
+    sites=st.lists(st.sampled_from(['backbone_n', 'backbone_c', 'thiol', 'hydroxyl']), max_size=5),
+    offset=st.integers(min_value=1, max_value=12),
+)
+def test_fuzz_swap_site_matching_agrees_with_exhaustive_assignments(partners, sites, offset):
+    from itertools import permutations
+    from pyPept.attachments import reaction_for_types
+
+    requirements = [{'slot': i + 1, 'chem_type': 'backbone_n', 'partner_chem_type': partner}
+                    for i, partner in enumerate(partners)]
+    candidates = [{'slot': offset + i, 'chem_type': chemistry} for i, chemistry in enumerate(sites)]
+    record('swap.site_matching', requirements=requirements, candidates=candidates)
+    possible = any(all(reaction_for_types(sites[target], partner)
+                       for partner, target in zip(partners, assignment))
+                   for assignment in permutations(range(len(sites)), len(partners)))
+    result = PeptideDocument.replacement_options(requirements, candidates)
+    assert (result is not None) == possible
+    if result is not None:
+        assert set(result['mapping']) == set(range(1, len(partners) + 1))
+        assert len(set(result['mapping'].values())) == len(partners)
+        assert all(reaction_for_types(sites[target - offset], partners[slot - 1])
+                   for slot, target in result['mapping'].items())
+
+
+@pytest.mark.parametrize('slot', [7, 11])
+def test_newly_registered_definition_can_replace_with_renumbered_sites(tmp_path, monkeypatch, slot):
+    from pyPept import monomer_store
+
+    _, monomers = monomer_store._load_sdf()
+    custom = Chem.Mol(monomers['D'])
+    custom.SetProp('m_abbr', 'SwapD')
+    custom.SetProp('symbol', 'SwapD')
+    custom.SetProp('m_name', 'Renumbered aspartate')
+    for atom in custom.GetAtoms():
+        if atom.GetAtomicNum() == 0 and atom.GetIsotope() == 4:
+            atom.SetIsotope(slot)
+    groups = custom.GetProp('m_Rgroups').split(',')
+    groups.extend(['None'] * (slot - len(groups)))
+    groups[slot - 1], groups[3] = groups[3], 'None'
+    custom.SetProp('m_Rgroups', ','.join(groups))
+    custom.SetProp('m_chem_types', custom.GetProp('m_chem_types').replace('4:', f'{slot}:'))
+    path = tmp_path / 'swap-library.sdf'
+    with Chem.SDWriter(str(path)) as writer:
+        for abbr in ('ac', 'am', 'G', 'D', 'E', 'K'):
+            writer.write(monomers[abbr])
+    monkeypatch.setenv('CABILN_MONOMER_LIBRARY', str(path))
+    monomer_store._invalidate_sdf()
+    try:
+        # Populate the catalog before ingestion to test revision invalidation too.
+        from pyPept.web.builder import replacement_options
+        from pyPept.web.schemas import _ReplacementOptionsReq
+        request = _ReplacementOptionsReq(cabiln='ac-E.[G(4,1)]-am', residue_idx=1)
+        assert 'SwapD' not in {m['abbr'] for m in replacement_options(request)['candidates']}
+        monomer_store.register_molecule(custom)
+        options = replacement_options(request)
+        candidate = next(m for m in options['candidates'] if m['abbr'] == 'SwapD')
+        assert candidate['mapping'] == {1: 1, 2: 2, 4: slot}
+        document = PeptideDocument(request.cabiln)
+        result = document.replace_monomer(document.select(1), 'SwapD', candidate['mapping'])
+        assert smiles(result) == smiles('ac-D.[G(4,1)]-am')
+        assert f'{slot},1' in result
+        assert 'SwapD' in result
+    finally:
+        monomer_store._invalidate_sdf()
 
 
 def test_selected_occupancy_discovers_only_the_selected_definition(monkeypatch):

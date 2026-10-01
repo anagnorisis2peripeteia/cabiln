@@ -23,6 +23,7 @@ let buildLeftRIdx = null;
 let buildRightRIdx = null;
 let buildReaction = '';
 let insertBetweenActive = false;
+let swapState = null;  // Current source, eligible definitions, reviewed mapping and preview.
 let rerollSeed   = 0;
 let reactionPairs = null;  // lazy-loaded list of [ct_a, ct_b] pairs
 let rxnFilterActive = false;
@@ -132,6 +133,9 @@ const buildPanel    = document.getElementById('build-panel');
 const btnBuild      = document.getElementById('btn-build');
 const buildClose    = document.getElementById('build-close');
 const buildConnect  = document.getElementById('build-connect');
+const buildAction = document.getElementById('build-action');
+const swapMapping = document.getElementById('build-swap-mapping');
+const swapSites = document.getElementById('build-swap-sites');
 const buildPreviewButton = document.getElementById('build-preview-button');
 const buildPreviewPanel = document.getElementById('build-preview');
 const buildPreviewStatus = document.getElementById('build-preview-status');
@@ -778,9 +782,10 @@ function parseCts(cts) {
 }
 
 function renderLibList(q) {
+  const catalog = buildMode && isSwapMode() ? (swapState?.candidates || []) : allMonomers;
   let filtered = q
-    ? allMonomers.filter(m => m.searchText.includes(q))
-    : allMonomers;
+    ? catalog.filter(m => m.searchText.includes(q))
+    : catalog;
 
   if (rxnFilterActive && buildLeft && Array.isArray(reactionPairs)) {
     const pairSet = new Set(reactionPairs.map(([a, b]) => a + '|' + b));
@@ -803,10 +808,13 @@ function renderLibList(q) {
     filtered = filtered.filter(m => m.backbone_insertable);
   }
 
-  libCount.textContent = `${filtered.length} / ${allMonomers.length} monomers`;
+  libCount.textContent = buildMode && isSwapMode()
+    ? `${filtered.length} / ${catalog.length} replacements with compatible sites`
+    : `${filtered.length} / ${allMonomers.length} monomers`;
 
   if (!filtered.length) {
-    libList.innerHTML = '<div class="placeholder">No matches</div>';
+    libList.innerHTML = `<div class="placeholder">${buildMode && isSwapMode() && !swapState
+      ? 'Select a residue to find replacements' : 'No matches'}</div>`;
     return;
   }
 
@@ -856,6 +864,8 @@ function useLibraryMonomer(abbr, explicit = false) {
     buildHint.textContent = 'First monomer added — select its residue, then choose another monomer';
   } else if (buildMode && mainStale) {
     buildHint.textContent = 'Wait for a valid drawing before choosing attachment sites';
+  } else if (buildMode && isSwapMode()) {
+    chooseSwapMonomer(abbr);
   } else if (buildMode) {
     loadBuildRight(abbr);
     if (!buildLeft) buildHint.textContent = 'Now select a residue in the sequence';
@@ -1346,7 +1356,7 @@ btnMol.addEventListener('click', async () => {
 // ─── build mode ──────────────────────────────────────────────────────────────
 function selectBuildResidue(residue) {
   if (!buildMode || mainStale) return;
-  const right = buildLeft && buildLeftRIdx !== residue.idx;
+  const right = !isSwapMode() && buildLeft && buildLeftRIdx !== residue.idx;
   const pending = right
     ? loadBuildRight(residue.abbr, residue.idx)
     : loadBuildLeft(residue.abbr, residue.idx);
@@ -1375,10 +1385,14 @@ function closeBuild() {
   btnBuild.classList.remove('active');
   btnBuild.setAttribute('aria-expanded', 'false');
   clearBuild();
+  if (libLoaded && isSwapMode()) renderLibList(libSearch.value.trim().toLowerCase());
 }
 function clearBuild() {
   clearBuildPreview();
-  cancelRequests('build-left', 'build-right', 'bond-check', 'sequence-edit');
+  cancelRequests('build-left', 'build-right', 'bond-check', 'sequence-edit', 'swap-options');
+  swapState = null;
+  swapMapping.hidden = true;
+  swapSites.innerHTML = '';
   buildLeft = null; buildRight = null; buildLeftRIdx = null; buildRightRIdx = null;
   buildReaction = '';
   insertBetweenActive = false;
@@ -1389,14 +1403,18 @@ function clearBuild() {
   buildLeftRg.innerHTML = '';
   buildLeftSite.hidden = true;
   buildRightAbbr.textContent = '—';
-  document.getElementById('build-right-label').textContent = 'New monomer';
+  document.getElementById('build-right-label').textContent = isSwapMode() ? 'Replacement monomer' : 'New monomer';
+  document.getElementById('build-title').textContent = isSwapMode() ? 'Swap Monomer' : 'Build by Connection';
+  buildPanel.classList.toggle('swapping', isSwapMode());
+  buildConnect.textContent = isSwapMode() ? 'Apply swap' : 'Connect';
   buildRightSvg.innerHTML = '<div class="box-placeholder">Choose Use in the library</div>';
   buildRightRg.innerHTML = '';
   buildRightSite.hidden = true;
   setBuildReady(false);
   buildStatus.textContent = 'Choose a residue and a monomer to connect';
   buildStatus.className = 'build-status';
-  buildHint.textContent = cabilnInput.value.trim()
+  buildHint.textContent = isSwapMode() ? 'Select the residue to replace; every existing connection will be kept'
+    : cabilnInput.value.trim()
     ? 'Select a residue, then choose Use beside a library monomer'
     : 'Choose Use beside a monomer to start a peptide';
   resChips.querySelectorAll('.res-chip').forEach(c => c.style.outline = '');
@@ -1407,6 +1425,110 @@ function clearBuild() {
     btnRxnFilter.setAttribute('aria-pressed', 'false');
     if (libLoaded) renderLibList(libSearch.value.trim().toLowerCase());
   }
+  if (libLoaded && buildMode && isSwapMode()) renderLibList(libSearch.value.trim().toLowerCase());
+}
+
+function isSwapMode() { return buildAction.value === 'swap'; }
+
+buildAction.addEventListener('change', () => {
+  const selected = residueList.find(residue => residue.idx === buildLeftRIdx);
+  clearBuild();
+  if (libLoaded) renderLibList(libSearch.value.trim().toLowerCase());
+  if (selected && !mainStale) selectBuildResidue(selected);
+});
+
+async function loadSwapOptions() {
+  const request = startRequest('swap-options');
+  const source = cabilnInput.value.trim();
+  const index = buildLeftRIdx;
+  buildStatus.textContent = 'Finding replacements for all connected sites…';
+  try {
+    while (activeRequests.has('library') || activeRequests.has('reactions')) {
+      const pending = activeRequests.get('library') || activeRequests.get('reactions');
+      await Promise.race([pending.done, request.done]);
+      if (!request.current()) return;
+    }
+    const data = await readResponse(await fetchCalculation('/replacement_options', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cabiln: source, residue_idx: index }), signal: request.signal,
+    }));
+    if (!request.current() || source !== cabilnInput.value.trim() || index !== buildLeftRIdx) return;
+    if (data.error) throw new Error(data.error);
+    if (data.source_echo !== source || data.residue_idx !== index || !data.context) {
+      throw new Error('The replacement list is out of date. Select the residue again.');
+    }
+    const quality = new Map(allMonomers.map(m => [m.abbr, m.quality]));
+    const candidates = data.candidates.map(m => ({ ...m, quality: quality.get(m.abbr),
+      searchText: [m.abbr, m.name, m.type, m.chem_types].join(' ').toLowerCase() }));
+    swapState = { ...data, candidates, candidate: null, mapping: {}, preview: null };
+    buildStatus.textContent = 'Choose a replacement from the filtered library';
+    buildHint.textContent = 'Only monomers with compatible sites for every connection are shown';
+    renderLibList(libSearch.value.trim().toLowerCase());
+  } catch (error) {
+    if (request.current()) {
+      buildStatus.textContent = error.message || 'Could not find replacements. Select the residue to retry.';
+      buildStatus.className = 'build-status invalid';
+    }
+  } finally { request.finish(); }
+}
+
+function chooseSwapMonomer(abbr) {
+  const candidate = swapState?.candidates.find(item => item.abbr === abbr);
+  if (!candidate) return;
+  swapState.candidate = candidate;
+  swapState.mapping = { ...candidate.mapping };
+  swapState.preview = null;
+  renderSwapMapping();
+  loadBuildRight(abbr);
+}
+
+function renderSwapMapping() {
+  swapSites.innerHTML = '';
+  swapMapping.hidden = !swapState?.candidate;
+  if (swapMapping.hidden) return;
+  const candidate = swapState.candidate;
+  for (const need of swapState.requirements) {
+    const label = document.createElement('label');
+    label.className = 'swap-site';
+    const text = document.createElement('span');
+    text.textContent = `Current R${need.slot} →`;
+    const select = document.createElement('select');
+    select.className = 'hbtn';
+    select.dataset.slot = need.slot;
+    select.setAttribute('aria-label', `Replacement site for R${need.slot}`);
+    for (const slot of candidate.choices[need.slot]) {
+      const option = document.createElement('option');
+      option.value = slot;
+      const site = candidate.sites.find(item => item.slot === slot);
+      option.textContent = `R${slot} ${(site?.chem_type || '').replaceAll('_', ' ')}`;
+      select.appendChild(option);
+    }
+    select.value = swapState.mapping[need.slot];
+    select.addEventListener('change', () => {
+      cancelRequests('sequence-edit');
+      swapState.mapping[need.slot] = Number(select.value);
+      checkBuildValidity();
+      if (buildRight) renderRgroupButtons(buildRightRg, buildRight, 'right');
+    });
+    const partner = document.createElement('small');
+    partner.textContent = need.internal ? `joins the replacement site mapped from R${need.partner_slot}`
+      : `keeps ${need.partner_abbr} (residue ${need.partner_idx + 1}) R${need.partner_slot}`;
+    label.appendChild(text);
+    label.appendChild(select);
+    label.appendChild(partner);
+    swapSites.appendChild(label);
+  }
+  if (!swapState.requirements.length) swapSites.textContent = 'This monomer has no existing connections.';
+}
+
+function swapRequest() {
+  if (!swapState?.candidate || !buildLeft || !buildRight || mainStale ||
+      swapState.source_echo !== cabilnInput.value.trim() || swapState.residue_idx !== buildLeftRIdx ||
+      swapState.candidate.abbr !== buildRight.abbr) return null;
+  const slots = Object.values(swapState.mapping);
+  if (slots.length !== swapState.requirements.length || new Set(slots).size !== slots.length) return null;
+  return { cabiln: swapState.source_echo, residue_idx: swapState.residue_idx,
+    new_abbr: swapState.candidate.abbr, slot_map: { ...swapState.mapping }, context: swapState.context };
 }
 
 btnBuild.addEventListener('click', () => buildMode ? closeBuild() : openBuild());
@@ -1430,7 +1552,7 @@ function checkAdjacentBackbone() {
 }
 
 function updateInsertBetweenUI() {
-  if (buildMode && checkAdjacentBackbone()) {
+  if (buildMode && !isSwapMode() && checkAdjacentBackbone()) {
     const la = (residueList.find(r => r.idx === buildLeftRIdx) || {}).abbr || '?';
     const ra = (residueList.find(r => r.idx === buildRightRIdx) || {}).abbr || '?';
     buildInsertInfo.textContent = `${la} and ${ra} are adjacent on the backbone`;
@@ -1501,7 +1623,19 @@ document.getElementById('build-right-change').addEventListener('click', clearBui
 
 async function loadBuildLeft(abbr, rIdx) {
   clearBuildPreview();
-  cancelRequests('bond-check', 'sequence-edit');
+  cancelRequests('bond-check', 'sequence-edit', 'swap-options');
+  if (isSwapMode()) {
+    cancelRequests('build-right');
+    swapState = null;
+    swapMapping.hidden = true;
+    buildRight = null;
+    buildRightRIdx = null;
+    buildRightAbbr.textContent = '—';
+    buildRightSvg.innerHTML = '<div class="box-placeholder">Choose a replacement in the library</div>';
+    buildRightRg.innerHTML = '';
+    buildRightSite.hidden = true;
+    renderLibList(libSearch.value.trim().toLowerCase());
+  }
   const request = startRequest('build-left');
   const sequence = cabilnInput.value.trim();
   buildLeftRIdx = rIdx;
@@ -1525,10 +1659,11 @@ async function loadBuildLeft(abbr, rIdx) {
     buildLeft = { abbr, rgroups: data.rgroups || [], selectedSlot: null };
     renderRgroupButtons(buildLeftRg, buildLeft, 'left');
     buildHint.textContent = buildRight ? 'Choose an attachment site on each side' : 'Choose Use beside a library monomer';
-    btnRxnFilter.disabled = false;
+    btnRxnFilter.disabled = isSwapMode();
     if (rxnFilterActive && libLoaded) renderLibList(libSearch.value.trim().toLowerCase());
     updateInsertBetweenUI();
-    checkBuildValidity();
+    if (isSwapMode()) loadSwapOptions();
+    else checkBuildValidity();
   } catch (e) {
     if (!request.current()) return;
     buildLeftSvg.innerHTML = '<div class="box-placeholder">Error loading monomer</div>';
@@ -1544,7 +1679,8 @@ async function loadBuildRight(abbr, rIdx) {
   const sequence = cabilnInput.value.trim();
   buildRightRIdx = rIdx !== undefined ? rIdx : null;
   buildRightAbbr.textContent = abbr;
-  document.getElementById('build-right-label').textContent = rIdx !== undefined ? 'Current residue' : 'New monomer';
+  document.getElementById('build-right-label').textContent = isSwapMode() ? 'Replacement monomer'
+    : rIdx !== undefined ? 'Current residue' : 'New monomer';
   buildRightSvg.innerHTML = '<div class="spinner"></div>';
   buildRightRg.innerHTML = '';
   buildRightSite.hidden = true;
@@ -1552,7 +1688,7 @@ async function loadBuildRight(abbr, rIdx) {
   setBuildReady(false);
   buildStatus.textContent = '';
 
-  const family = rIdx === undefined && allMonomers.find(m => m.abbr === abbr && m.degenerate);
+  const family = !isSwapMode() && rIdx === undefined && allMonomers.find(m => m.abbr === abbr && m.degenerate);
   if (family) {
     buildRightSvg.innerHTML = '<div class="box-placeholder">Choose the attachment form</div>';
     for (const [label, symbol] of [['N-terminal', family.nterm_abbr], ['C-terminal', family.cterm_abbr]]) {
@@ -1583,7 +1719,8 @@ async function loadBuildRight(abbr, rIdx) {
     buildRightSvg.innerHTML = data.svg || '';
     buildRight = { abbr, rgroups: data.rgroups || [], selectedSlot: null };
     renderRgroupButtons(buildRightRg, buildRight, 'right');
-    buildHint.textContent = buildLeft ? 'Choose an attachment site on each side' : 'Select a residue in the sequence';
+    buildHint.textContent = isSwapMode() ? 'Review each site mapping, then preview the replacement'
+      : buildLeft ? 'Choose an attachment site on each side' : 'Select a residue in the sequence';
     updateInsertBetweenUI();
     checkBuildValidity();
   } catch (e) {
@@ -1600,12 +1737,12 @@ function renderRgroupButtons(container, state, side) {
     const btn = document.createElement('button');
     btn.className = 'rgroup-btn';
     if (rg.used) btn.classList.add('used');
-    btn.disabled = !!rg.used;
+    btn.disabled = isSwapMode() || !!rg.used;
     btn.setAttribute('aria-pressed', String(state.selectedSlot === rg.slot));
     if (state.selectedSlot === rg.slot) btn.classList.add('selected');
-    btn.textContent = `R${rg.slot} ${(rg.chem_type || '').replaceAll('_', ' ')}${rg.used ? ' · used' : ''}`;
+    btn.textContent = `R${rg.slot} ${(rg.chem_type || '').replaceAll('_', ' ')}${rg.used ? (isSwapMode() ? ' · connected' : ' · used') : ''}`;
     btn.title = `R${rg.slot}: ${rg.chem_type || 'unknown'} · Free-site group: ${rg.leaving || '[H] (implicit)'}${rg.used ? ' — already connected' : ''}`;
-    if (!rg.used) {
+    if (!isSwapMode() && !rg.used) {
       btn.addEventListener('click', () => selectRgroup(side, rg.slot));
     }
     container.appendChild(btn);
@@ -1621,6 +1758,13 @@ function renderRgroupButtons(container, state, side) {
   }
   if (Number.isInteger(selected?.atom_idx)) {
     drawing.querySelectorAll(`.atom-${selected.atom_idx}`).forEach(path => path.classList.add('site-selected'));
+  }
+  if (isSwapMode()) {
+    const occupied = side === 'left' ? state.rgroups.filter(rg => rg.used)
+      : state.rgroups.filter(rg => Object.values(swapState?.mapping || {}).includes(rg.slot));
+    for (const site of occupied) {
+      drawing.querySelectorAll(`.atom-${site.atom_idx}`).forEach(path => path.classList.add('site-selected'));
+    }
   }
 }
 
@@ -1642,6 +1786,15 @@ async function checkBuildValidity() {
   cancelRequests('bond-check');
   buildReaction = '';
   setBuildReady(false);
+  if (isSwapMode()) {
+    const valid = !!swapRequest();
+    buildStatus.textContent = valid ? 'Preview to validate the complete replacement product'
+      : swapState?.candidate && buildRight ? 'Choose a different replacement site for each connection'
+      : 'Choose a replacement from the filtered library';
+    buildStatus.className = 'build-status';
+    setBuildReady(valid);
+    return;
+  }
   if (!buildLeft?.selectedSlot || !buildRight?.selectedSlot) {
     buildStatus.textContent = !buildLeft ? 'Select a residue in the sequence'
       : !buildRight ? 'Choose a monomer from the library'
@@ -1697,7 +1850,7 @@ async function checkBuildValidity() {
 }
 
 function setBuildReady(ready) {
-  buildConnect.disabled = !ready;
+  buildConnect.disabled = !ready || (isSwapMode() && !swapState?.preview);
   buildPreviewButton.disabled = !ready;
 }
 
@@ -1715,6 +1868,8 @@ function buildConnection() {
 }
 
 function clearBuildPreview() {
+  if (swapState) swapState.preview = null;
+  if (isSwapMode()) buildConnect.disabled = true;
   const pending = activeRequests.has('build-preview');
   cancelRequests('build-preview');
   if (pending) setBuildReady(true);
@@ -1732,12 +1887,15 @@ document.getElementById('build-preview-close').addEventListener('click', () => {
   buildPreviewButton.focus();
 });
 buildPreviewButton.addEventListener('click', async () => {
-  const connection = buildConnection();
+  const swapping = isSwapMode();
+  const connection = swapping ? swapRequest() : buildConnection();
   if (!connection || buildPreviewButton.disabled) return;
   clearBuildPreview();
   const request = startRequest('build-preview', () => buildPreviewPanel.setAttribute('aria-busy', 'false'));
-  const left = `${buildLeft.abbr} (residue ${connection.host_residue_idx + 1}) R${connection.r_host}`;
-  const right = `${buildRight.abbr} (${connection.target_residue_idx < 0 ? 'new' : `residue ${connection.target_residue_idx + 1}`}) R${connection.r_new}`;
+  const left = swapping ? `${buildLeft.abbr} (residue ${connection.residue_idx + 1})`
+    : `${buildLeft.abbr} (residue ${connection.host_residue_idx + 1}) R${connection.r_host}`;
+  const right = swapping ? buildRight.abbr
+    : `${buildRight.abbr} (${connection.target_residue_idx < 0 ? 'new' : `residue ${connection.target_residue_idx + 1}`}) R${connection.r_new}`;
   const pair = `${left} ↔ ${right}`;
   setBuildReady(false);
   buildPreviewPanel.hidden = false;
@@ -1745,7 +1903,8 @@ buildPreviewButton.addEventListener('click', async () => {
   buildPreviewButton.setAttribute('aria-expanded', 'true');
   buildPreviewStatus.textContent = `${pair} · Preparing preview…`;
   buildPreviewStatus.className = '';
-  buildPreviewReaction.textContent = buildReaction;
+  buildPreviewReaction.textContent = swapping ? Object.entries(connection.slot_map)
+    .map(([old, next]) => `R${old} → R${next}`).join(' · ') || 'No existing connections' : buildReaction;
   buildPreviewInner.innerHTML = '<div class="spinner"></div>';
   buildPreviewViewport.reset();
   buildPreviewPanel.scrollIntoView({ block: 'nearest' });
@@ -1762,7 +1921,7 @@ buildPreviewButton.addEventListener('click', async () => {
     if (!request.current()) return;
     buildPreviewStatus.textContent = `${pair} · Preparing preview…`;
     // These endpoints calculate a candidate; only Connect commits the document.
-    const proposal = await readResponse(await fetchCalculation('/insert_bond', {
+    const proposal = await readResponse(await fetchCalculation(swapping ? '/replace_monomer' : '/insert_bond', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(connection), signal: request.signal,
     }));
@@ -1775,6 +1934,10 @@ buildPreviewButton.addEventListener('click', async () => {
     }));
     if (!request.current()) return;
     if (drawing.error) throw new Error(drawing.error);
+    if (swapping && (!CabilnProject.sameContext(connection.context, proposal.context) ||
+        !CabilnProject.sameContext(connection.context, drawing.context))) {
+      throw new Error('The library changed. Select the residue again to refresh replacements');
+    }
     const changedLibrary = editor.present.context?.library_binding && drawing.context?.library_binding
       && !CabilnProject.sameContext(editor.present.context, drawing.context);
     const notice = changedLibrary ? 'Library changed since the current drawing; preview uses current definitions.' : '';
@@ -1782,6 +1945,14 @@ buildPreviewButton.addEventListener('click', async () => {
     buildPreviewStatus.textContent = [pair, drawing.info, notice, drawing.normalization_note, ...(drawing.warnings || [])].filter(Boolean).join(' · ');
     buildPreviewSource.textContent = proposal.result;
     buildPreviewNotation.hidden = false;
+    if (swapping) {
+      swapState.preview = { result: proposal.result, request: connection };
+      buildStatus.textContent = 'Product validated. Apply swap keeps every mapped connection.';
+      buildStatus.className = 'build-status valid';
+      if (Object.entries(connection.slot_map).some(([old, next]) => Number(old) !== next)) {
+        buildPreviewStatus.textContent += ' · Site renumbering can reformat the notation; review Proposed CABILN.';
+      }
+    }
   } catch (error) {
     if (!request.current()) return;
     buildPreviewInner.innerHTML = '';
@@ -1794,17 +1965,19 @@ buildPreviewButton.addEventListener('click', async () => {
 });
 
 buildConnect.addEventListener('click', async () => {
-  const connection = buildConnection();
+  const swapping = isSwapMode();
+  const reviewed = swapping ? swapState?.preview : null;
+  const connection = swapping ? reviewed?.request : buildConnection();
   if (!connection) return;
   clearBuildPreview();
   const request = startRequest('sequence-edit');
 
   setBuildReady(false);
-  buildStatus.textContent = 'Inserting...';
+  buildStatus.textContent = swapping ? 'Checking and applying swap…' : 'Inserting...';
   buildStatus.className = 'build-status';
 
   try {
-    const res = await fetchCalculation('/insert_bond', {
+    const res = await fetchCalculation(swapping ? '/replace_monomer' : '/insert_bond', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify(connection),
@@ -1817,13 +1990,21 @@ buildConnect.addEventListener('click', async () => {
       buildStatus.className = 'build-status invalid';
       return;
     }
+    if (swapping && (data.result !== reviewed.result ||
+        !CabilnProject.sameContext(connection.context, data.context))) {
+      buildStatus.textContent = 'The replacement changed. Preview it again before applying.';
+      buildStatus.className = 'build-status invalid';
+      return;
+    }
     commitDocument(data.result, 'cabiln');
-    buildHint.textContent = 'Connection added — select a residue to continue building';
+    buildHint.textContent = swapping ? 'Monomer replaced — Undo restores the original peptide'
+      : 'Connection added — select a residue to continue building';
   } catch (e) {
     if (!request.current()) return;
-    buildStatus.textContent = 'Insert failed';
+    buildStatus.textContent = swapping ? 'Swap failed. Your sequence is unchanged; preview to retry.' : 'Insert failed';
     buildStatus.className = 'build-status invalid';
   } finally {
+    if (swapping && request.current()) setBuildReady(!!swapRequest());
     request.finish();
   }
 });

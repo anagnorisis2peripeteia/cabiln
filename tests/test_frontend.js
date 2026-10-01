@@ -915,6 +915,105 @@ test('preview waits for active drawings without cancelling them or accepting the
   }
 });
 
+function swapPage() {
+  const ui = page('builder.js');
+  ui.element('build-action').value = 'swap';
+  ui.element('cabiln-input').value = 'A-G';
+  ui.run(`
+    buildMode = true; buildLeftRIdx = 0;
+    buildLeft = {abbr: 'A', rgroups: [{slot: 2, used: true}], selectedSlot: null};
+    buildRight = {abbr: 'S', rgroups: [{slot: 2}], selectedSlot: null};
+    libLoaded = true; libraryVersion = 'old';
+    swapState = { source_echo: 'A-G', residue_idx: 0,
+      context: { project_version: 1, library_binding: 'library', canonical: {version: 1} },
+      requirements: [{slot: 2}], candidate: {abbr: 'S'}, candidates: [], mapping: {2: 2}, preview: null };
+    checkBuildValidity();
+  `);
+  return ui;
+}
+
+test('Swap requires a matching product preview and rechecks that exact proposal before applying', async () => {
+  for (const failure of [null, 'preview-context', 'apply-context', 'apply-product', 'apply-error']) {
+    const ui = swapPage();
+    const context = JSON.parse(ui.run('JSON.stringify(swapState.context)'));
+    const changed = {...context, library_binding: 'changed'};
+    assert.equal(ui.element('build-connect').disabled, true);
+    const previewing = ui.element('build-preview-button').click();
+    assert.equal(ui.requests[0].url, '/replace_monomer');
+    ui.requests[0].resolve({ result: 'S-G', context });
+    await new Promise(setImmediate);
+    ui.requests[1].resolve({...rendered, context: failure === 'preview-context' ? changed : context});
+    await previewing;
+    assert.equal(ui.element('cabiln-input').value, 'A-G');
+    if (failure === 'preview-context') {
+      assert.equal(ui.element('build-connect').disabled, true);
+      assert.match(ui.element('build-preview-status').textContent, /library changed/i);
+      continue;
+    }
+    assert.equal(ui.element('build-connect').disabled, false);
+    const applying = ui.element('build-connect').click();
+    assert.deepEqual(JSON.parse(ui.requests[2].options.body), JSON.parse(ui.requests[0].options.body));
+    ui.requests[2].resolve(failure === 'apply-error' ? {error: 'Library changed'} : {
+      result: failure === 'apply-product' ? 'K-G' : 'S-G',
+      context: failure === 'apply-context' ? changed : context,
+    });
+    await applying;
+    assert.equal(ui.element('cabiln-input').value, failure ? 'A-G' : 'S-G');
+    if (failure) {
+      assert.equal(ui.element('build-connect').disabled, true);
+      assert.equal(ui.element('build-preview-button').disabled, false);
+    }
+  }
+});
+
+test('cancelled Swap responses cannot restore a mapping, preview or apply an old source', async () => {
+  for (const stage of ['options', 'proposal', 'drawing', 'apply']) {
+    for (const action of ['edit', 'mode', 'close', 'library', 'mapping']) {
+      const ui = swapPage();
+      const context = JSON.parse(ui.run('JSON.stringify(swapState.context)'));
+      let pending;
+      if (stage === 'options') pending = ui.run('loadSwapOptions()');
+      else {
+        pending = ui.element('build-preview-button').click();
+        if (stage !== 'proposal') {
+          ui.requests[0].resolve({result:'S-G', context});
+          await new Promise(setImmediate);
+        }
+        if (stage === 'apply') {
+          ui.requests[1].resolve({...rendered, context});
+          await pending;
+          pending = ui.element('build-connect').click();
+        }
+      }
+      const response = ui.requests.at(-1);
+      if (action === 'edit') await ui.input('cabiln-input', 'K-G');
+      if (action === 'mode') {
+        ui.element('build-action').value = 'connect';
+        await ui.element('build-action').dispatchEvent({ type: 'change' });
+      }
+      if (action === 'close') await ui.element('build-close').click();
+      if (action === 'library') {
+        const refresh = ui.run('loadMonomers()');
+        ui.requests.at(-1).resolve([], true, 200, { 'X-Library-Version': 'new' });
+        await refresh;
+      }
+      if (action === 'mapping') {
+        // Choosing another occurrence cancels both candidate discovery and the proposal.
+        ui.run('loadBuildLeft("G", 1)');
+      }
+      const count = ui.requests.length;
+      response.resolve(stage === 'options' ? {source_echo:'A-G', residue_idx:0, requirements:[], candidates:[], context}
+        : stage === 'drawing' ? {...rendered, context} : {result:'S-G',context});
+      await pending;
+      assert.equal(ui.requests.length, count, `${stage}/${action}`);
+      assert.equal(ui.element('cabiln-input').value, action === 'edit' ? 'K-G' : 'A-G');
+      assert.equal(ui.element('build-connect').disabled, true);
+      assert.equal(ui.element('build-preview').hidden, true);
+      assert.equal(ui.run('swapState?.preview || null'), null);
+    }
+  }
+});
+
 test('cancelled SMILES conversion restores the button without replacing main input', async () => {
   const ui = page('builder.js');
   ui.element('btn-s2c').textContent = '→ %';

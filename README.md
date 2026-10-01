@@ -54,6 +54,16 @@ and press **Connect**. The selected sites light up in their previews. Existing
 tile insertion, right-click selection, and selection through the drawing remain
 available. The same controls work with newly registered monomers.
 
+In Build, choose **Swap monomer** and select a residue to replace. The library
+then shows monomers with compatible sites for all its existing connections.
+Review the mapping from each occupied R-group to a distinct replacement site;
+different site numbers are supported. **Preview** validates and draws the full
+product before enabling **Apply swap**. Existing neighbours, branches and ring
+closures stay connected, and Undo restores the original. Site renumbering can
+reformat the notation; the preview includes the proposed CABILN. Compatibility
+filtering checks attachment chemistry; full assembly can reject a candidate
+whose reaction pattern does not fit the complete structure.
+
 Sequence edits, connections, and conversions support **Undo** and **Redo**.
 Use Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z from the sequence input or builder controls.
 Changing the input format retains that format's draft and conversion warnings.

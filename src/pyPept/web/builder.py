@@ -13,8 +13,13 @@ from pyPept.peptide import Peptide
 from pyPept.sequence import Sequence
 
 from .drawing import _draw_mol
+from .cache import _rc_get, _rc_put, library_version
 from .execution import error_response
-from .schemas import _InsertBackboneReq, _InsertBondReq, _ValidateBondReq
+from .projects import checked_context, project_context
+from .schemas import (
+    _InsertBackboneReq, _InsertBondReq, _ValidateBondReq,
+    _ReplacementOptionsReq, _ReplaceMonomerReq,
+)
 
 router = APIRouter()
 
@@ -53,6 +58,65 @@ def insert_backbone(req: _InsertBackboneReq):
         document = PeptideDocument(req.cabiln)
         result = document.insert_backbone(document.select(req.after_idx), req.new_abbr)
         return {"result": result}
+    except Exception as exc:
+        return error_response(exc)
+
+
+def _replacement_catalog():
+    """Retain detected sites once per library revision, including concrete cap forms."""
+    version = library_version()
+    key = (version, "replacement_sites")
+    cached = _rc_get(key)
+    if cached is not None:
+        return cached
+    _, monomers = _load_sdf()
+    catalog = []
+    for abbr, molecule in monomers.items():
+        props = molecule.GetPropsAsDict()
+        sites = attachment_sites(molecule)
+        catalog.append({
+            "abbr": abbr, "name": props.get("m_name", ""),
+            "type": props.get("m_type", ""), "subtype": props.get("m_subtype", ""),
+            "chem_types": ",".join(f"{s['slot']}:{s['chem_type']}" for s in sites),
+            "sites": [{"slot": s["slot"], "chem_type": s["chem_type"]} for s in sites],
+        })
+    if library_version() == version:
+        _rc_put(key, catalog)
+    return catalog
+
+
+@router.post("/replacement_options")
+def replacement_options(req: _ReplacementOptionsReq):
+    try:
+        context = project_context()
+        document = PeptideDocument(req.cabiln)
+        selection = document.select(req.residue_idx)
+        requirements = document.replacement_requirements(selection)
+        current = document.peptide.occurrence(req.residue_idx).symbol
+        candidates = []
+        for monomer in _replacement_catalog():
+            if monomer["abbr"] == current:
+                continue
+            options = document.replacement_options(requirements, monomer["sites"])
+            if options is not None:
+                candidates.append({**monomer, **options})
+        return {"source_echo": req.cabiln, "residue_idx": req.residue_idx,
+                "requirements": requirements, "candidates": candidates,
+                "context": checked_context(context)}
+    except Exception as exc:
+        return error_response(exc)
+
+
+@router.post("/replace_monomer")
+def replace_monomer(req: _ReplaceMonomerReq):
+    try:
+        context = checked_context(req.context)
+        document = PeptideDocument(req.cabiln)
+        result = document.replace_monomer(
+            document.select(req.residue_idx), req.new_abbr, req.slot_map
+        )
+        return {"result": result, "source_echo": req.cabiln,
+                "context": checked_context(context)}
     except Exception as exc:
         return error_response(exc)
 

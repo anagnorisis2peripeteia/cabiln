@@ -81,6 +81,17 @@ class _InsertBackboneReq(BaseModel):
     new_abbr: ExistingSymbol
 
 
+class _ReplacementOptionsReq(BaseModel):
+    cabiln: Notation
+    residue_idx: int = Field(ge=0)
+
+
+class _ReplaceMonomerReq(_ReplacementOptionsReq):
+    new_abbr: ExistingSymbol
+    slot_map: dict[Slot, Slot]
+    context: dict
+
+
 class _SmilesToCabilnReq(BaseModel):
     smiles: Notation
     notation: Literal["percent", "bracket"] = "percent"

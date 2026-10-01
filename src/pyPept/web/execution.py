@@ -32,6 +32,7 @@ CHEMISTRY_ROUTES = frozenset({
         "/render", "/render_smiles", "/render_reference", "/render_mol",
         "/verify", "/convert_notation", "/smiles_to_cabiln", "/to_cabiln",
         "/preview_monomer", "/insert_bond", "/insert_backbone", "/validate_bond",
+        "/replacement_options", "/replace_monomer",
         "/prepare_project", "/validate_project",
     )
 } | {("GET", path) for path in (

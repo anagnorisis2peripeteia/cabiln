@@ -45,6 +45,7 @@
 <section id="help-panel" class="help-panel" aria-labelledby="help-title" hidden>
   <div class="help-heading"><h2 id="help-title">Working with CABILN</h2><button type="button" id="help-close" class="panel-close" aria-label="Close help">✕</button></div>
   <p>Type a sequence, or choose SMILES, BILN or HELM and convert it. Open Build, select a residue, then choose Use in the library and choose free numbered sites. Preview shows the proposed molecule; Connect applies it. Nested brackets keep their own attachment parent. Undo and Redo restore sequence edits.</p>
+  <p>To replace a residue, choose Swap monomer in Build. The library filters replacements against every existing connection. Review the numbered site mapping and preview the full product, then Apply swap. Site numbers can differ; the preview shows any reformatted notation. Undo restores the original.</p>
   <p>Keep layout preserves your grouping. Canonical exports order the resolved monomer graph under a recorded convention and library binding. Imported structures can include inferred stereochemistry or preserved synthetic regions; open Import quality for details. Valid synthetic sites remain editable.</p>
   <p>Save project downloads your source, notation drafts, original reference and conversion details. Opening checks the definitions and reaction rules before loading. PNG and MOL export the current drawing and molecule.</p>
   <p>Your inputs and uploaded structures are sent to the server hosting this page for chemistry processing. Browser drafts stay in this browser's local storage; project files download to your device. Clearing a draft removes that browser copy only. Avoid putting private structures in public feedback.</p>
@@ -94,6 +95,12 @@
 <section id="build-panel" aria-labelledby="build-title">
   <div class="build-header">
     <h2 class="panel-title" id="build-title">Build by Connection</h2>
+    <label class="build-action-label">Action
+      <select id="build-action" class="hbtn" aria-label="Build action">
+        <option value="connect">Connect</option>
+        <option value="swap">Swap monomer</option>
+      </select>
+    </label>
     <span class="build-hint" id="build-hint" role="status" aria-live="polite">Select a residue, then choose Use beside a library monomer</span>
     <button type="button" id="build-close" class="panel-close" title="Close Build" aria-label="Close Build panel">✕</button>
   </div>
@@ -123,10 +130,15 @@
       <p class="site-detail" id="build-right-site" hidden></p>
     </div>
   </div>
+  <section id="build-swap-mapping" hidden aria-labelledby="build-swap-title">
+    <h3 class="panel-title" id="build-swap-title">Keep these connections</h3>
+    <p class="site-explanation">Each connection needs its own compatible replacement site. Review the mapping, then preview the complete product before applying.</p>
+    <div id="build-swap-sites"></div>
+  </section>
   <section id="build-preview" aria-label="Connection preview" aria-busy="false" hidden>
     <div class="build-header">
-      <h3 class="panel-title">Connection preview</h3>
-      <span class="build-hint">Not applied · Connect adds it to your sequence</span>
+      <h3 class="panel-title">Product preview</h3>
+      <span class="build-hint">Not applied · Your sequence is unchanged</span>
       <button type="button" class="box-clear-btn" id="build-preview-close">Hide preview</button>
     </div>
     <p id="build-preview-status" role="status" aria-live="polite" aria-atomic="true"></p>

@@ -27,6 +27,56 @@ def canonical(notation):
     return Chem.MolToSmiles(Molecule(Sequence(notation)).get_molecule(fmt="ROMol"))
 
 
+@pytest.mark.parametrize('mode', ['local', 'process'])
+def test_replacement_routes_filter_all_connections_and_bind_apply_to_the_library(mode):
+    from pyPept.web.execution import CHEMISTRY_ROUTES
+
+    assert {('POST', '/replacement_options'), ('POST', '/replace_monomer')} <= CHEMISTRY_ROUTES
+    with TestClient(create_app(execution_mode=mode, observability=False)) as client:
+        source = 'ac-K.G(4,2)-am'
+        options = client.post('/replacement_options', json={'cabiln': source, 'residue_idx': 1})
+        assert options.status_code == 200, options.text
+        data = options.json()
+        assert data['source_echo'] == source and data['residue_idx'] == 1
+        assert {r['slot'] for r in data['requirements']} == {1, 2, 4}
+        candidates = {item['abbr']: item for item in data['candidates']}
+        assert 'K' not in candidates and 'A' not in candidates
+        body = {'cabiln': source, 'residue_idx': 1, 'new_abbr': 'Orn',
+                'slot_map': candidates['Orn']['mapping'], 'context': data['context']}
+        result = client.post('/replace_monomer', json=body)
+        assert result.status_code == 200, result.text
+        assert result.json()['result'] == 'ac-Orn.G(4,2)-am'
+        assert result.json()['context'] == data['context']
+        for invalid, status in [({'slot_map': {'1': 1, '2': 2}}, 400),
+                                ({'context': {}}, 400), ({'residue_idx': 999}, 400),
+                                ({'slot_map': {'0': 1}}, 422)]:
+            rejected = client.post('/replace_monomer', json={**body, **invalid})
+            assert rejected.status_code == status, rejected.text
+            assert 'result' not in rejected.json()
+        assert client.get('/ready').status_code == 200
+
+
+def test_replacement_response_rejects_a_library_change_during_calculation(client, monkeypatch):
+    import pyPept.web.builder as builder
+
+    original = builder.PeptideDocument.replace_monomer
+    options = client.post('/replacement_options', json={'cabiln': 'A-G', 'residue_idx': 0}).json()
+
+    def changing(*args, **kwargs):
+        result = original(*args, **kwargs)
+        monkeypatch.setattr('pyPept.web.projects.project_context', lambda: {})
+        return result
+
+    monkeypatch.setattr(builder.PeptideDocument, 'replace_monomer', changing)
+    response = client.post('/replace_monomer', json={
+        'cabiln': 'A-G', 'residue_idx': 0, 'new_abbr': 'S', 'slot_map': {'2': 2},
+        'context': options['context'],
+    })
+    assert response.status_code == 400
+    assert 'library changed' in response.json()['error']
+    assert 'result' not in response.json()
+
+
 @pytest.mark.fuzz
 @pytest.mark.parametrize("mode", ["local", "process"])
 @fuzz_settings(examples=10)

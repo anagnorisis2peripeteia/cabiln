@@ -601,6 +601,11 @@
     align-items: stretch;
     min-height: 180px;
   }
+  .build-action-label { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+  #build-swap-mapping { grid-column: 1; grid-row: 3; margin-top: 10px; }
+  .swap-site { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 6px 0; font-size: 12px; }
+  .swap-site small { color: var(--muted); }
+  #build-panel.swapping .rgroup-btn.used { opacity: 1; text-decoration: none; }
   .build-box {
     flex: 1;
     background: var(--surface-inset);

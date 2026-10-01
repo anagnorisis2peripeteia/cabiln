@@ -7,12 +7,13 @@ connections before assembling the product. No second chemical graph is kept.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from hashlib import sha256
 
 from pyPept.molecule import Molecule
+from pyPept.attachments import reaction_for_types
 from pyPept.notation import normalize_legacy_brackets, supports_bracket_token
-from pyPept.peptide import Connection, Endpoint, Peptide
+from pyPept.peptide import Connection, Endpoint, Peptide, serialize
 from pyPept.sequence import Sequence
 from pyPept.source import SourceText, Span, join, origin_span
 
@@ -92,6 +93,171 @@ class PeptideDocument:
             raise ValueError(f"Residue {index} has no R{slot} attachment") from error
         if self.peptide.connection_at(endpoint) is not None:
             raise ValueError(f"Residue {index} R{slot} is already bonded")
+
+    def replacement_requirements(self, selection: Selection):
+        """Describe every occupied site, including branches and ring closures."""
+        index = self._index(selection)
+        requirements = []
+        for edge in self.peptide.connections:
+            for own, other in (edge.endpoints, tuple(reversed(edge.endpoints))):
+                if own.occurrence_id != index:
+                    continue
+                requirements.append({
+                    "slot": own.slot,
+                    "chem_type": self.peptide.site(own).chem_type,
+                    "partner_idx": other.occurrence_id,
+                    "partner_abbr": self.peptide.occurrence(other.occurrence_id).symbol,
+                    "partner_slot": other.slot,
+                    "partner_chem_type": self.peptide.site(other).chem_type,
+                    "internal": other.occurrence_id == index,
+                })
+        return sorted(requirements, key=lambda item: item["slot"])
+
+    @staticmethod
+    def replacement_options(requirements, sites):
+        """Find distinct compatible sites for every existing connection.
+
+        Options describe detected chemistry, not a guarantee that a reaction's
+        structural pattern will assemble. Applying the chosen mapping validates
+        the complete product. Equal slot numbers and chemistry are preferred;
+        the caller still presents the mapping for review.
+        """
+        types = {site["slot"]: site["chem_type"] for site in sites}
+        choices = {
+            need["slot"]: [site["slot"] for site in sorted(
+                sites,
+                key=lambda site: (
+                    site["slot"] != need["slot"],
+                    site["chem_type"] != need["chem_type"], site["slot"],
+                ),
+            ) if (
+                any(other != site["slot"] and reaction_for_types(site["chem_type"], chemistry)
+                    for other, chemistry in types.items())
+                if need.get("internal")
+                else reaction_for_types(site["chem_type"], need["partner_chem_type"])
+            )]
+            for need in requirements
+        }
+
+        def match(fixed):
+            owners = {target: slot for slot, target in fixed.items()}
+
+            def assign(slot, visited):
+                for target in choices[slot]:
+                    if target in visited or owners.get(target) in fixed:
+                        continue
+                    visited.add(target)
+                    if target not in owners or assign(owners[target], visited):
+                        owners[target] = slot
+                        return True
+                return False
+
+            remaining = sorted(set(choices) - set(fixed), key=lambda s: len(choices[s]))
+            if all(assign(slot, set()) for slot in remaining):
+                return {slot: target for target, slot in owners.items()}
+            return None
+
+        internal = [(need["slot"], need["partner_slot"]) for need in requirements
+                    if need.get("internal") and need["slot"] < need["partner_slot"]]
+
+        def match_internal(pairs, fixed):
+            # A closure wholly inside the replaced monomer depends on BOTH new
+            # sites. Fix compatible pairs before matching its external bonds.
+            if not pairs:
+                return match(fixed)
+            left, right = pairs[0]
+            for a in choices[left]:
+                for b in choices[right]:
+                    if (a == b or a in fixed.values() or b in fixed.values()
+                            or not reaction_for_types(types[a], types[b])):
+                        continue
+                    result = match_internal(pairs[1:], {**fixed, left: a, right: b})
+                    if result is not None:
+                        return result
+            return None
+
+        mapping = match_internal(internal, {})
+        if mapping is None:
+            return None
+        return {"choices": choices, "mapping": mapping}
+
+    def replace_monomer(self, selection: Selection, symbol: str, mapping: dict[int, int]) -> str:
+        """Replace one definition, preserving all neighbours and explicit site choices."""
+        index = self._index(selection)
+        replacement = Peptide.from_sequence(Sequence(symbol))
+        if len(replacement.occurrences) != 1 or replacement.connections:
+            raise EditError("Choose a single replacement monomer")
+        node = replacement.occurrences[0]
+        sites = [{"slot": s.slot, "chem_type": s.chem_type} for s in node.sites]
+        requirements = self.replacement_requirements(selection)
+        options = self.replacement_options(requirements, sites)
+        if options is None:
+            raise EditError("This monomer cannot preserve all existing connections")
+        if set(mapping) != set(options["choices"]):
+            raise EditError("Map every occupied R-group, and only occupied R-groups")
+        if len(set(mapping.values())) != len(mapping):
+            raise EditError("Each existing connection needs a different replacement R-group")
+        for old, new in mapping.items():
+            if new not in options["choices"][old]:
+                raise EditError(f"Replacement R{new} is incompatible with the neighbour at R{old}")
+        types = {site.slot: site.chem_type for site in node.sites}
+        for need in requirements:
+            if need["internal"] and not reaction_for_types(
+                types[mapping[need["slot"]]], types[mapping[need["partner_slot"]]]
+            ):
+                raise EditError("The mapped sites cannot close the replacement monomer's internal connection")
+
+        def endpoint(site):
+            return Endpoint(index, mapping[site.slot]) if site.occurrence_id == index else site
+
+        nodes = tuple(
+            replace(node, id=index, token=node.definition.token)
+            if old.id == index else old
+            for old in self.peptide.occurrences
+        )
+        expected = Peptide(nodes, tuple(
+            Connection(endpoint(edge.left), endpoint(edge.right), edge.label)
+            for edge in self.peptide.connections
+        ))
+
+        # The common same-number swap preserves spelling, brackets and spacing.
+        # Renumbered sites are written from the graph, never by guessing which
+        # parenthesised numbers in nested notation refer to this occurrence.
+        text = None
+        if all(old == new for old, new in mapping.items()):
+            span = self.sequence.s_sources[index].token
+            candidate = self.source[:span.start] + symbol + self.source[span.end:]
+            try:
+                parsed = Peptide.from_sequence(Sequence(candidate, track_source=True))
+                if self._same_replacement(parsed, expected):
+                    text = candidate
+            except ValueError:
+                pass  # A library symbol can require an explicit notation segment.
+        if text is None:
+            notation = "bracket" if self.peptide.layout.groups else "percent"
+            emitted = serialize(replace(expected, occurrences=tuple(
+                replace(item, token=item.definition.token) for item in expected.occurrences
+            )), notation)
+            text = emitted.text
+            parsed = Peptide.from_sequence(Sequence(text, track_source=True), emitted.occurrence_order)
+            if not self._same_replacement(parsed, expected):
+                raise EditError("Replacement notation would change another monomer or connection")
+        # Validate both the requested graph and its emitted representation.
+        from pyPept.structure import compare_structures
+
+        intended = Molecule(expected, depiction=None).get_molecule("ROMol")
+        actual = Molecule(parsed, depiction=None).get_molecule("ROMol")
+        if not compare_structures(intended, actual).exact:
+            raise EditError("Replacement notation would change the assembled product")
+        return text
+
+    @staticmethod
+    def _same_replacement(actual, expected):
+        return (
+            {node.id: node.definition for node in actual.occurrences}
+            == {node.id: node.definition for node in expected.occurrences}
+            and set(actual.connections) == set(expected.connections)
+        )
 
     @staticmethod
     def _new_definition(symbol: str, *slots: int):
