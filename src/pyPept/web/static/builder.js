@@ -936,6 +936,8 @@ async function doRenderForeign(txt) {
   clearComparison();
   const { w, h } = canvasSize(renderCanvas);
   try {
+    if (requests.has('library', 'reactions') &&
+        !await request.waitFor('library', 'reactions')) return;
     const res = await postCalculation('/render_reference', {
       input: txt, input_format: mode, width: w, height: h,
     }, request.signal);
@@ -1006,6 +1008,8 @@ async function doRenderCabiln(seq) {
   if (build.filters.building && !sameDocument) build.clear();
   const view = { ...canvasSize(renderCanvas), seed: drawing.seed };
   try {
+    if (requests.has('library', 'reactions') &&
+        !await request.waitFor('library', 'reactions')) return;
     const res = await postCalculation('/render', {
       cabiln: seq, width: view.w, height: view.h, seed: view.seed,
     }, request.signal);

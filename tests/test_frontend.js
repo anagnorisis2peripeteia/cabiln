@@ -1688,6 +1688,41 @@ test('a busy calculation retries after Retry-After and uses the same current doc
   assert.equal(ui.element('cabiln-input').className, 'ok');
 });
 
+test('drawing during Build startup survives library admission retries', async () => {
+  for (const [mode, source, endpoint, data] of [
+    ['cabiln', 'C-A-C', '/render', rendered],
+    ['smiles', 'NCC(=O)O', '/render_reference', glycineDrawing],
+  ]) {
+    const ui = page('builder.js');
+    await ui.element('btn-build').click();
+    latestRequest(ui, '/monomers').resolve([]);
+    await flush();
+    ui.element('notation-select').value = mode;
+    await ui.input('cabiln-input', source);
+    await ui.timers();
+    const rejected = new Set();
+    for (let attempt = 0; attempt < 3; attempt++) {
+      // Reproduce recovery followed by the reaction request occupying the
+      // worker during the drawing's final retry, as observed in browser CI.
+      for (const request of ui.requests.filter(request => request.url === endpoint && !rejected.has(request))) {
+        request.resolve({ error: 'Chemistry capacity is busy; retry shortly' }, false, 503, { 'Retry-After': '1' });
+        rejected.add(request);
+      }
+      latestRequest(ui, '/reactions').resolve(attempt < 2 ? { error: 'Busy' } : [],
+        attempt === 2, attempt < 2 ? 503 : 200, { 'Retry-After': '1' });
+      await flush();
+      await ui.timers();
+    }
+    await flush();
+    for (const request of ui.requests.filter(request => request.url === endpoint && !rejected.has(request))) {
+      request.resolve(data);
+    }
+    await flush();
+    assert.equal(ui.element('cabiln-input').className, 'ok', mode);
+    assert.equal(ui.element('cabiln-input').value, source);
+  }
+});
+
 test('editing during a busy retry cancels the wait without submitting obsolete chemistry', async () => {
   const ui = page('builder.js');
   ui.element('cabiln-input').value = 'A-G';
@@ -1699,6 +1734,23 @@ test('editing during a busy retry cancels the wait without submitting obsolete c
   await ui.timers();
   assert.equal(ui.requests.filter(request => request.url === '/render').length, 1);
   assert.equal(ui.element('cabiln-input').value, '');
+});
+
+test('clearing a drawing waiting for library metadata cancels its submission', async () => {
+  for (const [mode, source] of [['cabiln', 'C-A-C'], ['smiles', 'NCC(=O)O']]) {
+    const ui = page('builder.js');
+    await ui.element('btn-build').click();
+    ui.element('notation-select').value = mode;
+    await ui.input('cabiln-input', source);
+    await ui.timers();
+    await ui.input('cabiln-input', '');
+    latestRequest(ui, '/monomers').resolve([]);
+    await flush();
+    latestRequest(ui, '/reactions').resolve([]);
+    await flush();
+    assert.deepEqual(ui.requests.map(request => request.url), ['/monomers', '/reactions']);
+    assert.equal(ui.element('cabiln-input').value, '');
+  }
 });
 
 test('persistent overload is visible after two retries and other errors are never retried', async () => {
