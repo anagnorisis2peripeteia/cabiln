@@ -46,12 +46,47 @@ Two additional diagnostics answer different questions:
 | `python tools/find_duplicates.py` | SDF template/core duplicates and case-insensitive symbol collisions |
 
 Both print reports without changing the library. Duplicate structures can be
-intentional; name/CIP heuristics need chemical review. They do not authorize
-merging definitions or changing stereochemistry.
+intentional. Review the name/CIP heuristics and chemistry before merging
+definitions or changing stereochemistry.
 
 `release_manifest.py` records the installed wheel and chemistry bindings during
 the Docker build. `release_smoke.py` checks a running release image. See the
 [deployment instructions](../docs/deployment.md) for their use.
+
+## Generated tests
+
+Generated tests use Hypothesis for notation, chemistry and library changes, and
+fast-check for UI histories and browser interactions. From the repository root,
+after installing `[dev,web]`, run the bounded campaign:
+
+```bash
+CABILN_FUZZ_ARTIFACTS=/tmp/cabiln-fuzz/python python -m pytest -m fuzz \
+  --hypothesis-show-statistics --timeout=300 --timeout-method=thread
+npm ci --prefix tests/browser
+CABILN_FUZZ_ARTIFACTS=/tmp/cabiln-fuzz/frontend npm run fuzz:frontend --prefix tests/browser
+(cd tests/browser && npx playwright install chromium)
+CABILN_FUZZ_ARTIFACTS=/tmp/cabiln-fuzz/browser npm run fuzz:browser --prefix tests/browser
+```
+
+Set `CABILN_FUZZ_PROFILE=deep` for longer campaigns; use `--timeout=1200` for the
+Python run. CI runs bounded campaigns on pushes and pull requests, and the deep
+profile nightly. Browser servers and library changes use temporary local copies.
+These campaigns sample supported feature combinations; they do not exhaust the
+possible peptides or editing histories.
+
+Failures retain reduced inputs, seeds, dependency versions and replay information.
+Python artifacts include source/library hashes, Hypothesis's example database
+and reproduction decorator. Replay with the recorded versions and
+`--hypothesis-seed=<seed>`, or apply the reported reproduction decorator to the
+owning test. Select the recorded fast-check property with `CABILN_FUZZ_CASE`, then
+use `CABILN_FUZZ_SEED`, `CABILN_FUZZ_PATH` and, for command histories,
+`CABILN_FUZZ_REPLAY_PATH` to replay its failure. `CABILN_FUZZ_SCHEDULE` accepts the
+saved task order for exact replay of a frontend scheduling failure.
+Observation counters include shrinking and repeated examples; they do not count
+unique peptides. A watchdog termination preserves
+the latest eight Python observations in `active.json`, alongside the captured CI log.
+The [initial campaign record](benchmarks/results/fuzz-20260930.json) documents
+generated cases, independent fault controls and coverage limits.
 
 ## Historical scripts
 
@@ -65,7 +100,7 @@ git show 8721900:tools/add_monomers_batch6.py
 
 The former `validate_monomers.py` and `full_library_roundtrip.py` diagnostics are
 superseded by the versioned library audit above. The README check is now
-`check_examples.py`. Past review reports retain their original paths and counts.
+`check_examples.py`. Past review reports are indexed in [the archive](../docs/history.md).
 
 The root `bench_cyclicpepedia.py` survey depended on removed normalization
 helpers. Its source remains in that commit; `cyclicpepedia_structure.xlsx` and

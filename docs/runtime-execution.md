@@ -84,7 +84,7 @@ administrative parsing cannot echo structures. Expected input failures retain
 their useful HTTP validation messages. Keep raw URL access logging disabled
 when supplying a different ASGI runner.
 
-## Local evidence and required Linux check
+## Verification
 
 On the development macOS host, one standalone run on 2026-09-29 measured startup
 validation at 1.268 s and a warmed child at 2.758 s. Parent peak RSS was
@@ -103,5 +103,7 @@ overload, cancellation, crash recovery, HTTP disconnect, active shutdown,
 health during chemistry, byte bounds, readiness and safe logs. Its Linux-only
 test checks `/proc` for the actual 1 GiB hard address-space limit, renders real
 chemistry under that limit, and verifies that an insufficient limit cannot
-start. Run that test in the locked Linux release environment before rollout;
-macOS cannot establish Linux enforcement or hosted capacity.
+start. The release browser job runs these checks against the installed wheel
+and pinned Linux dependencies. The measurements above describe the dated macOS
+run; use each commit's CI result for Linux verification and hosted measurements
+for service capacity.

@@ -4,19 +4,20 @@ These tests drive the local application through its visible controls and actual
 HTTP chemistry. Every server uses a temporary monomer library. Registration
 never changes packaged data. Tests close their servers and remove the copies.
 
-Install the project's Python `[dev,web]` dependencies, then run from this directory:
+Install the project's Python `[dev,web]` dependencies and Node 20 or newer,
+then run from this directory. The command below exercises the process executor
+used in production; omit `CABILN_EXECUTION=process` for local thread-pool mode:
 
 ```sh
 npm ci
 npx playwright install chromium
-npm test
+CABILN_EXECUTION=process npm test
 ```
 
 The suite covers building chains, caps, branches, disulfides, cycles and
-scaffolds; connection previews and selected attachment sites; panels; tile
+scaffolds; connection/swap previews, site mappings and attachment highlights; panels; tile
 families; chip/SVG selection; insertion; nested atom highlights; input formats;
-verification/uploads; registration; unknown-region
-editing; canvas controls; exports; and delayed/failed responses.
+verification/uploads; registration; project Save/Open; unknown-region editing; canvas controls; exports; and delayed/failed responses.
 
 The UX journeys also cover retained drawings and zoom, disabled stale selections,
 keyboard building, attachment highlights, Undo/Redo, format drafts, recovery,
@@ -44,7 +45,9 @@ feedback, with no machine-specific speed threshold.
 `CABILN_PYTHON` selects an interpreter. Otherwise the repository's `.venv` is used
 when available, falling back to `python3`. `CABILN_APP_ROOT` selects another
 checkout for baseline comparisons. Explicit `PYTHONPATH` keeps that source
-selection independent of editable installations.
+selection independent of editable installations. `CABILN_BROWSER_INSTALLED=1`
+uses the installed wheel with Python isolation; release CI sets this and runs
+with the production worker memory limit.
 
 `CABILN_BROWSER_CHANNEL=chrome` uses installed Chrome. Without it, Playwright's
 Chromium is used. The viewport is fixed at 1440 × 1000, with one worker.

@@ -1,11 +1,14 @@
-# Code layout
+# Architecture
 
-The builder grows from the monomer library. The chemistry package can also be
-installed without the web dependencies.
+Monomer definitions supply registration, recognition, library tiles, attachment
+choices and assembly. Each peptide contains distinct occurrences of those
+definitions. Connections join numbered sites; atom ownership connects the
+assembled molecule to editing and highlighting. [Domain terms](../CONTEXT.md)
+defines this vocabulary.
 
-The [streamlining plan](streamlining-plan.md) records the preservation contract
-and migration decisions. [Validation evidence](streamlining-validation.md)
-records the GUI comparisons, compatibility probes and integrated checks.
+The chemistry package can be installed without the web dependencies.
+
+## Modules
 
 ```mermaid
 flowchart LR
@@ -42,6 +45,7 @@ flowchart LR
 | `pyPept.notation` | Share library-free bracket grammar, legacy normalization, slot mapping and chain emission |
 | `pyPept.notation_lowering` | Lower bracket scopes, inline attachments and terminal links into explicit chains while retaining source records |
 | `pyPept.notation_conversion` | Preserve the historical library-free BILN/CABILN text conversions, including unsupported-text pass-through |
+| `pyPept.canonical` | Label resolved graphs and write versioned canonical bracket/percent notation |
 | `pyPept.synthetic` | Protect inline SMILES during parsing and construct local monomer definitions in a detached table |
 | `pyPept.pdb_names` | Assign PDB residue and atom names independently of notation parsing |
 | `pyPept.inputs` | Interpret formats, retain normalized source, reuse parsing/assembly within an operation and verify formatting |
@@ -75,213 +79,137 @@ flowchart LR
 | `pyPept.web.notation` | Preserve historical imports of the core input/formatting functions |
 | `pyPept.web.static` | HTML, CSS, JavaScript, and example sequences |
 
-`web/static/document.js` owns editable source, evidence, bounded Undo/Redo and
-notation drafts. `builder.js` passes document transitions to it and updates the
-controls through one display function. Request lifetimes, storage timers and
-the last successful drawing remain separate because they outlive different edits.
-`drawing.js` keeps the accepted source, depiction, MOL atom order and layout
-together. Export eligibility and notation reuse derive from its readiness; an
-edit retains the old depiction while invalidating its use in new operations.
+## Parsing, editing and assembly
 
-`build.js` owns the connection/replacement session: selected occurrences and
-sites, validation, insertion, candidate mappings and product previews. The page
-supplies document access and commits, and receives library-filter facts and
-selection indices. It cannot assign the session's internal state. Preview and
-Apply availability derive from the current selection, validation and requests;
-Swap also requires the reviewed preview. Closing or editing cancels that session.
+`Sequence` parses notation, resolves definitions and validates connections.
+`Peptide.from_sequence` adapts it to the immutable occurrence/connection model
+used by `Molecule`. Assembly labels each attachment endpoint explicitly; those
+labels also identify unused sites during leaving-group restoration. Labels do
+not encode occurrence or slot numbers.
 
-`residues.js` owns the accepted drawing's atom maps, residue tabs, group highlights
-and backbone insertion positions. The builder passes drawing data and selection
-policy through its view interface. Clearing or replacing a drawing resets these
-derived facts together. Marker indexes avoid scanning every marker for each tab.
+`notation` parses complete recursive scopes and validates crosslink declarations
+before lowering. `notation_lowering` retains original source ownership while
+expanding brackets, caps and terminal links. Inline SMILES is protected during
+this processing. Library-free legacy text conversions preserve unsupported
+input unchanged.
 
-`library.js` owns discovery, library revisions, reaction filtering and hover
-previews. The builder supplies current connection/swap filter facts and receives
-monomer choices and library-change notifications. It does not manage the palette's
-cache or DOM. `requests.js` owns request lifetimes, cancellable waits, calculation
-POST encoding and response errors. Builder and registration use the same helpers;
-registration writes use a single fetch without calculation retries. `ui.js`
-contains shared mouse/touch/keyboard viewport controls, nonmodal panel lifetimes,
-loading/retry presentation, structured drawing messages and HTML escaping.
-Panels share Escape dismissal and focus return while remaining independently
-openable. These helpers own presentation, never peptide or chemistry state.
+`PeptideDocument` edits source locations, reparses, and checks the retained
+definitions and requested connection change before assembly. Every occurrence
+has its own identity, including repeated monomers, generated pendant chains
+and synthetic fragments. Atom indices, occurrence identities and site numbers
+serve different purposes.
 
-Imports of attachment lookup, text conversion and PDB naming functions from
-`pyPept.sequence` remain supported. Internal callers use the owning modules;
-attachment lookups live in `pyPept.attachments`. Synthetic definitions share
-one record-construction path, both legacy hub spellings share one detachment path,
-and parsing/PDB naming share selection of the monomer library resource.
+Serialization returns output occurrence order and layout. The renderer uses
+that layout for explicit segments, nested groups and link tabs. Assembly's atom
+owners determine which atoms each tab highlights. Reaction steps preserve those
+owners in the actual reactant order.
 
-`tools/live_renderer.py` is a compatibility launcher. Old conversion imports
-continue to resolve, but new library callers should import `pyPept.smiles`.
+`inputs.format_source` verifies occurrences, definitions, connections and the
+assembled product after formatting. Canonical export uses the shared graph
+labeler in `canonical.py`; ordinary editing preserves source grouping. See
+[notation](notation.md) and [canonical notation](canonical-notation.md).
 
-The [design decision](architecture-rework-design.md) compares a syntax-tree rewrite
-with the selected shared model. The [decomposition contract](decomposition.md) describes the
-recognition path. The recognizer uses the library's actual attachment slots and
-the same leaving-group restoration and effective chemistry as assembly. It
-does not select one backbone before accounting for the rest of the molecule.
+Display inputs prefer peptide notation for ambiguous bare text; reference
+inputs prefer SMILES. An explicit selector overrides detection. The legacy
+`Converter.get_biln()` returns CABILN, while `Converter(biln=...)` accepts BILN.
+Callers must retain that format distinction.
 
-HTTP chemistry handlers stay ordinary synchronous functions. Trusted local mode
-runs them in FastAPI's thread pool. Production sends the same validated HTTP
-operations to a fixed pool of child processes. That seam owns admission,
-payload bounds, deadlines, disconnect cancellation and worker replacement.
-It has no unbounded job queue. Static assets and liveness remain in the parent;
-authenticated library writes retain their existing lock/atomic replacement.
-Render caches have both entry and retained-byte limits, use locks, and include
-the library file version in their keys. Monomer depictions use molecule copies.
+## Library and recognition
 
-The browser keeps recognition evidence with the exact document history entry.
-Editing or changing the library binding invalidates it; Undo restores the old
-entry. Formatting that reorders occurrences clears import assignments when no
-source correspondence is available. Project files retain original references,
-including MOL bytes, and resolve definitions/connections before accepting a
-changed library. Presentation never guesses scientific provenance from a name.
+`CABILN_MONOMER_LIBRARY` selects an existing SDF for the CLI, palette, parser,
+recognizer and assembler. Normalized tables are cached by SDF/CSV revision;
+parsers receive detached molecule and metadata copies. Replacement during a read
+causes a retry. Alias-only changes do not require structural pattern compilation.
 
-`CABILN_MONOMER_LIBRARY` selects an existing SDF for default library consumers.
-The CLI, palette, converter, parser and assembly use that same selection.
-File changes invalidate cached discovery and conversion data. New monomer names
-do not require new tile components, switch statements, or editor cases.
+Registration and bulk import share record construction. Registration requires
+complete slot metadata and atomically appends under a lock. Bulk import retains
+older sparse leaving groups and declarations; an absent leaving group means
+implicit hydrogen. Explicit `rebuild=True` reactivates amino acids and discards
+their leaving-group overrides. Preserve that compatibility when changing imports.
 
-CLI, HTTP registration and CSV export share record construction. Registration
-requires complete, known slot metadata. Bulk import retains older sparse leaving
-groups and declarations; an absent leaving group still means implicit hydrogen.
-Unchanged CSV builds persist chemistry declarations, arbitrary numbered slots
-and author columns. Explicit `rebuild=True` retains the older reactivation policy
-for amino acids, including discarding leaving-group overrides. Atomic append
-and bulk replacement remain distinct operations.
+The recognizer compiles states from actual library sites, leaving groups and
+effective chemistry. It searches ownership across the whole molecule and
+independently verifies assembled candidates. Cheap proposal search and ownership
+search have separate budgets; both share connection and unknown-region rules.
+Candidates and verification decisions are reused within one active proposal.
+See [recognition](decomposition.md) for result fields, ambiguity and limits.
 
-`Peptide` identifies each occurrence independently of its symbol or display order.
-Parsed notation and imported molecular structures both produce this model.
-Its serializer returns the output occurrence order directly. Formatting never
-needs to search molecular isomorphisms to rediscover which occurrence moved.
+## Browser state
 
-`Sequence` remains the public parser and a compatible input to `Molecule`.
-Assembly consumes resolved `Peptide` definitions and `Endpoint` connections;
-Sequence callers adapt through `Peptide.from_sequence`. Temporary reaction labels
-come from an explicit endpoint map and do not encode slot or occurrence numbers.
-The same labels identify leaving groups during restoration.
-Source tracking records original occurrences, including generated pendant chains
-and synthetic tokens. `PeptideDocument` edits those locations, reparses, and checks
-retained definitions and the exact requested change before assembling that peptide.
-An occurrence's atom index, its attachment number, and its identity are different
-things, even when two attachment slots share one anchor atom.
+| File in `web/static/` | State and behaviour |
+| --- | --- |
+| `document.js` | Editable source, recognition evidence, Undo/Redo and notation drafts |
+| `builder.js` | Page wiring, document transitions, rendering, conversion and project controls |
+| `drawing.js` | Accepted source, SVG, MOL atom order, layout and export eligibility |
+| `build.js` | Selected residues/sites, connection validation, insertion, swap mappings and previews |
+| `residues.js` | Atom maps, residue/group tabs, selection highlights and insertion positions |
+| `library.js` | Discovery, library revisions, filtering and hover previews |
+| `requests.js` | Cancellation, current-request checks, waits, calculation retries and response errors |
+| `project.js` | Saved-project format and document/context validation helpers |
+| `ui.js` | Viewport controls, panels, loading/retry presentation and status details |
 
-`notation` consumes complete bracket entries before legacy normalization can move
-them. Parsed entries retain source slices and distinguish sequential continuation
-from an arm that leaves the outer pointer unchanged. A shared declaration check
-enforces inverse crosslink slots across inline, bracket, and arm spellings before
-terminal inference. Library-free text adapters preserve unsupported input rather
-than deleting unknown annotations. The [normalization review](notation-normalization-review.md)
-records the connection rules and regression cases.
+Editing invalidates selections, comparisons and exports while retaining the last
+valid drawing. Free typing has a 180 ms delay; explicit actions render
+immediately. Only the current response can supply a new drawing and atom map.
+Main drawing requests wait for library metadata already loading. Cancellation
+also ends that wait, so superseded input cannot submit later.
 
-The source layout records every explicit segment, bracket delimiter, nested arm
-and crosslink marker. The renderer consumes those records. It does not recover
-branches from connected components or guess all brackets from one character in
-the input. Each chip selects an occurrence or an explicit group; assembly's
-residue atom map determines which drawing atoms light up.
-Legacy positional notation is explicitly converted in the browser before its
-residue IDs become selectable.
+Build controls derive availability from the current selection and validation.
+Swap requires a reviewed product preview. Closing Build or editing the document
+cancels the session. Chip and SVG selections use the same transition.
 
-Reaction execution carries each atom's occurrence owner from the actual reactant
-order through every reaction step. The assembler does not infer reaction order
-from slot numbers or assign unowned junction atoms to a neighboring residue.
-The reaction table decides support. Legacy bare-atom diagnostics retain their
-warnings and parser-only acceptance without vetoing registered reactions.
+Library revisions preserve rows and focus when definitions are unchanged.
+Changed definitions invalidate previews and selections even if labels match.
+Search fields are prepared once per revision, and list events use shared
+listeners. Newly registered monomers need no tile-specific code.
 
-Input detection has explicit policies because existing callers differ: display
-prefers peptide notation for ambiguous bare text; reference/import controls
-prefer SMILES. Explicit BILN/HELM inputs retain their legacy slot interpretation.
-Main-editor requests carry the selected `input_format` through rendering and
-conversion. Free-form reference requests and older callers retain autodetection.
-The historical `Converter.get_biln()` returns CABILN, while `Converter(biln=...)`
-continues to accept legacy BILN only. Internal callers carry that format fact
-instead of relying on the method name.
+History retains each document's recognition evidence. Edits or changed bindings
+invalidate it; Undo restores the saved entry. Browser recovery restores text
+and context after clearing old requests. Project files also retain original
+references, including uploaded MOL bytes, and verify saved definitions before
+accepting a changed library.
 
-Normalized library tables are cached by SDF and optional CSV version. Each parser
-receives its own molecules, leaving-group lists and alias metadata. Raw recognition
-templates keep explicit hydrogens and use the same SDF version stamp; alias-only
-updates need not recompile structural patterns. Reads retry if external file
-replacement changes the version during loading. Import verification assembles
-without producing drawing coordinates.
+Builder and registration share theme tokens. Panels open independently and
+share Escape/focus behaviour. Drawing canvases use the same mouse, touch and
+keyboard controls. Molecular atom colours are separate from interface colours.
+[Drawing performance](drawing-performance.md) describes layout and notation reuse.
 
-Recognition retains a cheap candidate search and an admission-aware ownership
-search. They share reciprocal-boundary, unknown-atom and cover-retention rules.
-One active reaction proposal can reuse candidates and verification decisions
-between phases; switching proposals releases them. This bounds retained state
-while avoiding repeated work on the usual single-proposal partial import.
-Different state accounting remains explicit because cheap search must retain
-observed partial progress, while admitted search must validate terminal partitions.
+## HTTP and execution
 
-Browser requests have lifetimes tied to the current input or selection. Results
-from earlier edits must not replace the current drawing, comparison, or builder
-selection. Node tests exercise these races with controlled delayed responses.
-Chip and SVG selection share one transition. Hover previews use the same request
-lifetime manager as other reads, so closing a panel also cancels its preview.
+HTTP chemistry handlers are synchronous functions. Local mode uses FastAPI's
+thread pool. Production sends allowed operations to bounded child processes,
+which enforce transport limits, deadlines and cancellation. Static assets and
+health responses stay in the parent; authenticated registration uses the parent
+and the library write lock. See [runtime](runtime-execution.md).
 
-The browser separates the current document from the last successful drawing.
-Editing invalidates selection, comparison and exports immediately while keeping
-the previous drawing and viewport visible. Explicit edits render immediately;
-free typing has a 180 ms debounce. Only a successful current response admits a
-new atom map. Reroll preserves selections only for the same source and notation.
+Render caches have entry and retained-byte limits, locks and library-version
+keys. Monomer previews use molecule copies. Responses of at least 1,000 bytes
+use gzip when requested, at compression level 4.
 
-Document commits own bounded Undo/Redo, per-format text and conversion warnings,
-and local draft saving. Recovery clears reference requests and derived chemistry
-before restoring text. Beginning new work resolves an offered recovery so a
-pending banner cannot suppress autosave. Existing reference-field native editing
-remains separate from sequence history.
+`tools/live_renderer.py`, historical imports from `pyPept.sequence`, and the web
+notation adapter remain compatibility entry points. Internal callers use the
+owning package modules.
 
-Builder and registration share local theme tokens for colour, typography,
-keyboard focus, and reduced motion. Their page stylesheets own layout. Toolbar
-icons are local inline SVG with visible labels; no font or UI framework download
-is required. Molecular atom colours and occurrence colours remain independent
-of the interface theme.
+## Verification and maintenance
 
-Palette responses carry an opaque library revision header. An unchanged revision
-preserves rows, focus and hover previews; changed definitions invalidate them,
-even if the tile labels are identical. Palette events are delegated once, and
-search text and attachment types are prepared once per library revision.
-
-The web app negotiates gzip for responses of at least 1,000 bytes, using the
-existing FastAPI/Starlette middleware with compression level 4. Stereo validation
-checks empty RDKit group vectors by length before iterating. Reaction ownership
-restoration writes only missing owners. Both optimizations retain the molecular
-verification path. The [UX and performance evidence](ux-performance-validation.md)
-records their measured scope and limits.
-
-The core suite is organized by activation, attachment reactions, restoration,
-parsing, notation conversion, assembly, recognition, CLI and bundled definitions.
-The shared chemistry oracle holds only reused product/atom-partition assertions.
-[Test ownership](../tests/AGENTS.md) maps each responsibility to its module.
-HTTP tests exercise rendered MOL exports, edits, request
-errors, registration, and responsiveness. The distribution test uses an installed
-wheel outside the source tree, so editable imports cannot hide missing resources.
-The [browser suite](../tests/browser/README.md) drives actual construction and
-registration with temporary libraries. The [tools index](../tools/README.md)
-separates maintained entry points from retained migration and repair history.
-
-## Keeping changes readable
+[Test ownership](../tests/AGENTS.md) maps the chemistry suites. HTTP tests cover
+request fields, errors, exports and persistence. Node tests control delayed and
+cancelled responses. [Browser checks](../tests/browser/README.md) exercise visible
+controls with temporary libraries. Distribution and release CI test installed
+packages outside the source checkout.
 
 Use [Google's review checklist](https://google.github.io/eng-practices/review/reviewer/looking-for.html)
-to check design, complexity, names and useful comments. Follow
-[PEP 8](https://peps.python.org/pep-0008/) with this repository's 88-column Python
-formatting and Python 3.9 compatibility. Apply
-[Fowler's refactoring method](https://refactoring.com/) through small changes
-checked against the existing behaviour. Keep
-[Sandi Metz's warning about wrong abstractions](https://sandimetz.com/blog/2016/1/20/the-wrong-abstraction)
-in mind when combining similar code.
+for complexity, names and comments; [PEP 8](https://peps.python.org/pep-0008/)
+with the repository's 88-column Python style; and
+[Fowler's refactoring method](https://refactoring.com/) for small changes checked
+against existing behaviour. [Sandi Metz's discussion of wrong abstractions](https://sandimetz.com/blog/2016/1/20/the-wrong-abstraction)
+helps decide whether similar code represents the same rule.
 
-- Give each rule and mutable state one owner. A caller should not need to know
-  the owner's internal bookkeeping to use it correctly.
-- Share code when its meaning, inputs and lifetime agree. Similar-looking
-  chemistry and presentation operations can still need different policies.
-- Prefer named facts, early returns and direct data flow. Keep temporary work
-  local and publish it after validation, so failure needs less rollback logic.
-- Explain chemical precedence and compatibility constraints in comments.
-  Remove narration that merely repeats the next statement.
-- Preserve numbering, source spelling and unsupported-input behaviour during
-  refactoring. Use existing chemistry oracles and browser journeys, with a
-  baseline comparison when changing a parser or classifier.
+- Give each rule and mutable state one owner.
+- Share code when its meaning, inputs and lifetime agree.
+- Prefer named facts, early returns and local temporary work.
+- Explain chemistry and compatibility constraints in comments.
+- Preserve source spelling, numbering and unsupported-input behaviour during
+  refactoring. Check parser/classifier changes against a frozen baseline.
 
-Judge a cleanup by how much a reader must understand to make the next change.
-Moving lines between files or introducing configurable wrappers is not evidence
-of reduced complexity by itself.
+[Earlier reviews](history.md) retain the design alternatives and measurements.

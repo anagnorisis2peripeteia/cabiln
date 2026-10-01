@@ -1,133 +1,57 @@
-# CLAUDE.md
+# Repository notes
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+CABILN extends pyPept with numbered attachment sites, reaction-based assembly
+and a web peptide builder. Python 3.9+ is supported. The browser uses JavaScript
+without a UI framework.
 
-## What this is
-
-pyPept is a CABILN (Chemistry Aware BILN) fork of the Boehringer Ingelheim pyPept library. It converts single-string peptide notations into atomistic RDKit molecules. The fork adds explicit numbered attachment sites, SMIRKS-based bond assembly via reactions.yaml, inline cap/crosslink syntax, and a bundled monomer library with SMARTS-based auto-detection.
-
-## Build & test commands
+## Commands
 
 ```bash
-# Install (editable)
-pip install -e ".[dev,web]"
-
-# Run chemistry and HTTP regressions
-python -m pytest -m "not distribution"
-
-# Browser request-lifetime regressions
+python -m pip install -e '.[dev,web]'
+python -m pytest -m 'not distribution and not fuzz'
 node --test tests/test_frontend.js
-
-# Build and install a release artifact (requires package-index access)
 python -m pytest tests/test_distribution.py
-
-# Run a single test class or test
-pytest tests/test_bond_validation_and_assembly.py::TestAssembly -v
-pytest tests/test_notation_conversion.py::TestRoundTrips -v
-
-# Verify every Sequence() call in README produces a valid molecule
 python tools/check_examples.py
-
-# Generate a candidate activation and metadata audit for every bundled monomer
-python -m pyPept.library_quality --output /tmp/library-quality-candidate.json
-
-# Start the live renderer web app (127.0.0.1:8732)
 cabiln
-
-# Register a new monomer from SMILES
-pyPept-monomer-add --smiles "N[C@@H](CS)C(=O)O" --symbol Cys_check
 ```
 
-## Architecture
+Run affected test modules first. The distribution check installs a fresh wheel
+and needs package-index access. Browser setup is in
+[tests/browser/README.md](tests/browser/README.md); generated tests and replay
+are in [tools/README.md](tools/README.md#generated-tests).
 
-See [docs/architecture.md](docs/architecture.md) for the web and conversion modules.
-The former renderer now lives in `src/pyPept/web/`; reverse conversion lives in
-`src/pyPept/smiles.py`. The `tools/live_renderer.py` file is a compatibility launcher.
-Web registration is disabled by default; enable only on a trusted local instance.
+## Code and chemistry
 
+[CONTEXT.md](CONTEXT.md) defines the domain terms.
+[Architecture](docs/architecture.md) maps module responsibilities.
+[Notation](docs/notation.md) and [canonical output](docs/canonical-notation.md)
+describe the format. [Test ownership](tests/AGENTS.md) identifies the suites.
 
-### Core pipeline: string → molecule
+- Monomer definitions supply registration, recognition, library tiles, attachment
+  choices and assembly. Support new monomers through those definitions.
+- Preserve declared R-group numbers. Amino-acid activation conventionally assigns
+  R1 to backbone N, R2 to backbone C, R3 to the additional N attachment and R4+
+  to sidechains. Resolve each definition's chemistry before connecting sites.
+- A dash connects left R2 to right R1. Occurrence identity, atom index and site
+  number are separate; repeated residues need separate identities.
+- Preserve structure, charge, isotopes, specified stereo and atom ownership.
+  Carboxyl and aldehyde sites can share an activated C(=O) graph; their leaving
+  groups distinguish them. Exclude the backbone carboxyl from sidechain detection.
+- Use the shared attachment, reaction and leaving-group implementations.
+  Reaction routing and restoration rules live in `src/pyPept/data/`.
+- Preserve the working builder's selection, panels, previews, highlights, history
+  and exports. Test changed request lifetimes through their browser events.
+- Keep library records and reaction data unchanged during structural refactors
+  unless a demonstrated chemistry defect requires a separate correction.
 
-```
-CABILN string
-  ↓  Sequence.__init__()            [sequence.py]
-  │  ├─ _preprocess_cabiln()        segment splitting (%), terminal markers (!n)
-  │  ├─ _expand_inline_caps()       .Cap(y,z) and .!n(y,z) → pendant chains + bond list
-  │  ├─ _check_bond_chemistry()     validates each bond's element-pair chemistry
-  │  └─ stores s_monomers[], s_bonds[]
-  ↓
-  ↓  Peptide.from_sequence()        [peptide.py]
-  │  └─ resolved definitions, occurrence IDs and numbered endpoints
-  ↓  Molecule(sequence_or_peptide)  [molecule.py]
-  │  ├─ Sequence inputs adapt to the same resolved Peptide
-  │  ├─ __assemble() assigns unique temporary labels to attachment dummies
-  │  │   ├─ reaction_for_types() selects the shared reaction rule
-  │  │   └─ run_bond_smirks() handles inter/intramolecular bonds
-  │  └─ restore_leaving_groups() uses the same labels for unconsumed sites
-  ↓
-RDKit ROMol
-```
+## Maintenance
 
-### Key modules
+Use the repository's 88-column Python style, Black and isort's Black profile.
+Keep Python 3.9 compatibility. Comments should explain chemistry or compatibility
+constraints. Give shared rules one owner and keep public compatibility adapters
+where callers still need them.
 
-| Module | Role |
-|--------|------|
-| `sequence.py` | CABILN/BILN parser, bond validation, monomer library loading from SDF |
-| `molecule.py` | Assemble resolved peptide endpoints; retain Sequence compatibility |
-| `interfaces/reaction_library.py` | YAML-driven reaction routing, `_CHEM_TYPE_REGISTRY` (SMARTS patterns), `infer_chem_type()`, `run_bond_smirks()` |
-| `interfaces/monomer_pipeline.py` | `pre_activate()` (SMILES → CHUCKLES), `find_sidechain_slots()`, `build_library_from_csv()` |
-| `interfaces/cli_monomer.py` | `register_monomer()` function and CLI entry point |
-| `converter.py` | BILN ↔ HELM conversion (legacy, not part of CABILN pipeline) |
-
-### Data files
-
-| File | Format | Purpose |
-|------|--------|---------|
-| `data/monomers.sdf` | SDF with properties | Monomer library (CHUCKLES + leaving groups + chem_types) |
-| `data/monomers.csv` | CSV | Authoring source for the core 52-monomer subset |
-| `data/reactions.yaml` | YAML | 25 SMIRKS reactions (19 bond-forming + 6 terminal restoration) |
-| `data/cap_reactions.yaml` | YAML | 100 cap-specific reactions (auto-applied) |
-
-### CHUCKLES convention
-
-Isotope-labelled dummy atoms encode attachment slots: `[1*]`=R1 (backbone N), `[2*]`=R2 (backbone C=O), `[3*]`=R3 (backbone-N mod), `[4*]`=R4+ (sidechain). The dummy's **neighbour** is the heavy atom where the bond forms. `_attachment_idx(mol, slot)` returns that neighbour; `_rgroup_atom_idx(mol, slot)` returns the dummy itself.
-
-### SMIRKS reaction system
-
-Reactions are defined in `reactions.yaml` with `reactant_pairs` that map `(chem_type_a, chem_type_b)` tuples to SMIRKS steps. The `REACTION_INDEX` dict is built at import time — adding a new reaction to the YAML file automatically makes it available without code changes.
-
-Intramolecular ring closure uses RDKit's grouped-reactant syntax: `([A].[B]) >> [P]` called with `RunReactants((single_mol,))`. The isotope-swap fallback in `reaction_library.py` handles swapped dummy order. Targeted reaction labels explicitly match atomic-number-zero dummies, preserving isotopes on ordinary atoms.
-
-### Monomer pre-activation
-
-`pre_activate(smiles)` converts raw SMILES to CHUCKLES via:
-1. **Backbone detection**: graph-topology shortest-path between amino N and carboxyl C
-2. **R3 assignment**: if backbone N has ≥2 H (skipped for Pro)
-3. **Sidechain detection**: `_CHEM_TYPE_REGISTRY` patterns in priority order, first-match-wins per atom
-4. **Leaving group inference**: SMARTS-based rules determine what fragment (`[H]`, `[OH]`, `[Cl]`) to remove when placing the dummy
-
-## Critical invariants
-
-- **Preserve declared R-group numbers**: Amino-acid activation conventionally assigns R1=backbone_n, R2=backbone_c, R3=backbone_n_mod and R4+=sidechains. Other monomers can have different numbered sites. Resolve chemistry from each definition and structure; never silently renumber sites or infer reaction compatibility from a slot number alone.
-- **Kekulize before dummy removal**: `molecule.py` Kekulizes the combined mol before removing any dummy atoms. This prevents aromatic-ring sanitization failures on His/Trp/etc. when an aromatic NH loses its dummy neighbour.
-- **Backbone COOH excluded from sidechain scan**: After backbone detection, the backbone carboxyl's hydroxyl O is explicitly excluded so sidechain SMARTS won't re-match it (critical for Asp/Glu which have two COOH groups).
-- **Carboxyl vs aldehyde disambiguation**: Both are `[CX3](=O)` in CHUCKLES. Distinguished by leaving group metadata: `[OH]` → carboxyl, `[H]` → aldehyde.
-- **`take_largest: true`** in reactions.yaml: Filters out small byproduct fragments (NHS ring, N₂ from IEDDA). Required for any reaction with a leaving group.
-
-## CABILN notation quick reference
-
-```
--           backbone bond (amide by default)
-.Cap(y,z)   inline cap attachment (host Ry to cap Rz)
-.!n(y,z)    crosslink first endpoint (bond ID n)
-.!n         crosslink second endpoint (inverse inferred)
-%           segment separator (main chain first, branches after)
-!n-...-!n   head-to-tail cyclisation (terminal markers)
-[A(y,z).B(y,z)]  bracket multi-step conjugation
-```
-
-## Formatting
-
-- Line length: 88 (flake8/black)
-- Import sorting: isort with black profile
-- No Co-Authored-By Claude tags in commits (causes CLA conflicts on OSS PRs)
+Update the relevant guide when behaviour, commands or ownership changes.
+Keep dated measurements with their revision and environment. Earlier reviews
+are indexed in [docs/history.md](docs/history.md).
+Do not add AI co-author trailers to commits.

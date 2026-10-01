@@ -22,8 +22,7 @@ properties and monomer ownership remain authoritative. Unsupported structures
 and failed validation use the existing CoordGen renderer.
 
 Explicit odd layout seeds retain Indigo and even seeds retain the CoordGen
-search. The first GUI reroll selects seed 2, so it changes engines from the new
-default. The CoordGen search stops when it reaches zero atom overlaps: its
+search. The first GUI reroll selects seed 2, so it changes engines from the default. The CoordGen search stops when it reaches zero atom overlaps: its
 nonnegative score cannot improve further, and equal scores never replace the
 current winner.
 
@@ -57,14 +56,12 @@ Undo and Redo render their selected documents normally.
 The formatter also assembles from the resolved source and target peptide objects
 it already checked. This removes two repeated graph projections. Both chemical
 assemblies, connection checks, monomer checks and exact product comparison remain.
-No shared drawing cache or new runtime dependency is introduced.
 
 The [notation reuse measurement record](../tools/benchmarks/results/notation-reuse-20261001.json)
 compares the formatter with `60e9ff0`. Warm local medians across both notation
 directions and both policies fell from 56–73 ms to 52–72 ms for Semaglutide,
 and from 76–90 ms to 72–86 ms for Lixisenatide. Each median uses five requests.
-All eight pre-existing response field sets match. The exploratory 35 ms target
-remains unmet. The same record separates these local samples from the live
+All eight pre-existing response field sets match. The same record separates these local samples from the live
 pre-change browser timings; it does not claim a hosted result from local data.
 
 ## Removal of duplicate work, 30 September 2026
@@ -117,26 +114,10 @@ coordinates then reduced the combined result to 668 ms.
 distinguish backend calculations from browser event-to-paint measurements.
 Local timings exclude hosted cold starts and network latency.
 
-## Preservation of the duplicate-work changes
-
-All 42 compared request responses are identical between `6c4ed23` and `9d2d946`. The comparison
-includes every built-in example at the default layout, five representative
-peptides at both alternate layout seeds, explicit and automatic reference
-formats, and exact, unspecified-stereo and mismatching verification cases.
-It compares the complete response, including SVG, MOL export, residue ownership,
-branch tabs, warnings and context. Seven format-detection and error responses
-also remain identical.
-
-The HTTP regression counts actual coordinate calculations: one for each main or
-reference drawing and none for verification. All four cases fail on the baseline
-and pass with this change. Frontend contracts cover request order, active
-normalization, Undo, failure fallback, replacement clicks, reference updates,
-Verify and edits that preserve the trimmed source. The latter prevents a
-cancellation callback from scheduling two competing drawings.
-
-Notation conversion retains occurrence, connection, monomer-definition and
-assembled-structure checks. Library bindings, recognition and ingestion are
-unchanged. No additional cache or runtime dependency is introduced.
+The comparison checked 42 complete HTTP responses and seven format/error
+responses. HTTP regressions require one coordinate calculation per drawing and
+none for verification. The source hashes, response checks and browser samples
+are retained in the measurement record above.
 
 ## Faster default layout, 1 October 2026
 
@@ -160,11 +141,6 @@ and error cases also match. Drawing geometry changes. The engine-selection
 experiment covered all fourteen examples and six additional chemical structures;
 all twenty retained chemistry and ownership, with finite 2D coordinates and no
 measured atom overlaps or bond crossings after normalization.
-
-An initial integration spent most of its time converting native coordinate
-objects into tuples. Reading their `x`, `y` and `z` fields directly avoids a
-native exception at the end of each iteration. The control produced identical
-coordinates and SVG output. All map, chemistry and coordinate checks remain.
 
 RDKit can add display-only hydrogens while preparing a drawing. These glyphs
 inherit the original neighboring atom's SVG identity, so residue highlighting

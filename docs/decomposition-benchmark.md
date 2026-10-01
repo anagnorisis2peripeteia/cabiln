@@ -5,7 +5,7 @@ supplied and after deterministic atom reordering, separate exact reconstruction
 from useful residue recovery. This is a bounded diagnostic set, not a population
 accuracy estimate or evidence that the search is globally optimal.
 
-The final frozen rework passes all 28 cases with unchanged expected annotations.
+The frozen 28 September implementation passed all 28 cases with unchanged annotations.
 The fixed baseline `f6c0423` recovered the expected partitions in 26; its
 Sar/Gly decomposition exposed inconsistent backbone scoring, subsequently fixed
 without a symbol-specific rule. Both preserve all specified chemistry. Datagrok's
@@ -74,7 +74,7 @@ anchors. Changed isotopes cannot hide behind allowed stereo inference; wrong
 emitted occurrence indices also fail. An external success string without an
 ownership witness stays unassessed for partition acceptance.
 
-## Baseline and rework results
+## Results from 28 September 2026
 
 The archived source and library hashes remained unchanged throughout the run.
 Python 3.11.15, RDKit 2026.03.6, macOS 27 arm64; each call includes cold importer
@@ -142,7 +142,7 @@ likewise become diglycine plus two free glycines. HELM containing custom monomer
 outside RDKit's supported subset remains unassessed, not automatically incorrect.
 The external public API supplies no ownership witness. Broader tool source review
 and separately measured stereo/library controls are in
-[decomposition-tools.md](decomposition-tools.md).
+[decomposition-tools.md](https://github.com/anagnorisis2peripeteia/pyPept/blob/428eafc16ecc879f986708c53a1d71192e514a2a/docs/decomposition-tools.md).
 
 ## Reproduction
 

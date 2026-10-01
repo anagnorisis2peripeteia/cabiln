@@ -61,7 +61,7 @@ palette exposes that result as `quality`:
 Only warnings appear as amber tile text. Hover previews retain informational
 notes in neutral text and warnings separately. An unreviewed definition remains
 usable. Its empty `issues` array must not be
-read as a clean bill of health. A changed fingerprint cannot inherit the known
+read as evidence that its chemistry has been reviewed. A changed fingerprint cannot inherit the known
 status of another record with the same label. Unsupported enhanced stereo also
 cannot inherit a fingerprint produced by plain-SMILES normalization.
 
@@ -81,7 +81,7 @@ Run the full audit into a candidate file before changing the packaged baseline:
 ```sh
 python -m pyPept.library_quality --output /tmp/library-quality-candidate.json
 python -m pytest tests/test_library_quality.py \
-  tests/test_bond_validation_and_assembly.py::TestLibraryRoundTrip
+  tests/test_bundled_monomers.py::TestLibraryRoundTrip
 ```
 
 Generation is deterministic for a fixed SDF, code, and RDKit version. The test
@@ -99,36 +99,13 @@ substitution products. These controls do not prove the
 identity of every imported record. Source attribution and scientific curation
 of individual exceptions remain separate work.
 
-## September 2026 warning review
+## Recorded data concerns
 
-The warning review covered every bundled definition, all 3,595 attachment sites,
-and each warning/error producer that reaches the browser. A frozen application
-at `6ea6d215` was exercised through Chromium: all 1,123 palette entries,
-1,128 standalone renders and attachment lists, and all 377 affected hover
-previews completed without a browser exception or HTTP error. Those successful
-renders did not establish that their attachment chemistry was classified
-correctly.
-
-The shared classifier had called 219 aromatic, amide or guanidine nitrogen sites
-primary amines. Correct typing now controls the palette, compatibility filter,
-validation and assembly. Explicit imide and guanidine reactions retain supported
-products; aromatic nitrogen no longer advertises an unmatched amine reaction.
-The audit also corrected phosphate and formamide inference, explicit carbon
-anchor roles, and the built-in threonine token stereochemistry.
-
-Sixty stored records received demonstrated metadata corrections. Five halide
-templates now replace the leaving halogen at R4, rather than a hydrogen while
-retaining that halogen. Independent cysteine products confirm halogen loss,
-thioether formation and retained stereochemistry. All 1,128 standalone isomeric
-structures and every numbered attachment were preserved across these data edits.
-
-Correcting those templates also exposed a reverse-recognition performance bug:
-their reacted cores matched ordinary sidechains, and chemically impossible
-connections survived until full assembly. Conversion now applies the shared
-reaction table to known candidate boundaries during search. Slot and name
-alternatives remain available, unknown boundaries remain conservative, and final
-assembly must still reproduce the input structure. Candidate definitions and
-search budgets are unchanged; incomplete searches still disclose their limits.
+The September 2026 review corrected nitrogen typing, phosphate/formamide
+inference, carbon anchor roles and selected stored metadata. The audit baseline
+and curated findings record the resulting definitions. Earlier sweep counts
+and comparisons are available in the
+[original review](https://github.com/anagnorisis2peripeteia/pyPept/blob/428eafc16ecc879f986708c53a1d71192e514a2a/docs/library-quality.md).
 
 The following entries retain explicit review warnings rather than guessed
 structural corrections:
@@ -151,20 +128,6 @@ and the [structural identification of beta-hydroxyvaline](https://pubmed.ncbi.nl
 These sources establish the named structures; they do not establish which
 structure the original library author intended.
 
-The after-fix browser sweep exercised every palette tile, preview, attachment
-list and standalone render again. It opened all 172 issue-bearing tooltips and
-checked their text, severity and accessibility labels. All 50 ordinary browser
-workflows also passed in process mode without retries.
-
-| Browser observation | Before | After |
-| --- | ---: | ---: |
-| Definitions rendered | 1,128 | 1,128 |
-| Palette entries | 1,123 | 1,123 |
-| Amber library tiles | 377 | 55 |
-| Informational-only tiles shown neutrally | 0 | 117 |
-| Preview, attachment-list or standalone-render failures | 0 | 0 |
-| Browser exceptions during the sweep | 0 | 0 |
-
 For `W`, the former declaration warning exposed a shared classifier bug:
 aromatic nitrogen had been treated as a primary amine. Its R4 now resolves to
 `aromatic_nh`. The builder rejects the unsupported R4-to-ac-R2 pairing and keeps
@@ -177,12 +140,8 @@ Brackets can contain a peptide branch; supported connections now use the shared
 reaction policy. Browser checks confirmed the branch tab still highlights
 exactly its four residues.
 
-This finite sweep covers the bundled definitions and their displayed issues.
-It does not test every possible monomer pairing or establish synthesis
-feasibility. The wider diagnostic inventory contains 66 warning/error classes;
-source tracing covers their producers and browser consumers, with targeted
-dynamic controls for the reported defects. Every invalid-input and resource-limit
-branch was not forced through the browser.
+The audit covers the bundled definitions and their recorded issues. It does
+not test every monomer pairing or establish synthesis feasibility.
 
 ## Input normalization boundary
 

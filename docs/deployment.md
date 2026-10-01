@@ -1,88 +1,93 @@
 # Deployment and recovery
 
-The production candidate is a read-only public builder. Administrative ingestion
-still feeds the same library, tiles, attachment detection and recognition.
-No account/workspace service is introduced. A public multiuser private-monomer
-service would require a separate ownership model.
+The public [CABILN app](https://cabiln.onrender.com/) automatically deploys from
+`master`. Check a release by its Git SHA and the `/ready` response. The repository's
+`deploy/render.yaml` is a separate staging template with automatic deployment
+disabled; it does not describe the live service's deployment trigger.
 
-## Release artifact
+## Release procedure
 
-`Dockerfile` builds one wheel and installs it with the exact dependency closure
-in `requirements-production.txt`, using CPython 3.11.15. The general library
-requirements remain compatible with supported Python versions. Build tools are
-pinned separately. The base tag pins Python, but its OS layers can change:
-retain the built image by digest instead of assuming a rebuild is identical.
+1. Push the candidate to a branch and check its **Tests** and **Fuzzing** workflows.
+   All jobs must pass for the exact code being promoted.
+2. Retain the candidate artifacts and the previous passing release outside CI's
+   retention window.
+3. Fast-forward `master` to the verified candidate. This triggers the live deploy.
+4. Confirm that `/ready` reports the expected SHA. Exercise a drawing, notation
+   conversion, Build preview/apply, highlighting, Undo and an exported molecule.
+5. Check the workflows triggered by the `master` push as well.
 
 ```bash
-docker build --build-arg CABILN_RELEASE=<commit> -t cabiln-candidate .
+release_ref=$(git rev-parse HEAD)
+gh run list --repo anagnorisis2peripeteia/pyPept --commit "$release_ref"
+curl -fsS https://cabiln.onrender.com/ready
+```
+
+The [CI workflows](../.github/workflows/) provide current release evidence.
+[Earlier launch reviews](history.md) describe past checkpoints and their limits.
+A passing functional check does not measure concurrent-user capacity: measure
+editing latency, peak memory and cancellation under representative hosted load
+before increasing concurrency.
+
+## Build and retain an image
+
+`Dockerfile` builds one wheel and installs the exact runtime dependencies from
+`requirements-production.txt` with CPython 3.11.15. Build tools are pinned
+separately. The Python base tag's OS layers can change, so retain the tested image.
+
+```bash
+docker build --build-arg CABILN_RELEASE="$(git rev-parse HEAD)" -t cabiln-candidate .
 docker run --rm --memory=2g --cpus=1 -p 127.0.0.1:8000:8000 cabiln-candidate
 ```
 
-In a second terminal, run `python tools/release_smoke.py`. CI builds the image,
-tests its running production profile, extracts that exact wheel for the Linux
-browser suite, and retains the image, wheel, dependency-download hashes,
-library/rule binding, canonical convention and image ID for 30 days. Artifacts
-exist before all jobs finish, so an artifact is eligible for promotion only
-when **all** jobs for its commit pass. Preserve the previous passing release
-outside CI's retention window before promoting another release.
+Run `python tools/release_smoke.py` in another terminal. CI uses this production
+profile, extracts its wheel for the Linux browser suite, and retains the image,
+wheel, dependency hashes, library/rule binding and canonical convention for
+30 days. Artifacts can appear before the workflow finishes; check the final
+result before using them.
 
-The frozen dependencies came from the tested local environment. A fresh Linux
-binary-wheel installation and the container/browser jobs are mandatory gates;
-see [current evidence](launch-validation.md). No Linux build is claimed merely
-because versions are pinned.
+Render builds the live Git deployment separately. Verify that deployed revision
+and its assets; the retained CI image remains a tested recovery artifact. For
+an image-based service, publish the tested image and select its immutable digest.
 
-## Hosting profile
+## Hosting configuration
 
-`deploy/render.yaml` is a reviewable, manual-deploy staging Blueprint. It selects
-one 1-CPU/2-GiB instance, `/ready`, one chemistry worker, a 30-second deadline,
-and a 1024-MiB worker address-space limit. These are conservative starting
-limits, not measured hosted capacity. Applying the Blueprint provisions paid
-hosting. This implementation did not apply it or deploy the application.
+The staging Blueprint requests one 1-CPU/2-GiB instance, `/ready` health checks,
+one chemistry worker, a 30-second deadline and a 1024-MiB worker address-space
+limit. Applying it provisions a separate service. Use the actual service settings
+when checking production capacity or storage.
 
-Render's [Blueprint fields](https://render.com/docs/blueprint-spec) define the
-plan, health route and disabled automatic deployment. For promotion, publish
-the passing image and select its immutable registry digest in an image-backed
-service. A Git-based Docker rebuild creates another candidate and needs staging
-validation again. Render's [health checks](https://render.com/docs/health-checks)
-should use `/ready`; `/health` deliberately remains cheap liveness.
+Render documents deployment triggers in its
+[Blueprint reference](https://render.com/docs/blueprint-spec#autodeploytrigger).
+Use `/ready` for [health checks](https://render.com/docs/health-checks);
+`/health` reports only that the application responds.
 
-| Setting | Production default or policy |
+| Setting | Container default or supported limit |
 | --- | --- |
-| `CABILN_ENV` | `production`; refuses unbounded local execution |
+| `CABILN_ENV` | `production`; requires process execution |
 | `CABILN_EXECUTION` | `process` |
-| `CABILN_WORKERS` | `1`; fixed pool, maximum 4 |
+| `CABILN_WORKERS` | `1`; maximum 4 |
 | `CABILN_JOB_TIMEOUT_SECONDS` | `30`; maximum 120 |
-| `CABILN_WORKER_MEMORY_MB` | `1024`; Linux address-space bound, not RSS |
+| `CABILN_WORKER_MEMORY_MB` | `1024`; Linux address-space limit |
 | `CABILN_MAX_REQUEST_BYTES` | `2097152` |
 | `CABILN_MAX_RESPONSE_BYTES` | `8388608` |
 | `CABILN_ENABLE_REGISTRATION` | `0` |
-| `CABILN_RELEASE` | Commit/release ID; falls back to `RENDER_GIT_COMMIT` |
+| `CABILN_RELEASE` | Release ID; falls back to `RENDER_GIT_COMMIT` |
 
-Use the `cabiln` entry point. It disables raw URL access logging and fixes the
-parent to one Uvicorn worker. Native chemistry output is suppressed in production.
-Logs contain request ID, route pattern, status, elapsed time and release. Internal
-failures add exception type and code locations, without request bodies, molecule
-text or exception messages. The app creates no server document database; browser
-drafts and downloaded files have separate lifetimes. The host's own proxy/log
-retention policy still needs to be set by the operator.
+Use the `cabiln` entry point. It disables raw URL access logs and uses one Uvicorn
+worker. Production suppresses native chemistry output. Logs contain request ID,
+route, status, elapsed time and release; internal failures add exception type
+and code locations without submitted structures. Set the host's proxy/log
+retention separately. The application stores no server-side document database.
 
-Busy work receives 503 with `Retry-After`; deadlines terminate the worker and
-return 504. A disconnected request also terminates its calculation. Workers are
-replaced after crashes and periodically recycled. The browser makes at most two
-abort-aware retries for transient busy computation requests. Persistent overload
-remains visible. It never automatically retries a registration write.
+Busy calculations return 503 with `Retry-After`; deadlines terminate the worker
+and return 504. Disconnects terminate active calculations. The browser makes up
+to two cancellable retries for brief overload, then displays a Retry control.
+Registration writes are never retried automatically. Workers prepare palette
+data before reporting readiness; changing the library rebuilds that cache.
 
-Each worker prepares the Library palette before reporting readiness, including
-replacement workers. The existing bounded cache stores its finished JSON bytes,
-so the first user does not trigger library-wide detection or repeated encoding.
-SDF and alias-file changes still rebuild the palette automatically. This moves
-initial preparation into startup; it does not eliminate hosting startup time.
-
-The 32-MiB render-cache budget counts retained Python payload size; it is not a
-bound on total process memory. Linux enforces the worker address-space limit.
-macOS tests exercise process lifecycle but do not prove that limit. Keep the
-container memory cap, and measure total memory and normal editing latency under
-representative concurrent work before increasing concurrency.
+The render cache's 32-MiB budget counts retained payloads. Native allocations
+and the parent process need additional memory. See [runtime](runtime-execution.md)
+for limits, worker replacement, readiness and logging.
 
 ## Administrative ingestion and backups
 
@@ -108,7 +113,6 @@ Render's [persistent disks](https://render.com/docs/disks) preserve only their
 mounted path; the default filesystem is ephemeral. A disk is tied to one
 instance. Library and backups must be under durable mounts. Copy snapshots to
 independent storage regularly; a backup on the same disk does not cover disk loss.
-No storage was provisioned or inspected in this implementation.
 
 Every successful ingestion first takes a locked, versioned ZIP snapshot of the
 previous SDF and aliases. A backup failure prevents the library write. Take a
@@ -135,7 +139,8 @@ the pair changes. `--offline` is an operator assertion; it does not discover
 remote readers. Restart and confirm `/ready`, palette detection and a saved
 project before reopening traffic.
 
-For application rollback, select the retained previous image digest and its
-compatible library snapshot. Preserve both current and previous snapshots. A
+For a Git-based deployment, redeploy the previous verified commit. An image-based
+service can select its retained image digest. Use a compatible library snapshot
+and preserve the current snapshot before restoring an older one. A
 different canonical/RDKit convention intentionally requires source verification
 when opening projects; do not silently relabel their chemistry metadata.

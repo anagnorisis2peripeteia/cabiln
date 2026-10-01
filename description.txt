@@ -1,1 +1,1 @@
-A python library to generate atomistic 2D and 3D representations of peptides
+Peptide notation, molecular assembly and an interactive builder based on pyPept.

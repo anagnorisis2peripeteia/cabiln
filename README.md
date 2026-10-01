@@ -1,23 +1,21 @@
 # CABILN / pyPept
 
-CABILN is a peptide notation and interactive builder built on
+CABILN is a peptide notation and interactive builder based on
 [Boehringer Ingelheim's pyPept](https://github.com/Boehringer-Ingelheim/pyPept).
-Its monomer library supplies the builder's vocabulary. Ingesting a structure
-detects its attachment sites and chemistry, creates its library tile, and makes
-those sites available for building. New monomers with supported attachment
-chemistry need no code specific to their names.
+Its monomer library supplies the builder's vocabulary: registration detects
+attachment sites and chemistry, creates a library tile, and makes the monomer
+available for construction and recognition. New monomers with supported
+attachment chemistry need no code specific to their names.
 
-CABILN describes backbones, caps, branches, and crosslinks. The assembler uses
-the monomer structures and reaction definitions to produce an RDKit molecule.
+The builder supports backbones, caps, branches, crosslinks, monomer replacement,
+structure comparison, and PNG/MOL export. Monomer structures and reaction
+definitions determine the assembled RDKit molecule.
 
-The web app provides structure drawing, residue selection, bond editing,
-SMILES conversion, structure comparison, and PNG/MOL export.
-The hosted application is at [cabiln.onrender.com](https://cabiln.onrender.com/).
-A local checkout can contain changes that have not been deployed there.
+**[Open the web app](https://cabiln.onrender.com/)** · [Documentation](docs/README.md)
 
 ## Install and run
 
-Python 3.9 or newer is required. From a checkout:
+Use Python 3.9 or newer. From a checkout:
 
 ```bash
 python -m venv .venv
@@ -26,56 +24,49 @@ python -m pip install -e '.[web]'
 cabiln
 ```
 
-Open `http://127.0.0.1:8732`. On Windows, activate with
-`.venv\Scripts\activate` instead. For the chemistry library alone, install
-with `python -m pip install -e .`.
+Open `http://127.0.0.1:8732`. On Windows, activate the environment with
+`.venv\Scripts\activate`. For the chemistry library alone, install with
+`python -m pip install -e .`.
 
-The old launcher remains available:
-
-```bash
-python tools/live_renderer.py
-```
-
-For an ASGI server or Render deployment:
-
-```bash
-python -m pip install -r requirements-render.txt
-uvicorn pyPept.web.app:app --host 0.0.0.0 --port 8732
-```
-
-Render can also run `python tools/live_renderer.py`, which reads its `PORT`
-environment variable. `/health` reports whether the server responds.
+`cabiln --host` and `--port` set the listening address; the launcher also reads
+`HOST` and `PORT`. `python tools/live_renderer.py` remains supported.
+See [deployment](docs/deployment.md) for hosting, process limits and recovery.
 
 ## Use the builder
 
-Open Library and choose **Use** beside a monomer to start a peptide. Select a
-residue chip, choose another monomer, select an attachment site on each side,
-and press **Connect**. The selected sites light up in their previews. Existing
-tile insertion, right-click selection, and selection through the drawing remain
-available. The same controls work with newly registered monomers.
+Open **Library** and choose **Use** beside a monomer to start a peptide.
+Select a residue chip or an atom in the drawing, choose another monomer, then
+select a free attachment site on each side. The selected sites light up in the
+previews. **Preview** shows the proposed structure, reaction and CABILN before
+**Connect** applies the change. You can also select two existing residues to
+connect them, or insert a monomer between neighbouring backbone residues.
 
-In Build, choose **Swap monomer** and select a residue to replace. The library
-then shows monomers with compatible sites for all its existing connections.
-Review the mapping from each occupied R-group to a distinct replacement site;
-different site numbers are supported. **Preview** validates and draws the full
-product before enabling **Apply swap**. Existing neighbours, branches and ring
-closures stay connected, and Undo restores the original. Site renumbering can
-reformat the notation; the preview includes the proposed CABILN. Compatibility
-filtering checks attachment chemistry; full assembly can reject a candidate
-whose reaction pattern does not fit the complete structure.
+Choose **Swap monomer** in Build to replace a selected residue. The library
+shows candidates with compatible sites for its existing connections. Review the
+mapping from each occupied R-group to a distinct replacement site; different
+site numbers are supported. **Preview** assembles the proposed product before
+**Apply swap** becomes available. Neighbours, branches and ring closures stay
+connected. Site renumbering can change the notation's layout. Chemistry filters
+narrow the choices; full assembly can still reject a candidate.
 
-Sequence edits, connections, and conversions support **Undo** and **Redo**.
-Use Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z from the sequence input or builder controls.
-Changing the input format retains that format's draft and conversion warnings.
-The drawing stays visible during updates, with an explicit previous-drawing
-notice; selection and exports resume after the current input is validated.
+Hover over residue or branch tabs to highlight their atoms. Library tiles also
+support insertion and right-click selection. Drawing, reference and product
+preview canvases have zoom and reset controls, keyboard panning, and touch
+pan/pinch. Escape closes the active panel and returns focus to its control.
 
-Drafts are saved in this browser. After reloading, choose **Restore saved draft**
-to recover the sequence, format drafts, and reference text. Starting new work
-resolves the recovery offer and saves the new draft. Browser storage must be
-available for recovery; Undo still works when storage is unavailable.
+**Undo** and **Redo** cover sequence edits, connections, swaps and conversions.
+Use Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z in the sequence input or builder controls.
+Changing input format retains that format's draft and conversion warnings.
+During updates, the previous drawing stays visible and is marked as outdated;
+selection and exports resume when the current input has a valid drawing.
 
-## Build a peptide
+Browser drafts retain the sequence, format drafts and reference. After reloading,
+choose **Restore saved draft** to recover them. **Save project** downloads a
+portable file; **Open project** checks its saved definitions and chemistry before
+replacing current work. Help explains storage and offers **Clear saved draft**.
+Undo remains available when browser storage is unavailable.
+
+## Build a peptide in Python
 
 ```python
 from rdkit import Chem
@@ -87,11 +78,10 @@ molecule = Molecule(sequence).get_molecule(fmt='ROMol')
 print(Chem.MolToSmiles(molecule))
 ```
 
-`-` always connects the left monomer's R2 to the right monomer's R1.
-For standard amino acids, R1 is the backbone nitrogen, R2 the backbone
-carboxyl, R3 an additional nitrogen attachment, and R4+ sidechain sites.
-Inspect a monomer's actual slots in the library before connecting it.
-Some legacy library records use older slot assignments.
+`-` connects the left monomer's R2 to the right monomer's R1. Standard amino acids
+use R1 for the backbone nitrogen, R2 for the backbone carboxyl, R3 for an
+additional nitrogen attachment, and R4+ for sidechains. Other definitions can
+use different numbering; inspect their actual sites in the library.
 
 | Purpose | Example |
 | --- | --- |
@@ -101,68 +91,59 @@ Some legacy library records use older slot assignments.
 | Disulfide | `C.!1(4,4)-A-G-C.!1` |
 | Head-to-tail cycle | `!1-A-G-K-A-!1` |
 | Sequential branch | `K.[G(4,2).ac(1,2)]-A` |
-| Protected branch notation | `K.{G(4,2).ac(1,2)}-A` |
+| Protected branch | `K.{G(4,2).ac(1,2)}-A` |
 
-See [the notation guide](docs/notation.md) for branch direction,
-attachment slots, and format conversion.
+The [notation guide](docs/notation.md) explains nested and sibling branches,
+attachment slots, and bracket/percent conversion. **Canonical** formatting
+produces a stable spelling for a resolved monomer graph under a specific library
+and convention; it preserves the chosen decomposition.
 
 ## Convert and compare
 
-```python
-from pyPept.smiles import smiles_to_cabiln_core
+The input selector accepts CABILN, SMILES, BILN and HELM. Verify compares the
+current peptide with reference text or an uploaded MOL/SDF structure.
 
-cabiln, residues = smiles_to_cabiln_core('N[C@@H](C)C(=O)NCC(=O)O')
-print(cabiln)
+```python
+from pyPept.smiles import convert_smiles
+
+result = convert_smiles('N[C@@H](C)C(=O)NCC(=O)O')
+print(result.cabiln)
+print(result.recognition_status)
 ```
 
-Conversion checks the assembled result against the source molecular graph.
-Unsupported structures raise an error. When a library match cannot preserve
-the input, supported structures can use an inline SMILES fragment instead.
-Local synthetic residues retain the surrounding recognized residues when a
-verified decomposition is possible. A coarse fallback preserves the component
-but cannot identify individual residues inside it; the result reports this.
+The converter uses the selected monomer library and checks its assembled result
+against the source structure. It reports recognition as `complete`, `partial`, or
+`unresolved`, with source atom assignments and any search limits reached.
+Supported unknown regions can use local inline SMILES while retaining nearby
+recognized residues. An opaque fallback preserves a component without claiming
+residue boundaries inside it. Unsupported structures raise an error.
 
-`pyPept.smiles.convert_smiles` exposes recognition as `complete`, `partial`, or
-`unresolved`, with source atom assignments for the identified occurrences.
-It also reports when search limits prevent checking further interpretations.
-Recognition uses the current monomer library, including newly registered records.
-See [the decomposition contract](docs/decomposition.md) for the algorithm and limits.
-Pass `notation="bracket"` to `convert_smiles` for bracket output; its source atom
-assignments refer directly to occurrences in that output. Editing, formatting
-and highlighting share explicit occurrence identities and numbered connections.
-The [independent benchmark](docs/decomposition-benchmark.md) checks molecular
-identity, residue boundaries and attachment sites against external references.
+Pass `notation="bracket"` for bracket output. Returned assignments identify the
+occurrences in that output. The older `smiles_to_cabiln_core` interface remains
+available. See [recognition](docs/decomposition.md) for the algorithm and limits,
+and the [benchmark](docs/decomposition-benchmark.md) for independently specified
+molecules, residue partitions and attachment sites.
 
-Unspecified input stereochemistry can be filled from library monomers.
-The converter warns when this happens; the web app displays that warning.
-Defined stereochemistry and disconnected molecular components must be preserved.
-Structure comparison distinguishes an exact match from compatible, incomplete
-input stereochemistry. It does not treat different tautomers as exact matches.
-A successful conversion does not establish a compound's identity or biological activity.
+Conversion preserves defined stereochemistry and disconnected components.
+Library monomers can supply stereochemistry omitted by the input; the result
+and web app report this. Verify distinguishes an exact match from compatibility
+with incomplete input stereochemistry. Different tautomers are not exact matches.
 
-## Monomer registration
+## Register monomers
 
-The web app serves a read-only library by default. For a trusted local instance:
+The public app's library is read-only. Enable registration on a trusted local
+instance with:
 
 ```bash
 cabiln --enable-registration
 ```
 
-This enables the Register page for loopback clients. Use an external library
-for durable custom data. `CABILN_ENABLE_REGISTRATION=1` enables the same route
-for ASGI deployments. For remote administration, set a secret
-`CABILN_REGISTRATION_TOKEN` of at least 32 characters; the browser prompts for
-HTTP Basic credentials (username `admin`, or `CABILN_REGISTRATION_USER`). Serve
-remote administration over HTTPS. The public builder stays read-only by default.
-Production administration also requires an external library and backup directory.
+Preview detects attachment sites before registration. The server validates the
+slots and metadata, rejects duplicate symbols, and replaces the SDF atomically
+under a file lock.
 
-Preview detects attachment sites before registration. The server checks that
-slots and metadata agree, rejects duplicate symbols, and replaces the SDF
-atomically under a file lock. This avoids partial writes and concurrent
-registrations with the same symbol.
-
-To keep a custom library outside the installation, copy the distributed SDF
-and select it before starting the application or CLI:
+For durable custom data, copy the distributed `monomers.sdf` outside the
+installation and select it before starting the application or CLI:
 
 ```bash
 export CABILN_MONOMER_LIBRARY=/path/to/monomers.sdf
@@ -170,36 +151,23 @@ export CABILN_LIBRARY_BACKUP_DIR=/path/to/backups
 cabiln --enable-registration
 ```
 
-The file must exist. Put a companion `monomers.csv` beside it to retain custom
-synonyms. CLI ingestion and web registration use the same selected library.
-New records are discovered without a server restart; reopen the palette or
-return to its browser window to refresh the tiles. Reaction filters and slot
-buttons use the same chemistry detection as assembly. Adding an unsupported
-reaction still requires a reaction definition and detection rules.
+The SDF must already exist. Put a companion `monomers.csv` beside it to retain
+custom synonyms. CLI ingestion and web registration use the same selected
+library. Reopen the palette or return to its browser window to discover new
+records without restarting the server. Reaction filters and attachment buttons
+use the same chemistry detection as assembly. Supporting a new reaction can
+require additional reaction definitions and detection rules.
 
-Each registration snapshots the existing SDF and companion aliases when the
-backup directory is configured. If that backup fails, registration does not
-write. [Deployment and recovery](docs/deployment.md) describes offline restore.
-The library's [quality baseline](docs/library-quality.md) identifies known
-compatibility exceptions without changing stored structures or attachment slots.
+A configured backup directory receives a snapshot before each registration;
+a failed backup prevents the write. Remote administration requires authentication
+and HTTPS; production also requires an external library and backup directory.
+See [administration and restore](docs/deployment.md#administrative-ingestion-and-backups).
 
-## Saved work and production
+The [library quality baseline](docs/library-quality.md) records compatibility
+exceptions and identity concerns for specific definitions. Successful assembly
+alone does not verify a library record's chemical identity.
 
-Save project downloads editable source, notation drafts, original reference,
-recognition details, and the library/rule binding. Open project checks that its
-sources and chemistry still agree before replacing current work. Adding an
-unrelated monomer can remain compatible; changed selected definitions or rules
-require re-verification. Browser drafts remain local, with a clear-draft control
-in Help. Server processing and local storage are explained there.
-
-Production uses a bounded worker process with a deadline, cancellation cleanup,
-memory limit on Linux, and explicit overload responses. `/health` reports
-liveness; `/ready` checks startup data and worker availability. The container
-profile freezes Python and runtime dependencies and disables registration.
-See [deployment](docs/deployment.md) and the current
-[launch evidence](docs/launch-validation.md) before deploying.
-
-## Development
+## Development and checks
 
 ```bash
 python -m pip install -e '.[dev,web]'
@@ -208,47 +176,20 @@ node --test tests/test_frontend.js
 python -m pytest tests/test_distribution.py
 ```
 
-The distribution test builds an sdist and wheel, then installs them in a fresh
-environment outside the checkout. It needs package-index access. CI checks
-Python 3.9, 3.11, and 3.13. The [tools index](tools/README.md) lists the current
-library diagnostics, example checks and benchmarks.
+The distribution check builds an sdist and wheel and installs them outside the
+checkout; it needs package-index access. CI tests Python 3.9, 3.11 and 3.13.
+The browser suite uses Node 20 or newer; CI uses Node 22.
 
-Generated tests use Hypothesis for notation, chemistry and library changes, and
-fast-check for UI histories and browser interactions. Run the bounded campaign:
+See [browser checks](tests/browser/README.md) for Playwright setup and
+[generated tests and replay](tools/README.md#generated-tests) for Hypothesis and
+fast-check. Generated campaigns sample feature combinations and preserve reduced
+failures; they do not exhaust possible peptides or editing histories.
 
-```bash
-CABILN_FUZZ_ARTIFACTS=/tmp/cabiln-fuzz/python python -m pytest -m fuzz \
-  --hypothesis-show-statistics --timeout=300 --timeout-method=thread
-npm ci --prefix tests/browser
-CABILN_FUZZ_ARTIFACTS=/tmp/cabiln-fuzz/frontend npm run fuzz:frontend --prefix tests/browser
-# Install Chromium first: cd tests/browser && npx playwright install chromium
-CABILN_FUZZ_ARTIFACTS=/tmp/cabiln-fuzz/browser npm run fuzz:browser --prefix tests/browser
-```
-
-Set `CABILN_FUZZ_PROFILE=deep` for longer campaigns; use `--timeout=1200` for the
-Python run. CI runs bounded campaigns on pushes and pull requests, and the deep
-profile nightly. Browser servers and library changes use temporary local copies.
-These campaigns sample supported feature combinations; they do not exhaust the
-possible peptides or editing histories.
-
-Failures retain reduced inputs, seeds, dependency versions and replay information.
-Python artifacts include source/library hashes, Hypothesis's example database
-and reproduction decorator. Replay with the recorded versions and
-`--hypothesis-seed=<seed>`, or apply the reported reproduction decorator to the
-owning test. Select the recorded fast-check property with `CABILN_FUZZ_CASE`, then
-use `CABILN_FUZZ_SEED`, `CABILN_FUZZ_PATH` and, for command histories,
-`CABILN_FUZZ_REPLAY_PATH` to replay its failure. `CABILN_FUZZ_SCHEDULE` accepts the
-saved task order for exact replay of a frontend scheduling failure.
-Observation counters include shrinking and repeated examples; they do not count
-unique peptides. A watchdog termination preserves
-the latest eight Python observations in `active.json`, alongside the captured CI log.
-The [initial campaign record](tools/benchmarks/results/fuzz-20260930.json) documents
-generated cases, independent fault controls and coverage limits.
-
-The code layout and review findings are in [docs/architecture.md](docs/architecture.md)
-and [docs/cleanup-review.md](docs/cleanup-review.md). The latest editing, browser,
-and performance evidence is in
-[docs/ux-performance-validation.md](docs/ux-performance-validation.md).
+[Architecture](docs/architecture.md) maps the current modules.
+[Documentation](docs/README.md) links the maintained guides, performance records
+and earlier reviews. Historical test counts belong to their recorded revisions;
+use the [CI runs](https://github.com/anagnorisis2peripeteia/pyPept/actions) for a
+particular release.
 
 ## Attribution
 

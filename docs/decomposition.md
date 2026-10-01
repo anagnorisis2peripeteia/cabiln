@@ -53,8 +53,7 @@ and budget semantics. Both use the same reciprocal-port, unknown-atom and
 cover-retention rules. Candidates and verified notation decisions can be reused
 for one active proposal within a conversion; switching proposals releases that
 state. There is no cache across input molecules or library revisions. The
-streamlining experiment with one grouped search lost observed partial progress
-at a tight state limit, so it was not adopted.
+separate budgets preserve partial progress at tight search limits.
 
 Some local failures also provide a safe search constraint. Current synthetic
 residues require a carbonyl attachment site. A sealed unmatched region without
@@ -64,10 +63,7 @@ surrounding ownership choices. A generic assembly error does not justify this
 pruning. This distinction matters for large structures with many equivalent
 choices far from one unknown residue.
 
-The former backbone-first walker and its separate scaffold, branch, and named
-tautomer rescue paths are removed. The initial audit records the reproduced
-failures in [decomposition-audit.md](decomposition-audit.md). The design review
-and its vocabulary remain in [decomposition-contract.md](decomposition-contract.md).
+The [review archive](history.md) records earlier algorithms and rejected designs.
 
 ## Result contract
 
@@ -129,32 +125,22 @@ never silently discarded.
 
 The selected library is checked before and after conversion. A concurrent
 library update invalidates the attempt and asks the caller to retry. Existing
-library metadata issues listed in [cleanup-review.md](cleanup-review.md) remain
-separate data work; this algorithm does not repair or endorse every record.
+library metadata issues listed in [library quality](library-quality.md) remain
+separate data work.
 
-## Evidence
+## Verification and measurements
 
-[decomposition-invariance.md](decomposition-invariance.md) records the independent
-atom-partition checks, SMILES permutations, shuffled libraries, new registration,
-unknown regions, and explicit budget exhaustion. The existing drug fixtures
-also require editable residue counts and exact chemistry; preserving only the
-whole molecule cannot satisfy those checks.
-
-The [initial recognizer integration](cleanup-review.md#decomposition-validation),
-at `f6c0423`, passed
-all 1,100 Python checks and 27 frontend checks. It includes all six large-peptide
-fixtures. The slowest conversion, exenatide, took 29.32 seconds on this machine;
-that baseline precedes the shared-definition cache and depiction-free verification.
-The [independent benchmark](decomposition-benchmark.md) records external reference
-structures, expected monomer ownership, attachment checks, and measured comparisons.
-The [tool review](decomposition-tools.md) records why the tested external importers
-could not replace this application's exact-chemistry contract. The current
-[rework validation](rework-validation.md) records the full suite and browser checks.
+The [independent benchmark](decomposition-benchmark.md) checks external reference
+structures, expected monomer ownership, attachment sites and atom-order changes.
+The chemistry and browser suites also cover registration, unknown regions,
+budget exhaustion and editable large-peptide imports. Historical comparisons
+with earlier algorithms and external tools are in the [review archive](history.md).
 
 The necessary-core filter was checked against unfiltered compilation for
 mixed backbones, cycles, branches, unknown residues, CuAAC and metathesis
-proposals. Every exact candidate was retained in those cases. In a fresh
-process, converting `NCC(=O)N[C@@H](C)C(=O)O` reduced peak resident memory from
+proposals. Every exact candidate was retained in those cases. The fresh-process
+comparison recorded at `f6c0423` on 28 September 2026 used
+`NCC(=O)N[C@@H](C)C(=O)O`. Filtering reduced peak resident memory from
 636.3 MiB to 144.7 MiB, and call time from 4.76 to 1.27 seconds. The converter
 compiled 128 viable states instead of 14,618 whole-library states. These are
 measurements on the review machine, not memory or latency guarantees.
