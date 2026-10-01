@@ -57,30 +57,33 @@
     <textarea id="cabiln-input"
               placeholder="Enter a sequence, e.g. fmoc-A-G-L-am"
               spellcheck="false" autocomplete="off" aria-describedby="cabiln-status conversion-status quality-summary"></textarea>
-  </div>
-  <div id="notation-actions" class="notation-actions" role="group" aria-label="Notation">
-    <span class="toolbar-label">Convert notation</span>
-    <select id="notation-policy" class="hbtn" aria-label="Notation formatting" title="Canonical formatting uses a standard order for chains, branches and connection labels">
-      <option value="layout" selected>Keep layout</option>
-      <option value="canonical">Canonical</option>
-    </select>
-    <div class="notation-targets">
-      <button type="button" id="btn-to-bracket" class="hbtn" title="Convert to bracket notation" aria-label="Convert to bracket notation">Bracket [ ]</button>
-      <button type="button" id="btn-to-branch" class="hbtn" title="Convert to branch (%) notation" aria-label="Convert to branch notation">Branch %</button>
-      <button type="button" id="btn-to-cabiln-pct" class="hbtn convert-input" style="display:none;" title="Convert to CABILN (% branch notation)" aria-label="Convert input to branch notation">Branch %</button>
-      <button type="button" id="btn-to-cabiln-bracket" class="hbtn convert-input" style="display:none;" title="Convert to CABILN ([] bracket notation)" aria-label="Convert input to bracket notation">Bracket [ ]</button>
+    <div id="notation-actions" class="notation-actions" role="group" aria-label="Notation">
+      <span class="toolbar-label">Convert</span>
+      <select id="notation-policy" class="hbtn" aria-label="Notation formatting" title="Canonical formatting uses a standard order for chains, branches and connection labels">
+        <option value="layout" selected>Keep layout</option>
+        <option value="canonical">Canonical</option>
+      </select>
+      <div class="notation-targets">
+        <button type="button" id="btn-to-bracket" class="hbtn" title="Convert to bracket notation" aria-label="Convert to bracket notation">Bracket [ ]</button>
+        <button type="button" id="btn-to-branch" class="hbtn" title="Convert to branch (%) notation" aria-label="Convert to branch notation">Branch %</button>
+        <button type="button" id="btn-to-cabiln-pct" class="hbtn convert-input" style="display:none;" title="Convert to CABILN (% branch notation)" aria-label="Convert input to branch notation">Branch %</button>
+        <button type="button" id="btn-to-cabiln-bracket" class="hbtn convert-input" style="display:none;" title="Convert to CABILN ([] bracket notation)" aria-label="Convert input to bracket notation">Bracket [ ]</button>
+      </div>
+      <div class="history-controls" role="group" aria-label="Sequence history">
+        <button type="button" id="btn-undo" class="hbtn" title="Undo last edit" disabled><svg class="ui-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M6 3L2 7l4 4M2 7h7a4 4 0 0 1 4 4v2"/></svg>Undo</button>
+        <button type="button" id="btn-redo" class="hbtn" title="Redo last edit" disabled><svg class="ui-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M10 3l4 4-4 4M14 7H7a4 4 0 0 0-4 4v2"/></svg>Redo</button>
+      </div>
     </div>
-    <div class="history-controls" role="group" aria-label="Sequence history">
-      <button type="button" id="btn-undo" class="hbtn" title="Undo last edit" disabled><svg class="ui-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M6 3L2 7l4 4M2 7h7a4 4 0 0 1 4 4v2"/></svg>Undo</button>
-      <button type="button" id="btn-redo" class="hbtn" title="Redo last edit" disabled><svg class="ui-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M10 3l4 4-4 4M14 7H7a4 4 0 0 0-4 4v2"/></svg>Redo</button>
-    </div>
   </div>
-  <div class="sequence-feedback">
-    <div id="cabiln-status" class="statusbar" role="status" aria-live="polite" aria-atomic="true"></div>
-    <div id="draft-notice" class="draft-notice" hidden>
-      <span id="draft-status" role="status" aria-live="polite" aria-atomic="true"></span>
-      <button type="button" id="btn-restore-draft" class="hbtn">Restore saved draft</button>
-      <button type="button" id="btn-dismiss-draft" class="hbtn">Dismiss</button>
+  <div class="sequence-summary">
+    <div id="residue-chips" role="group" aria-label="Residues and connections"></div>
+    <div class="sequence-feedback">
+      <div id="cabiln-status" class="statusbar" role="status" aria-live="polite" aria-atomic="true"></div>
+      <div id="draft-notice" class="draft-notice" hidden>
+        <span id="draft-status" role="status" aria-live="polite" aria-atomic="true"></span>
+        <button type="button" id="btn-restore-draft" class="hbtn">Restore saved draft</button>
+        <button type="button" id="btn-dismiss-draft" class="hbtn">Dismiss</button>
+      </div>
     </div>
   </div>
   <div id="conversion-status" class="statusbar warn" role="status" aria-live="polite" aria-atomic="true" hidden></div>
@@ -90,8 +93,6 @@
     <div id="quality-details"></div>
   </details>
   <div id="canonical-status" class="statusbar" hidden></div>
-
-  <div id="residue-chips" role="group" aria-label="Residues and connections"></div>
 </div>
 
 <!-- build panel -->

@@ -107,10 +107,10 @@
     flex-direction: column;
     gap: 6px;
   }
-  #input-bar-row { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  #input-bar-row { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px; min-width: 0; }
   .sequence-format { display: flex; align-items: center; gap: 8px; }
-  #cabiln-input { flex: 1; min-width: 0; height: 44px; }
-  .history-controls { display: flex; gap: 5px; flex-shrink: 0; margin-left: auto; }
+  #cabiln-input { flex: 1; min-width: 320px; height: 44px; }
+  .history-controls { display: flex; gap: 5px; flex-shrink: 0; margin-left: 6px; }
   .notation-targets { display: flex; gap: 6px; }
   .convert-input { flex-shrink: 0; }
   #notation-select {
@@ -165,8 +165,16 @@
   .statusbar.warn { color: var(--warning); }
   .statusbar:empty { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
   #residue-chips:empty { display: none; }
-  .sequence-feedback { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 12px; }
+  .sequence-summary { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 16px; }
+  .sequence-feedback { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; margin-left: auto; min-width: 0; max-width: 100%; }
   .sequence-feedback > .statusbar { flex: 1; min-width: 160px; }
+  .sequence-feedback:has(.structure-warning, .structure-details, .retry-button, #cabiln-status:not(.ok):not(:empty)) {
+    flex: 1 0 100%;
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+  }
   .draft-notice {
     display: flex;
     align-items: center;
@@ -790,6 +798,8 @@
   /* residue chips */
   #residue-chips {
     display: flex;
+    flex: 1;
+    min-width: 0;
     flex-wrap: wrap;
     gap: 3px;
     padding: 2px 0;
@@ -863,8 +873,11 @@
     html, body { height: auto; min-height: 100%; overflow: auto; }
     body { min-height: 100dvh; }
     header, #input-bar, #build-panel { padding-left: 12px; padding-right: 12px; }
-    #input-bar-row { flex-wrap: wrap; }
-    #cabiln-input { order: 2; flex-basis: 100%; }
+    #cabiln-input { min-width: 0; }
+    .notation-actions { flex-basis: 100%; }
+    .history-controls { margin-left: auto; }
+    #residue-chips { flex-basis: 100%; }
+    .sequence-feedback { flex: 1 0 100%; flex-direction: row; align-items: center; flex-wrap: wrap; gap: 4px 12px; }
     #main { flex-direction: column; flex: 1 0 auto; }
     #render-pane { height: 440px; height: max(440px, 55dvh); flex: none; }
     #verify-pane { min-height: 360px; flex: none; border-left: 0; border-top: 1px solid var(--line-soft); }
@@ -892,6 +905,8 @@
   }
 
   @media (max-width: 520px) {
+    #cabiln-input { flex-basis: 100%; }
+    .sequence-feedback:has(.structure-warning, .structure-details, .retry-button, #cabiln-status:not(.ok):not(:empty)) > .statusbar { flex-basis: 100%; }
     .drawing-toolbar { padding: 4px 12px; gap: 6px 10px; }
     .drawing-toolbar > .toolbar-group:first-child { flex-basis: 100%; }
     .drawing-toolbar .toolbar-label { display: none; }
