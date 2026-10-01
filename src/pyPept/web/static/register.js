@@ -1,6 +1,5 @@
 let detectedData = null;
 let detectedSmiles = '';
-let previewRequest = null;
 let formRevision = 0;
 let registering = false;
 let registeredPayload = null;
@@ -41,8 +40,7 @@ function updateRegisterButton() {
 }
 
 function invalidatePreview() {
-  if (previewRequest) previewRequest.abort();
-  previewRequest = null;
+  requests.cancel('registration-preview');
   detectedData = null;
   detectedSmiles = '';
   registeredPayload = null;
@@ -70,38 +68,23 @@ for (const field of [abbrIn, nameIn, typeIn, subtypeIn]) {
   });
 }
 
-function responseError(response, data) {
-  if (data.error) return data.error;
-  if (response.ok) return '';
-  return Array.isArray(data.detail)
-    ? data.detail.map(item => item.msg).join('; ')
-    : data.detail || 'The request could not be completed.';
-}
-
 btnPreview.addEventListener('click', async () => {
   const smi = smilesIn.value.trim();
   invalidatePreview();
   if (!smi) return;
-  const request = new AbortController();
-  previewRequest = request;
-  const current = () => previewRequest === request && smilesIn.value.trim() === smi;
+  const request = requests.start('registration-preview');
+  const current = () => request.current() && smilesIn.value.trim() === smi;
   btnPreview.disabled = true;
   btnPreview.textContent = 'Detecting…';
   prevCanvas.innerHTML = '<div class="preview-message">Analysing…</div>';
   detDisp.innerHTML = '';
   prevSec.style.display = 'block';
   try {
-    const res  = await fetchCalculation('/preview_monomer', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ smiles: smi }),
-      signal: request.signal,
-    });
-    const data = await res.json();
+    const res = await postCalculation('/preview_monomer', { smiles: smi }, request.signal);
+    const data = await readResponse(res);
     if (!current()) return;
-    const error = responseError(res, data);
-    if (error) {
-      prevCanvas.innerHTML = `<div class="preview-message err">${escHtml(error)}</div>`;
+    if (data.error) {
+      prevCanvas.innerHTML = `<div class="preview-message err">${escHtml(data.error)}</div>`;
       smilesIn.className = 'err';
       btnRegister.disabled = true;
     } else {
@@ -122,11 +105,11 @@ btnPreview.addEventListener('click', async () => {
     prevCanvas.innerHTML = '<div class="preview-message err">Server error</div>';
   } finally {
     if (current()) {
-      previewRequest = null;
       btnPreview.disabled = false;
       btnPreview.textContent = 'Preview & detect R-groups';
       updateRegisterButton();
     }
+    request.finish();
   }
 });
 
@@ -156,10 +139,9 @@ btnRegister.addEventListener('click', async () => {
       headers: {'Content-Type': 'application/json'},
       body,
     });
-    const data = await res.json();
-    const error = responseError(res, data);
-    if (error) {
-      if (revision === formRevision) showStatus('err', error);
+    const data = await readResponse(res);
+    if (data.error) {
+      if (revision === formRevision) showStatus('err', data.error);
     } else {
       registeredPayload = body;
       if (revision === formRevision) {
@@ -178,8 +160,4 @@ function showStatus(cls, msg) {
   statusMsg.className = cls;
   statusMsg.textContent = msg;
   statusMsg.style.display = '';
-}
-
-function escHtml(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }

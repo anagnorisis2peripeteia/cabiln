@@ -7,6 +7,38 @@ from typing import NamedTuple
 from pyPept.interfaces.reaction_library import REACTION_INDEX, infer_chem_type
 
 
+def _attachment_idx(mol, slot):
+    """Return attachment atom index for R-group slot (1-based), or None.
+
+    Locates the dummy atom whose isotope equals slot (CHUCKLES convention:
+    slot 1 → [1*], slot 2 → [2*], …) and returns its neighbour's index —
+    i.e. the heavy atom where the inter-monomer bond will form.
+    """
+    for atom in mol.GetAtoms():
+        if atom.GetAtomicNum() == 0 and atom.GetIsotope() == slot:
+            nb = atom.GetNeighbors()
+            return nb[0].GetIdx() if nb else None
+    return None
+
+
+def _rgroup_atom_idx(mol, slot):
+    """Return the dummy atom index for R-group slot (1-based), or None."""
+    for atom in mol.GetAtoms():
+        if atom.GetAtomicNum() == 0 and atom.GetIsotope() == slot:
+            return atom.GetIdx()
+    return None
+
+
+def _slot_for_attachment(mol, atom_idx):
+    """Return R-group slot (1-based) whose dummy neighbours atom_idx, or None."""
+    for atom in mol.GetAtoms():
+        if atom.GetAtomicNum() == 0:
+            for nb in atom.GetNeighbors():
+                if nb.GetIdx() == atom_idx:
+                    return atom.GetIsotope()
+    return None
+
+
 class ResolvedConnection(NamedTuple):
     chem_type1: str
     chem_type2: str

@@ -144,7 +144,7 @@ def _connection_occupancy(connections, sites):
 
 
 def _sequence_connections(sequence, ids):
-    from pyPept.sequence import _slot_for_attachment
+    from pyPept.attachments import _slot_for_attachment
 
     connections = []
     for bond in sequence.s_bonds:

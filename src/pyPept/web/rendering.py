@@ -77,20 +77,23 @@ def render(req: _CabilnReq):
         return error_response(exc)
 
 
+def _structure_view(romol, req):
+    from rdkit.Chem.Descriptors import ExactMolWt
+
+    require_supported_stereo(romol)
+    return {
+        "svg": _draw_mol(romol, max(400, req.width), max(300, req.height)),
+        "info": f"{romol.GetNumAtoms()} atoms · MW {ExactMolWt(romol):.2f}",
+    }
+
+
 @router.post("/render_smiles")
 def render_smiles(req: _SmilesReq):
     try:
-        from rdkit.Chem.Descriptors import ExactMolWt
-
         context = project_context()
         romol = read_input(req.smiles, input_format="smiles").molecule
-        require_supported_stereo(romol)
-
-        w, h = max(400, req.width), max(300, req.height)
-        svg = _draw_mol(romol, w, h)
         return {
-            "svg": svg,
-            "info": f"{romol.GetNumAtoms()} atoms · MW {ExactMolWt(romol):.2f}",
+            **_structure_view(romol, req),
             "context": checked_context(context),
         }
 
@@ -103,26 +106,19 @@ def render_reference(req: _ReferenceReq):
     """Render the requested input format, using auto-detection by default."""
     try:
         from rdkit import Chem
-        from rdkit.Chem.Descriptors import ExactMolWt
 
         context = project_context()
-        w, h = max(400, req.width), max(300, req.height)
         parsed = (
             detect_input(req.input, depiction=None)
             if req.input_format == "auto"
             else read_input(req.input, input_format=req.input_format)
         )
         romol, fmt = parsed.assemble(depiction=None), parsed.format
-        require_supported_stereo(romol)
-
-        svg = _draw_mol(romol, w, h)
-        smiles = Chem.MolToSmiles(romol)
         return {
-            "svg": svg,
-            "smiles": smiles,
+            **_structure_view(romol, req),
+            "smiles": Chem.MolToSmiles(romol),
             "format": fmt,
             "context": checked_context(context),
-            "info": f"{romol.GetNumAtoms()} atoms · MW {ExactMolWt(romol):.2f}",
         }
     except Exception as exc:
         return error_response(exc)
@@ -132,20 +128,13 @@ def render_reference(req: _ReferenceReq):
 def render_mol(req: _MolBlockReq):
     try:
         from rdkit import Chem
-        from rdkit.Chem.Descriptors import ExactMolWt
 
         context = project_context()
         romol = read_input(req.mol_block, input_format="mol").molecule
-        require_supported_stereo(romol)
-
-        w, h = max(400, req.width), max(300, req.height)
-        svg = _draw_mol(romol, w, h)
-        smiles = Chem.MolToSmiles(romol)
         return {
-            "svg": svg,
-            "smiles": smiles,
+            **_structure_view(romol, req),
+            "smiles": Chem.MolToSmiles(romol),
             "context": checked_context(context),
-            "info": f"{romol.GetNumAtoms()} atoms · MW {ExactMolWt(romol):.2f}",
         }
 
     except Exception as exc:

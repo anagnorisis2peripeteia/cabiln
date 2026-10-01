@@ -18,6 +18,7 @@ from rdkit import Chem
 from pyPept.source import SourceText, join as _source_join, sub as _source_sub
 from pyPept.notation import MAX_NOTATION_CHARACTERS, split_outside
 # Compatibility imports preserve the existing library entry points.
+from pyPept.attachments import _attachment_idx, _rgroup_atom_idx, _slot_for_attachment
 from pyPept.notation_conversion import (
     _OLD_BILN_RE, biln_to_cabiln, cabiln_to_branch, cabiln_to_bracket,
     colorize_cabiln,
@@ -26,38 +27,6 @@ from pyPept.notation_lowering import _expand_inline_caps, _preprocess_cabiln
 from pyPept.pdb_names import correct_pdb_atoms, greekify, get_atom_by_name, get_monomer_codes
 from pyPept.monomer_store import library_resource
 from pyPept.synthetic import expand_synthetic_tokens, add_synthetic_monomers
-
-
-def _attachment_idx(mol, slot):
-    """Return attachment atom index for R-group slot (1-based), or None.
-
-    Locates the dummy atom whose isotope equals slot (CHUCKLES convention:
-    slot 1 → [1*], slot 2 → [2*], …) and returns its neighbour's index —
-    i.e. the heavy atom where the inter-monomer bond will form.
-    """
-    for atom in mol.GetAtoms():
-        if atom.GetAtomicNum() == 0 and atom.GetIsotope() == slot:
-            nb = atom.GetNeighbors()
-            return nb[0].GetIdx() if nb else None
-    return None
-
-
-def _rgroup_atom_idx(mol, slot):
-    """Return the dummy atom index for R-group slot (1-based), or None."""
-    for atom in mol.GetAtoms():
-        if atom.GetAtomicNum() == 0 and atom.GetIsotope() == slot:
-            return atom.GetIdx()
-    return None
-
-
-def _slot_for_attachment(mol, atom_idx):
-    """Return R-group slot (1-based) whose dummy neighbours atom_idx, or None."""
-    for atom in mol.GetAtoms():
-        if atom.GetAtomicNum() == 0:
-            for nb in atom.GetNeighbors():
-                if nb.GetIdx() == atom_idx:
-                    return atom.GetIsotope()
-    return None
 
 
 def _emit_warning(message, category=UserWarning, stacklevel=1, *, warning_sink=None):

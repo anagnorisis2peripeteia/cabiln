@@ -388,10 +388,7 @@ async function restoreBoundDraft(project) {
   const request = requests.start('project-open');
   setProjectStatus('Checking the saved draft library binding and definitions…');
   try {
-    const response = await fetchCalculation('/prepare_project', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ project }), signal: request.signal,
-    });
+    const response = await postCalculation('/prepare_project', { project }, request.signal);
     const data = await readResponse(response);
     if (!request.current() || revision !== projectRevision) return;
     if (data.error) throw new Error(data.error);
@@ -412,10 +409,7 @@ async function saveProject() {
   btnProjectSave.disabled = true;
   setProjectStatus('Checking project definitions before saving…');
   try {
-    const response = await fetchCalculation('/prepare_project', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ project }), signal: request.signal,
-    });
+    const response = await postCalculation('/prepare_project', { project }, request.signal);
     const data = await readResponse(response);
     if (!request.current() || revision !== projectRevision) return;
     if (data.error) throw new Error(data.error);
@@ -438,10 +432,7 @@ async function validateAndOpenProject(project, successMessage = 'Project opened'
   const request = requests.start('project-open');
   setProjectStatus('Checking the project library binding and definitions…');
   try {
-    const response = await fetchCalculation('/validate_project', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ project }), signal: request.signal,
-    });
+    const response = await postCalculation('/validate_project', { project }, request.signal);
     const data = await readResponse(response);
     if (!request.current() || revision !== projectRevision) return;
     if (data.error || data.valid !== true) throw new Error(data.error || 'The project could not be validated.');
@@ -786,15 +777,11 @@ async function loadSwapOptions() {
   const index = buildLeftRIdx;
   buildStatus.textContent = 'Finding replacements for all connected sites…';
   try {
-    while (requests.has('library') || requests.has('reactions')) {
-      const pending = requests.pending('library', 'reactions');
-      await Promise.race([pending, request.done]);
-      if (!request.current()) return;
-    }
-    const data = await readResponse(await fetchCalculation('/replacement_options', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cabiln: source, residue_idx: index }), signal: request.signal,
-    }));
+    if (requests.has('library', 'reactions') &&
+        !await request.waitFor('library', 'reactions')) return;
+    const data = await readResponse(await postCalculation('/replacement_options', {
+      cabiln: source, residue_idx: index,
+    }, request.signal));
     if (!request.current() || source !== cabilnInput.value.trim() || index !== buildLeftRIdx) return;
     if (data.error) throw new Error(data.error);
     if (data.source_echo !== source || data.residue_idx !== index || !data.context) {
@@ -923,12 +910,9 @@ async function doInsertBetween(abbr) {
   const request = requests.start('sequence-edit');
   buildHint.textContent = 'Inserting…';
   try {
-    const res = await fetchCalculation('/insert_backbone', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ cabiln: val, after_idx, new_abbr: abbr }),
-      signal: request.signal,
-    });
+    const res = await postCalculation('/insert_backbone', {
+      cabiln: val, after_idx, new_abbr: abbr,
+    }, request.signal);
     const data = await readResponse(res);
     if (!request.current() || cabilnInput.value.trim() !== val) return;
     if (data.error) {
@@ -1141,19 +1125,14 @@ async function checkBuildValidity() {
   buildStatus.className = 'build-status';
 
   try {
-    const res = await fetchCalculation('/validate_bond', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({
-        chem_type_a: leftRg.chem_type,
-        chem_type_b: rightRg.chem_type,
-        abbr_a: buildLeft.abbr,
-        slot_a: buildLeft.selectedSlot,
-        abbr_b: buildRight.abbr,
-        slot_b: buildRight.selectedSlot
-      }),
-      signal: request.signal,
-    });
+    const res = await postCalculation('/validate_bond', {
+      chem_type_a: leftRg.chem_type,
+      chem_type_b: rightRg.chem_type,
+      abbr_a: buildLeft.abbr,
+      slot_a: buildLeft.selectedSlot,
+      abbr_b: buildRight.abbr,
+      slot_b: buildRight.selectedSlot
+    }, request.signal);
     const data = await readResponse(res);
     if (!request.current()) return;
     if (data.valid) {
@@ -1238,26 +1217,21 @@ buildPreviewButton.addEventListener('click', async () => {
   try {
     // Drawing and verification share one worker. Do not spend preview retries
     // competing with work that is already running for this page.
-    while (request.current()) {
-      const pending = requests.pending('main-render', 'reference-render', 'verify');
-      if (!pending) break;
+    if (requests.has('main-render', 'reference-render', 'verify')) {
       buildPreviewStatus.textContent = `${pair} · Waiting for the current drawing or verification…`;
-      await Promise.race([pending, request.done]);
+      if (!await request.waitFor('main-render', 'reference-render', 'verify')) return;
     }
     if (!request.current()) return;
     buildPreviewStatus.textContent = `${pair} · Preparing preview…`;
     // These endpoints calculate a candidate; only Connect commits the document.
-    const proposal = await readResponse(await fetchCalculation(swapping ? '/replace_monomer' : '/insert_bond', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(connection), signal: request.signal,
-    }));
+    const proposal = await readResponse(await postCalculation(
+      swapping ? '/replace_monomer' : '/insert_bond', connection, request.signal
+    ));
     if (!request.current()) return;
     if (proposal.error) throw new Error(proposal.error);
-    const drawing = await readResponse(await fetchCalculation('/render', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cabiln: proposal.result, width: 1000, height: 320 }),
-      signal: request.signal,
-    }));
+    const drawing = await readResponse(await postCalculation('/render', {
+      cabiln: proposal.result, width: 1000, height: 320,
+    }, request.signal));
     if (!request.current()) return;
     if (drawing.error) throw new Error(drawing.error);
     if (swapping && (!CabilnProject.sameContext(connection.context, proposal.context) ||
@@ -1303,12 +1277,9 @@ buildConnect.addEventListener('click', async () => {
   buildStatus.className = 'build-status';
 
   try {
-    const res = await fetchCalculation(swapping ? '/replace_monomer' : '/insert_bond', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify(connection),
-      signal: request.signal,
-    });
+    const res = await postCalculation(
+      swapping ? '/replace_monomer' : '/insert_bond', connection, request.signal
+    );
     const data = await readResponse(res);
     if (!request.current() || cabilnInput.value.trim() !== connection.cabiln) return;
     if (data.error) {
@@ -1340,9 +1311,8 @@ async function settleDrawingsForConversion(request) {
   // Aborting a running drawing retires the server's chemistry worker. Let the
   // current drawing (and its automatic Verify) finish before competing with it.
   while (request.current()) {
-    const pending = requests.pending('main-render', 'reference-render', 'verify');
-    if (pending) {
-      await Promise.race([pending, request.done]);
+    if (requests.has('main-render', 'reference-render', 'verify')) {
+      if (!await request.waitFor('main-render', 'reference-render', 'verify')) return;
       continue;
     }
     if (cabilnTimer !== null) {
@@ -1417,12 +1387,7 @@ async function convertNotation(target) {
     if (!request.current()) return;
     const val = cabilnInput.value.trim();
     const snapshot = cabilnDrawing;
-    const res = await fetchCalculation('/convert_notation', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ cabiln: val, target, canonical }),
-      signal: request.signal,
-    });
+    const res = await postCalculation('/convert_notation', { cabiln: val, target, canonical }, request.signal);
     const data = await readResponse(res);
     if (!request.current() || cabilnInput.value.trim() !== val) return;
     if (data.error) { conversionError = data.error; return; }
@@ -1494,12 +1459,7 @@ async function doS2c(notation) {
     const smiles = smilesInput.value.trim();
     if (!smiles) return;
     const originalMain = cabilnInput.value.trim();
-    const res = await fetchCalculation('/smiles_to_cabiln', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ smiles, notation }),
-      signal: request.signal,
-    });
+    const res = await postCalculation('/smiles_to_cabiln', { smiles, notation }, request.signal);
     const data = await readResponse(res);
     if (!request.current() || smilesInput.value.trim() !== smiles ||
         cabilnInput.value.trim() !== originalMain) return;
@@ -1535,12 +1495,9 @@ async function doToCabiln(notation) {
     if (!request.current()) return;
     const txt = cabilnInput.value.trim();
     const inputFormat = notationSelect.value;
-    const res = await fetchCalculation('/to_cabiln', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ input: txt, input_format: inputFormat, notation }),
-      signal: request.signal,
-    });
+    const res = await postCalculation('/to_cabiln', {
+      input: txt, input_format: inputFormat, notation,
+    }, request.signal);
     const data = await readResponse(res);
     if (!request.current() || cabilnInput.value.trim() !== txt ||
         notationSelect.value !== inputFormat) return;
@@ -1681,12 +1638,9 @@ async function doRenderForeign(txt) {
   btnReroll.disabled = true;
   const { w, h } = canvasSize(renderCanvas);
   try {
-    const res = await fetchCalculation('/render_reference', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ input: txt, input_format: mode, width: w, height: h }),
-      signal: request.signal,
-    });
+    const res = await postCalculation('/render_reference', {
+      input: txt, input_format: mode, width: w, height: h,
+    }, request.signal);
     const data = await readResponse(res);
     if (!request.current() || cabilnInput.value.trim() !== txt ||
         notationSelect.value !== mode) return;
@@ -1757,12 +1711,9 @@ async function doRenderCabiln(seq) {
   if (buildMode && !sameDocument) clearBuild();
   const view = { ...canvasSize(renderCanvas), seed: rerollSeed };
   try {
-    const res  = await fetchCalculation('/render', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cabiln: seq, width: view.w, height: view.h, seed: view.seed }),
-      signal: request.signal,
-    });
+    const res = await postCalculation('/render', {
+      cabiln: seq, width: view.w, height: view.h, seed: view.seed,
+    }, request.signal);
     const data = await readResponse(res);
     if (!request.current() || cabilnInput.value.trim() !== seq ||
         notationSelect.value !== 'cabiln') return;
@@ -1849,12 +1800,7 @@ async function renderMolReference(text, name, request = requests.start('referenc
   setStatus(smilesStatus, `Reference: ${name || 'uploaded structure'}`);
   try {
     const { w, h } = canvasSize(document.getElementById('smiles-canvas'));
-    const res = await fetchCalculation('/render_mol', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mol_block: text, width: w, height: h }),
-      signal: request.signal,
-    });
+    const res = await postCalculation('/render_mol', { mol_block: text, width: w, height: h }, request.signal);
     const data = await readResponse(res);
     if (!request.current()) return;
     if (data.error) {
@@ -1882,12 +1828,7 @@ async function doRenderRef(txt) {
   clearComparison();
   const { w, h } = canvasSize(document.getElementById('smiles-canvas'));
   try {
-    const res = await fetchCalculation('/render_reference', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ input: txt, width: w, height: h }),
-      signal: request.signal,
-    });
+    const res = await postCalculation('/render_reference', { input: txt, width: w, height: h }, request.signal);
     const data = await readResponse(res);
     if (!request.current() || smilesInput.value.trim() !== txt) return;
     if (data.error) {
@@ -1924,12 +1865,7 @@ async function triggerVerify() {
   const smiles = lastSmiles;
   const cabiln = lastCabiln;
   try {
-    const res  = await fetchCalculation('/verify', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ smiles, cabiln }),
-      signal: request.signal,
-    });
+    const res = await postCalculation('/verify', { smiles, cabiln }, request.signal);
     const data = await readResponse(res);
     if (!request.current() || lastSmiles !== smiles || lastCabiln !== cabiln) return;
     if (data.error) {

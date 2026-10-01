@@ -25,6 +25,15 @@ async function fetchCalculation(url, options = {}) {
   }
 }
 
+function postCalculation(url, body, signal) {
+  return fetchCalculation(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    signal,
+  });
+}
+
 // A response may already be queued when abort() runs. Only the current request
 // in each group may change the UI, even if a cancelled fetch still resolves.
 const requests = (() => {
@@ -46,12 +55,20 @@ const requests = (() => {
       onEnd() { try { onEnd(); } finally { settle(); } },
     };
     activeRequests.set(key, pending);
+    const current = () => activeRequests.get(key) === pending;
     return {
       signal: pending.controller.signal,
-      done,
-      current: () => activeRequests.get(key) === pending,
+      current,
+      async waitFor(...keys) {
+        while (current()) {
+          const waiting = keys.map(key => activeRequests.get(key)?.done).find(Boolean);
+          if (!waiting) return true;
+          await Promise.race([waiting, done]);
+        }
+        return false;
+      },
       finish() {
-        if (activeRequests.get(key) !== pending) return;
+        if (!current()) return;
         activeRequests.delete(key);
         pending.onEnd();
       },
@@ -60,8 +77,7 @@ const requests = (() => {
 
   return {
     start: startRequest, cancel: cancelRequests,
-    has: key => activeRequests.has(key),
-    pending: (...keys) => keys.map(key => activeRequests.get(key)?.done).find(Boolean),
+    has: (...keys) => keys.some(key => activeRequests.has(key)),
   };
 })();
 
@@ -75,4 +91,3 @@ async function readResponse(response) {
   }
   return data;
 }
-

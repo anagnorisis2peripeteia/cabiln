@@ -88,12 +88,14 @@ derived facts together. Marker indexes avoid scanning every marker for each tab.
 `library.js` owns discovery, library revisions, reaction filtering and hover
 previews. The builder supplies current connection/swap filter facts and receives
 monomer choices and library-change notifications. It does not manage the palette's
-cache or DOM. `requests.js` owns active requests behind start, cancel, pending and
-has operations; callers cannot mutate its request map. `ui.js` contains shared
-zoom/pan and HTML escaping helpers without document state.
+cache or DOM. `requests.js` owns request lifetimes, cancellable waits, calculation
+POST encoding and response errors. Builder and registration use the same helpers;
+registration writes use a single fetch without calculation retries. `ui.js`
+contains shared zoom/pan and HTML escaping helpers without document state.
 
-Imports of text conversion and PDB naming functions from `pyPept.sequence` remain
-supported. Internal callers use the owning modules. Synthetic definitions share
+Imports of attachment lookup, text conversion and PDB naming functions from
+`pyPept.sequence` remain supported. Internal callers use the owning modules;
+attachment lookups live in `pyPept.attachments`. Synthetic definitions share
 one record-construction path, both legacy hub spellings share one detachment path,
 and parsing/PDB naming share selection of the monomer library resource.
 

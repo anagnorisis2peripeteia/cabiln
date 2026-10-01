@@ -124,10 +124,7 @@ class MonomerLibrary {
     try {
       // Both endpoints share one calculation worker. Let the palette finish so
       // a quick reaction-list request cannot force it into a one-second retry.
-      while (requests.has('library')) {
-        await requests.pending('library');
-        if (!request.current()) return;
-      }
+      if (requests.has('library') && !await request.waitFor('library')) return;
       const res = await fetchCalculation('/reactions', { signal: request.signal });
       const data = await readResponse(res);
       if (!request.current()) return;

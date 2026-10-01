@@ -97,7 +97,7 @@ function page(script, { registration = false, storedDraft = null, now = Date.now
   });
   const filename = path.join(__dirname, '../src/pyPept/web/static', script);
   const dependencies = script === 'builder.js'
-    ? ['requests.js', 'project.js', 'document.js', 'ui.js', 'residues.js', 'library.js'] : ['requests.js'];
+    ? ['requests.js', 'project.js', 'document.js', 'ui.js', 'residues.js', 'library.js'] : ['requests.js', 'ui.js'];
   for (const name of dependencies) {
     const dependency = path.join(path.dirname(filename), name);
     vm.runInContext(fs.readFileSync(dependency, 'utf8'), context, { filename: dependency });

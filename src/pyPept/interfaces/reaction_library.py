@@ -242,7 +242,7 @@ def infer_chem_type(mol, attach_idx: int, slot: int = None,
                     structurally identical in CHUCKLES but differ in LG.
     :returns: chem_type string matching reaction library keys.
     """
-    from pyPept.sequence import _slot_for_attachment
+    from pyPept.attachments import _slot_for_attachment
 
     atom = mol.GetAtomWithIdx(attach_idx)
     sym = atom.GetAtomicNum()
