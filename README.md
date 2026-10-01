@@ -186,10 +186,9 @@ fast-check. Generated campaigns sample feature combinations and preserve reduced
 failures; they do not exhaust possible peptides or editing histories.
 
 [Architecture](docs/architecture.md) maps the current modules.
-[Documentation](docs/README.md) links the maintained guides, performance records
-and earlier reviews. Historical test counts belong to their recorded revisions;
-use the [CI runs](https://github.com/anagnorisis2peripeteia/pyPept/actions) for a
-particular release.
+[Documentation](docs/README.md) links the usage guides and performance records.
+See the [CI runs](https://github.com/anagnorisis2peripeteia/pyPept/actions) for
+results from a particular release.
 
 ## Attribution
 

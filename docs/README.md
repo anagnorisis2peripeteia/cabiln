@@ -16,7 +16,5 @@
 | [Browser checks](../tests/browser/README.md) | Playwright setup, interactions and timing captures |
 | [Domain terms](../CONTEXT.md) | Definitions used in the code and guides |
 
-[Earlier reviews](history.md) are indexed by their original files at a fixed Git
-revision. Their old test counts and unresolved tasks are historical observations.
 For current release results, check the commit's
 [Tests and Fuzzing workflows](https://github.com/anagnorisis2peripeteia/pyPept/actions).

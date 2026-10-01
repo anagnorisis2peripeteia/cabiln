@@ -52,6 +52,7 @@ constraints. Give shared rules one owner and keep public compatibility adapters
 where callers still need them.
 
 Update the relevant guide when behaviour, commands or ownership changes.
-Keep dated measurements with their revision and environment. Earlier reviews
-are indexed in [docs/history.md](docs/history.md).
+Keep dated measurements with their revision and environment.
+Keep personal reviews, work plans and session reports outside the repository.
+Do not publish those notes or link to copies in Git history.
 Do not add AI co-author trailers to commits.

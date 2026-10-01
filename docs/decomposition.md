@@ -63,8 +63,6 @@ surrounding ownership choices. A generic assembly error does not justify this
 pruning. This distinction matters for large structures with many equivalent
 choices far from one unknown residue.
 
-The [review archive](history.md) records earlier algorithms and rejected designs.
-
 ## Result contract
 
 `convert_smiles` returns a `ConversionResult`:
@@ -133,8 +131,7 @@ separate data work.
 The [independent benchmark](decomposition-benchmark.md) checks external reference
 structures, expected monomer ownership, attachment sites and atom-order changes.
 The chemistry and browser suites also cover registration, unknown regions,
-budget exhaustion and editable large-peptide imports. Historical comparisons
-with earlier algorithms and external tools are in the [review archive](history.md).
+budget exhaustion and editable large-peptide imports.
 
 The necessary-core filter was checked against unfiltered compilation for
 mixed backbones, cycles, branches, unknown residues, CuAAC and metathesis

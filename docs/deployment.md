@@ -23,7 +23,6 @@ curl -fsS https://cabiln.onrender.com/ready
 ```
 
 The [CI workflows](../.github/workflows/) provide current release evidence.
-[Earlier launch reviews](history.md) describe past checkpoints and their limits.
 A passing functional check does not measure concurrent-user capacity: measure
 editing latency, peak memory and cancellation under representative hosted load
 before increasing concurrency.

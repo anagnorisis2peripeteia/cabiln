@@ -85,8 +85,6 @@ saved task order for exact replay of a frontend scheduling failure.
 Observation counters include shrinking and repeated examples; they do not count
 unique peptides. A watchdog termination preserves
 the latest eight Python observations in `active.json`, alongside the captured CI log.
-The [initial campaign record](benchmarks/results/fuzz-20260930.json) documents
-generated cases, independent fault controls and coverage limits.
 
 ## Historical scripts
 
@@ -100,7 +98,7 @@ git show 8721900:tools/add_monomers_batch6.py
 
 The former `validate_monomers.py` and `full_library_roundtrip.py` diagnostics are
 superseded by the versioned library audit above. The README check is now
-`check_examples.py`. Past review reports are indexed in [the archive](../docs/history.md).
+`check_examples.py`.
 
 The root `bench_cyclicpepedia.py` survey depended on removed normalization
 helpers. Its source remains in that commit; `cyclicpepedia_structure.xlsx` and

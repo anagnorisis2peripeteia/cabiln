@@ -172,13 +172,11 @@ The HTTP `/convert_notation` request accepts `canonical: true` and returns
 convention, RDKit-version, and library/rule content identifiers with the result.
 Canonical strings are qualified by that convention and binding. They are not
 promised to remain byte-identical across unqualified RDKit or library upgrades.
-See the [canonical contract](canonical-notation.md) and its
-[validation record](https://github.com/anagnorisis2peripeteia/pyPept/blob/428eafc16ecc879f986708c53a1d71192e514a2a/docs/canonical-notation-validation.md).
+See the [canonical contract](canonical-notation.md).
 
 The parser requires complete bracket entries and consistent crosslink slot pairs.
 Library-free text converters preserve unsupported input unchanged. They do not
-discard unknown annotations to make an input valid. See the
-[normalization review](https://github.com/anagnorisis2peripeteia/pyPept/blob/428eafc16ecc879f986708c53a1d71192e514a2a/docs/notation-normalization-review.md) for examples and checks.
+discard unknown annotations to make an input valid.
 
 ## BILN and HELM
 

@@ -211,5 +211,3 @@ helps decide whether similar code represents the same rule.
 - Explain chemistry and compatibility constraints in comments.
 - Preserve source spelling, numbering and unsupported-input behaviour during
   refactoring. Check parser/classifier changes against a frozen baseline.
-
-[Earlier reviews](history.md) retain the design alternatives and measurements.

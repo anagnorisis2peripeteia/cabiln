@@ -140,9 +140,7 @@ The input molecules are identical. RDKit independently reconstructs the standard
 HELM outputs and distinguishes Ala–Gly from Gly–Ala. Two disconnected diglycines
 likewise become diglycine plus two free glycines. HELM containing custom monomers
 outside RDKit's supported subset remains unassessed, not automatically incorrect.
-The external public API supplies no ownership witness. Broader tool source review
-and separately measured stereo/library controls are in
-[decomposition-tools.md](https://github.com/anagnorisis2peripeteia/pyPept/blob/428eafc16ecc879f986708c53a1d71192e514a2a/docs/decomposition-tools.md).
+The external public API supplies no ownership witness.
 
 ## Reproduction
 

@@ -246,5 +246,4 @@ The following properties apply to both styles:
 
 Literal expected outputs, graph permutations and independently assembled
 structures are covered in [test_canonical_notation.py](../tests/test_canonical_notation.py)
-and the notation, editor and browser suites. See
-[historical reviews](history.md) for the original design and validation records.
+and the notation, editor and browser suites.

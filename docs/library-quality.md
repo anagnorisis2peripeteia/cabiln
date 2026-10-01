@@ -101,12 +101,6 @@ of individual exceptions remain separate work.
 
 ## Recorded data concerns
 
-The September 2026 review corrected nitrogen typing, phosphate/formamide
-inference, carbon anchor roles and selected stored metadata. The audit baseline
-and curated findings record the resulting definitions. Earlier sweep counts
-and comparisons are available in the
-[original review](https://github.com/anagnorisis2peripeteia/pyPept/blob/428eafc16ecc879f986708c53a1d71192e514a2a/docs/library-quality.md).
-
 The following entries retain explicit review warnings rather than guessed
 structural corrections:
 
