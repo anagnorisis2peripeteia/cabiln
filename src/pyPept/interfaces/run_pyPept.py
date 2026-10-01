@@ -30,7 +30,7 @@ from rdkit.Chem import Draw
 
 # PyPept modules
 from pyPept.inputs import read_input
-from pyPept.sequence import correct_pdb_atoms
+from pyPept.pdb_names import correct_pdb_atoms
 from pyPept.conformer import Conformer, ConformerConstants, SecStructPredictor
 
 

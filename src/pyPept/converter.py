@@ -25,7 +25,7 @@ import warnings
 
 # pyPept functions
 from pyPept.sequence import SequenceConstants
-from pyPept.sequence import split_outside
+from pyPept.notation import split_outside
 from pyPept.notation import legacy_attachment_slot
 
 ##########################################################################

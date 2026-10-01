@@ -50,7 +50,8 @@ def read_input(source, *, input_format="cabiln", warning_sink=None, track_source
     from rdkit import Chem
 
     from pyPept.molecule import Molecule
-    from pyPept.sequence import Sequence, biln_to_cabiln
+    from pyPept.sequence import Sequence
+    from pyPept.notation_conversion import biln_to_cabiln
 
     if isinstance(source, Chem.rdchem.Mol):
         return MolecularInput("MOL", molecule=source)
@@ -209,7 +210,7 @@ def _to_bracket(cabiln: str) -> str:
     branch_parts = split_top_level(cabiln, "%")[1:]
     if all("!" in p for p in branch_parts):
         return cabiln  # all crosslink — Sequence handles it
-    from pyPept.sequence import cabiln_to_bracket
+    from pyPept.notation_conversion import cabiln_to_bracket
 
     return cabiln_to_bracket(cabiln)
 

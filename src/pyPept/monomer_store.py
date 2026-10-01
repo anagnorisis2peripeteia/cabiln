@@ -29,6 +29,22 @@ def library_path():
     return Path(_SDF_PATH).resolve()
 
 
+def library_resource(path="pyPept.data", monomer_lib="monomers.sdf"):
+    """Resolve the legacy package/file arguments shared by parsing and PDB naming.
+
+    The default uses the selected external library. A missing custom resource
+    retains the historical fallback to the bundled library.
+    """
+    from importlib.resources import files
+
+    bundled = files("pyPept.data").joinpath("monomers.sdf")
+    selected = (
+        library_path() if (path, monomer_lib) == ("pyPept.data", "monomers.sdf")
+        else files(path).joinpath(monomer_lib)
+    )
+    return selected if selected.is_file() else bundled
+
+
 def library_version(path=None, *, include_aliases=True):
     """Identify the SDF and, by default, its optional synonym definitions.
 

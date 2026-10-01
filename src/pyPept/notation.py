@@ -475,3 +475,40 @@ def _flatten_one_nested(s):
             "Legacy nested bracket must be one complete [[...].Entry(r,r)] group."
         )
     return _normalized_scope(parse_bracket_group(s))
+
+
+def split_outside(string, by_element, outside, keep_marker=True):
+    """
+    Splits a string by delimiter only if outside of a given delimiter
+
+    :param string: string to be split
+    :param by_element: delimiter(s) by which to be split
+    :param outside: only split if outside of this
+    :param keep_marker: if True keep the chunk marker, remove otherwise
+
+    :return splitChains: split string as list
+    """
+    delimiters = set(by_element)
+    if len(outside) == 1:
+        outside += outside
+    pairs = {outside[0]: outside[1]}
+    if outside == '[]':
+        pairs['{'] = '}'
+    stack, pieces, result = [], [], []
+    for position in range(len(string)):
+        character = string[position]
+        if stack and character == stack[-1]:
+            stack.pop()
+            if keep_marker:
+                pieces.append(character)
+        elif character in pairs:
+            stack.append(pairs[character])
+            if keep_marker:
+                pieces.append(character)
+        elif not stack and character in delimiters:
+            result.append(_source_join('', pieces))
+            pieces = []
+        else:
+            pieces.append(character)
+    result.append(_source_join('', pieces))
+    return result
