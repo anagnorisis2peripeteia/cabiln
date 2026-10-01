@@ -17,26 +17,18 @@
     <button type="button" id="btn-build" class="hbtn green" title="Visual peptide builder" aria-controls="build-panel" aria-expanded="false"><svg class="ui-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><circle cx="3" cy="8" r="2"/><circle cx="12" cy="3" r="2"/><circle cx="12" cy="13" r="2"/><path d="M5 7l5-3M5 9l5 3"/></svg>Build</button>
     <button type="button" id="btn-verify" class="hbtn" title="SMILES vs CABILN comparison" aria-controls="verify-pane" aria-expanded="false"><svg class="ui-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M9 3H2v10h10V8M6 7l2 2 6-6"/></svg>Verify</button>
   </div>
-  <div class="toolbar-group" role="group" aria-label="Drawing">
-    <button type="button" id="btn-hl" class="hbtn active" title="Toggle residue highlighting" aria-pressed="true"><svg class="ui-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M6 3l7 7-4 4-7-7zM2 11l3 3M1 15h6M9 1l5 5"/></svg>Highlight</button>
-    <button type="button" id="btn-dark" class="hbtn" title="Toggle dark canvas" aria-pressed="true"><svg class="ui-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M13.8 9.1A6 6 0 0 1 6.9 2.2a6 6 0 1 0 6.9 6.9z"/></svg>Dark</button>
-    <button type="button" id="btn-reroll" class="hbtn" title="New 2D layout seed" disabled>⟳ Reroll</button>
-  </div>
-  <div class="toolbar-group" role="group" aria-label="Notation">
-    <select id="notation-policy" class="hbtn" aria-label="Notation formatting" title="Canonical formatting uses a standard order for chains, branches and connection labels">
-      <option value="layout" selected>Keep layout</option>
-      <option value="canonical">Canonical</option>
-    </select>
-    <button type="button" id="btn-to-bracket" class="hbtn" title="Convert to bracket notation" aria-label="Convert to bracket notation">→[ ]</button>
-    <button type="button" id="btn-to-branch" class="hbtn" title="Convert to branch (%) notation" aria-label="Convert to branch notation">→%</button>
-  </div>
-  <div class="toolbar-group" role="group" aria-label="Export and registration">
+  <div class="toolbar-group" role="group" aria-label="Project files">
     <button type="button" id="btn-project-save" class="hbtn" title="Save source, drafts, reference and import details as a portable project">Save project</button>
     <label class="hbtn upload-trigger">Open project
       <input type="file" id="project-upload" class="sr-only" accept=".cabiln.json,.json,application/json" aria-label="Open a CABILN project">
     </label>
+  </div>
+  <div class="toolbar-group" role="group" aria-label="Export structure">
+    <span class="toolbar-label">Export</span>
     <button type="button" id="btn-png" class="hbtn" title="Download PNG" disabled><svg class="ui-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M8 2v8M5 7l3 3 3-3M2 11v3h12v-3"/></svg>PNG</button>
     <button type="button" id="btn-mol" class="hbtn" title="Download MOL file" disabled><svg class="ui-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M8 2v8M5 7l3 3 3-3M2 11v3h12v-3"/></svg>MOL</button>
+  </div>
+  <div class="toolbar-group" role="group" aria-label="Help and registration">
     <a id="register-link" class="hbtn green" href="/register" target="_blank" rel="noopener" title="Register a new monomer in a new tab" hidden><svg class="ui-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M8 3v10M3 8h10"/></svg>Register</a>
     <button type="button" id="btn-help" class="hbtn" aria-controls="help-panel" aria-expanded="false">Help</button>
   </div>
@@ -48,6 +40,7 @@
   <p>To replace a residue, choose Swap monomer in Build. The library filters replacements against every existing connection. Review the numbered site mapping and preview the full product, then Apply swap. Site numbers can differ; the preview shows any reformatted notation. Undo restores the original.</p>
   <p>Keep layout preserves your grouping. Canonical exports order the resolved monomer graph under a recorded convention and library binding. Imported structures can include inferred stereochemistry or preserved synthetic regions; open Import quality for details. Valid synthetic sites remain editable.</p>
   <p>Save project downloads your source, notation drafts, original reference and conversion details. Opening checks the definitions and reaction rules before loading. PNG and MOL export the current drawing and molecule.</p>
+  <p>Drawing controls work with mouse, touch and keyboard. Focus a drawing and use arrow keys to pan, + or − to zoom, and 0 or Home to reset. Escape closes the active panel and returns focus to its button.</p>
   <p>Your inputs and uploaded structures are sent to the server hosting this page for chemistry processing. Browser drafts stay in this browser's local storage; project files download to your device. Clearing a draft removes that browser copy only. Avoid putting private structures in public feedback.</p>
   <div class="help-actions"><button type="button" id="btn-clear-draft" class="hbtn">Clear saved browser draft</button><a class="hbtn" href="https://github.com/anagnorisis2peripeteia/pyPept/issues" target="_blank" rel="noopener noreferrer">Report a problem</a></div>
 </section>
@@ -69,8 +62,17 @@
       <button type="button" id="btn-undo" class="hbtn" title="Undo last edit" disabled><svg class="ui-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M6 3L2 7l4 4M2 7h7a4 4 0 0 1 4 4v2"/></svg>Undo</button>
       <button type="button" id="btn-redo" class="hbtn" title="Redo last edit" disabled><svg class="ui-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M10 3l4 4-4 4M14 7H7a4 4 0 0 0-4 4v2"/></svg>Redo</button>
     </div>
-    <button type="button" id="btn-to-cabiln-pct" class="hbtn green convert-input" style="display:none;" title="Convert to CABILN (% branch notation)" aria-label="Convert input to branch notation">→ %</button>
-    <button type="button" id="btn-to-cabiln-bracket" class="hbtn green convert-input" style="display:none;" title="Convert to CABILN ([] bracket notation)" aria-label="Convert input to bracket notation">→ []</button>
+  </div>
+  <div id="notation-actions" class="notation-actions" role="group" aria-label="Notation">
+    <span class="toolbar-label">Convert notation</span>
+    <select id="notation-policy" class="hbtn" aria-label="Notation formatting" title="Canonical formatting uses a standard order for chains, branches and connection labels">
+      <option value="layout" selected>Keep layout</option>
+      <option value="canonical">Canonical</option>
+    </select>
+    <button type="button" id="btn-to-bracket" class="hbtn" title="Convert to bracket notation" aria-label="Convert to bracket notation">Bracket [ ]</button>
+    <button type="button" id="btn-to-branch" class="hbtn" title="Convert to branch (%) notation" aria-label="Convert to branch notation">Branch %</button>
+    <button type="button" id="btn-to-cabiln-pct" class="hbtn green convert-input" style="display:none;" title="Convert to CABILN (% branch notation)" aria-label="Convert input to branch notation">Branch %</button>
+    <button type="button" id="btn-to-cabiln-bracket" class="hbtn green convert-input" style="display:none;" title="Convert to CABILN ([] bracket notation)" aria-label="Convert input to bracket notation">Bracket [ ]</button>
   </div>
   <div id="draft-notice" class="draft-notice" hidden>
     <span id="draft-status" role="status" aria-live="polite" aria-atomic="true"></span>
@@ -85,9 +87,7 @@
     <div id="quality-details"></div>
   </details>
   <div id="canonical-status" class="statusbar" hidden></div>
-  <div id="conversion-progress" class="operation-progress" hidden>
-    <span id="conversion-progress-label" role="status" aria-live="polite" aria-atomic="true">Converting structure…</span>
-  </div>
+
   <div id="residue-chips" role="group" aria-label="Residues and connections"></div>
 </div>
 
@@ -141,10 +141,15 @@
       <span class="build-hint">Not applied · Your sequence is unchanged</span>
       <button type="button" class="box-clear-btn" id="build-preview-close">Hide preview</button>
     </div>
-    <p id="build-preview-status" role="status" aria-live="polite" aria-atomic="true"></p>
+    <div id="build-preview-status" role="status" aria-live="polite" aria-atomic="true"></div>
     <p id="build-preview-reaction"></p>
     <p class="site-explanation">Free-site groups describe the unconnected sites; the reaction can replace or rearrange them.</p>
-    <div id="build-preview-canvas" class="canvas-wrap" title="Scroll to zoom; drag to pan; double-click to reset">
+    <div class="viewport-controls" data-viewport="build-preview-canvas" role="group" aria-label="Drawing zoom">
+      <button type="button" class="hbtn" data-zoom="out" aria-label="Zoom out">−</button>
+      <button type="button" class="hbtn" data-zoom="in" aria-label="Zoom in">+</button>
+      <button type="button" class="hbtn" data-zoom="reset" title="Reset zoom and pan (0 or Home when the drawing has focus)">Reset view</button>
+    </div>
+    <div id="build-preview-canvas" class="canvas-wrap" title="Drag to pan; pinch or scroll to zoom; double-click to reset. Keyboard: arrows, plus, minus and zero">
       <div id="build-preview-inner" class="canvas-inner"></div>
     </div>
     <details id="build-preview-notation" hidden>
@@ -177,13 +182,28 @@
 
   <!-- render mode -->
   <section id="render-pane" aria-label="Peptide drawing" aria-busy="false">
-    <div id="render-canvas" class="canvas-wrap" role="group" aria-label="Peptide structure; scroll to zoom, drag to pan, double-click to reset">
+    <div class="drawing-toolbar">
+      <div class="toolbar-group" role="group" aria-label="Drawing">
+        <button type="button" id="btn-hl" class="hbtn active" title="Toggle residue highlighting" aria-pressed="true"><svg class="ui-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M6 3l7 7-4 4-7-7zM2 11l3 3M1 15h6M9 1l5 5"/></svg>Highlight</button>
+        <button type="button" id="btn-dark" class="hbtn" title="Toggle dark canvas" aria-pressed="true"><svg class="ui-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M13.8 9.1A6 6 0 0 1 6.9 2.2a6 6 0 1 0 6.9 6.9z"/></svg>Dark</button>
+        <button type="button" id="btn-reroll" class="hbtn" title="New 2D layout seed" disabled>⟳ Reroll</button>
+      </div>
+      <div class="viewport-controls" data-viewport="render-canvas" role="group" aria-label="Drawing zoom">
+        <button type="button" class="hbtn" data-zoom="out" aria-label="Zoom out">−</button>
+        <button type="button" class="hbtn" data-zoom="in" aria-label="Zoom in">+</button>
+        <button type="button" class="hbtn" data-zoom="reset" title="Reset zoom and pan (0 or Home when the drawing has focus)">Reset view</button>
+      </div>
+    </div>
+    <div id="render-canvas" class="canvas-wrap" role="group" aria-label="Peptide structure; drag to pan, pinch or scroll to zoom. Keyboard: arrows to pan, plus or minus to zoom, zero to reset">
       <div class="canvas-inner" id="render-inner">
         <div class="placeholder">Start typing a sequence…</div>
       </div>
     </div>
     <div id="render-progress" class="operation-progress" hidden>
       <span id="render-progress-label" role="status" aria-live="polite" aria-atomic="true">Updating drawing…</span>
+    </div>
+    <div id="conversion-progress" class="operation-progress" hidden>
+      <span id="conversion-progress-label" role="status" aria-live="polite" aria-atomic="true">Converting structure…</span>
     </div>
   </section>
 
@@ -197,21 +217,27 @@
   </aside>
 
   <!-- verify reference pane (hidden by default, shown beside render-pane) -->
-  <section id="verify-pane" style="display:none;" aria-label="Verify against a reference structure">
+  <section id="verify-pane" hidden aria-label="Verify against a reference structure">
     <div class="vpanel">
       <div class="reference-actions">
         <label class="seq-label" for="smiles-input">Reference</label>
+        <button type="button" id="verify-close" class="panel-close" aria-label="Close Verify panel">✕</button>
         <label class="hbtn upload-trigger">
           <svg class="ui-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M2 5V3h5l2 2h5v8H2zM2 7h12"/></svg>.mol
           <input type="file" id="mol-upload" class="sr-only" accept=".mol,.sdf" aria-label="Upload a MOL or SDF file">
         </label>
-        <button type="button" id="btn-s2c" class="hbtn green" title="Convert SMILES → % CABILN (branch form)" aria-label="Convert reference to branch notation">→ %</button>
-        <button type="button" id="btn-s2c-bracket" class="hbtn green" title="Convert SMILES → [] CABILN (bracket form)" aria-label="Convert reference to bracket notation">→ []</button>
+        <button type="button" id="btn-s2c" class="hbtn green" title="Convert SMILES → % CABILN (branch form)" aria-label="Convert reference to branch notation">Use branch %</button>
+        <button type="button" id="btn-s2c-bracket" class="hbtn green" title="Convert SMILES → [] CABILN (bracket form)" aria-label="Convert reference to bracket notation">Use bracket [ ]</button>
       </div>
       <textarea id="smiles-input" placeholder="Paste SMILES, BILN, or HELM here…"
                 spellcheck="false" autocomplete="off" aria-describedby="smiles-status"></textarea>
       <div id="smiles-status" class="statusbar" role="status" aria-live="polite" aria-atomic="true"></div>
-      <div id="smiles-canvas" class="canvas-wrap" role="group" aria-label="Reference drawing">
+      <div class="viewport-controls" data-viewport="smiles-canvas" role="group" aria-label="Drawing zoom">
+        <button type="button" class="hbtn" data-zoom="out" aria-label="Zoom out">−</button>
+        <button type="button" class="hbtn" data-zoom="in" aria-label="Zoom in">+</button>
+        <button type="button" class="hbtn" data-zoom="reset" title="Reset zoom and pan (0 or Home when the drawing has focus)">Reset view</button>
+      </div>
+      <div id="smiles-canvas" class="canvas-wrap" role="group" aria-label="Reference drawing; arrows to pan, plus or minus to zoom, zero to reset">
         <div class="canvas-inner" id="smiles-inner">
           <div class="placeholder">Paste SMILES or upload .mol to compare…</div>
         </div>
@@ -221,14 +247,16 @@
 </main>
 
 <!-- compare bar (verify mode only) -->
-<div id="compare-bar" style="display:none;" role="status" aria-live="polite" aria-atomic="true"></div>
+<div id="compare-bar" hidden role="status" aria-live="polite" aria-atomic="true"></div>
 
 <script src="/static/requests.js" defer></script>
 <script src="/static/project.js" defer></script>
 <script src="/static/document.js" defer></script>
+<script src="/static/drawing.js" defer></script>
 <script src="/static/ui.js" defer></script>
 <script src="/static/residues.js" defer></script>
 <script src="/static/library.js" defer></script>
+<script src="/static/build.js" defer></script>
 <script src="/static/builder.js" defer></script>
 </body>
 </html>

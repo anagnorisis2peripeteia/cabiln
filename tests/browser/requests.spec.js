@@ -11,8 +11,10 @@ for (const previous of ['', 'G']) {
     if (previous) await render(page, previous);
     const source = 'K.[G(4,2).ac(1,2)]-A';
     const requests = [];
-    page.on('request', request => {
-      const path = new URL(request.url()).pathname;
+    // Admission retries are attempts at the same drawing, not extra drawings.
+    page.on('response', response => {
+      if (!isCompletedResponse(response)) return;
+      const path = new URL(response.url()).pathname;
       if (['/render', '/convert_notation'].includes(path)) requests.push(path);
     });
     const converted = page.waitForResponse(response => isCompletedResponse(response) && new URL(response.url()).pathname === '/convert_notation');

@@ -21,7 +21,9 @@ editing; canvas controls; exports; and delayed/failed responses.
 The UX journeys also cover retained drawings and zoom, disabled stale selections,
 keyboard building, attachment highlights, Undo/Redo, format drafts, recovery,
 unavailable storage, preserved stereo warnings, library revision refreshes, and
-building/verification at a 390 px viewport.
+building/verification at a 390 px viewport. Interaction journeys cover independent
+Escape dismissal and focus return, keyboard examples, shared zoom/reset controls,
+real touch pan/pinch, in-place Retry, and visible warnings with expandable details.
 
 For comparable browser timings, run the performance file alone against each
 revision with the same Python and browser:
@@ -31,11 +33,13 @@ CABILN_BROWSER_ARTIFACTS=/tmp/cabiln-current-timing npx playwright test performa
 CABILN_APP_ROOT=/path/to/frozen/source CABILN_BROWSER_ARTIFACTS=/tmp/cabiln-baseline-timing npx playwright test performance.spec.js
 ```
 
-Its `browser-timings.json` measures input/click events through completed drawing
-and chip updates followed by two animation frames. It excludes assertion polling
-time. The first edit uses a fresh server only when this file runs alone. The
-small sample is performance evidence, with no machine-specific speed threshold
-in the acceptance suite.
+Its `browser-timings.json` records `feedbackMs` (the first visible acknowledgement)
+and `completedMs` (the finished drawing and chips), each after two animation
+frames. It covers edits, connections, a 60-residue chain with caps and six nested
+branches. Completion includes network and chemistry; assertion polling is excluded.
+The first edit uses a fresh server only when this file runs alone. These are small
+local samples, not field INP or production percentiles. The suite requires actual
+feedback, with no machine-specific speed threshold.
 
 `CABILN_PYTHON` selects an interpreter. Otherwise the repository's `.venv` is used
 when available, falling back to `python3`. `CABILN_APP_ROOT` selects another

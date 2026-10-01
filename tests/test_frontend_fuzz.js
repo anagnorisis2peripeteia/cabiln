@@ -8,7 +8,7 @@ const crypto = require('node:crypto');
 const { execFileSync } = require('node:child_process');
 const test = require('node:test');
 const fc = require('./browser/node_modules/fast-check');
-const { page } = require('./_frontend_harness');
+const { page, prepareConnection } = require('./_frontend_harness');
 
 const profile = process.env.CABILN_FUZZ_PROFILE || 'ci';
 assert.ok(['ci', 'deep'].includes(profile), 'CABILN_FUZZ_PROFILE must be ci or deep');
@@ -23,7 +23,7 @@ assert.ok(completionOrder === null || (Array.isArray(completionOrder) && complet
 const artifacts = process.env.CABILN_FUZZ_ARTIFACTS || path.join(os.tmpdir(), 'cabiln-frontend-fuzz');
 const root = path.resolve(__dirname, '..');
 assert.ok(!process.env.CABILN_FUZZ_CASE || ['editable-history', 'render-completion-order', 'foreground-admission-and-errors', 'registration-preview-and-write-ownership', 'normalization-keeps-redo-and-reference', 'selection-and-library-revisions'].includes(process.env.CABILN_FUZZ_CASE), 'Unknown CABILN_FUZZ_CASE');
-const sourceFiles = ['builder.js', 'ui.js', 'residues.js', 'library.js', 'document.js', 'project.js', 'requests.js', 'register.js'].map(name => `src/pyPept/web/static/${name}`).concat(['tests/_frontend_harness.js', 'tests/test_frontend_fuzz.js', 'tests/browser/package-lock.json']);
+const sourceFiles = ['builder.js', 'build.js', 'drawing.js', 'ui.js', 'residues.js', 'library.js', 'document.js', 'project.js', 'requests.js', 'register.js'].map(name => `src/pyPept/web/static/${name}`).concat(['tests/_frontend_harness.js', 'tests/test_frontend_fuzz.js', 'tests/browser/package-lock.json']);
 const source = { commit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(),
   sha256: Object.fromEntries(sourceFiles.map(name => [name, crypto.createHash('sha256').update(fs.readFileSync(path.join(root, name))).digest('hex')])) };
 const tick = () => new Promise(setImmediate);
@@ -115,7 +115,7 @@ function checkDocument(model, real) {
   assert.equal(ui.element('btn-redo').disabled, model.redo.length === 0);
   assert.equal(ui.element('btn-mol').disabled, model.source === '');
   assert.equal(ui.element('btn-png').disabled, model.source === '');
-  if (model.source) assert.equal(ui.run('lastMolBlock'), `MOL:${model.source}`);
+  if (model.source) assert.equal(ui.run('drawing.molBlock'), `MOL:${model.source}`);
   const current = snapshot(ui);
   assert.equal(current.document.text, model.source);
   assert.equal(current.document.warning, '');
@@ -186,9 +186,10 @@ class Connect {
   check(model) { return /^[AGK](?:-[AGK])*$/.test(model.source); }
   async run(model, real) {
     real.count('connect');
-    // Selection geometry is generated against real DOM in fuzz.spec.cjs. Here
-    // the actual Connect handler owns the asynchronous document commit.
-    real.ui.run(`buildLeftRIdx=${model.source.split('-').length - 1}; buildRightRIdx=null; buildLeft={abbr:'K',selectedSlot:2}; buildRight={abbr:'G',selectedSlot:1}`);
+    await prepareConnection(real.ui, { source: model.source, left: model.source.split('-').at(-1),
+      right: 'G', index: model.source.split('-').length - 1 });
+    resolve(pending(real.ui, '/validate_bond')[0], {valid: true});
+    await tick();
     const task = real.ui.element('build-connect').click();
     const sequence = `${model.source}-G`;
     resolve(pending(real.ui, '/insert_bond')[0], { result: sequence });
@@ -343,12 +344,12 @@ property('render-completion-order', [fc.scheduler(), fc.array(fc.record({ source
         // This oracle admits only a completion of the latest independently
         // edited reference revision. It does not inspect the app's request map.
         if (isReference && revision === index) {
-          if (outcome === 'network') reference.status = 'Could not reach the renderer. Your reference input is preserved.';
+          if (outcome === 'network') reference.status = 'Could not reach the renderer. Your reference input is preserved. Retry';
           else if (outcome === 'invalid') {
             reference.status = error; reference.className = 'err';
             reference.svg = `<div class="placeholder err">${error}</div>`;
           } else Object.assign(reference, { svg: `<svg>${source}</svg>`, lastSmiles: source,
-            status: `SMILES: ${source}`, className: 'ok', context });
+            status: `SMILES · ${source}`, className: 'ok', context });
         }
         if (outcome === 'network') reject(request);
         else if (outcome === 'invalid') resolve(request, { error }, false, 400);
@@ -367,10 +368,11 @@ property('render-completion-order', [fc.scheduler(), fc.array(fc.record({ source
   assert.equal(ui.element('btn-mol').disabled, last.outcome !== 'success');
   assert.equal(ui.element('cabiln-input').className, last.outcome === 'success' ? 'ok' : last.outcome === 'invalid' ? 'err' : '');
   if (last.outcome === 'success') {
-    assert.equal(ui.run('lastMolBlock'), `MOL:${last.source}`);
+    assert.equal(ui.run('drawing.molBlock'), `MOL:${last.source}`);
     assert.equal(ui.element('render-inner').innerHTML, `<svg>${last.source}</svg>`);
   } else assert.equal(snapshot(ui).document.warning, '');
-  assert.equal(ui.run('buildLeft'), null); assert.equal(ui.run('buildRight'), null);
+  assert.deepEqual(JSON.parse(ui.run('JSON.stringify(build.selection)')), [null, null]);
+  assert.equal(ui.element('build-right-abbr').textContent, '—');
 });
 
 const foregroundCase = fc.record({
@@ -495,8 +497,8 @@ property('foreground-admission-and-errors', [foregroundCase], async (example, co
     count('retainedDrawing');
     assert.equal(pending(ui, '/render').length, 0, 'The existing drawing needs no new request');
     assert.equal(ui.element('render-inner').innerHTML, `<svg>${source}</svg>`);
-    assert.equal(ui.run('lastMolBlock'), `MOL:${source}`);
-    assert.equal(ui.run('lastCabiln'), result);
+    assert.equal(ui.run('drawing.molBlock'), `MOL:${source}`);
+    assert.equal(ui.run('drawing.cabiln'), result);
     assert.deepEqual(JSON.parse(ui.run('JSON.stringify(residueView.atoms)')), residue_map);
   }
   if (example.format && example.presentation === 'valid' &&
@@ -640,9 +642,9 @@ property('selection-and-library-revisions', [fc.scheduler(), fc.array(fc.integer
   assert.equal(ui.element('lib-preview').style.display, 'none');
   assert.equal(ui.element('build-connect').disabled, true);
   count(changedLibrary ? 'changedLibrary' : 'unchangedLibrary');
-  if (invalidate !== 'none' || changedLibrary) assert.equal(ui.run('buildLeft'), null);
+  if (invalidate !== 'none' || changedLibrary) assert.equal(ui.run('build.filters.left'), null);
   else {
-    assert.equal(ui.run('buildLeft.abbr'), selections.at(-1) === 0 ? 'K' : 'A');
+    assert.equal(ui.run('build.filters.left.abbr'), selections.at(-1) === 0 ? 'K' : 'A');
     assert.equal(ui.element('build-left-svg').innerHTML, `<svg>SITE:${selections.length - 1}</svg>`);
   }
 });

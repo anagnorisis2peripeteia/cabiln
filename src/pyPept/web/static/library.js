@@ -20,9 +20,13 @@ class MonomerLibrary {
     this.preview = document.getElementById('lib-preview');
     this.button = document.getElementById('btn-lib');
     this.filterButton = document.getElementById('btn-rxn-filter');
-    this.button.addEventListener('click', () =>
-      this.panel.classList.contains('open') ? this.close() : this.open());
-    this.closeButton.addEventListener('click', () => this.close());
+    this.disclosure = createPanel({ panel: this.panel, button: this.button,
+      closeButton: this.closeButton, focus: this.search,
+      onChange: open => {
+        if (open) { this.load(); this.loadReactions(); }
+        else this.hidePreview();
+      },
+    });
 
     this.search.addEventListener('input', () => this.render());
 
@@ -73,31 +77,19 @@ class MonomerLibrary {
     }
   }
 
-  open() {
-    this.panel.classList.add('open');
-    this.button.classList.add('active');
-    this.button.setAttribute('aria-expanded', 'true');
-    this.load();
-    this.search.focus();
-    this.loadReactions();
-  }
-
-  close() {
-    this.panel.classList.remove('open');
-    this.button.classList.remove('active');
-    this.button.setAttribute('aria-expanded', 'false');
-    this.hidePreview();
-  }
+  open(options) { this.disclosure.open(options); }
+  close() { this.disclosure.close(); }
 
   async load() {
     const request = requests.start('library');
-    if (!this.loaded) this.list.innerHTML = '<div class="placeholder">Loading…</div>';
+    if (!this.loaded) showLoading(this.list, 'Loading monomers…');
     try {
       const res = await fetchCalculation('/monomers', { signal: request.signal });
       const data = await readResponse(res);
       if (!request.current()) return;
       if (!Array.isArray(data)) throw new Error(data.error || 'Invalid monomer library');
       const version = res.headers?.get('X-Library-Version') || null;
+      this.status.hidden = true;
       if (this.loaded && version && version === this.version) return;
       if (this.loaded) this.onChanged();
       this.version = version;
@@ -111,7 +103,10 @@ class MonomerLibrary {
       this.render();
     } catch (e) {
       if (!request.current()) return;
-      if (!this.loaded) this.list.innerHTML = '<div class="placeholder err">Failed to load monomers. Close and reopen the library to retry.</div>';
+      const target = this.loaded ? this.status : this.list;
+      target.hidden = false;
+      showRetry(target, this.loaded ? 'Could not refresh the library. Previous definitions are still shown.'
+        : 'Could not load monomers.', () => this.load());
     } finally {
       request.finish();
     }
@@ -134,7 +129,7 @@ class MonomerLibrary {
     } catch (error) {
       if (!request.current()) return;
       this.reactionPairs = null;
-      this.status.textContent = 'Reaction filter unavailable. Reopen Library or click Filter to retry. ' + error.message;
+      showRetry(this.status, 'Reaction filter unavailable. ' + error.message, () => this.loadReactions());
       this.status.hidden = false;
     } finally { request.finish(); }
   }
@@ -304,7 +299,7 @@ class MonomerLibrary {
     this.preview.style.display = 'none';
   }
 
-  get isOpen() { return this.panel.classList.contains('open'); }
+  get isOpen() { return this.disclosure.isOpen; }
 
   setDark(dark) { this.preview.classList.toggle('dark', dark); }
 

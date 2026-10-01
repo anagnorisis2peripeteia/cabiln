@@ -1,27 +1,10 @@
-// state
+// Page preferences and reference lifetime.
+const drawing = new DrawingState();
 let darkMode   = true;
-let verifyMode = false;
 let hlEnabled  = true;
 let cabilnTimer = null;
 let smilesTimer = null;
-let lastCabiln  = '';
 let lastSmiles  = '';
-let lastSvg     = '';
-let lastMolBlock = '';
-let buildMode    = false;
-let buildLeft    = null;  // { abbr, rgroups: [{slot, chem_type, used}], selectedSlot }
-let buildRight   = null;  // { abbr, rgroups: [{slot, chem_type, used}], selectedSlot }
-let buildLeftRIdx = null;
-let buildRightRIdx = null;
-let buildReaction = '';
-let insertBetweenActive = false;
-let swapState = null;  // Current source, eligible definitions, reviewed mapping and preview.
-let rerollSeed   = 0;
-let mainStale = false;
-let hasMainDrawing = false;
-let displayedSource = '';
-let displayedNotation = '';
-let cabilnDrawing = null;
 let projectContext = null;
 let projectRevision = 0;
 let draftCleared = false;
@@ -62,33 +45,6 @@ const examplesPanel  = document.getElementById('examples-panel');
 const examplesClose  = document.getElementById('examples-close');
 const examplesList   = document.getElementById('examples-list');
 const resChips      = document.getElementById('residue-chips');
-const buildPanel    = document.getElementById('build-panel');
-const btnBuild      = document.getElementById('btn-build');
-const buildClose    = document.getElementById('build-close');
-const buildConnect  = document.getElementById('build-connect');
-const buildAction = document.getElementById('build-action');
-const swapMapping = document.getElementById('build-swap-mapping');
-const swapSites = document.getElementById('build-swap-sites');
-const buildPreviewButton = document.getElementById('build-preview-button');
-const buildPreviewPanel = document.getElementById('build-preview');
-const buildPreviewStatus = document.getElementById('build-preview-status');
-const buildPreviewReaction = document.getElementById('build-preview-reaction');
-const buildPreviewInner = document.getElementById('build-preview-inner');
-const buildPreviewSource = document.getElementById('build-preview-source');
-const buildPreviewNotation = document.getElementById('build-preview-notation');
-const buildStatus   = document.getElementById('build-status');
-const buildHint     = document.getElementById('build-hint');
-const buildLeftAbbr = document.getElementById('build-left-abbr');
-const buildLeftSvg  = document.getElementById('build-left-svg');
-const buildLeftRg   = document.getElementById('build-left-rgroups');
-const buildLeftSite = document.getElementById('build-left-site');
-const buildRightAbbr= document.getElementById('build-right-abbr');
-const buildRightSvg = document.getElementById('build-right-svg');
-const buildRightRg  = document.getElementById('build-right-rgroups');
-const buildRightSite = document.getElementById('build-right-site');
-const buildInsertRow = document.getElementById('build-insert-row');
-const buildInsertInfo = document.getElementById('build-insert-info');
-const buildInsertBtn = document.getElementById('build-insert-btn');
 const btnReroll     = document.getElementById('btn-reroll');
 const btnS2c        = document.getElementById('btn-s2c');
 const btnS2cBracket = document.getElementById('btn-s2c-bracket');
@@ -118,23 +74,22 @@ const helpPanel = document.getElementById('help-panel');
 
 const residueView = createResidueView({
   inner: renderInner, chips: resChips,
-  canHighlight: () => hlEnabled && !mainStale,
-  onSelect: residue => selectBuildResidue(residue),
+  canHighlight: () => hlEnabled && !drawing.stale,
+  onSelect: residue => build.selectResidue(residue),
 });
 
 const library = new MonomerLibrary({
-  getFilters: () => ({
-    building: buildMode, left: buildLeft, insertBetween: insertBetweenActive,
-    replacements: buildMode && isSwapMode() ? (swapState?.candidates || []) : null,
-    awaitingSelection: !swapState,
-  }),
-  onUse: (abbr, explicit) => useLibraryMonomer(abbr, explicit),
-  onChanged: () => { if (buildMode) clearBuild(); },
+  getFilters: () => build.filters,
+  onUse: (abbr, explicit) => { if (!build.useMonomer(abbr, explicit)) insertAbbr(abbr); },
+  onChanged: () => { if (build.filters.building) build.clear(); },
 });
 
 // Document data belongs to the editor; these timers belong to browser storage.
 const DRAFT_KEY = 'cabiln.draft.v1';
 const editor = new CabilnDocument();
+const build = createBuildPanel({ library, residueView,
+  getDocument: () => editor.present, commitDocument, isStale: () => drawing.stale,
+});
 let saveDraftTimer = null;
 let savedDraft = null;
 
@@ -192,7 +147,9 @@ function updateNotationControls() {
   cabilnInput.placeholder = NOTATION_PLACEHOLDER[mode] || '';
   btnToCabilnPct.style.display = mode === 'cabiln' ? 'none' : '';
   btnToCabilnBracket.style.display = mode === 'cabiln' ? 'none' : '';
+  btnToBracket.hidden = btnToBranch.hidden = mode !== 'cabiln';
   btnToBracket.disabled = btnToBranch.disabled = mode !== 'cabiln';
+  notationPolicy.hidden = mode !== 'cabiln';
   notationPolicy.disabled = mode !== 'cabiln';
 }
 
@@ -482,7 +439,7 @@ function applyProject(project) {
   const state = CabilnProject.document(project.document);
   commitDocument(state.text, state.notation, state.warning, state);
   saveDraft();
-  if (verifyMode) restoreReferenceDrawing();
+  if (verifyPanel.isOpen) restoreReferenceDrawing();
 }
 
 function restoreReferenceDrawing() {
@@ -499,15 +456,8 @@ function restoreReferenceDrawing() {
   }
 }
 
-function showHelp(open) {
-  helpPanel.hidden = !open;
-  btnHelp.setAttribute('aria-expanded', String(open));
-  if (!open) btnHelp.focus();
-}
-btnHelp.addEventListener('click', () => showHelp(helpPanel.hidden));
-document.getElementById('help-close').addEventListener('click', () => showHelp(false));
-window.addEventListener('keydown', event => {
-  if (event.key === 'Escape' && !helpPanel.hidden) showHelp(false);
+createPanel({ panel: helpPanel, button: btnHelp,
+  closeButton: document.getElementById('help-close'),
 });
 document.getElementById('btn-clear-draft').addEventListener('click', () => {
   requests.cancel('project-open');
@@ -558,46 +508,34 @@ btnHl.addEventListener('click', () => {
   if (!hlEnabled) residueView.clearHighlight();
 });
 
-// verify mode
-btnVerify.addEventListener('click', () => {
-  verifyMode = !verifyMode;
-  btnVerify.classList.toggle('active', verifyMode);
-  btnVerify.setAttribute('aria-expanded', String(verifyMode));
-  document.getElementById('verify-pane').style.display = verifyMode ? '' : 'none';
-  compareBar.style.display = verifyMode ? '' : 'none';
-  clearComparison();
-  if (verifyMode && (smilesInput.value.trim() || referenceOriginal) && !lastSmiles) restoreReferenceDrawing();
-  else if (verifyMode) triggerVerify();
+const verifyPanel = createPanel({ panel: document.getElementById('verify-pane'), button: btnVerify,
+  closeButton: document.getElementById('verify-close'), focus: smilesInput,
+  onChange(open) {
+    compareBar.hidden = !open;
+    clearComparison();
+    if (open && (smilesInput.value.trim() || referenceOriginal) && !lastSmiles) restoreReferenceDrawing();
+    else if (open) triggerVerify();
+  },
 });
 
-// example peptide sidebar
 let examplesLoaded = false;
-
-function openExamples() {
-  examplesPanel.classList.add('open');
-  btnExamples.classList.add('active');
-  btnExamples.setAttribute('aria-expanded', 'true');
-  if (!examplesLoaded) loadExamples();
-}
-function closeExamples() {
-  examplesPanel.classList.remove('open');
-  btnExamples.classList.remove('active');
-  btnExamples.setAttribute('aria-expanded', 'false');
-}
-
-btnExamples.addEventListener('click', () =>
-  examplesPanel.classList.contains('open') ? closeExamples() : openExamples());
-examplesClose.addEventListener('click', closeExamples);
+createPanel({ panel: examplesPanel, button: btnExamples, closeButton: examplesClose,
+  onChange(open) { if (open && !examplesLoaded) loadExamples(); },
+});
 
 async function loadExamples() {
+  const request = requests.start('examples');
+  showLoading(examplesList, 'Loading examples…');
   try {
-    const res = await fetchCalculation('/examples');
+    const res = await fetchCalculation('/examples', { signal: request.signal });
     const data = await readResponse(res);
+    if (!request.current()) return;
+    if (!Array.isArray(data)) throw new Error(data.error || 'Invalid examples');
     renderExamples(data);
     examplesLoaded = true;
   } catch (e) {
-    examplesList.innerHTML = '<div class="placeholder err">Failed to load examples</div>';
-  }
+    if (request.current()) showRetry(examplesList, 'Could not load examples.', loadExamples);
+  } finally { request.finish(); }
 }
 
 function renderExamples(categories) {
@@ -608,11 +546,11 @@ function renderExamples(categories) {
       const preview = item.cabiln.length > 55
         ? item.cabiln.slice(0, 52) + '…'
         : item.cabiln;
-      rows.push(`<div class="example-row" data-cabiln="${escAttr(item.cabiln)}">
-        <div class="example-name">${escHtml(item.name)}</div>
-        <div class="example-desc">${escHtml(item.description)}</div>
-        <div class="example-seq" title="${escAttr(item.cabiln)}">${escHtml(preview)}</div>
-      </div>`);
+      rows.push(`<button type="button" class="example-row" data-cabiln="${escAttr(item.cabiln)}">
+        <span class="example-name">${escHtml(item.name)}</span>
+        <span class="example-desc">${escHtml(item.description)}</span>
+        <span class="example-seq" title="${escAttr(item.cabiln)}">${escHtml(preview)}</span>
+      </button>`);
     }
   }
   examplesList.innerHTML = rows.join('');
@@ -622,27 +560,6 @@ function renderExamples(categories) {
       cabilnInput.focus();
     });
   });
-}
-
-function useLibraryMonomer(abbr, explicit = false) {
-  if (explicit && !buildMode) openBuild();
-  if (buildMode && notationSelect.value !== 'cabiln') {
-    buildHint.textContent = 'Convert this input to CABILN before building';
-  } else if (buildMode && insertBetweenActive) {
-    doInsertBetween(abbr);
-  } else if (buildMode && !cabilnInput.value.trim()) {
-    commitDocument(abbr, 'cabiln');
-    buildHint.textContent = 'First monomer added — select its residue, then choose another monomer';
-  } else if (buildMode && mainStale) {
-    buildHint.textContent = 'Wait for a valid drawing before choosing attachment sites';
-  } else if (buildMode && isSwapMode()) {
-    chooseSwapMonomer(abbr);
-  } else if (buildMode) {
-    loadBuildRight(abbr);
-    if (!buildLeft) buildHint.textContent = 'Now select a residue in the sequence';
-  } else {
-    insertAbbr(abbr);
-  }
 }
 
 function insertAbbr(abbr) {
@@ -663,12 +580,11 @@ function insertAbbr(abbr) {
 // zoom / pan (shared, wired per canvas)
 const mainViewport = makeZoomable(renderCanvas, renderInner);
 makeZoomable(document.getElementById('smiles-canvas'), smilesInner);
-const buildPreviewViewport = makeZoomable(document.getElementById('build-preview-canvas'), buildPreviewInner);
 
 // PNG download (client-side SVG → canvas → PNG)
 btnPng.addEventListener('click', () => {
-  if (!lastSvg) return;
-  const blob = new Blob([lastSvg], { type: 'image/svg+xml;charset=utf-8' });
+  if (!drawing.svg) return;
+  const blob = new Blob([drawing.svg], { type: 'image/svg+xml;charset=utf-8' });
   const url  = URL.createObjectURL(blob);
   const img  = new Image();
   img.onload = () => {
@@ -692,618 +608,12 @@ btnPng.addEventListener('click', () => {
 
 // MOL download (server-side mol block)
 btnMol.addEventListener('click', async () => {
-  if (!lastMolBlock) return;
-  const blob = new Blob([lastMolBlock], { type: 'chemical/x-mdl-molfile' });
+  if (!drawing.molBlock) return;
+  const blob = new Blob([drawing.molBlock], { type: 'chemical/x-mdl-molfile' });
   const a = document.createElement('a');
   a.download = 'structure.mol';
   a.href = URL.createObjectURL(blob);
   a.click();
-});
-
-// build mode
-function selectBuildResidue(residue) {
-  if (!buildMode || mainStale) return;
-  const right = !isSwapMode() && buildLeft && buildLeftRIdx !== residue.idx;
-  const pending = right
-    ? loadBuildRight(residue.abbr, residue.idx)
-    : loadBuildLeft(residue.abbr, residue.idx);
-  residueView.select(right ? buildLeftRIdx : residue.idx, right ? residue.idx : null);
-  return pending;
-}
-
-function openBuild() {
-  buildMode = true;
-  buildPanel.classList.add('open');
-  btnBuild.classList.add('active');
-  btnBuild.setAttribute('aria-expanded', 'true');
-  if (!library.isOpen) library.open();
-  clearBuild();
-}
-function closeBuild() {
-  buildMode = false;
-  buildPanel.classList.remove('open');
-  btnBuild.classList.remove('active');
-  btnBuild.setAttribute('aria-expanded', 'false');
-  clearBuild();
-  if (library.loaded && isSwapMode()) library.render();
-}
-function clearBuild() {
-  clearBuildPreview();
-  requests.cancel('build-left', 'build-right', 'bond-check', 'sequence-edit', 'swap-options');
-  swapState = null;
-  swapMapping.hidden = true;
-  swapSites.innerHTML = '';
-  buildLeft = null; buildRight = null; buildLeftRIdx = null; buildRightRIdx = null;
-  buildReaction = '';
-  insertBetweenActive = false;
-  buildInsertRow.style.display = 'none';
-  buildInsertBtn.textContent = '⊕ Insert Between';
-  buildLeftAbbr.textContent = '—';
-  buildLeftSvg.innerHTML = '<div class="box-placeholder">Click a chip above</div>';
-  buildLeftRg.innerHTML = '';
-  buildLeftSite.hidden = true;
-  buildRightAbbr.textContent = '—';
-  document.getElementById('build-right-label').textContent = isSwapMode() ? 'Replacement monomer' : 'New monomer';
-  document.getElementById('build-title').textContent = isSwapMode() ? 'Swap Monomer' : 'Build by Connection';
-  buildPanel.classList.toggle('swapping', isSwapMode());
-  buildConnect.textContent = isSwapMode() ? 'Apply swap' : 'Connect';
-  buildRightSvg.innerHTML = '<div class="box-placeholder">Choose Use in the library</div>';
-  buildRightRg.innerHTML = '';
-  buildRightSite.hidden = true;
-  setBuildReady(false);
-  buildStatus.textContent = 'Choose a residue and a monomer to connect';
-  buildStatus.className = 'build-status';
-  buildHint.textContent = isSwapMode() ? 'Select the residue to replace; every existing connection will be kept'
-    : cabilnInput.value.trim()
-    ? 'Select a residue, then choose Use beside a library monomer'
-    : 'Choose Use beside a monomer to start a peptide';
-  residueView.select();
-  const filtered = library.resetFilter();
-  if (library.loaded && (filtered || (buildMode && isSwapMode()))) library.render();
-}
-
-function isSwapMode() { return buildAction.value === 'swap'; }
-
-buildAction.addEventListener('change', () => {
-  const selected = residueView.residue(buildLeftRIdx);
-  clearBuild();
-  if (library.loaded) library.render();
-  if (selected && !mainStale) selectBuildResidue(selected);
-});
-
-async function loadSwapOptions() {
-  const request = requests.start('swap-options');
-  const source = cabilnInput.value.trim();
-  const index = buildLeftRIdx;
-  buildStatus.textContent = 'Finding replacements for all connected sites…';
-  try {
-    if (requests.has('library', 'reactions') &&
-        !await request.waitFor('library', 'reactions')) return;
-    const data = await readResponse(await postCalculation('/replacement_options', {
-      cabiln: source, residue_idx: index,
-    }, request.signal));
-    if (!request.current() || source !== cabilnInput.value.trim() || index !== buildLeftRIdx) return;
-    if (data.error) throw new Error(data.error);
-    if (data.source_echo !== source || data.residue_idx !== index || !data.context) {
-      throw new Error('The replacement list is out of date. Select the residue again.');
-    }
-    const quality = new Map(library.monomers.map(m => [m.abbr, m.quality]));
-    const candidates = data.candidates.map(m => ({ ...m, quality: quality.get(m.abbr),
-      searchText: [m.abbr, m.name, m.type, m.chem_types].join(' ').toLowerCase() }));
-    swapState = { ...data, candidates, candidate: null, mapping: {}, preview: null };
-    buildStatus.textContent = 'Choose a replacement from the filtered library';
-    buildHint.textContent = 'Only monomers with compatible sites for every connection are shown';
-    library.render();
-  } catch (error) {
-    if (request.current()) {
-      buildStatus.textContent = error.message || 'Could not find replacements. Select the residue to retry.';
-      buildStatus.className = 'build-status invalid';
-    }
-  } finally { request.finish(); }
-}
-
-function chooseSwapMonomer(abbr) {
-  const candidate = swapState?.candidates.find(item => item.abbr === abbr);
-  if (!candidate) return;
-  swapState.candidate = candidate;
-  swapState.mapping = { ...candidate.mapping };
-  swapState.preview = null;
-  renderSwapMapping();
-  loadBuildRight(abbr);
-}
-
-function renderSwapMapping() {
-  swapSites.innerHTML = '';
-  swapMapping.hidden = !swapState?.candidate;
-  if (swapMapping.hidden) return;
-  const candidate = swapState.candidate;
-  for (const need of swapState.requirements) {
-    const label = document.createElement('label');
-    label.className = 'swap-site';
-    const text = document.createElement('span');
-    text.textContent = `Current R${need.slot} →`;
-    const select = document.createElement('select');
-    select.className = 'hbtn';
-    select.dataset.slot = need.slot;
-    select.setAttribute('aria-label', `Replacement site for R${need.slot}`);
-    for (const slot of candidate.choices[need.slot]) {
-      const option = document.createElement('option');
-      option.value = slot;
-      const site = candidate.sites.find(item => item.slot === slot);
-      option.textContent = `R${slot} ${(site?.chem_type || '').replaceAll('_', ' ')}`;
-      select.appendChild(option);
-    }
-    select.value = swapState.mapping[need.slot];
-    select.addEventListener('change', () => {
-      requests.cancel('sequence-edit');
-      swapState.mapping[need.slot] = Number(select.value);
-      checkBuildValidity();
-      if (buildRight) renderRgroupButtons(buildRightRg, buildRight, 'right');
-    });
-    const partner = document.createElement('small');
-    partner.textContent = need.internal ? `joins the replacement site mapped from R${need.partner_slot}`
-      : `keeps ${need.partner_abbr} (residue ${need.partner_idx + 1}) R${need.partner_slot}`;
-    label.appendChild(text);
-    label.appendChild(select);
-    label.appendChild(partner);
-    swapSites.appendChild(label);
-  }
-  if (!swapState.requirements.length) swapSites.textContent = 'This monomer has no existing connections.';
-}
-
-function swapRequest() {
-  if (!swapState?.candidate || !buildLeft || !buildRight || mainStale ||
-      swapState.source_echo !== cabilnInput.value.trim() || swapState.residue_idx !== buildLeftRIdx ||
-      swapState.candidate.abbr !== buildRight.abbr) return null;
-  const slots = Object.values(swapState.mapping);
-  if (slots.length !== swapState.requirements.length || new Set(slots).size !== slots.length) return null;
-  return { cabiln: swapState.source_echo, residue_idx: swapState.residue_idx,
-    new_abbr: swapState.candidate.abbr, slot_map: { ...swapState.mapping }, context: swapState.context };
-}
-
-btnBuild.addEventListener('click', () => buildMode ? closeBuild() : openBuild());
-buildClose.addEventListener('click', closeBuild);
-
-function checkAdjacentBackbone() {
-  return residueView.insertionAnchor(buildLeftRIdx, buildRightRIdx) !== null;
-}
-
-function updateInsertBetweenUI() {
-  if (buildMode && !isSwapMode() && checkAdjacentBackbone()) {
-    const la = (residueView.residue(buildLeftRIdx) || {}).abbr || '?';
-    const ra = (residueView.residue(buildRightRIdx) || {}).abbr || '?';
-    buildInsertInfo.textContent = `${la} and ${ra} are adjacent on the backbone`;
-    buildInsertRow.style.display = 'flex';
-  } else {
-    buildInsertRow.style.display = 'none';
-    if (insertBetweenActive) {
-      insertBetweenActive = false;
-      buildInsertBtn.textContent = '⊕ Insert Between';
-      if (library.loaded) library.render();
-    }
-  }
-}
-
-buildInsertBtn.addEventListener('click', () => {
-  clearBuildPreview();
-  requests.cancel('sequence-edit');
-  if (insertBetweenActive) {
-    insertBetweenActive = false;
-    buildInsertBtn.textContent = '⊕ Insert Between';
-    buildHint.textContent = 'Select a residue, then choose Use beside a library monomer';
-    if (library.loaded) library.render();
-    return;
-  }
-  if (!checkAdjacentBackbone()) return;
-  insertBetweenActive = true;
-  buildInsertBtn.textContent = '✕ Cancel';
-  buildHint.textContent = 'Click a backbone monomer in the library to insert between the selected residues';
-  if (!library.isOpen) library.open();
-  if (library.loaded) library.render();
-});
-
-async function doInsertBetween(abbr) {
-  clearBuildPreview();
-  const after_idx = residueView.insertionAnchor(buildLeftRIdx, buildRightRIdx);
-  if (after_idx === null) return;
-  const val = cabilnInput.value.trim();
-  const request = requests.start('sequence-edit');
-  buildHint.textContent = 'Inserting…';
-  try {
-    const res = await postCalculation('/insert_backbone', {
-      cabiln: val, after_idx, new_abbr: abbr,
-    }, request.signal);
-    const data = await readResponse(res);
-    if (!request.current() || cabilnInput.value.trim() !== val) return;
-    if (data.error) {
-      buildHint.textContent = 'Insert failed: ' + data.error;
-      return;
-    }
-    commitDocument(data.result, 'cabiln');
-    buildHint.textContent = `${abbr} inserted — select chips to continue building`;
-    if (library.loaded) library.render();
-  } catch (e) {
-    if (!request.current()) return;
-    buildHint.textContent = 'Insert failed';
-  } finally {
-    request.finish();
-  }
-}
-document.getElementById('build-left-change').addEventListener('click', clearBuild);
-document.getElementById('build-right-change').addEventListener('click', clearBuild);
-
-async function loadBuildLeft(abbr, rIdx) {
-  clearBuildPreview();
-  requests.cancel('bond-check', 'sequence-edit', 'swap-options');
-  if (isSwapMode()) {
-    requests.cancel('build-right');
-    swapState = null;
-    swapMapping.hidden = true;
-    buildRight = null;
-    buildRightRIdx = null;
-    buildRightAbbr.textContent = '—';
-    buildRightSvg.innerHTML = '<div class="box-placeholder">Choose a replacement in the library</div>';
-    buildRightRg.innerHTML = '';
-    buildRightSite.hidden = true;
-    library.render();
-  }
-  const request = requests.start('build-left');
-  const sequence = cabilnInput.value.trim();
-  buildLeftRIdx = rIdx;
-  buildLeftAbbr.textContent = abbr;
-  buildLeftSvg.innerHTML = '<div class="spinner"></div>';
-  buildLeftRg.innerHTML = '';
-  buildLeftSite.hidden = true;
-  buildLeft = null;
-  setBuildReady(false);
-  buildStatus.textContent = '';
-
-  try {
-    const res = await fetchCalculation(`/monomer_rgroups?abbr=${encodeURIComponent(abbr)}&residue_idx=${rIdx}&cabiln=${encodeURIComponent(sequence)}`, { signal: request.signal });
-    const data = await readResponse(res);
-    if (!request.current() || cabilnInput.value.trim() !== sequence) return;
-    if (data.error) {
-      buildLeftSvg.innerHTML = `<div class="box-placeholder">${escHtml(data.error)}</div>`;
-      return;
-    }
-    buildLeftSvg.innerHTML = data.svg || '';
-    buildLeft = { abbr, rgroups: data.rgroups || [], selectedSlot: null };
-    renderRgroupButtons(buildLeftRg, buildLeft, 'left');
-    buildHint.textContent = buildRight ? 'Choose an attachment site on each side' : 'Choose Use beside a library monomer';
-    library.setFilterEnabled(!isSwapMode());
-    if (library.filterActive && library.loaded) library.render();
-    updateInsertBetweenUI();
-    if (isSwapMode()) loadSwapOptions();
-    else checkBuildValidity();
-  } catch (e) {
-    if (!request.current()) return;
-    buildLeftSvg.innerHTML = '<div class="box-placeholder">Error loading monomer</div>';
-  } finally {
-    request.finish();
-  }
-}
-
-async function loadBuildRight(abbr, rIdx) {
-  clearBuildPreview();
-  requests.cancel('bond-check', 'sequence-edit');
-  const request = requests.start('build-right');
-  const sequence = cabilnInput.value.trim();
-  buildRightRIdx = rIdx !== undefined ? rIdx : null;
-  buildRightAbbr.textContent = abbr;
-  document.getElementById('build-right-label').textContent = isSwapMode() ? 'Replacement monomer'
-    : rIdx !== undefined ? 'Current residue' : 'New monomer';
-  buildRightSvg.innerHTML = '<div class="spinner"></div>';
-  buildRightRg.innerHTML = '';
-  buildRightSite.hidden = true;
-  buildRight = null;
-  setBuildReady(false);
-  buildStatus.textContent = '';
-
-  const family = !isSwapMode() && rIdx === undefined && library.monomers.find(m => m.abbr === abbr && m.degenerate);
-  if (family) {
-    buildRightSvg.innerHTML = '<div class="box-placeholder">Choose the attachment form</div>';
-    for (const [label, symbol] of [['N-terminal', family.nterm_abbr], ['C-terminal', family.cterm_abbr]]) {
-      if (!symbol) continue;
-      const button = document.createElement('button');
-      button.className = 'rgroup-btn';
-      button.textContent = `${label}: ${symbol}`;
-      button.addEventListener('click', () => loadBuildRight(symbol));
-      buildRightRg.appendChild(button);
-    }
-    buildHint.textContent = 'Choose a monomer form, then its attachment site';
-    request.finish();
-    return;
-  }
-
-  try {
-    let url = `/monomer_rgroups?abbr=${encodeURIComponent(abbr)}`;
-    if (rIdx !== undefined) {
-      url += `&residue_idx=${rIdx}&cabiln=${encodeURIComponent(sequence)}`;
-    }
-    const res = await fetchCalculation(url, { signal: request.signal });
-    const data = await readResponse(res);
-    if (!request.current() || cabilnInput.value.trim() !== sequence) return;
-    if (data.error) {
-      buildRightSvg.innerHTML = `<div class="box-placeholder">${escHtml(data.error)}</div>`;
-      return;
-    }
-    buildRightSvg.innerHTML = data.svg || '';
-    buildRight = { abbr, rgroups: data.rgroups || [], selectedSlot: null };
-    renderRgroupButtons(buildRightRg, buildRight, 'right');
-    buildHint.textContent = isSwapMode() ? 'Review each site mapping, then preview the replacement'
-      : buildLeft ? 'Choose an attachment site on each side' : 'Select a residue in the sequence';
-    updateInsertBetweenUI();
-    checkBuildValidity();
-  } catch (e) {
-    if (!request.current()) return;
-    buildRightSvg.innerHTML = '<div class="box-placeholder">Error loading monomer</div>';
-  } finally {
-    request.finish();
-  }
-}
-
-function renderRgroupButtons(container, state, side) {
-  container.innerHTML = '';
-  state.rgroups.forEach(rg => {
-    const btn = document.createElement('button');
-    btn.className = 'rgroup-btn';
-    if (rg.used) btn.classList.add('used');
-    btn.disabled = isSwapMode() || !!rg.used;
-    btn.setAttribute('aria-pressed', String(state.selectedSlot === rg.slot));
-    if (state.selectedSlot === rg.slot) btn.classList.add('selected');
-    btn.textContent = `R${rg.slot} ${(rg.chem_type || '').replaceAll('_', ' ')}${rg.used ? (isSwapMode() ? ' · connected' : ' · used') : ''}`;
-    btn.title = `R${rg.slot}: ${rg.chem_type || 'unknown'} · Free-site group: ${rg.leaving || '[H] (implicit)'}${rg.used ? ' — already connected' : ''}`;
-    if (!isSwapMode() && !rg.used) {
-      btn.addEventListener('click', () => selectRgroup(side, rg.slot));
-    }
-    container.appendChild(btn);
-  });
-  const drawing = side === 'left' ? buildLeftSvg : buildRightSvg;
-  drawing.querySelectorAll('.site-selected').forEach(path => path.classList.remove('site-selected'));
-  const selected = state.rgroups.find(rg => rg.slot === state.selectedSlot);
-  const detail = side === 'left' ? buildLeftSite : buildRightSite;
-  detail.hidden = !selected;
-  if (selected) {
-    detail.textContent = `R${selected.slot} · Free-site group: ${selected.leaving || '[H] (implicit)'}`;
-    detail.title = 'Group present at this site when it is unconnected. The product preview shows the selected reaction.';
-  }
-  if (Number.isInteger(selected?.atom_idx)) {
-    drawing.querySelectorAll(`.atom-${selected.atom_idx}`).forEach(path => path.classList.add('site-selected'));
-  }
-  if (isSwapMode()) {
-    const occupied = side === 'left' ? state.rgroups.filter(rg => rg.used)
-      : state.rgroups.filter(rg => Object.values(swapState?.mapping || {}).includes(rg.slot));
-    for (const site of occupied) {
-      drawing.querySelectorAll(`.atom-${site.atom_idx}`).forEach(path => path.classList.add('site-selected'));
-    }
-  }
-}
-
-function selectRgroup(side, slot) {
-  requests.cancel('sequence-edit');
-  if (side === 'left' && buildLeft) {
-    buildLeft.selectedSlot = buildLeft.selectedSlot === slot ? null : slot;
-    renderRgroupButtons(buildLeftRg, buildLeft, 'left');
-    if (library.filterActive && library.loaded) library.render();
-  } else if (side === 'right' && buildRight) {
-    buildRight.selectedSlot = buildRight.selectedSlot === slot ? null : slot;
-    renderRgroupButtons(buildRightRg, buildRight, 'right');
-  }
-  checkBuildValidity();
-}
-
-async function checkBuildValidity() {
-  clearBuildPreview();
-  requests.cancel('bond-check');
-  buildReaction = '';
-  setBuildReady(false);
-  if (isSwapMode()) {
-    const valid = !!swapRequest();
-    buildStatus.textContent = valid ? 'Preview to validate the complete replacement product'
-      : swapState?.candidate && buildRight ? 'Choose a different replacement site for each connection'
-      : 'Choose a replacement from the filtered library';
-    buildStatus.className = 'build-status';
-    setBuildReady(valid);
-    return;
-  }
-  if (!buildLeft?.selectedSlot || !buildRight?.selectedSlot) {
-    buildStatus.textContent = !buildLeft ? 'Select a residue in the sequence'
-      : !buildRight ? 'Choose a monomer from the library'
-      : !buildLeft.selectedSlot ? 'Choose a site on the current residue'
-      : 'Choose a site on the other monomer';
-    buildStatus.className = 'build-status';
-    return;
-  }
-
-  const leftRg = buildLeft.rgroups.find(r => r.slot === buildLeft.selectedSlot);
-  const rightRg = buildRight.rgroups.find(r => r.slot === buildRight.selectedSlot);
-  if (!leftRg || !rightRg) return;
-
-  const request = requests.start('bond-check');
-
-  buildStatus.textContent = 'Checking bond...';
-  buildStatus.className = 'build-status';
-
-  try {
-    const res = await postCalculation('/validate_bond', {
-      chem_type_a: leftRg.chem_type,
-      chem_type_b: rightRg.chem_type,
-      abbr_a: buildLeft.abbr,
-      slot_a: buildLeft.selectedSlot,
-      abbr_b: buildRight.abbr,
-      slot_b: buildRight.selectedSlot
-    }, request.signal);
-    const data = await readResponse(res);
-    if (!request.current()) return;
-    if (data.valid) {
-      buildReaction = data.reaction ? `Reaction: ${data.reaction.replaceAll('_', ' ')}` : 'Bond formation';
-      buildStatus.textContent = `Valid: ${data.reaction || 'bond'} (R${buildLeft.selectedSlot}↔R${buildRight.selectedSlot})`;
-      buildStatus.className = 'build-status valid';
-      setBuildReady(true);
-    } else {
-      buildStatus.textContent = data.error || data.reason || 'No compatible reaction found';
-      buildStatus.className = 'build-status invalid';
-      setBuildReady(false);
-    }
-  } catch (e) {
-    if (!request.current()) return;
-    buildStatus.textContent = 'Validation error';
-    buildStatus.className = 'build-status invalid';
-    setBuildReady(false);
-  } finally {
-    request.finish();
-  }
-}
-
-function setBuildReady(ready) {
-  buildConnect.disabled = !ready || (isSwapMode() && !swapState?.preview);
-  buildPreviewButton.disabled = !ready;
-}
-
-function buildConnection() {
-  if (!buildLeft?.selectedSlot || !buildRight?.selectedSlot) return null;
-  return {
-    cabiln: cabilnInput.value.trim(),
-    host_residue_idx: buildLeftRIdx ?? 0,
-    new_abbr: buildRight.abbr,
-    r_host: buildLeft.selectedSlot,
-    r_new: buildRight.selectedSlot,
-    target_residue_idx: (buildRightRIdx !== null && buildRightRIdx !== buildLeftRIdx)
-      ? buildRightRIdx : -1,
-  };
-}
-
-function clearBuildPreview() {
-  if (swapState) swapState.preview = null;
-  if (isSwapMode()) buildConnect.disabled = true;
-  const pending = requests.has('build-preview');
-  requests.cancel('build-preview');
-  if (pending) setBuildReady(true);
-  buildPreviewPanel.hidden = true;
-  buildPreviewInner.innerHTML = '';
-  buildPreviewStatus.textContent = '';
-  buildPreviewReaction.textContent = '';
-  buildPreviewSource.textContent = '';
-  buildPreviewNotation.hidden = true;
-  buildPreviewButton.setAttribute('aria-expanded', 'false');
-}
-
-document.getElementById('build-preview-close').addEventListener('click', () => {
-  clearBuildPreview();
-  buildPreviewButton.focus();
-});
-buildPreviewButton.addEventListener('click', async () => {
-  const swapping = isSwapMode();
-  const connection = swapping ? swapRequest() : buildConnection();
-  if (!connection || buildPreviewButton.disabled) return;
-  clearBuildPreview();
-  const request = requests.start('build-preview', () => buildPreviewPanel.setAttribute('aria-busy', 'false'));
-  const left = swapping ? `${buildLeft.abbr} (residue ${connection.residue_idx + 1})`
-    : `${buildLeft.abbr} (residue ${connection.host_residue_idx + 1}) R${connection.r_host}`;
-  const right = swapping ? buildRight.abbr
-    : `${buildRight.abbr} (${connection.target_residue_idx < 0 ? 'new' : `residue ${connection.target_residue_idx + 1}`}) R${connection.r_new}`;
-  const pair = `${left} ↔ ${right}`;
-  setBuildReady(false);
-  buildPreviewPanel.hidden = false;
-  buildPreviewPanel.setAttribute('aria-busy', 'true');
-  buildPreviewButton.setAttribute('aria-expanded', 'true');
-  buildPreviewStatus.textContent = `${pair} · Preparing preview…`;
-  buildPreviewStatus.className = '';
-  buildPreviewReaction.textContent = swapping ? Object.entries(connection.slot_map)
-    .map(([old, next]) => `R${old} → R${next}`).join(' · ') || 'No existing connections' : buildReaction;
-  buildPreviewInner.innerHTML = '<div class="spinner"></div>';
-  buildPreviewViewport.reset();
-  buildPreviewPanel.scrollIntoView({ block: 'nearest' });
-  try {
-    // Drawing and verification share one worker. Do not spend preview retries
-    // competing with work that is already running for this page.
-    if (requests.has('main-render', 'reference-render', 'verify')) {
-      buildPreviewStatus.textContent = `${pair} · Waiting for the current drawing or verification…`;
-      if (!await request.waitFor('main-render', 'reference-render', 'verify')) return;
-    }
-    if (!request.current()) return;
-    buildPreviewStatus.textContent = `${pair} · Preparing preview…`;
-    // These endpoints calculate a candidate; only Connect commits the document.
-    const proposal = await readResponse(await postCalculation(
-      swapping ? '/replace_monomer' : '/insert_bond', connection, request.signal
-    ));
-    if (!request.current()) return;
-    if (proposal.error) throw new Error(proposal.error);
-    const drawing = await readResponse(await postCalculation('/render', {
-      cabiln: proposal.result, width: 1000, height: 320,
-    }, request.signal));
-    if (!request.current()) return;
-    if (drawing.error) throw new Error(drawing.error);
-    if (swapping && (!CabilnProject.sameContext(connection.context, proposal.context) ||
-        !CabilnProject.sameContext(connection.context, drawing.context))) {
-      throw new Error('The library changed. Select the residue again to refresh replacements');
-    }
-    const changedLibrary = editor.present.context?.library_binding && drawing.context?.library_binding
-      && !CabilnProject.sameContext(editor.present.context, drawing.context);
-    const notice = changedLibrary ? 'Library changed since the current drawing; preview uses current definitions.' : '';
-    buildPreviewInner.innerHTML = drawing.svg;
-    buildPreviewStatus.textContent = [pair, drawing.info, notice, drawing.normalization_note, ...(drawing.warnings || [])].filter(Boolean).join(' · ');
-    buildPreviewSource.textContent = proposal.result;
-    buildPreviewNotation.hidden = false;
-    if (swapping) {
-      swapState.preview = { result: proposal.result, request: connection };
-      buildStatus.textContent = 'Product validated. Apply swap keeps every mapped connection.';
-      buildStatus.className = 'build-status valid';
-      if (Object.entries(connection.slot_map).some(([old, next]) => Number(old) !== next)) {
-        buildPreviewStatus.textContent += ' · Site renumbering can reformat the notation; review Proposed CABILN.';
-      }
-    }
-  } catch (error) {
-    if (!request.current()) return;
-    buildPreviewInner.innerHTML = '';
-    buildPreviewStatus.textContent = `Preview unavailable: ${error.message}. Your sequence is unchanged.`;
-    buildPreviewStatus.className = 'error';
-  } finally {
-    if (request.current()) setBuildReady(true);
-    request.finish();
-  }
-});
-
-buildConnect.addEventListener('click', async () => {
-  const swapping = isSwapMode();
-  const reviewed = swapping ? swapState?.preview : null;
-  const connection = swapping ? reviewed?.request : buildConnection();
-  if (!connection) return;
-  clearBuildPreview();
-  const request = requests.start('sequence-edit');
-
-  setBuildReady(false);
-  buildStatus.textContent = swapping ? 'Checking and applying swap…' : 'Inserting...';
-  buildStatus.className = 'build-status';
-
-  try {
-    const res = await postCalculation(
-      swapping ? '/replace_monomer' : '/insert_bond', connection, request.signal
-    );
-    const data = await readResponse(res);
-    if (!request.current() || cabilnInput.value.trim() !== connection.cabiln) return;
-    if (data.error) {
-      buildStatus.textContent = data.error;
-      buildStatus.className = 'build-status invalid';
-      return;
-    }
-    if (swapping && (data.result !== reviewed.result ||
-        !CabilnProject.sameContext(connection.context, data.context))) {
-      buildStatus.textContent = 'The replacement changed. Preview it again before applying.';
-      buildStatus.className = 'build-status invalid';
-      return;
-    }
-    commitDocument(data.result, 'cabiln');
-    buildHint.textContent = swapping ? 'Monomer replaced — Undo restores the original peptide'
-      : 'Connection added — select a residue to continue building';
-  } catch (e) {
-    if (!request.current()) return;
-    buildStatus.textContent = swapping ? 'Swap failed. Your sequence is unchanged; preview to retry.' : 'Insert failed';
-    buildStatus.className = 'build-status invalid';
-  } finally {
-    if (swapping && request.current()) setBuildReady(!!swapRequest());
-    request.finish();
-  }
 });
 
 // notation conversion
@@ -1340,10 +650,9 @@ function drawingForNotation(snapshot, data) {
   const view = canvasSize(renderCanvas);
   const presentation = data.presentation;
   const order = data.occurrence_order;
-  if (!snapshot || snapshot !== cabilnDrawing || mainStale ||
-      requests.has('main-render') || displayedNotation !== 'cabiln' ||
-      displayedSource !== snapshot.source || data.source_echo !== snapshot.source ||
-      !lastSvg || !lastMolBlock || view.w !== snapshot.canvas.w || view.h !== snapshot.canvas.h ||
+  if (!snapshot || snapshot !== drawing.snapshot || drawing.stale ||
+      requests.has('main-render') || !drawing.matches(snapshot.source, 'cabiln') || data.source_echo !== snapshot.source ||
+      !drawing.svg || !drawing.molBlock || view.w !== snapshot.canvas.w || view.h !== snapshot.canvas.h ||
       !CabilnProject.sameContext(snapshot.data.context, data.context) ||
       !CabilnProject.sameContext(editor.present.context, data.context) ||
       presentation?.cabiln_echo !== data.result || !presentation?.layout ||
@@ -1367,18 +676,20 @@ async function convertNotation(target) {
   if (!original) return;
   const canonical = notationPolicy.value === 'canonical';
   let deferredDrawing = false;
-  const request = requests.start('sequence-edit', () => {
+  const button = target === 'bracket' ? btnToBracket : btnToBranch;
+  const request = startConversion(button, () => {
     // Let the cancelling action schedule its own drawing or formatter first.
     Promise.resolve().then(() => {
-      if (deferredDrawing && mainStale && cabilnTimer === null &&
+      if (deferredDrawing && drawing.stale && cabilnTimer === null &&
           !requests.has('main-render') && !requests.has('sequence-edit') &&
           notationSelect.value === 'cabiln' && cabilnInput.value.trim() === original) renderDocument();
     });
   });
+  conversionProgressLabel.textContent = 'Converting notation and checking the structure…';
   // The formatter validates and normalizes unsent input. Draw its result once,
   // or draw the original input if formatting fails. Stale input also covers a
   // second formatter click taking over the first click's deferred drawing.
-  deferredDrawing = cabilnTimer !== null || (mainStale && !requests.has('main-render'));
+  deferredDrawing = cabilnTimer !== null || (drawing.stale && !requests.has('main-render'));
   clearTimeout(cabilnTimer);
   cabilnTimer = null;
   let conversionError = '';
@@ -1386,22 +697,22 @@ async function convertNotation(target) {
     await settleDrawingsForConversion(request);
     if (!request.current()) return;
     const val = cabilnInput.value.trim();
-    const snapshot = cabilnDrawing;
+    const snapshot = drawing.snapshot;
     const res = await postCalculation('/convert_notation', { cabiln: val, target, canonical }, request.signal);
     const data = await readResponse(res);
     if (!request.current() || cabilnInput.value.trim() !== val) return;
     if (data.error) { conversionError = data.error; return; }
     if (data.result) {
       deferredDrawing = false;
-      const drawing = drawingForNotation(snapshot, data);
+      const reused = drawingForNotation(snapshot, data);
       const document = { text: data.result, notation: 'cabiln', warning: editor.present.warning,
         quality: null, canonical: data.canonical || null, context: data.context || editor.present.context };
       recordDocument(document);
-      if (drawing) {
+      if (reused) {
         clearComparison();
-        clearBuild();
+        build.clear();
         residueView.clearHighlight();
-        acceptCabilnDrawing(drawing, data.result, snapshot);
+        acceptCabilnDrawing(reused, data.result, snapshot);
         setMainProgress(false);
       } else renderDocument(true);
     }
@@ -1420,24 +731,25 @@ btnToBracket.addEventListener('click', () => convertNotation('bracket'));
 btnToBranch.addEventListener('click', () => convertNotation('branch'));
 
 btnReroll.addEventListener('click', () => {
-  if (!lastCabiln) return;
+  if (!drawing.cabiln) return;
   // The default already uses Indigo; start with the alternate CoordGen layout.
-  rerollSeed = rerollSeed === 0 ? 2 : rerollSeed + 1;
-  btnReroll.textContent = rerollSeed % 2 === 1 ? '⟳ Indigo' : '⟳ CoordGen';
+  drawing.nextLayout();
+  btnReroll.textContent = drawing.seed % 2 === 1 ? '⟳ Indigo' : '⟳ CoordGen';
   setMainProgress(true);
-  doRenderCabiln(lastCabiln);
+  doRenderCabiln(drawing.cabiln);
 });
 
 // SMILES → CABILN conversion
-function startConversion(button) {
+function startConversion(button, onEnd = () => {}) {
   requests.cancel('sequence-edit');
-  const label = button.textContent;
   const request = requests.start('sequence-edit', () => {
-    button.textContent = label;
+    button.setAttribute('aria-busy', 'false');
     button.disabled = false;
     conversionProgress.hidden = true;
+    onEnd();
+    updateNotationControls();
   });
-  button.textContent = '…';
+  button.setAttribute('aria-busy', 'true');
   button.disabled = true;
   conversionProgress.hidden = false;
   conversionProgressLabel.textContent = 'Recognizing monomers and checking the structure. Large peptides can take several seconds.';
@@ -1517,17 +829,10 @@ async function doToCabiln(notation) {
 btnToCabilnPct.addEventListener('click',     () => doToCabiln('percent'));
 btnToCabilnBracket.addEventListener('click', () => doToCabiln('bracket'));
 
-function setExportReady(svg, molBlock) {
-  lastSvg      = svg || '';
-  lastMolBlock = molBlock || '';
-  btnPng.disabled = !lastSvg;
-  btnMol.disabled = !lastMolBlock;
-}
-
-function clearExports() {
-  lastSvg = lastMolBlock = '';
-  btnPng.disabled = true;
-  btnMol.disabled = true;
+function updateDrawingControls() {
+  btnPng.disabled = !drawing.svg;
+  btnMol.disabled = !drawing.molBlock;
+  btnReroll.disabled = !drawing.cabiln;
 }
 
 // render helpers
@@ -1541,7 +846,7 @@ function setInner(inner, html) {
 }
 
 function showSpinner(inner) {
-  setInner(inner, '<div class="spinner"></div>');
+  showLoading(inner, 'Drawing structure…');
 }
 
 // notation selector
@@ -1566,9 +871,9 @@ cabilnInput.addEventListener('input', () => {
 
 function setMainProgress(pending) {
   renderPane.setAttribute('aria-busy', String(pending));
-  renderProgress.hidden = !pending && !(mainStale && hasMainDrawing);
+  renderProgress.hidden = !pending && !(drawing.stale && drawing.hasDrawing);
   renderProgressLabel.textContent = pending
-    ? (hasMainDrawing ? 'Updating — previous drawing shown' : 'Drawing structure…')
+    ? (drawing.hasDrawing ? 'Updating — previous drawing shown' : 'Drawing structure…')
     : cabilnInput.className === 'err'
       ? 'Previous drawing — correct the input to update'
       : 'Previous drawing — drawing unavailable; try again';
@@ -1579,16 +884,12 @@ function invalidateDocument() {
   cabilnTimer = null;
   requests.cancel('main-render', 'sequence-edit');
   clearComparison();
-  clearBuild();
+  build.clear();
   residueView.clearHighlight();
-  clearExports();
-  cabilnDrawing = null;
-  lastCabiln = '';
-  mainStale = true;
+  drawing.invalidate();
+  updateDrawingControls();
   renderCanvas.classList.add('stale');
   residueView.setStale(true);
-  rerollSeed = 0;
-  btnReroll.disabled = true;
   btnReroll.textContent = '⟳ Layout';
   cabilnInput.className = '';
   setStatus(cabilnStatus, '');
@@ -1602,7 +903,7 @@ function renderDocument(immediate = false) {
     return;
   }
   invalidateDocument();
-  if (!hasMainDrawing) showSpinner(renderInner);
+  if (!drawing.hasDrawing) showSpinner(renderInner);
   setMainProgress(true);
   const render = () => {
     cabilnTimer = null;
@@ -1612,30 +913,27 @@ function renderDocument(immediate = false) {
   else cabilnTimer = setTimeout(render, 180);
 }
 
-function acceptMainDrawing(svg, source, notation) {
+function displayMainDrawing(svg) {
   setInner(renderInner, svg);
-  hasMainDrawing = true;
-  mainStale = false;
-  displayedSource = source;
-  displayedNotation = notation;
   renderCanvas.classList.remove('stale');
   residueView.setStale(false);
 }
 
 function mainRenderError(message, invalidInput = false) {
-  mainStale = true;
-  if (!hasMainDrawing) setInner(renderInner, `<div class="placeholder err">${escHtml(message)}</div>`);
-  setStatus(cabilnStatus, message);
+  drawing.invalidate();
+  updateDrawingControls();
+  if (!drawing.hasDrawing) setInner(renderInner, `<div class="placeholder err">${escHtml(message)}</div>`);
+  setStatus(cabilnStatus, message, invalidInput ? 'error' : 'warn');
+  if (!invalidInput) showRetry(cabilnStatus, message, () => renderDocument(true));
   cabilnInput.className = invalidInput ? 'err' : '';
 }
 
 async function doRenderForeign(txt) {
   const request = requests.start('main-render');
   const mode = notationSelect.value;
-  lastCabiln = '';
-  clearExports();
+  drawing.begin();
+  updateDrawingControls();
   clearComparison();
-  btnReroll.disabled = true;
   const { w, h } = canvasSize(renderCanvas);
   try {
     const res = await postCalculation('/render_reference', {
@@ -1648,9 +946,12 @@ async function doRenderForeign(txt) {
       mainRenderError(data.error, invalidInputResponse(res));
     } else {
       acceptDocumentContext(data.context);
-      acceptMainDrawing(data.svg, txt, mode);
+      displayMainDrawing(data.svg);
+      drawing.accept(data, txt, mode);
+      updateDrawingControls();
       residueView.clear();
-      setStatus(cabilnStatus, `${data.format}: ${data.info || ''}`, 'ok');
+      setStatus(cabilnStatus, '', 'ok');
+      showStructureInfo(cabilnStatus, data, { lead: data.format });
       cabilnInput.className = 'ok';
     }
   } catch (e) {
@@ -1664,9 +965,8 @@ async function doRenderForeign(txt) {
 
 function resetCabiln() {
   invalidateDocument();
-  hasMainDrawing = false;
-  mainStale = false;
-  displayedSource = displayedNotation = '';
+  drawing.clear();
+  updateDrawingControls();
   renderCanvas.classList.remove('stale');
   residueView.setStale(false);
   mainViewport.reset();
@@ -1683,33 +983,28 @@ function acceptCabilnDrawing(data, source, view, sameDocument = false) {
     saveDraft();
   }
   acceptDocumentContext(data.context);
-  lastCabiln = displayedSequence;
-  acceptMainDrawing(data.svg, displayedSequence, 'cabiln');
-  rerollSeed = view.seed;
-  setStatus(cabilnStatus, [data.info, data.normalization_note, ...(data.warnings || [])].filter(Boolean).join(' · '),
-    data.warnings?.length ? 'warn' : 'ok');
+  displayMainDrawing(data.svg);
+  setStatus(cabilnStatus, '', data.warnings?.length ? 'warn' : 'ok');
+  showStructureInfo(cabilnStatus, data);
   cabilnInput.className = 'ok';
-  btnReroll.disabled = false;
-  setExportReady(data.svg, data.mol_block);
   residueView.render(data, editor.present.quality);
   // Tabs can change the canvas height on the first render. Detect later resizes
   // against the accepted view, while retaining the dimensions of the SVG itself.
-  cabilnDrawing = { source: displayedSequence, data, w: view.w, h: view.h,
-    seed: view.seed, canvas: canvasSize(renderCanvas) };
-  if (sameDocument) residueView.select(buildLeftRIdx, buildRightRIdx);
-  if (verifyMode && lastSmiles) triggerVerify();
+  drawing.accept(data, displayedSequence, 'cabiln', { w: view.w, h: view.h,
+    seed: view.seed, canvas: canvasSize(renderCanvas) });
+  updateDrawingControls();
+  if (sameDocument) residueView.select(...build.selection);
+  if (verifyPanel.isOpen && lastSmiles) triggerVerify();
 }
 
 async function doRenderCabiln(seq) {
   const request = requests.start('main-render');
-  const sameDocument = seq === displayedSource && displayedNotation === 'cabiln';
-  lastCabiln = '';
-  clearExports();
-  cabilnDrawing = null;
+  const sameDocument = drawing.matches(seq, 'cabiln');
+  drawing.begin();
+  updateDrawingControls();
   clearComparison();
-  btnReroll.disabled = true;
-  if (buildMode && !sameDocument) clearBuild();
-  const view = { ...canvasSize(renderCanvas), seed: rerollSeed };
+  if (build.filters.building && !sameDocument) build.clear();
+  const view = { ...canvasSize(renderCanvas), seed: drawing.seed };
   try {
     const res = await postCalculation('/render', {
       cabiln: seq, width: view.w, height: view.h, seed: view.seed,
@@ -1719,8 +1014,6 @@ async function doRenderCabiln(seq) {
         notationSelect.value !== 'cabiln') return;
     if (data.error) {
       mainRenderError(data.error, invalidInputResponse(res));
-      clearExports();
-      btnReroll.disabled = true;
     } else {
       acceptCabilnDrawing(data, seq, view, sameDocument);
     }
@@ -1805,7 +1098,8 @@ async function renderMolReference(text, name, request = requests.start('referenc
     if (!request.current()) return;
     if (data.error) {
       setInner(smilesInner, `<div class="placeholder err">${escHtml(data.error)}</div>`);
-      setStatus(smilesStatus, data.error);
+      setStatus(smilesStatus, data.error, 'error');
+      if (!invalidInputResponse(res)) showRetry(smilesStatus, data.error, restoreReferenceDrawing);
     } else {
       setInner(smilesInner, data.svg);
       lastSmiles = data.smiles || '';
@@ -1814,11 +1108,11 @@ async function renderMolReference(text, name, request = requests.start('referenc
       acceptReferenceContext(data.context);
       saveDraft();
       smilesInput.className = 'ok';
-      if (lastCabiln) triggerVerify();
+      if (drawing.cabiln) triggerVerify();
     }
   } catch (err) {
     if (!request.current()) return;
-    setStatus(smilesStatus, 'Failed to render the original MOL/SDF reference');
+    showRetry(smilesStatus, 'Could not render the original MOL/SDF reference.', restoreReferenceDrawing);
   } finally { request.finish(); }
 }
 
@@ -1833,19 +1127,21 @@ async function doRenderRef(txt) {
     if (!request.current() || smilesInput.value.trim() !== txt) return;
     if (data.error) {
       setInner(smilesInner, `<div class="placeholder err">${escHtml(data.error)}</div>`);
-      setStatus(smilesStatus, data.error);
+      setStatus(smilesStatus, data.error, 'error');
+      if (!invalidInputResponse(res)) showRetry(smilesStatus, data.error, restoreReferenceDrawing);
       smilesInput.className = invalidInputResponse(res) ? 'err' : '';
     } else {
       setInner(smilesInner, data.svg);
       lastSmiles = data.smiles || '';
       acceptReferenceContext(data.context);
-      setStatus(smilesStatus, `${data.format}: ${data.info || ''}`, 'ok');
+      setStatus(smilesStatus, '', 'ok');
+      showStructureInfo(smilesStatus, data, { lead: data.format });
       smilesInput.className = 'ok';
-      if (lastCabiln) triggerVerify();
+      if (drawing.cabiln) triggerVerify();
     }
   } catch (e) {
     if (!request.current()) return;
-    setStatus(smilesStatus, 'Could not reach the renderer. Your reference input is preserved.');
+    showRetry(smilesStatus, 'Could not reach the renderer. Your reference input is preserved.', restoreReferenceDrawing);
     smilesInput.className = '';
   } finally {
     request.finish();
@@ -1860,14 +1156,14 @@ function clearComparison() {
 
 async function triggerVerify() {
   clearComparison();
-  if (!verifyMode || !lastSmiles || !lastCabiln) return;
+  if (!verifyPanel.isOpen || !lastSmiles || !drawing.cabiln) return;
   const request = requests.start('verify');
   const smiles = lastSmiles;
-  const cabiln = lastCabiln;
+  const cabiln = drawing.cabiln;
   try {
     const res = await postCalculation('/verify', { smiles, cabiln }, request.signal);
     const data = await readResponse(res);
-    if (!request.current() || lastSmiles !== smiles || lastCabiln !== cabiln) return;
+    if (!request.current() || lastSmiles !== smiles || drawing.cabiln !== cabiln) return;
     if (data.error) {
       compareBar.innerHTML = `<span class="nomatch">Error: ${escHtml(data.error)}</span>`;
       return;

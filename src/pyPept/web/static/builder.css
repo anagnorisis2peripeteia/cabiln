@@ -182,7 +182,7 @@
     line-height: 1.4;
   }
   .operation-progress [role="status"] { min-width: 0; overflow-wrap: anywhere; }
-  #render-progress {
+  #render-progress, #conversion-progress {
     position: absolute;
     bottom: 14px;
     left: 14px;
@@ -191,6 +191,7 @@
     pointer-events: none;
     box-shadow: 0 3px 16px #0004;
   }
+  #conversion-progress { bottom: 68px; }
   #render-canvas.stale .canvas-inner { opacity: .6; }
   #residue-chips.stale { opacity: .55; pointer-events: none; }
 
@@ -199,6 +200,7 @@
 
   /* render mode */
   #render-pane {
+    flex-direction: column;
     flex: 1;
     display: flex;
     min-height: 0;
@@ -369,6 +371,13 @@
   }
   .example-cat:first-child { margin-top: 0; }
   .example-row {
+    display: block;
+    width: 100%;
+    text-align: left;
+    font: inherit;
+    color: inherit;
+    background: transparent;
+    border: 0;
     padding: 8px 14px 7px;
     border-bottom: 1px solid var(--line-soft);
     cursor: pointer;
@@ -858,3 +867,29 @@
     .panel-close { min-width: 44px; }
     .res-chip { min-height: 36px; padding-top: 7px; padding-bottom: 7px; }
   }
+
+  .toolbar-label { color: var(--muted); font-size: 12px; white-space: nowrap; }
+  .notation-actions, .drawing-toolbar, .viewport-controls {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .notation-actions { padding-top: 6px; }
+  .drawing-toolbar { padding: 7px 10px; border-bottom: 1px solid var(--line-soft); }
+  .drawing-toolbar .toolbar-group { padding-left: 0; border-left: 0; }
+  .drawing-toolbar .viewport-controls { margin-left: auto; }
+  .viewport-controls { flex-shrink: 0; }
+  .viewport-controls [data-zoom="in"], .viewport-controls [data-zoom="out"] { min-width: 34px; }
+  #build-preview > .viewport-controls { margin: 6px 0; }
+  #verify-close { margin-left: auto; order: 2; }
+  .example-row > span { display: block; }
+  .loading-state { display: flex; justify-content: center; align-items: center; gap: 10px; padding: 16px; color: var(--muted); }
+  .canvas-wrap .loading-state { color: var(--canvas-text); }
+  .loading-state .spinner { flex-shrink: 0; }
+  .retry-button { margin: 6px; }
+  .structure-warning { color: var(--warning); margin-top: 4px; white-space: normal; overflow-wrap: anywhere; }
+  .structure-details { margin-top: 4px; color: var(--muted); white-space: normal; overflow-wrap: anywhere; }
+  .structure-details summary { cursor: pointer; width: fit-content; }
+  .structure-details p { padding: 6px 0; }
+  .statusbar:has(.structure-details, .structure-warning, .retry-button) { max-height: 10em; }

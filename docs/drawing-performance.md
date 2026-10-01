@@ -1,5 +1,18 @@
 # Drawing and notation conversion performance
 
+Interaction feedback and chemistry completion have separate budgets. Aim to
+paint an acknowledgement within 200 ms; measure field responsiveness at the 75th
+percentile separately for mobile and desktop, following the
+[INP guidance](https://web.dev/articles/inp). A chemistry request may take longer
+while leaving the controls responsive and the previous depiction visible.
+
+The browser performance journey records both feedback and completed-result
+timings for short edits/connections, a capped 60-residue chain and six nested
+branches. Compare identical cases against a frozen revision with the same
+browser, viewport and Python environment. Investigate a repeatable completion
+regression above 20% before release; compare cold and warm work separately.
+Do not infer production percentiles or chemistry throughput from first feedback.
+
 Web rendering assembles the molecule without calculating a preliminary layout.
 The default drawing uses Indigo through a detached, atom-mapped isomeric SMILES.
 The returned structure must preserve the mapped graph and stereochemistry, and

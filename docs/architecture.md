@@ -79,6 +79,16 @@ flowchart LR
 notation drafts. `builder.js` passes document transitions to it and updates the
 controls through one display function. Request lifetimes, storage timers and
 the last successful drawing remain separate because they outlive different edits.
+`drawing.js` keeps the accepted source, depiction, MOL atom order and layout
+together. Export eligibility and notation reuse derive from its readiness; an
+edit retains the old depiction while invalidating its use in new operations.
+
+`build.js` owns the connection/replacement session: selected occurrences and
+sites, validation, insertion, candidate mappings and product previews. The page
+supplies document access and commits, and receives library-filter facts and
+selection indices. It cannot assign the session's internal state. Preview and
+Apply availability derive from the current selection, validation and requests;
+Swap also requires the reviewed preview. Closing or editing cancels that session.
 
 `residues.js` owns the accepted drawing's atom maps, residue tabs, group highlights
 and backbone insertion positions. The builder passes drawing data and selection
@@ -91,7 +101,10 @@ monomer choices and library-change notifications. It does not manage the palette
 cache or DOM. `requests.js` owns request lifetimes, cancellable waits, calculation
 POST encoding and response errors. Builder and registration use the same helpers;
 registration writes use a single fetch without calculation retries. `ui.js`
-contains shared zoom/pan and HTML escaping helpers without document state.
+contains shared mouse/touch/keyboard viewport controls, nonmodal panel lifetimes,
+loading/retry presentation, structured drawing messages and HTML escaping.
+Panels share Escape dismissal and focus return while remaining independently
+openable. These helpers own presentation, never peptide or chemistry state.
 
 Imports of attachment lookup, text conversion and PDB naming functions from
 `pyPept.sequence` remain supported. Internal callers use the owning modules;

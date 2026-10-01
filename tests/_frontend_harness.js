@@ -7,8 +7,8 @@ const vm = require('node:vm');
 class Element {
   constructor() {
     this.value = '';
-    this.innerHTML = '';
-    this.textContent = '';
+    this._html = '';
+    this._text = '';
     this.style = {};
     this.dataset = {};
     this.children = [];
@@ -27,12 +27,22 @@ class Element {
       },
     };
   }
+  get innerHTML() { return this._html; }
+  set innerHTML(html) {
+    this._html = html;
+    this._text = html.replace(/<[^>]*>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"');
+    this.children = [];
+  }
+  get textContent() { return this._text + this.children.map(child => child.textContent).join(''); }
+  set textContent(text) { this._text = text; this._html = ''; this.children = []; }
+  contains(element) { return this === element || this.children.some(child => child.contains(element)); }
   addEventListener(type, listener) {
     if (!this.listeners.has(type)) this.listeners.set(type, []);
     this.listeners.get(type).push(listener);
   }
   dispatchEvent(event) {
     event.target ??= this;
+    event.preventDefault ??= () => { event.defaultPrevented = true; };
     return Promise.all((this.listeners.get(event.type) || []).map(fn => fn(event)));
   }
   querySelectorAll() { return []; }
@@ -48,7 +58,11 @@ class Element {
 function page(script, { registration = false, storedDraft = null, now = Date.now } = {}) {
   const elements = new Map();
   const element = id => {
-    if (!elements.has(id)) elements.set(id, new Element());
+    if (!elements.has(id)) {
+      const node = new Element();
+      node.id = id;
+      elements.set(id, node);
+    }
     return elements.get(id);
   };
   element('notation-select').value = 'cabiln';
@@ -96,13 +110,11 @@ function page(script, { registration = false, storedDraft = null, now = Date.now
     },
   });
   const filename = path.join(__dirname, '../src/pyPept/web/static', script);
-  const dependencies = script === 'builder.js'
-    ? ['requests.js', 'project.js', 'document.js', 'ui.js', 'residues.js', 'library.js'] : ['requests.js', 'ui.js'];
-  for (const name of dependencies) {
+  const html = fs.readFileSync(path.join(path.dirname(filename), script === 'builder.js' ? 'index.html' : 'register.html'), 'utf8');
+  for (const [, name] of html.matchAll(/<script src="\/static\/([^"]+)"[^>]*><\/script>/g)) {
     const dependency = path.join(path.dirname(filename), name);
     vm.runInContext(fs.readFileSync(dependency, 'utf8'), context, { filename: dependency });
   }
-  vm.runInContext(fs.readFileSync(filename, 'utf8'), context, { filename });
   return {
     element, requests, downloads, storage,
     run: source => vm.runInContext(source, context),
@@ -119,4 +131,50 @@ function page(script, { registration = false, storedDraft = null, now = Date.now
   };
 }
 
-module.exports = { Element, page };
+const flush = () => new Promise(setImmediate);
+
+async function openBuilder(ui, source = 'G') {
+  ui.run(`replaceDocument({text: ${JSON.stringify(source)}, notation: 'cabiln'})`);
+  if (!ui.run('build.filters.building')) {
+    await ui.element('btn-build').click();
+    ui.requests.findLast(request => request.url === '/monomers').resolve([], true, 200, { 'X-Library-Version': 'old' });
+    await flush();
+    ui.requests.findLast(request => request.url === '/reactions').resolve([]);
+    await flush();
+  }
+  ui.requests.length = 0;
+}
+
+async function loadSelection(ui, side, abbr, index, rgroups = []) {
+  const pending = side === 'left' || index !== null
+    ? ui.run(`build.selectResidue({abbr:${JSON.stringify(abbr)}, idx:${index}})`)
+    : ui.run(`build.useMonomer(${JSON.stringify(abbr)})`);
+  const request = ui.requests.at(-1);
+  assertRequest(request, '/monomer_rgroups');
+  request.resolve({ svg: `<svg>${abbr}</svg>`, rgroups });
+  await pending;
+  await flush();
+}
+
+function assertRequest(request, prefix) {
+  if (!request?.url.startsWith(prefix)) throw new Error(`Expected ${prefix}, got ${request?.url}`);
+}
+
+async function chooseSite(ui, side, slot) {
+  const button = ui.element(`build-${side}-rgroups`).children.find(child => child.textContent.startsWith(`R${slot} `));
+  if (!button) throw new Error(`Missing ${side} R${slot}`);
+  await button.click();
+}
+
+async function prepareConnection(ui, { source = 'G', left = 'G', right = 'A', leftSlot = 2, rightSlot = 1, index = 0 } = {}) {
+  await openBuilder(ui, source);
+  await loadSelection(ui, 'left', left, index, [{slot: leftSlot, chem_type: 'backbone_c'}]);
+  await loadSelection(ui, 'right', right, null, [{slot: rightSlot, chem_type: 'backbone_n'}]);
+  await chooseSite(ui, 'left', leftSlot);
+  // Each contract starts at the validation request, after setup has settled.
+  ui.requests.length = 0;
+  await chooseSite(ui, 'right', rightSlot);
+  assertRequest(ui.requests[0], '/validate_bond');
+}
+
+module.exports = { Element, page, flush, openBuilder, loadSelection, chooseSite, prepareConnection };

@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const test = require('node:test');
-const { page } = require('./_frontend_harness');
+const { page, flush, openBuilder, loadSelection, chooseSite, prepareConnection } = require('./_frontend_harness');
 
 const rendered = {
   svg: '<svg>OLD STRUCTURE</svg>', mol_block: 'OLD MOL', info: 'old',
@@ -62,9 +62,9 @@ test('branches and backbone insertion work on the second explicit segment', () =
     groups: [branch(0, 1, [3], '{')], markers: [],
   });
   assert.deepEqual(chips.map(chip => chip.textContent), ['%', 'A', '%', 'K', '$', '{', 'G', '}', 'A']);
-  assert.equal(ui.run('buildLeftRIdx = 1; buildRightRIdx = 2; checkAdjacentBackbone()'), true);
-  assert.equal(ui.run('buildLeftRIdx = 0; checkAdjacentBackbone()'), false);
-  assert.equal(ui.run('buildLeftRIdx = 3; checkAdjacentBackbone()'), false);
+  assert.equal(ui.run('residueView.insertionAnchor(1, 2)'), 1);
+  assert.equal(ui.run('residueView.insertionAnchor(0, 2)'), null);
+  assert.equal(ui.run('residueView.insertionAnchor(3, 2)'), null);
 });
 
 test('terminal link tabs use recorded placement and highlight both ends', async () => {
@@ -228,8 +228,9 @@ test('closing a cached preview before its debounce leaves it hidden', async () =
 
 test('a discovered cap family asks for its attachment form before loading slots', async () => {
   const ui = page('builder.js');
+  await openBuilder(ui);
   ui.run("library.monomers = [{abbr:'NovelCap', degenerate:true, nterm_abbr:'NovelCap_', cterm_abbr:'_NovelCap'}]");
-  await ui.run("loadBuildRight('NovelCap')");
+  ui.run("build.useMonomer('NovelCap')");
   assert.equal(ui.requests.length, 0);
   const choices = ui.element('build-right-rgroups').children;
   assert.equal(choices.length, 2);
@@ -249,10 +250,10 @@ test('legacy normalization updates the source before exposing selectable residue
     normalization_note: note, warnings: [] });
   await pending;
   assert.equal(ui.element('cabiln-input').value, normalized);
-  assert.equal(ui.run('lastCabiln'), normalized);
-  assert.equal(ui.element('cabiln-status').textContent, 'old · ' + note);
+  assert.equal(ui.run('drawing.cabiln'), normalized);
+  assert.equal(ui.element('cabiln-status').textContent, 'oldNotation normalized · Details' + note);
   assert.equal(ui.element('cabiln-status').className, 'statusbar ok');
-  assert.equal(ui.element('cabiln-status').title, ui.element('cabiln-status').textContent);
+  assert.match(ui.element('cabiln-status').innerHTML, /<details.*Notation normalized/);
 });
 
 test('clearing the main input discards an already pending render and exports', async () => {
@@ -263,7 +264,7 @@ test('clearing the main input discards an already pending render and exports', a
   ui.requests[0].resolve(rendered);
   await pending;
   assert.doesNotMatch(ui.element('render-inner').innerHTML, /OLD STRUCTURE/);
-  assert.equal(ui.run('lastCabiln'), '');
+  assert.equal(ui.run('drawing.cabiln'), '');
   assert.equal(ui.element('btn-mol').disabled, true);
 });
 
@@ -291,11 +292,12 @@ test('clearing the reference invalidates its pending render', async () => {
 
 test('closing build mode discards pending R-group selections', async () => {
   const ui = page('builder.js');
-  const pending = ui.run('loadBuildLeft("K", 0)');
-  ui.run('clearBuild()');
+  await openBuilder(ui, 'K');
+  const pending = ui.run('build.selectResidue({abbr:"K", idx:0})');
+  await ui.element('build-close').click();
   ui.requests[0].resolve({ svg: '<svg>OLD</svg>', rgroups: [{ slot: 4 }] });
   await pending;
-  assert.equal(ui.run('buildLeft'), null);
+  assert.equal(ui.run('build.filters.left'), null);
   assert.equal(ui.element('build-left-abbr').textContent, '—');
 });
 
@@ -378,9 +380,11 @@ test('validated notation conversion keeps the drawing, remaps owners and preserv
   await ui.element('btn-reroll').click();
   latestRequest(ui, '/render').resolve(notationDrawing());
   await new Promise(setImmediate);
-  assert.equal(ui.run('rerollSeed'), 2);
+  assert.equal(ui.run('drawing.seed'), 2);
   ui.element('render-inner').style.transform = 'scale(1.5)';
-  ui.run('buildLeftRIdx = 1');
+  const beforeSelection = [...ui.requests];
+  await openBuilder(ui, 'A%G');
+  await loadSelection(ui, 'left', 'G', 1);
   const result = notationResult();
   result.canonical = { ...binding.canonical, binding: binding.library_binding };
   ui.element('notation-policy').value = 'canonical';
@@ -388,16 +392,16 @@ test('validated notation conversion keeps the drawing, remaps owners and preserv
   await new Promise(setImmediate);
   latestRequest(ui, '/convert_notation').resolve(result);
   await pending;
-  assert.deepEqual(ui.requests.map(request => request.url), ['/render', '/render', '/convert_notation']);
+  assert.deepEqual([...beforeSelection, ...ui.requests].map(request => request.url).filter(url => !url.startsWith('/monomer_rgroups')), ['/render', '/render', '/convert_notation']);
   assert.equal(ui.element('cabiln-input').value, result.result);
-  assert.equal(ui.run('lastCabiln'), result.result);
-  assert.equal(ui.run('lastSvg'), rendered.svg);
-  assert.equal(ui.run('lastMolBlock'), rendered.mol_block);
+  assert.equal(ui.run('drawing.cabiln'), result.result);
+  assert.equal(ui.run('drawing.svg'), rendered.svg);
+  assert.equal(ui.run('drawing.molBlock'), rendered.mol_block);
   assert.deepEqual(JSON.parse(ui.run('JSON.stringify(residueView.atoms)')), { 0: [2, 3, 4], 1: [0, 1] });
   assert.deepEqual(JSON.parse(ui.run('JSON.stringify(residueView.atomOwners)')), { 0: 1, 1: 1, 2: 0, 3: 0, 4: 0 });
   assert.equal(ui.run('residueView.residues[0].abbr'), 'G');
-  assert.equal(ui.run('buildLeftRIdx'), null);
-  assert.equal(ui.run('rerollSeed'), 2);
+  assert.equal(ui.run('build.selection[0]'), null);
+  assert.equal(ui.run('drawing.seed'), 2);
   assert.equal(ui.element('render-inner').style.transform, 'scale(1.5)');
   assert.equal(ui.element('btn-mol').disabled, false);
   assert.equal(ui.element('btn-reroll').disabled, false);
@@ -411,10 +415,10 @@ test('validated notation conversion keeps the drawing, remaps owners and preserv
     source_echo: 'G%A', presentation: { ...notationResult().presentation,
       cabiln_echo: 'A%G', residues: notationDrawing().residues } });
   await second;
-  assert.deepEqual(ui.requests.map(request => request.url), ['/render', '/render', '/convert_notation', '/convert_notation']);
-  assert.equal(ui.run('lastMolBlock'), rendered.mol_block);
+  assert.deepEqual([...beforeSelection, ...ui.requests].map(request => request.url).filter(url => !url.startsWith('/monomer_rgroups')), ['/render', '/render', '/convert_notation', '/convert_notation']);
+  assert.equal(ui.run('drawing.molBlock'), rendered.mol_block);
   assert.deepEqual(JSON.parse(ui.run('JSON.stringify(residueView.atoms)')), notationDrawing().residue_map);
-  assert.equal(ui.run('rerollSeed'), 2);
+  assert.equal(ui.run('drawing.seed'), 2);
   ui.run('travelHistory("undo")');
   assert.equal(ui.element('cabiln-input').value, 'G%A');
   assert.equal(JSON.parse(latestRequest(ui, '/render').options.body).cabiln, 'G%A');
@@ -551,7 +555,8 @@ test('failed immediate formatting draws pending input without hiding its error',
     await ui.timers();
     latestRequest(ui, '/render').resolve(rendered);
     await new Promise(setImmediate);
-    ui.run("verifyMode = true; lastSmiles = 'NCC(=O)O'");
+    await ui.element('btn-verify').click();
+    ui.run("lastSmiles = 'NCC(=O)O'");
     const original = 'D.(4,1)-G%G-A';
     const normalized = 'D.[G(4,1).A(2,1)]-G';
     await ui.input('cabiln-input', original);
@@ -596,7 +601,7 @@ test('failed immediate formatting draws pending input without hiding its error',
 test('immediate formatting waits for the reference and verifies the final drawing', async () => {
   const ui = page('builder.js');
   await ui.input('cabiln-input', 'Ala-Gly');
-  ui.run('verifyMode = true');
+  await ui.element('btn-verify').click();
   await ui.input('smiles-input', 'NCC(=O)O');
   const converting = ui.element('btn-to-bracket').click();
   await new Promise(setImmediate);
@@ -677,7 +682,7 @@ test('render transport failures preserve source without reporting invalid syntax
       assert.equal(ui.element(input).value, source, label);
       assert.equal(ui.element(input).className, failure === 400 ? 'err' : '', label);
       assert.match(ui.element(status).textContent, failure === 'network' ? /input is preserved/ : failure === 400 ? /Unsupported input/ : /capacity is busy/, label);
-      assert.equal(ui.element(status).title, ui.element(status).textContent, label);
+      assert.equal(ui.element(status).title, ui.element(status).textContent.replace(/ Retry$/, ''), label);
       if (!reference) {
         assert.equal(ui.element('render-inner').innerHTML, drawing, label);
         assert.equal(ui.element('render-pane').getAttribute('aria-busy'), 'false', label);
@@ -771,7 +776,7 @@ test('the latest successful render enables exports; an older response cannot rep
   await old;
   assert.equal(ui.element('render-inner').innerHTML, '<svg>NEW</svg>');
   assert.equal(ui.element('btn-mol').disabled, false);
-  assert.equal(ui.run('lastCabiln'), 'G-A');
+  assert.equal(ui.run('drawing.cabiln'), 'G-A');
 });
 
 test('changing notation cancels a pending foreign render', async () => {
@@ -790,7 +795,8 @@ test('changing notation cancels a pending foreign render', async () => {
 test('editing either structure discards a pending verification result', async () => {
   for (const field of ['cabiln-input', 'smiles-input']) {
     const ui = page('builder.js');
-    ui.run('verifyMode = true; lastCabiln = "A-G"; lastSmiles = "NCC(=O)O"');
+    await ui.element('btn-verify').click();
+    ui.run('drawing.accept({}, "A-G", "cabiln"); lastSmiles = "NCC(=O)O"');
     const pending = ui.run('triggerVerify()');
     await ui.input(field, '');
     ui.requests[0].resolve({
@@ -802,29 +808,29 @@ test('editing either structure discards a pending verification result', async ()
 });
 
 test('competing build selections keep the latest R-group response on each side', async () => {
-  for (const side of ['Left', 'Right']) {
+  for (const side of ['left', 'right']) {
     const ui = page('builder.js');
-    const first = ui.run(`loadBuild${side}("K", 0)`);
-    const second = ui.run(`loadBuild${side}("C", 1)`);
+    await openBuilder(ui, 'G-K-C');
+    if (side === 'right') await loadSelection(ui, 'left', 'G', 0);
+    ui.requests.length = 0;
+    const first = ui.run('build.selectResidue({abbr:"K", idx:1})');
+    const second = ui.run('build.selectResidue({abbr:"C", idx:2})');
     ui.requests[1].resolve({ svg: '<svg>C</svg>', rgroups: [{ slot: 4 }] });
     await second;
     ui.requests[0].resolve({ svg: '<svg>K</svg>', rgroups: [{ slot: 5 }] });
     await first;
-    assert.equal(ui.run(`build${side}.abbr`), 'C');
-    assert.equal(ui.run(`build${side}.rgroups[0].slot`), 4);
+    assert.equal(ui.element(`build-${side}-abbr`).textContent, 'C');
+    assert.match(ui.element(`build-${side}-rgroups`).children[0].textContent, /^R4 /);
+    assert.deepEqual(JSON.parse(ui.run('JSON.stringify(build.selection)')), side === 'left' ? [2, null] : [0, 2]);
   }
 });
 
 test('a cleared R-group selection cannot be enabled by old bond validation', async () => {
   const ui = page('builder.js');
-  ui.run(`
-    buildLeft = {abbr: 'K', selectedSlot: 4, rgroups: [{slot: 4, chem_type: 'amine_primary'}]};
-    buildRight = {abbr: 'D', selectedSlot: 4, rgroups: [{slot: 4, chem_type: 'carboxyl'}]};
-  `);
-  const pending = ui.run('checkBuildValidity()');
-  ui.run('selectRgroup("left", 4)');
+  await prepareConnection(ui, {source: 'K', left: 'K', right: 'D', leftSlot: 4, rightSlot: 4});
+  await chooseSite(ui, 'left', 4);
   ui.requests[0].resolve({ valid: true, reaction: 'amide' });
-  await pending;
+  await flush();
   assert.equal(ui.element('build-connect').disabled, true);
   assert.equal(ui.element('build-status').textContent, 'Choose a site on the current residue');
 });
@@ -833,16 +839,9 @@ test('superseded connection previews cannot publish either a queued proposal or 
   for (const stage of ['proposal', 'drawing']) {
     for (const action of ['site', 'residue', 'close', 'edit', 'library', 'hide']) {
       const ui = page('builder.js');
-      ui.element('cabiln-input').value = 'G';
-      ui.run(`
-        buildMode = true; buildLeftRIdx = 0;
-        buildLeft = {abbr: 'G', selectedSlot: 2, rgroups: [{slot: 2, chem_type: 'backbone_c'}]};
-        buildRight = {abbr: 'A', selectedSlot: 1, rgroups: [{slot: 1, chem_type: 'backbone_n'}]};
-        library.loaded = true; library.version = 'old';
-      `);
-      const validity = ui.run('checkBuildValidity()');
+      await prepareConnection(ui);
       ui.requests[0].resolve({ valid: true, reaction: 'amide' });
-      await validity;
+      await flush();
       const pending = ui.element('build-preview-button').click();
       let response = ui.requests[1];
       if (stage === 'drawing') {
@@ -850,8 +849,8 @@ test('superseded connection previews cannot publish either a queued proposal or 
         await new Promise(setImmediate);
         response = ui.requests[2];
       }
-      if (action === 'site') ui.run('selectRgroup("left", 2)');
-      if (action === 'residue') ui.run('loadBuildRight("C")');
+      if (action === 'site') await chooseSite(ui, 'left', 2);
+      if (action === 'residue') ui.run('build.useMonomer("C")');
       if (action === 'close') await ui.element('build-close').click();
       if (action === 'edit') await ui.input('cabiln-input', 'G-K');
       if (action === 'hide') await ui.element('build-preview-close').click();
@@ -876,16 +875,10 @@ test('superseded connection previews cannot publish either a queued proposal or 
 test('preview waits for active drawings without cancelling them or accepting their library context', async () => {
   for (const dismiss of [false, true]) {
     const ui = page('builder.js');
-    ui.element('cabiln-input').value = 'G';
-    ui.run(`
-      buildMode = true; buildLeftRIdx = 0;
-      buildLeft = {abbr: 'G', selectedSlot: 2, rgroups: [{slot: 2, chem_type: 'backbone_c'}]};
-      buildRight = {abbr: 'A', selectedSlot: 1, rgroups: [{slot: 1, chem_type: 'backbone_n'}]};
-      replaceDocument({context: {project_version: 1, library_binding: 'original', canonical: {version: 1}}});
-    `);
-    const validity = ui.run('checkBuildValidity()');
+    await prepareConnection(ui);
+    ui.run("replaceDocument({context: {project_version: 1, library_binding: 'original', canonical: {version: 1}}})");
     ui.requests[0].resolve({ valid: true, reaction: 'amide' });
-    await validity;
+    await flush();
     await ui.input('smiles-input', 'NCC(=O)O');
     await ui.timers();
     const reference = ui.requests[1];
@@ -915,27 +908,25 @@ test('preview waits for active drawings without cancelling them or accepting the
   }
 });
 
-function swapPage() {
+const swapContext = { project_version: 1, library_binding: 'library', canonical: {version: 1} };
+async function swapPage() {
   const ui = page('builder.js');
   ui.element('build-action').value = 'swap';
-  ui.element('cabiln-input').value = 'A-G';
-  ui.run(`
-    buildMode = true; buildLeftRIdx = 0;
-    buildLeft = {abbr: 'A', rgroups: [{slot: 2, used: true}], selectedSlot: null};
-    buildRight = {abbr: 'S', rgroups: [{slot: 2}], selectedSlot: null};
-    library.loaded = true; library.version = 'old';
-    swapState = { source_echo: 'A-G', residue_idx: 0,
-      context: { project_version: 1, library_binding: 'library', canonical: {version: 1} },
-      requirements: [{slot: 2}], candidate: {abbr: 'S'}, candidates: [], mapping: {2: 2}, preview: null };
-    checkBuildValidity();
-  `);
+  await openBuilder(ui, 'A-G');
+  await loadSelection(ui, 'left', 'A', 0, [{slot: 2, used: true}]);
+  latestRequest(ui, '/replacement_options').resolve({ source_echo: 'A-G', residue_idx: 0,
+    context: swapContext, requirements: [{slot: 2}],
+    candidates: [{abbr: 'S', mapping: {2: 2}, choices: {2: [2]}, sites: [{slot: 2}]}] });
+  await flush();
+  await loadSelection(ui, 'right', 'S', null, [{slot: 2}]);
+  ui.requests.length = 0;
   return ui;
 }
 
 test('Swap requires a matching product preview and rechecks that exact proposal before applying', async () => {
   for (const failure of [null, 'preview-context', 'apply-context', 'apply-product', 'apply-error']) {
-    const ui = swapPage();
-    const context = JSON.parse(ui.run('JSON.stringify(swapState.context)'));
+    const ui = await swapPage();
+    const context = swapContext;
     const changed = {...context, library_binding: 'changed'};
     assert.equal(ui.element('build-connect').disabled, true);
     const previewing = ui.element('build-preview-button').click();
@@ -969,10 +960,14 @@ test('Swap requires a matching product preview and rechecks that exact proposal 
 test('cancelled Swap responses cannot restore a mapping, preview or apply an old source', async () => {
   for (const stage of ['options', 'proposal', 'drawing', 'apply']) {
     for (const action of ['edit', 'mode', 'close', 'library', 'mapping']) {
-      const ui = swapPage();
-      const context = JSON.parse(ui.run('JSON.stringify(swapState.context)'));
+      const ui = await swapPage();
+      const context = swapContext;
       let pending;
-      if (stage === 'options') pending = ui.run('loadSwapOptions()');
+      if (stage === 'options') {
+        pending = ui.run('build.selectResidue({abbr:"A", idx:0})');
+        ui.requests[0].resolve({svg: '<svg/>', rgroups: [{slot: 2, used: true}]});
+        await pending;
+      }
       else {
         pending = ui.element('build-preview-button').click();
         if (stage !== 'proposal') {
@@ -999,17 +994,18 @@ test('cancelled Swap responses cannot restore a mapping, preview or apply an old
       }
       if (action === 'mapping') {
         // Choosing another occurrence cancels both candidate discovery and the proposal.
-        ui.run('loadBuildLeft("G", 1)');
+        ui.run('build.selectResidue({abbr:"G", idx:1})');
       }
       const count = ui.requests.length;
       response.resolve(stage === 'options' ? {source_echo:'A-G', residue_idx:0, requirements:[], candidates:[], context}
         : stage === 'drawing' ? {...rendered, context} : {result:'S-G',context});
       await pending;
+      await flush();
       assert.equal(ui.requests.length, count, `${stage}/${action}`);
       assert.equal(ui.element('cabiln-input').value, action === 'edit' ? 'K-G' : 'A-G');
       assert.equal(ui.element('build-connect').disabled, true);
       assert.equal(ui.element('build-preview').hidden, true);
-      assert.equal(ui.run('swapState?.preview || null'), null);
+      assert.equal(ui.element('build-preview-source').textContent, '');
     }
   }
 });
@@ -1153,7 +1149,7 @@ test('reference conversion waits for original MOL rendering and its automatic Ve
   await ui.timers();
   latestRequest(ui, '/render').resolve({ ...rendered, context: binding });
   await new Promise(setImmediate);
-  ui.run('verifyMode = true');
+  await ui.element('btn-verify').click();
   const original = 'ORIGINAL MOL\r\nwith exact newlines\n';
   const uploading = ui.element('mol-upload').dispatchEvent({ type: 'change', target: { files: [{
     name: 'original.mol', text: async () => original,
@@ -1222,11 +1218,10 @@ test('an unreadable MOL reports that peptide input is preserved', async () => {
 
 test('a pending connection cannot overwrite manual sequence edits', async () => {
   const ui = page('builder.js');
-  ui.element('cabiln-input').value = 'A-K';
-  ui.run(`
-    buildLeft = {abbr: 'K', selectedSlot: 4};
-    buildRight = {abbr: 'D', selectedSlot: 4};
-  `);
+  await prepareConnection(ui, {source: 'A-K', left: 'K', right: 'D', leftSlot: 4, rightSlot: 4, index: 1});
+  ui.requests[0].resolve({valid: true});
+  await flush();
+  ui.requests.length = 0;
   const pending = ui.element('build-connect').dispatchEvent({ type: 'click' });
   await ui.input('cabiln-input', 'A-C');
   ui.requests[0].resolve({ result: 'OLD' });
@@ -1236,17 +1231,18 @@ test('a pending connection cannot overwrite manual sequence edits', async () => 
 
 test('cancelling backbone insertion discards the pending insertion result', async () => {
   const ui = page('builder.js');
-  ui.element('cabiln-input').value = 'A-K';
-  ui.run(`
-    residueView.render({layout: {segments: [{roots: [0, 1]}]}});
-    buildLeftRIdx = 0; buildRightRIdx = 1; insertBetweenActive = true;
-  `);
-  const pending = ui.run('doInsertBetween("G")');
-  await ui.element('build-insert-btn').dispatchEvent({ type: 'click' });
+  await openBuilder(ui, 'A-K');
+  ui.run('residueView.render({layout: {segments: [{roots: [0, 1]}]}})');
+  await loadSelection(ui, 'left', 'A', 0);
+  await loadSelection(ui, 'right', 'K', 1);
+  await ui.element('build-insert-btn').click();
+  ui.requests.length = 0;
+  ui.run('build.useMonomer("G")');
+  await ui.element('build-insert-btn').click();
   ui.requests[0].resolve({ result: 'A-G-K' });
-  await pending;
+  await flush();
   assert.equal(ui.element('cabiln-input').value, 'A-K');
-  assert.equal(ui.run('insertBetweenActive'), false);
+  assert.equal(ui.run('build.filters.insertBetween'), false);
 });
 
 test('file reading is cancelled by reference input edits before upload rendering', async () => {
@@ -1437,7 +1433,7 @@ test('synthetic and opaque occurrences remain selectable and library symbols are
     { idx: 2, abbr: '_SYN1', kind: 'opaque' },
   ];
   ui.run(`residueView.render({residues: ${JSON.stringify(residues)}, layout: {segments: [{roots: [0, 1, 2], members: [0, 1, 2]}], groups: [], markers: []}}, editor.present.quality)`);
-  ui.run('let selected = []; selectBuildResidue = residue => selected.push(residue.idx)');
+  ui.run('let selected = []; build.selectResidue = residue => selected.push(residue.idx)');
   const chips = ui.element('residue-chips').children;
   assert.equal(chips[0].dataset.quality, undefined);
   assert.equal(chips[1].dataset.quality, 'synthetic');
