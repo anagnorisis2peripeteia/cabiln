@@ -20,10 +20,12 @@ the package directly; dedicated tests cover the launcher separately.
 The maintained validation commands are:
 
 ```sh
-python -m pytest -m "not distribution"
+python -m pytest -m "not distribution and not fuzz"
 node --test tests/test_frontend.js
 python -m pytest tests/test_distribution.py
-python tools/benchmarks/decomposition.py --permutations 1 --output /tmp/cabiln-benchmark.json
+python tools/check_examples.py
+python -m pyPept.library_quality --output /tmp/library-quality-candidate.json
+python tools/benchmarks/decomposition.py --permutations 1 --output /tmp/cabiln-benchmark
 ```
 
 The [browser suite](../tests/browser/README.md) checks GUI interactions against an
@@ -31,20 +33,41 @@ isolated library. The [decomposition benchmark](../docs/decomposition-benchmark.
 uses independent reference structures, partitions and attachment expectations.
 Its external comparator and recorded results live in `benchmarks/`.
 
-The remaining scripts are retained development history and library-maintenance
-utilities. They are not imported by the application or part of its startup:
+The [library compatibility audit](../docs/library-quality.md) uses the package's
+current restoration and activation rules. It records exact per-definition
+results, metadata differences and curated identity concerns. Review the candidate
+report before changing the packaged baseline.
 
-- `add_monomers_batch*.py`, `add_new_monomers.py` and `add_dye_monomers.py`
-  record historical library additions.
-- `fix_*.py`, `patch_monomers_*.py`, `update_sdf*.py`, `populate_chem_types.py`
-  and `dedup_library.py` record data migrations and repairs.
-- `audit_library.py`, `validate_monomers.py`, `full_library_roundtrip.py`,
-  `check_*.py`, `find_duplicates.py`, `verify_chains.py`, `review_conflicts.py`,
-  `investigate_fewer_slots.py` and related analysis scripts inspect past datasets.
-- Files beginning with `_` and the standalone `test_*.py` probes are historical
-  experiments. Current regression checks live under `tests/`.
+Two additional diagnostics answer different questions:
 
-These callable paths and repair capabilities remain in place. Several scripts
-assume an old working directory or write directly to the bundled library; inspect
-their paths and use a disposable library copy when reproducing a past migration.
-Their name-specific repairs do not define runtime attachment or recognition rules.
+| Command | Scope |
+| --- | --- |
+| `python tools/audit_library.py` | CSV structure duplicates, name/CIP heuristics and CSV/SDF template consistency |
+| `python tools/find_duplicates.py` | SDF template/core duplicates and case-insensitive symbol collisions |
+
+Both print reports without changing the library. Duplicate structures can be
+intentional; name/CIP heuristics need chemical review. They do not authorize
+merging definitions or changing stereochemistry.
+
+`release_manifest.py` records the installed wheel and chemistry bindings during
+the Docker build. `release_smoke.py` checks a running release image. See the
+[deployment instructions](../docs/deployment.md) for their use.
+
+## Historical scripts
+
+Dataset repair recipes, monomer batches and scratch probes are preserved in
+[commit 8721900](https://github.com/anagnorisis2peripeteia/pyPept/tree/872190083427bef49f2e8d94af827eea74080775/tools).
+To inspect an original recipe:
+
+```sh
+git show 8721900:tools/add_monomers_batch6.py
+```
+
+The former `validate_monomers.py` and `full_library_roundtrip.py` diagnostics are
+superseded by the versioned library audit above. The README check is now
+`check_examples.py`. Past review reports retain their original paths and counts.
+
+The root `bench_cyclicpepedia.py` survey depended on removed normalization
+helpers. Its source remains in that commit; `cyclicpepedia_structure.xlsx` and
+recorded benchmark results remain available. The current decomposition benchmark
+uses independently annotated cases and has a different scope.

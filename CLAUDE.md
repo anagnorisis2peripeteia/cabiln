@@ -26,10 +26,10 @@ pytest tests/test_bond_validation_and_assembly.py::TestAssembly -v
 pytest tests/test_notation_conversion.py::TestRoundTrips -v
 
 # Verify every Sequence() call in README produces a valid molecule
-python tools/_test_readme_examples.py
+python tools/check_examples.py
 
-# Full library round-trip (1001 monomers → CABILN → Molecule → SMILES)
-python tools/full_library_roundtrip.py
+# Generate a candidate activation and metadata audit for every bundled monomer
+python -m pyPept.library_quality --output /tmp/library-quality-candidate.json
 
 # Start the live renderer web app (127.0.0.1:8732)
 cabiln

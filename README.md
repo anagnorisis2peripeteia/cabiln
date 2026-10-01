@@ -210,8 +210,8 @@ python -m pytest tests/test_distribution.py
 
 The distribution test builds an sdist and wheel, then installs them in a fresh
 environment outside the checkout. It needs package-index access. CI checks
-Python 3.9, 3.11, and 3.13. Historical repair scripts under `tools/` are not test
-entry points; some modify library files when run.
+Python 3.9, 3.11, and 3.13. The [tools index](tools/README.md) lists the current
+library diagnostics, example checks and benchmarks.
 
 Generated tests use Hypothesis for notation, chemistry and library changes, and
 fast-check for UI histories and browser interactions. Run the bounded campaign:
