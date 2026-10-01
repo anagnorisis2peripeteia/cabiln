@@ -53,6 +53,8 @@ Hover over residue or branch tabs to highlight their atoms. Library tiles also
 support insertion and right-click selection. Drawing, reference and product
 preview canvases have zoom and reset controls, keyboard panning, and touch
 pan/pinch. Escape closes the active panel and returns focus to its control.
+The drawing starts on a charcoal canvas; **Dark** switches it to white.
+**PNG** and **MOL** exports sit beside the drawing controls.
 
 **Undo** and **Redo** cover sequence edits, connections, swaps and conversions.
 Use Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z in the sequence input or builder controls.

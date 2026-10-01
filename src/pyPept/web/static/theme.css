@@ -1,31 +1,32 @@
 :root {
   color-scheme: dark;
-  --surface-base: #202525;
-  --surface-panel: #242c29;
-  --surface-raised: #2b3231;
-  --surface-inset: #171d1b;
-  --surface-hover: #353f3a;
-  --line: #46524e;
-  --line-soft: #35413a;
-  --text: #edf2ef;
-  --muted: #a9b8b0;
-  --focus: #b8d4e2;
-  --action: #d6bb85;
-  --action-hover: #e4cd9f;
-  --action-ink: #292319;
-  --selection: #3d5452;
-  --selection-line: #8abbb4;
-  --success: #99c5a5;
-  --success-surface: #263c30;
+  --surface-base: #18191c;
+  --surface-panel: #202125;
+  --surface-raised: #292b30;
+  --surface-inset: #17181b;
+  --surface-hover: #33363d;
+  --line: #454850;
+  --line-soft: #32343b;
+  --text: #f0f1f3;
+  --muted: #afb2bc;
+  --focus: #a8c7ff;
+  --action: #a8c7ff;
+  --action-hover: #c5d9ff;
+  --action-ink: #14233b;
+  --selection: #28374f;
+  --selection-line: #739bd9;
+  --success: #9bd3ad;
+  --success-surface: #24342b;
   --warning: #e8c68c;
   --error: #f0a8a5;
   --error-surface: #442b2c;
-  --canvas-text: #5f6b65;
+  --canvas-dark: #1c1d21;
+  --canvas-text: #616570;
   --canvas-error: #a33736;
-  --font-ui: "Avenir Next", "Segoe UI", sans-serif;
+  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-code: "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
-  --radius-control: 5px;
-  --radius-panel: 7px;
+  --radius-control: 6px;
+  --radius-panel: 8px;
 }
 
 [hidden] { display: none !important; }

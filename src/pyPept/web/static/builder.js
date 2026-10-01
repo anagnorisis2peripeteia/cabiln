@@ -851,7 +851,7 @@ function showSpinner(inner) {
 
 // notation selector
 const NOTATION_PLACEHOLDER = {
-  cabiln: 'e.g.  fmoc-A-G-L-am\nfmoc-C.trt(4,2)-A-K.boc(4,2)-am\nfmoc-K.!1(4,4)-G-G-E.!1-am',
+  cabiln: 'Enter a sequence, e.g. fmoc-A-G-L-am',
   smiles: 'Paste SMILES here… e.g. O=C1CNC(=O)[C@@H](C)N1',
   biln:   'Paste BILN here… e.g. fmoc-A-G-L-am  (use Token(bid,rg) for crosslinks)',
   helm:   'Paste HELM here… e.g. PEPTIDE1{A.G.L}$$$$',
@@ -972,7 +972,7 @@ function resetCabiln() {
   renderCanvas.classList.remove('stale');
   residueView.setStale(false);
   mainViewport.reset();
-  setInner(renderInner, '<div class="placeholder">Start typing a sequence…</div>');
+  setInner(renderInner, '<div class="placeholder"><strong>Your peptide appears here</strong>Enter a sequence above, browse Examples, or open Build.</div>');
   residueView.clear();
   setMainProgress(false);
 }
