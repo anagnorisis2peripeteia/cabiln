@@ -1,0 +1,635 @@
+{
+  "date": "2026-10-01",
+  "baseline_revision": "60e9ff053816cd707c945acd8aa3ca2cf623789f",
+  "scope": "Local warm HTTP formatter and live pre-change browser baseline; hosted candidate timings are recorded after deployment separately.",
+  "local_environment": {
+    "platform": "macOS-27.0-arm64-arm-64bit-Mach-O",
+    "python": "3.11.15",
+    "rdkit": "2026.03.6",
+    "repeats": 5
+  },
+  "formatter": [
+    {
+      "peptide": "Semaglutide",
+      "target": "branch",
+      "canonical": false,
+      "old_fields_equal": true,
+      "baseline_median_ms": 56.83020898140967,
+      "final_median_ms": 52.45300004025921,
+      "baseline_cpu_median_ms": 56.26600000000015,
+      "final_cpu_median_ms": 52.359000000000044
+    },
+    {
+      "peptide": "Semaglutide",
+      "target": "branch",
+      "canonical": true,
+      "old_fields_equal": true,
+      "baseline_median_ms": 72.2629579831846,
+      "final_median_ms": 66.22825004160404,
+      "baseline_cpu_median_ms": 72.04699999999997,
+      "final_cpu_median_ms": 66.10099999999997
+    },
+    {
+      "peptide": "Semaglutide",
+      "target": "bracket",
+      "canonical": false,
+      "old_fields_equal": true,
+      "baseline_median_ms": 55.94495800323784,
+      "final_median_ms": 52.64820798765868,
+      "baseline_cpu_median_ms": 55.73499999999987,
+      "final_cpu_median_ms": 52.535999999999916
+    },
+    {
+      "peptide": "Semaglutide",
+      "target": "bracket",
+      "canonical": true,
+      "old_fields_equal": true,
+      "baseline_median_ms": 73.22154199937358,
+      "final_median_ms": 71.89149997429922,
+      "baseline_cpu_median_ms": 70.61399999999995,
+      "final_cpu_median_ms": 68.33700000000009
+    },
+    {
+      "peptide": "Lixisenatide",
+      "target": "branch",
+      "canonical": false,
+      "old_fields_equal": true,
+      "baseline_median_ms": 78.80449999356642,
+      "final_median_ms": 72.56137498188764,
+      "baseline_cpu_median_ms": 77.66500000000009,
+      "final_cpu_median_ms": 72.38899999999981
+    },
+    {
+      "peptide": "Lixisenatide",
+      "target": "branch",
+      "canonical": true,
+      "old_fields_equal": true,
+      "baseline_median_ms": 90.32075002323836,
+      "final_median_ms": 83.87904200935736,
+      "baseline_cpu_median_ms": 89.91999999999977,
+      "final_cpu_median_ms": 83.75399999999988
+    },
+    {
+      "peptide": "Lixisenatide",
+      "target": "bracket",
+      "canonical": false,
+      "old_fields_equal": true,
+      "baseline_median_ms": 75.662084040232,
+      "final_median_ms": 71.61933300085366,
+      "baseline_cpu_median_ms": 75.02999999999993,
+      "final_cpu_median_ms": 71.50100000000003
+    },
+    {
+      "peptide": "Lixisenatide",
+      "target": "bracket",
+      "canonical": true,
+      "old_fields_equal": true,
+      "baseline_median_ms": 90.41274996707216,
+      "final_median_ms": 85.76420904137194,
+      "baseline_cpu_median_ms": 89.82899999999994,
+      "final_cpu_median_ms": 85.6110000000001
+    }
+  ],
+  "formatter_samples": [
+    {
+      "peptide": "Semaglutide",
+      "target": "branch",
+      "canonical": false,
+      "baseline": [
+        {
+          "wall_ms": 55.15541601926088,
+          "cpu_ms": 54.97799999999997
+        },
+        {
+          "wall_ms": 56.83020898140967,
+          "cpu_ms": 55.906999999999925
+        },
+        {
+          "wall_ms": 56.38920795172453,
+          "cpu_ms": 56.26600000000015
+        },
+        {
+          "wall_ms": 74.62749996921048,
+          "cpu_ms": 74.20899999999997
+        },
+        {
+          "wall_ms": 56.88762495992705,
+          "cpu_ms": 56.59900000000007
+        }
+      ],
+      "candidate": [
+        {
+          "wall_ms": 52.12533398298547,
+          "cpu_ms": 52.073000000000036
+        },
+        {
+          "wall_ms": 52.17254196759313,
+          "cpu_ms": 52.065000000000026
+        },
+        {
+          "wall_ms": 53.05758403846994,
+          "cpu_ms": 52.77200000000004
+        },
+        {
+          "wall_ms": 68.45366704510525,
+          "cpu_ms": 67.82200000000005
+        },
+        {
+          "wall_ms": 52.45300004025921,
+          "cpu_ms": 52.359000000000044
+        }
+      ]
+    },
+    {
+      "peptide": "Semaglutide",
+      "target": "branch",
+      "canonical": true,
+      "baseline": [
+        {
+          "wall_ms": 72.4487499683164,
+          "cpu_ms": 72.2259999999999
+        },
+        {
+          "wall_ms": 74.81720799114555,
+          "cpu_ms": 74.40800000000003
+        },
+        {
+          "wall_ms": 70.84758300334215,
+          "cpu_ms": 70.75699999999996
+        },
+        {
+          "wall_ms": 72.2629579831846,
+          "cpu_ms": 72.04699999999997
+        },
+        {
+          "wall_ms": 68.84879100834951,
+          "cpu_ms": 68.69600000000008
+        }
+      ],
+      "candidate": [
+        {
+          "wall_ms": 74.87337500788271,
+          "cpu_ms": 70.87400000000011
+        },
+        {
+          "wall_ms": 81.16866595810279,
+          "cpu_ms": 74.52400000000003
+        },
+        {
+          "wall_ms": 65.76316698919982,
+          "cpu_ms": 65.60100000000003
+        },
+        {
+          "wall_ms": 65.74587500654161,
+          "cpu_ms": 65.6350000000001
+        },
+        {
+          "wall_ms": 66.22825004160404,
+          "cpu_ms": 66.10099999999997
+        }
+      ]
+    },
+    {
+      "peptide": "Semaglutide",
+      "target": "bracket",
+      "canonical": false,
+      "baseline": [
+        {
+          "wall_ms": 55.94495800323784,
+          "cpu_ms": 55.73499999999987
+        },
+        {
+          "wall_ms": 56.82699999306351,
+          "cpu_ms": 56.50400000000033
+        },
+        {
+          "wall_ms": 54.63675002101809,
+          "cpu_ms": 54.59999999999976
+        },
+        {
+          "wall_ms": 75.9769169962965,
+          "cpu_ms": 75.82700000000031
+        },
+        {
+          "wall_ms": 55.80120801459998,
+          "cpu_ms": 55.69299999999977
+        }
+      ],
+      "candidate": [
+        {
+          "wall_ms": 52.38966702017933,
+          "cpu_ms": 52.31199999999991
+        },
+        {
+          "wall_ms": 53.17579099209979,
+          "cpu_ms": 53.01900000000015
+        },
+        {
+          "wall_ms": 52.42200003704056,
+          "cpu_ms": 52.30500000000005
+        },
+        {
+          "wall_ms": 66.65674998657778,
+          "cpu_ms": 66.53900000000013
+        },
+        {
+          "wall_ms": 52.64820798765868,
+          "cpu_ms": 52.535999999999916
+        }
+      ]
+    },
+    {
+      "peptide": "Semaglutide",
+      "target": "bracket",
+      "canonical": true,
+      "baseline": [
+        {
+          "wall_ms": 73.22154199937358,
+          "cpu_ms": 72.96699999999979
+        },
+        {
+          "wall_ms": 74.87891596974805,
+          "cpu_ms": 74.45000000000013
+        },
+        {
+          "wall_ms": 69.244125043042,
+          "cpu_ms": 68.81199999999987
+        },
+        {
+          "wall_ms": 71.35012501385063,
+          "cpu_ms": 70.61399999999995
+        },
+        {
+          "wall_ms": 100.77404201729223,
+          "cpu_ms": 69.71499999999997
+        }
+      ],
+      "candidate": [
+        {
+          "wall_ms": 72.90650001959875,
+          "cpu_ms": 70.32799999999995
+        },
+        {
+          "wall_ms": 67.01687496388331,
+          "cpu_ms": 66.86699999999979
+        },
+        {
+          "wall_ms": 68.56533302925527,
+          "cpu_ms": 68.3069999999999
+        },
+        {
+          "wall_ms": 73.54987500002608,
+          "cpu_ms": 68.33700000000009
+        },
+        {
+          "wall_ms": 71.89149997429922,
+          "cpu_ms": 68.69799999999992
+        }
+      ]
+    },
+    {
+      "peptide": "Lixisenatide",
+      "target": "branch",
+      "canonical": false,
+      "baseline": [
+        {
+          "wall_ms": 78.94712500274181,
+          "cpu_ms": 76.97100000000034
+        },
+        {
+          "wall_ms": 78.1402499997057,
+          "cpu_ms": 77.66500000000009
+        },
+        {
+          "wall_ms": 97.56458399351686,
+          "cpu_ms": 96.96000000000015
+        },
+        {
+          "wall_ms": 76.88412501011044,
+          "cpu_ms": 76.20700000000014
+        },
+        {
+          "wall_ms": 78.80449999356642,
+          "cpu_ms": 77.92699999999985
+        }
+      ],
+      "candidate": [
+        {
+          "wall_ms": 72.56137498188764,
+          "cpu_ms": 72.38899999999981
+        },
+        {
+          "wall_ms": 73.16541695035994,
+          "cpu_ms": 72.99599999999984
+        },
+        {
+          "wall_ms": 89.16733303340152,
+          "cpu_ms": 88.95100000000022
+        },
+        {
+          "wall_ms": 71.22600002912804,
+          "cpu_ms": 71.11000000000001
+        },
+        {
+          "wall_ms": 68.87687498237938,
+          "cpu_ms": 68.79899999999984
+        }
+      ]
+    },
+    {
+      "peptide": "Lixisenatide",
+      "target": "branch",
+      "canonical": true,
+      "baseline": [
+        {
+          "wall_ms": 89.20933294575661,
+          "cpu_ms": 88.99800000000013
+        },
+        {
+          "wall_ms": 88.5940829757601,
+          "cpu_ms": 88.27300000000005
+        },
+        {
+          "wall_ms": 90.32075002323836,
+          "cpu_ms": 89.91999999999977
+        },
+        {
+          "wall_ms": 91.85783303109929,
+          "cpu_ms": 91.53599999999962
+        },
+        {
+          "wall_ms": 92.36800001235679,
+          "cpu_ms": 92.1110000000005
+        }
+      ],
+      "candidate": [
+        {
+          "wall_ms": 84.83662497019395,
+          "cpu_ms": 84.71399999999996
+        },
+        {
+          "wall_ms": 83.40100001078099,
+          "cpu_ms": 83.32499999999987
+        },
+        {
+          "wall_ms": 84.32075002929196,
+          "cpu_ms": 84.21199999999996
+        },
+        {
+          "wall_ms": 83.87904200935736,
+          "cpu_ms": 83.75399999999988
+        },
+        {
+          "wall_ms": 83.73779099201784,
+          "cpu_ms": 83.65199999999984
+        }
+      ]
+    },
+    {
+      "peptide": "Lixisenatide",
+      "target": "bracket",
+      "canonical": false,
+      "baseline": [
+        {
+          "wall_ms": 101.83066700119525,
+          "cpu_ms": 101.05399999999953
+        },
+        {
+          "wall_ms": 75.74645796557888,
+          "cpu_ms": 75.02999999999993
+        },
+        {
+          "wall_ms": 73.63933400483802,
+          "cpu_ms": 73.24700000000028
+        },
+        {
+          "wall_ms": 74.16775001911446,
+          "cpu_ms": 73.7589999999999
+        },
+        {
+          "wall_ms": 75.662084040232,
+          "cpu_ms": 75.18000000000046
+        }
+      ],
+      "candidate": [
+        {
+          "wall_ms": 86.54733299044892,
+          "cpu_ms": 86.43100000000015
+        },
+        {
+          "wall_ms": 71.7083330382593,
+          "cpu_ms": 71.51499999999977
+        },
+        {
+          "wall_ms": 71.61933300085366,
+          "cpu_ms": 71.43299999999985
+        },
+        {
+          "wall_ms": 71.59233302809298,
+          "cpu_ms": 71.50100000000003
+        },
+        {
+          "wall_ms": 69.67279099626467,
+          "cpu_ms": 69.57099999999983
+        }
+      ]
+    },
+    {
+      "peptide": "Lixisenatide",
+      "target": "bracket",
+      "canonical": true,
+      "baseline": [
+        {
+          "wall_ms": 91.25308401416987,
+          "cpu_ms": 90.27399999999997
+        },
+        {
+          "wall_ms": 90.41274996707216,
+          "cpu_ms": 90.04499999999993
+        },
+        {
+          "wall_ms": 90.63799999421462,
+          "cpu_ms": 89.82899999999994
+        },
+        {
+          "wall_ms": 87.13454101234674,
+          "cpu_ms": 86.92100000000025
+        },
+        {
+          "wall_ms": 89.28441599709913,
+          "cpu_ms": 88.77999999999986
+        }
+      ],
+      "candidate": [
+        {
+          "wall_ms": 85.76420904137194,
+          "cpu_ms": 85.6110000000001
+        },
+        {
+          "wall_ms": 85.39937500609085,
+          "cpu_ms": 85.2170000000001
+        },
+        {
+          "wall_ms": 83.97712500300258,
+          "cpu_ms": 83.87399999999978
+        },
+        {
+          "wall_ms": 86.04579098755494,
+          "cpu_ms": 85.85899999999924
+        },
+        {
+          "wall_ms": 98.88050000881776,
+          "cpu_ms": 98.80399999999945
+        }
+      ]
+    }
+  ],
+  "live_baseline": [
+    {
+      "peptide": "Semaglutide",
+      "mode": "already-drawn",
+      "target": "branch",
+      "canonical": false,
+      "event_to_two_frames_ms": 2697,
+      "render_count": 1
+    },
+    {
+      "peptide": "Semaglutide",
+      "mode": "changed-input-immediate",
+      "target": "branch",
+      "canonical": false,
+      "event_to_two_frames_ms": 2898,
+      "render_count": 1
+    },
+    {
+      "peptide": "Semaglutide",
+      "mode": "already-drawn",
+      "target": "bracket",
+      "canonical": false,
+      "event_to_two_frames_ms": 2997.7000000476837,
+      "render_count": 1
+    },
+    {
+      "peptide": "Semaglutide",
+      "mode": "changed-input-immediate",
+      "target": "bracket",
+      "canonical": false,
+      "event_to_two_frames_ms": 3014.800000011921,
+      "render_count": 1
+    },
+    {
+      "peptide": "Semaglutide",
+      "mode": "already-drawn",
+      "target": "branch",
+      "canonical": true,
+      "event_to_two_frames_ms": 3112.399999976158,
+      "render_count": 1
+    },
+    {
+      "peptide": "Semaglutide",
+      "mode": "changed-input-immediate",
+      "target": "branch",
+      "canonical": true,
+      "event_to_two_frames_ms": 3129.2999999523163,
+      "render_count": 1
+    },
+    {
+      "peptide": "Semaglutide",
+      "mode": "already-drawn",
+      "target": "bracket",
+      "canonical": true,
+      "event_to_two_frames_ms": 2914.699999988079,
+      "render_count": 1
+    },
+    {
+      "peptide": "Semaglutide",
+      "mode": "changed-input-immediate",
+      "target": "bracket",
+      "canonical": true,
+      "event_to_two_frames_ms": 3148.099999964237,
+      "render_count": 1
+    },
+    {
+      "peptide": "Lixisenatide",
+      "mode": "already-drawn",
+      "target": "branch",
+      "canonical": false,
+      "event_to_two_frames_ms": 3514.800000011921,
+      "render_count": 1
+    },
+    {
+      "peptide": "Lixisenatide",
+      "mode": "changed-input-immediate",
+      "target": "branch",
+      "canonical": false,
+      "event_to_two_frames_ms": 4199.099999964237,
+      "render_count": 1
+    },
+    {
+      "peptide": "Lixisenatide",
+      "mode": "already-drawn",
+      "target": "bracket",
+      "canonical": false,
+      "event_to_two_frames_ms": 3997.2999999523163,
+      "render_count": 1
+    },
+    {
+      "peptide": "Lixisenatide",
+      "mode": "changed-input-immediate",
+      "target": "bracket",
+      "canonical": false,
+      "event_to_two_frames_ms": 3732.2000000476837,
+      "render_count": 1
+    },
+    {
+      "peptide": "Lixisenatide",
+      "mode": "already-drawn",
+      "target": "branch",
+      "canonical": true,
+      "event_to_two_frames_ms": 4014.100000023842,
+      "render_count": 1
+    },
+    {
+      "peptide": "Lixisenatide",
+      "mode": "changed-input-immediate",
+      "target": "branch",
+      "canonical": true,
+      "event_to_two_frames_ms": 4331.800000011921,
+      "render_count": 1
+    },
+    {
+      "peptide": "Lixisenatide",
+      "mode": "already-drawn",
+      "target": "bracket",
+      "canonical": true,
+      "event_to_two_frames_ms": 3948,
+      "render_count": 1
+    },
+    {
+      "peptide": "Lixisenatide",
+      "mode": "changed-input-immediate",
+      "target": "bracket",
+      "canonical": true,
+      "event_to_two_frames_ms": 4397.900000035763,
+      "render_count": 1
+    }
+  ],
+  "preservation": {
+    "complete_render_reference_verify_responses": 42,
+    "error_responses": 7,
+    "formatter_old_field_responses": 8,
+    "both_assemblies_and_exact_comparison_retained": true
+  },
+  "limitations": [
+    "Small local samples, not production percentiles or cold-start promises.",
+    "The exploratory35ms formatter target was not achieved; required chemistry checks remain.",
+    "Drawing reuse applies only to an eligible current drawing. Newly entered text still needs its target render.",
+    "Explicit CoordGen layout searches are unchanged."
+  ],
+  "source_sha256": {
+    "src/pyPept/inputs.py": "bbb9f524e667ed20ff1622100042cc2796eab5b681920215169c6debc93888c5",
+    "src/pyPept/web/conversion.py": "b4380d0b6a345eea845566a2e9f0a9d3199c7620a6e964258d0238c92b246b64",
+    "src/pyPept/web/rendering.py": "6a5be4e65196d561c91c3ee936c2a3516d7ecba14c34d85f408875eab245bf82",
+    "src/pyPept/web/static/builder.js": "45562770855b6cad861cc612e7dd359da8247e013c0177af298ff1c663af2dd6"
+  }
+}

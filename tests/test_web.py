@@ -290,6 +290,11 @@ def test_legacy_render_returns_the_source_that_its_residue_ids_describe(client):
     )
     assert conversion.status_code == 200, conversion.text
     assert canonical(conversion.json()["result"]) == canonical(expected)
+    assert conversion.json()["source_echo"] == normalized
+    target = client.post("/render", json={"cabiln": conversion.json()["result"]}).json()
+    assert conversion.json()["presentation"] == {
+        key: target[key] for key in conversion.json()["presentation"]
+    }
 
 
 @pytest.mark.parametrize(

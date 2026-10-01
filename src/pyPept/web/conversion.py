@@ -5,11 +5,12 @@ from __future__ import annotations
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
-from pyPept.inputs import convert_input, format_source
+from pyPept.inputs import convert_input, format_source_details
 from pyPept.smiles import convert_smiles
 
 from .execution import error_response
 from .projects import checked_context, project_context
+from .rendering import _render_presentation
 from .schemas import _ConvertReq, _SmilesToCabilnReq, _ToCabilnReq
 
 router = APIRouter()
@@ -51,8 +52,15 @@ def convert_notation(req: _ConvertReq):
                 {"error": "target must be 'bracket' or 'branch'"}, status_code=400
             )
         context = project_context()
-        result = format_source(req.cabiln, notation, canonical=req.canonical)
-        response = {"result": result, "context": checked_context(context)}
+        result = format_source_details(req.cabiln, notation, canonical=req.canonical)
+        response = {
+            "result": result.text,
+            "source_echo": result.source,
+            "occurrence_order": result.occurrence_order,
+            "presentation": _render_presentation(
+                result.sequence, result.peptide, result.warnings
+            ),
+        }
         if req.canonical:
             from pyPept.canonical import canonical_convention
 
@@ -60,6 +68,7 @@ def convert_notation(req: _ConvertReq):
                 **canonical_convention(),
                 "binding": context["library_binding"],
             }
+        response["context"] = checked_context(context)
         return response
     except Exception as exc:
         return error_response(exc)

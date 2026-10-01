@@ -286,7 +286,7 @@ def test_format_verification_assembles_each_representation_once(monkeypatch):
     sources = []
 
     def assemble(self, sequence, *args, **kwargs):
-        sources.append(sequence.s_inputbiln)
+        sources.append(sequence)
         return original(self, sequence, *args, **kwargs)
 
     monkeypatch.setattr(Molecule, "__init__", assemble)

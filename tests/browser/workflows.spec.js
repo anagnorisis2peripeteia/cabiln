@@ -104,6 +104,8 @@ test('Verify, MOL/SDF upload and both notation formatters preserve chemistry', a
     const response = await converted;
     expect(response.status(), await response.text()).toBe(200);
     await expect(page.locator('#cabiln-input')).toHaveValue((await response.json()).result);
+    await expect(page.locator('#cabiln-input')).toHaveClass('ok');
+    await expect(page.locator('#render-pane')).toHaveAttribute('aria-busy', 'false');
     await expect(page.locator('#compare-bar .match')).toHaveText('✓ EXACT MATCH');
     await capture(page, testInfo, `verified-${target}`);
   }

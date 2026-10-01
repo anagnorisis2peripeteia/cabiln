@@ -28,6 +28,18 @@ class MolecularInput:
         return self.molecule
 
 
+@dataclass(frozen=True)
+class FormattedSource:
+    """Verified notation and its target-to-source monomer correspondence."""
+
+    source: str
+    text: str
+    occurrence_order: tuple[int, ...]
+    sequence: object
+    peptide: object
+    warnings: tuple[str, ...]
+
+
 def read_input(source, *, input_format="cabiln", warning_sink=None, track_source=False):
     """Interpret an explicit format, retaining objects supplied by Python callers.
 
@@ -156,7 +168,7 @@ def convert_input(source, notation="percent", *, input_format="auto"):
 
         return parsed.format, convert_smiles(parsed.source, notation=notation)
     try:
-        return parsed.format, _format_parsed(parsed, notation)
+        return parsed.format, _format_parsed(parsed, notation).text
     except Exception as exc:
         if parsed.format == "HELM":
             raise ValueError(f"HELM parse failed: {exc}") from exc
@@ -236,6 +248,13 @@ def format_source(source: str, notation: str, *, canonical: bool = False) -> str
     Canonical output ignores source layout and spelling, retaining the selected
     monomer decomposition. The default preserves existing layout preferences.
     """
+    return format_source_details(source, notation, canonical=canonical).text
+
+
+def format_source_details(
+    source: str, notation: str, *, canonical: bool = False
+) -> FormattedSource:
+    """Retain the validated target parse for presentation without reparsing it."""
     parsed = read_input(source, track_source=True)
     return _format_parsed(parsed, notation, canonical=canonical)
 
@@ -243,7 +262,8 @@ def format_source(source: str, notation: str, *, canonical: bool = False) -> str
 def _format_parsed(parsed, notation, *, canonical=False):
     from rdkit import Chem
 
-    from pyPept.peptide import Peptide, serialize
+    from pyPept.molecule import Molecule
+    from pyPept.peptide import Connection, Endpoint, Peptide, serialize
     from pyPept.sequence import Sequence
     from pyPept.structure import compare_structures
 
@@ -255,9 +275,21 @@ def _format_parsed(parsed, notation, *, canonical=False):
         or set(emission.occurrence_order) != set(range(len(peptide.occurrences)))
     ):
         raise ValueError("Notation conversion would lose or duplicate a monomer")
-    converted = Sequence(emission.text, warning_sink=lambda message: None)
-    remapped = Peptide.from_sequence(converted, emission.occurrence_order)
-    if set(peptide.connections) != set(remapped.connections):
+    messages = []
+    converted = Sequence(
+        emission.text, warning_sink=messages.append, track_source=True
+    )
+    if len(converted.s_monomers) != len(emission.occurrence_order):
+        raise ValueError("Notation conversion would lose or duplicate a monomer")
+    target = Peptide.from_sequence(converted)
+    remapped_connections = {
+        Connection(*(
+            Endpoint(emission.occurrence_order[end.occurrence_id], end.slot)
+            for end in edge.endpoints
+        ))
+        for edge in target.connections
+    }
+    if set(peptide.connections) != remapped_connections:
         raise ValueError("Notation conversion would change monomer connections")
     for index, identity in enumerate(emission.occurrence_order):
         before = sequence.s_monomers[identity]
@@ -269,8 +301,13 @@ def _format_parsed(parsed, notation, *, canonical=False):
             raise ValueError(
                 "Notation conversion would change the molecular structure of a monomer"
             )
-    original = parsed.assemble(depiction=None)
-    product = read_input(converted).assemble(depiction=None)
-    if not compare_structures(original, product).exact:
+    if parsed.molecule is None:
+        parsed.assembly = Molecule(peptide, depiction=None)
+        parsed.molecule = parsed.assembly.get_molecule(fmt="ROMol")
+    product = Molecule(target, depiction=None).get_molecule(fmt="ROMol")
+    if not compare_structures(parsed.molecule, product).exact:
         raise ValueError("Notation conversion would change the molecular structure")
-    return emission.text
+    return FormattedSource(
+        parsed.source, emission.text, emission.occurrence_order,
+        converted, target, tuple(messages),
+    )

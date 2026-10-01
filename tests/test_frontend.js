@@ -347,6 +347,112 @@ test('canonical formatting is explicit and the original spelling remains undoabl
   }
 });
 
+function notationDrawing() {
+  return { ...rendered, context: binding, cabiln_echo: 'A%G',
+    residue_map: { 0: [0, 1], 1: [2, 3, 4] },
+    residues: [{ idx: 0, abbr: 'A' }, { idx: 1, abbr: 'G' }],
+    layout: { segments: [{ roots: [0], members: [0] }, { roots: [1], members: [1] }],
+      groups: [], markers: [] },
+  };
+}
+
+function notationResult() {
+  return { result: 'G%A', source_echo: 'A%G', occurrence_order: [1, 0], context: binding,
+    presentation: { cabiln_echo: 'G%A', warnings: ['Target warning'],
+      residues: [{ idx: 0, abbr: 'G' }, { idx: 1, abbr: 'A' }],
+      layout: { segments: [{ roots: [0], members: [0] }, { roots: [1], members: [1] }],
+        groups: [], markers: [] }, crosslink_groups: [] },
+  };
+}
+
+async function drawNotation(ui) {
+  await ui.input('cabiln-input', 'A%G');
+  await ui.timers();
+  latestRequest(ui, '/render').resolve(notationDrawing());
+  await new Promise(setImmediate);
+}
+
+test('validated notation conversion keeps the drawing, remaps owners and preserves Undo', async () => {
+  const ui = page('builder.js');
+  await drawNotation(ui);
+  await ui.element('btn-reroll').click();
+  latestRequest(ui, '/render').resolve(notationDrawing());
+  await new Promise(setImmediate);
+  assert.equal(ui.run('rerollSeed'), 2);
+  ui.element('render-inner').style.transform = 'scale(1.5)';
+  ui.run('buildLeftRIdx = 1');
+  const result = notationResult();
+  result.canonical = { ...binding.canonical, binding: binding.library_binding };
+  ui.element('notation-policy').value = 'canonical';
+  const pending = ui.element('btn-to-branch').click();
+  await new Promise(setImmediate);
+  latestRequest(ui, '/convert_notation').resolve(result);
+  await pending;
+  assert.deepEqual(ui.requests.map(request => request.url), ['/render', '/render', '/convert_notation']);
+  assert.equal(ui.element('cabiln-input').value, result.result);
+  assert.equal(ui.run('lastCabiln'), result.result);
+  assert.equal(ui.run('lastSvg'), rendered.svg);
+  assert.equal(ui.run('lastMolBlock'), rendered.mol_block);
+  assert.deepEqual(JSON.parse(ui.run('JSON.stringify(residueMap)')), { 0: [2, 3, 4], 1: [0, 1] });
+  assert.deepEqual(JSON.parse(ui.run('JSON.stringify(atomToRes)')), { 0: 1, 1: 1, 2: 0, 3: 0, 4: 0 });
+  assert.equal(ui.run('residueList[0].abbr'), 'G');
+  assert.equal(ui.run('buildLeftRIdx'), null);
+  assert.equal(ui.run('rerollSeed'), 2);
+  assert.equal(ui.element('render-inner').style.transform, 'scale(1.5)');
+  assert.equal(ui.element('btn-mol').disabled, false);
+  assert.equal(ui.element('btn-reroll').disabled, false);
+  assert.equal(ui.element('cabiln-input').className, 'ok');
+  assert.match(ui.element('cabiln-status').textContent, /Target warning/);
+  assert.deepEqual(JSON.parse(ui.run('JSON.stringify(editor.present.canonical)')), result.canonical);
+  ui.element('notation-policy').value = 'layout';
+  const second = ui.element('btn-to-bracket').click();
+  await new Promise(setImmediate);
+  latestRequest(ui, '/convert_notation').resolve({ ...notationResult(), result: 'A%G',
+    source_echo: 'G%A', presentation: { ...notationResult().presentation,
+      cabiln_echo: 'A%G', residues: notationDrawing().residues } });
+  await second;
+  assert.deepEqual(ui.requests.map(request => request.url), ['/render', '/render', '/convert_notation', '/convert_notation']);
+  assert.equal(ui.run('lastMolBlock'), rendered.mol_block);
+  assert.deepEqual(JSON.parse(ui.run('JSON.stringify(residueMap)')), notationDrawing().residue_map);
+  assert.equal(ui.run('rerollSeed'), 2);
+  ui.run('travelHistory("undo")');
+  assert.equal(ui.element('cabiln-input').value, 'G%A');
+  assert.equal(JSON.parse(latestRequest(ui, '/render').options.body).cabiln, 'G%A');
+  assert.equal(ui.element('btn-mol').disabled, true);
+});
+
+test('notation conversion redraws when drawing correspondence is unavailable or no longer current', async () => {
+  for (const scenario of ['old-server', 'source', 'target', 'mapping', 'missing-owner',
+    'library', 'aliases', 'reactions', 'caps', 'convention', 'resize', 'reroll']) {
+    const ui = page('builder.js');
+    await drawNotation(ui);
+    const pending = ui.element('btn-to-branch').click();
+    await new Promise(setImmediate);
+    const result = notationResult();
+    if (scenario === 'old-server') delete result.presentation;
+    if (scenario === 'source') result.source_echo = 'G%A';
+    if (scenario === 'target') result.presentation.cabiln_echo = 'A%G';
+    if (scenario === 'mapping') result.occurrence_order = [0, 0];
+    if (scenario === 'missing-owner') ui.run('delete residueMap[1]');
+    if (['library', 'aliases', 'reactions', 'caps'].includes(scenario)) result.context = {
+      ...binding, library_binding: { ...binding.library_binding,
+        [scenario === 'library' ? 'monomers' : scenario]: 'changed' },
+    };
+    if (scenario === 'convention') result.context = { ...binding, canonical: { ...binding.canonical, format: 'changed' } };
+    if (scenario === 'resize') ui.element('render-canvas').clientWidth = 900;
+    if (scenario === 'reroll') {
+      await ui.element('btn-reroll').click();
+      latestRequest(ui, '/render').resolve({ ...notationDrawing(), svg: '<svg>NEW LAYOUT</svg>' });
+      await new Promise(setImmediate);
+    }
+    latestRequest(ui, '/convert_notation').resolve(result);
+    await pending;
+    assert.equal(ui.requests.at(-1).url, '/render', scenario);
+    assert.equal(JSON.parse(ui.requests.at(-1).options.body).cabiln, result.result, scenario);
+    assert.equal(ui.element('btn-mol').disabled, true, scenario);
+  }
+});
+
 test('typing coalesces Undo while server normalization preserves Redo', async () => {
   let clock = 1000;
   const ui = page('builder.js', { now: () => clock });

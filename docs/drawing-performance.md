@@ -27,6 +27,33 @@ results. History records the exact text entered before an immediate conversion.
 Undo's ordinary renderer can subsequently normalize legacy spelling. Normalization
 by an already active drawing keeps its existing history behavior.
 
+When the source already has a current drawing, notation conversion retains its
+SVG and MOL together. The formatter returns its validated mapping from target
+occurrences to source occurrences, plus fresh target tabs and warnings. The UI
+remaps residue ownership without changing atom indices. It retains the chosen
+layout and zoom, clears old Build selections, and verifies the converted text
+when Verify is active.
+
+Reuse requires the same source, library and canonical context, a complete
+occurrence mapping, an unchanged canvas, and the same accepted drawing at
+response time. Edits, replacement drawings, external resizing and missing
+metadata use the ordinary render path. Canvas comparison accounts for the space
+taken by accepted tabs and status text. History still records notation changes;
+Undo and Redo render their selected documents normally.
+
+The formatter also assembles from the resolved source and target peptide objects
+it already checked. This removes two repeated graph projections. Both chemical
+assemblies, connection checks, monomer checks and exact product comparison remain.
+No shared drawing cache or new runtime dependency is introduced.
+
+The [notation reuse measurement record](../tools/benchmarks/results/notation-reuse-20261001.json)
+compares the formatter with `60e9ff0`. Warm local medians across both notation
+directions and both policies fell from 56–73 ms to 52–72 ms for Semaglutide,
+and from 76–90 ms to 72–86 ms for Lixisenatide. Each median uses five requests.
+All eight pre-existing response field sets match. The exploratory 35 ms target
+remains unmet. The same record separates these local samples from the live
+pre-change browser timings; it does not claim a hosted result from local data.
+
 ## Removal of duplicate work, 30 September 2026
 
 These measurements compare `6c4ed23` with `9d2d946`. They are small local samples from 30 September 2026,
@@ -143,8 +170,8 @@ Every uncached drawing still needs its final coordinate calculation.
 Superseding an active drawing still retires its process worker; an isolated 200-G cancellation
 control needed about 3.25 seconds for replacement and admission retries.
 
-Equivalent notation can change atom order, residue maps and the resulting SVG.
-Semaglutide's percent form did so in the comparison. Reusing a drawing based only
-on canonical molecular SMILES would require an explicit correspondence between
-atom indices and monomer occurrences. Molecular equality alone does not provide
-that correspondence.
+Equivalent notation can change atom order, residue maps and the resulting SVG
+when assembled afresh. Reuse therefore keeps the original SVG and MOL atom order
+and uses the formatter's occurrence correspondence. Molecular equality alone
+cannot supply that correspondence. Conversion of newly entered text still needs
+its first target drawing, and all formatting retains two chemical assemblies.

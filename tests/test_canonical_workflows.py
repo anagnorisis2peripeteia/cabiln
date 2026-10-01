@@ -26,11 +26,11 @@ def product(source):
 
 
 @pytest.mark.parametrize(
-    "source",
+    "source,bracket_order,branch_order",
     [
-        "K.[G(4,2).ac(1,2)]-A",
-        "K.[G(4,2).[ac(1,2)]]-A",
-        "ac-G.!bridge(2,4)%K.!bridge(4,2)-A",
+        ("K.[G(4,2).ac(1,2)]-A", [0, 1, 2, 3], [0, 1, 3, 2]),
+        ("K.[G(4,2).[ac(1,2)]]-A", [0, 1, 2, 3], [0, 1, 3, 2]),
+        ("ac-G.!bridge(2,4)%K.!bridge(4,2)-A", [2, 3, 1, 0], [2, 3, 0, 1]),
     ],
 )
 @pytest.mark.parametrize(
@@ -41,7 +41,7 @@ def product(source):
     ],
 )
 def test_canonical_route_converges_then_renders_exact_structure(
-    client, source, target, expected
+    client, source, bracket_order, branch_order, target, expected
 ):
     response = client.post(
         "/convert_notation",
@@ -50,6 +50,8 @@ def test_canonical_route_converges_then_renders_exact_structure(
     assert response.status_code == 200, response.text
     data = response.json()
     assert data["result"] == expected
+    assert data["source_echo"] == source
+    assert data["occurrence_order"] == (bracket_order if target == "bracket" else branch_order)
     assert data["canonical"]["format"] == "cabiln-graph-v1"
     assert data["canonical"]["rdkit"]
     assert set(data["canonical"]["binding"]) == {
@@ -57,6 +59,11 @@ def test_canonical_route_converges_then_renders_exact_structure(
     }
     rendered = client.post("/render", json={"cabiln": data["result"]})
     assert rendered.status_code == 200, rendered.text
+    assert set(data["presentation"]) == {
+        "residues", "chains", "layout", "bracket_groups", "crosslink_groups",
+        "warnings", "cabiln_echo",
+    }
+    assert data["presentation"] == {key: rendered.json()[key] for key in data["presentation"]}
     molecule = Chem.MolFromMolBlock(rendered.json()["mol_block"])
     assert Chem.MolToSmiles(molecule) == product(source)
 
@@ -68,7 +75,12 @@ def test_existing_layout_conversion_preserves_aliases_and_protection(client, tar
         "/convert_notation", json={"cabiln": source, "target": target}
     )
     assert response.status_code == 200, response.text
-    assert response.json() == {"result": source, "context": project_context()}
+    data = response.json()
+    assert data["result"] == data["source_echo"] == source
+    assert data["context"] == project_context()
+    assert data["occurrence_order"] == [0, 1, 2, 3]
+    rendered = client.post("/render", json={"cabiln": source}).json()
+    assert data["presentation"] == {key: rendered[key] for key in data["presentation"]}
 
 
 def test_recursive_renderer_keeps_sibling_groups_and_nested_atom_ownership(client):
@@ -182,17 +194,61 @@ def test_moving_marker_retains_protection_inherited_from_its_parent():
     assert product(result) == product("ac-K.[G(4,2)]-C-G")
 
 
-def test_formatting_rejects_a_duplicated_occurrence_mapping(monkeypatch):
+@pytest.mark.parametrize("fault", ["duplicate-order", "missing-output", "extra-output"])
+def test_formatting_rejects_a_nonbijective_occurrence_mapping(monkeypatch, fault):
     from pyPept import peptide
 
     serialize = peptide.serialize
 
     def duplicate(*args, **kwargs):
-        return replace(serialize(*args, **kwargs), occurrence_order=(0, 0))
+        emission = serialize(*args, **kwargs)
+        if fault == "duplicate-order":
+            return replace(emission, occurrence_order=(0, 0))
+        return replace(emission, text="G" if fault == "missing-output" else "G%G%G")
 
     monkeypatch.setattr(peptide, "serialize", duplicate)
-    with pytest.raises(ValueError, match="lose or duplicate a monomer"):
+    with pytest.raises(ValueError, match="lose or duplicate a monomer|one occurrence ID"):
         format_source("G%G", "percent", canonical=True)
+
+
+@pytest.mark.parametrize("canonical_output", [False, True])
+@pytest.mark.parametrize("changed_product", [False, True])
+def test_formatting_reuses_projections_and_checks_both_assembled_products(
+    monkeypatch, canonical_output, changed_product
+):
+    from unittest.mock import Mock
+
+    from pyPept import structure
+    from pyPept.peptide import Peptide
+
+    projection = Peptide.from_sequence.__func__
+    initialize = Molecule.__init__
+    projected, assembled = [], []
+
+    def project(cls, sequence, occurrence_ids=None):
+        projected.append(sequence)
+        return projection(cls, sequence, occurrence_ids)
+
+    def assemble(self, sequence=None, depiction="local"):
+        initialize(self, sequence, depiction)
+        assembled.append(self)
+        if changed_product and len(assembled) == 2:
+            carbon = next(atom for atom in self.mol.GetAtoms() if atom.GetAtomicNum() == 6)
+            carbon.SetIsotope(13)
+
+    compare = Mock(wraps=structure.compare_structures)
+    monkeypatch.setattr(Peptide, "from_sequence", classmethod(project))
+    monkeypatch.setattr(Molecule, "__init__", assemble)
+    monkeypatch.setattr(structure, "compare_structures", compare)
+    source = "K.[G(4,2).ac(1,2)]-A"
+    if changed_product:
+        with pytest.raises(ValueError, match="would change the molecular structure"):
+            format_source(source, "percent", canonical=canonical_output)
+    else:
+        assert format_source(source, "percent", canonical=canonical_output)
+    assert len(assembled) == 2
+    assert compare.call_count == 1
+    assert len(projected) == len({id(sequence) for sequence in projected})
 
 
 def test_export_binding_tracks_content_and_ignores_local_paths(tmp_path, monkeypatch):

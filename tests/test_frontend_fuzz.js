@@ -375,6 +375,7 @@ property('render-completion-order', [fc.scheduler(), fc.array(fc.record({ source
 
 const foregroundCase = fc.record({
   format: fc.boolean(), drawingStarted: fc.boolean(),
+  presentation: fc.constantFrom('missing', 'valid', 'changed-binding'),
   drawingBusy: fc.integer({ min: 0, max: 2 }), conversionBusy: fc.integer({ min: 0, max: 2 }),
   outcome: fc.constantFrom('success', 'network', 'error'),
 }).chain(example => fc.constantFrom('none', 'conversion', 'reference',
@@ -397,6 +398,8 @@ property('foreground-admission-and-errors', [foregroundCase], async (example, co
   const conversion = ui.element(button).click();
   await tick();
   const waitsForDrawing = !example.format || example.drawingStarted;
+  const residues = [{ idx: 0, abbr: 'K' }, { idx: 1, abbr: 'G' }];
+  const residue_map = { 0: [0, 1], 1: [2, 3] };
   count(`${example.format ? 'format' : 'foreign'}.${example.drawingStarted ? 'activeDrawing' : 'pendingTimer'}`);
   count(waitsForDrawing ? 'waitForDrawing' : 'skipUnsentFormatDrawing');
 
@@ -412,7 +415,8 @@ property('foreground-admission-and-errors', [foregroundCase], async (example, co
       await ui.timers(); await tick();
       rendering = pending(ui, url)[0];
     }
-    resolve(rendering, { ...drawing(text), format: 'SMILES' });
+    resolve(rendering, { ...drawing(text), format: 'SMILES',
+      ...(example.format ? { residues, residue_map } : {}) });
     await tick();
   }
 
@@ -459,6 +463,14 @@ property('foreground-admission-and-errors', [foregroundCase], async (example, co
   }
   const result = example.format ? 'K.!1(4,2)%G.!1(2,4)' : 'G';
   const success = { cabiln: result, result, from: 'SMILES', warnings: [], assignments: [] };
+  if (example.format && example.presentation !== 'missing') Object.assign(success, {
+    source_echo: source, occurrence_order: [0, 1],
+    context: example.presentation === 'valid' ? binding : {
+      ...binding, library_binding: { ...binding.library_binding, monomers: 'changed' } },
+    presentation: { cabiln_echo: result, residues,
+      layout: { segments: [{ roots: [0, 1], members: [0, 1] }], groups: [], markers: [] },
+      crosslink_groups: [], warnings: [] },
+  });
   count(example.outcome);
   if (example.outcome === 'network') reject(request);
   else resolve(request, example.outcome === 'error' ? { error: 'controlled conversion failure' } : success);
@@ -479,6 +491,16 @@ property('foreground-admission-and-errors', [foregroundCase], async (example, co
     await finishDrawing('/render', example.outcome === 'success' ? result : source);
   }
   await conversion;
+  function checkRetainedDrawing() {
+    count('retainedDrawing');
+    assert.equal(pending(ui, '/render').length, 0, 'The existing drawing needs no new request');
+    assert.equal(ui.element('render-inner').innerHTML, `<svg>${source}</svg>`);
+    assert.equal(ui.run('lastMolBlock'), `MOL:${source}`);
+    assert.equal(ui.run('lastCabiln'), result);
+    assert.deepEqual(JSON.parse(ui.run('JSON.stringify(residueMap)')), residue_map);
+  }
+  if (example.format && example.presentation === 'valid' &&
+      waitsForDrawing && example.outcome === 'success') checkRetainedDrawing();
   assert.equal(snapshot(ui).document.warning, '');
   if (example.outcome !== 'success') {
     assert.equal(ui.element('cabiln-input').value, source);
@@ -488,6 +510,7 @@ property('foreground-admission-and-errors', [foregroundCase], async (example, co
     await tick();
     resolve(pending(ui, endpoint)[0], success);
     await retry;
+    if (example.format && example.presentation === 'valid') checkRetainedDrawing();
     count('successfulRetry');
   }
   await settle(ui);

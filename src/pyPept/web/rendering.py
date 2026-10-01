@@ -52,36 +52,13 @@ def render(req: _CabilnReq):
 
         res_map = mol.get_residue_atom_map()
         peptide = Peptide.from_sequence(seq)
-        residues = [
-            {
-                "idx": i,
-                "abbr": m.get("m_abbr", f"?{i}"),
-                "kind": (
-                    "synthetic" if occurrence.definition.synthetic_role else "library"
-                ),
-            }
-            for i, (m, occurrence) in enumerate(
-                zip(seq.s_monomers, peptide.occurrences)
-            )
-        ]
-
-        chain_ids = seq.s_chains.get("s_monomerIDs", [])
-        chains = [{"idx": ci, "residues": ids} for ci, ids in enumerate(chain_ids)]
-
-        layout, crosslink_groups = _renderer_layout(peptide)
 
         result = {
             "svg": svg,
             "mol_block": block,
             "info": f"{romol.GetNumAtoms()} atoms · MW {ExactMolWt(romol):.2f}",
             "residue_map": {str(k): v for k, v in res_map.items()},
-            "residues": residues,
-            "chains": chains,
-            "layout": layout,
-            "bracket_groups": layout["groups"],
-            "crosslink_groups": crosslink_groups,
-            "warnings": messages,
-            "cabiln_echo": parsed_source,
+            **_render_presentation(seq, peptide, messages),
             "context": {
                 "project_version": 1,
                 "library_binding": binding,
@@ -205,6 +182,34 @@ def verify(req: _VerifyReq):
 
     except Exception as exc:
         return error_response(exc)
+
+
+def _render_presentation(sequence, peptide, warnings):
+    """Describe target parser IDs consistently for renders and conversions."""
+    layout, crosslink_groups = _renderer_layout(peptide)
+    return {
+        "residues": [
+            {
+                "idx": i,
+                "abbr": monomer.get("m_abbr", f"?{i}"),
+                "kind": (
+                    "synthetic" if occurrence.definition.synthetic_role else "library"
+                ),
+            }
+            for i, (monomer, occurrence) in enumerate(
+                zip(sequence.s_monomers, peptide.occurrences)
+            )
+        ],
+        "chains": [
+            {"idx": i, "residues": ids}
+            for i, ids in enumerate(sequence.s_chains.get("s_monomerIDs", []))
+        ],
+        "layout": layout,
+        "bracket_groups": layout["groups"],
+        "crosslink_groups": crosslink_groups,
+        "warnings": list(warnings),
+        "cabiln_echo": str(sequence.s_inputbiln),
+    }
 
 
 def _renderer_layout(peptide):

@@ -30,6 +30,7 @@ let mainStale = false;
 let hasMainDrawing = false;
 let displayedSource = '';
 let displayedNotation = '';
+let cabilnDrawing = null;
 let projectContext = null;
 let projectRevision = 0;
 let draftCleared = false;
@@ -1859,6 +1860,32 @@ async function settleDrawingsForConversion(request) {
   }
 }
 
+function drawingForNotation(snapshot, data) {
+  const view = canvasSize(renderCanvas);
+  const presentation = data.presentation;
+  const order = data.occurrence_order;
+  if (!snapshot || snapshot !== cabilnDrawing || mainStale ||
+      activeRequests.has('main-render') || displayedNotation !== 'cabiln' ||
+      displayedSource !== snapshot.source || data.source_echo !== snapshot.source ||
+      !lastSvg || !lastMolBlock || view.w !== snapshot.canvas.w || view.h !== snapshot.canvas.h ||
+      !CabilnProject.sameContext(snapshot.data.context, data.context) ||
+      !CabilnProject.sameContext(editor.present.context, data.context) ||
+      presentation?.cabiln_echo !== data.result || !presentation?.layout ||
+      !Array.isArray(presentation.residues) || !Array.isArray(order)) return null;
+  const count = snapshot.data.residues.length;
+  if (order.length !== count || presentation.residues.length !== count ||
+      new Set(order).size !== count || !order.every(index =>
+        Number.isInteger(index) && index >= 0 && index < count &&
+        Array.isArray(snapshot.data.residue_map[index]))) return null;
+  // Keep the SVG and MOL atom order together. Only occurrence IDs change;
+  // molecular equality alone cannot identify the atom owners of a depiction.
+  return { ...presentation, context: data.context,
+    svg: snapshot.data.svg, mol_block: snapshot.data.mol_block, info: snapshot.data.info,
+    residue_map: Object.fromEntries(order.map((previous, index) =>
+      [index, snapshot.data.residue_map[previous]])),
+  };
+}
+
 async function convertNotation(target) {
   const original = cabilnInput.value.trim();
   if (!original) return;
@@ -1879,11 +1906,11 @@ async function convertNotation(target) {
   clearTimeout(cabilnTimer);
   cabilnTimer = null;
   let conversionError = '';
-  setStatus(cabilnStatus, '');
   try {
     await settleDrawingsForConversion(request);
     if (!request.current()) return;
     const val = cabilnInput.value.trim();
+    const snapshot = cabilnDrawing;
     const res = await fetchCalculation('/convert_notation', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
@@ -1895,9 +1922,17 @@ async function convertNotation(target) {
     if (data.error) { conversionError = data.error; return; }
     if (data.result) {
       deferredDrawing = false;
-      commitDocument(data.result, 'cabiln', editor.present.warning, {
-        canonical: data.canonical || null, context: data.context || editor.present.context,
-      });
+      const drawing = drawingForNotation(snapshot, data);
+      const document = { text: data.result, notation: 'cabiln', warning: editor.present.warning,
+        quality: null, canonical: data.canonical || null, context: data.context || editor.present.context };
+      recordDocument(document);
+      if (drawing) {
+        clearComparison();
+        clearBuild();
+        clearHighlight();
+        acceptCabilnDrawing(drawing, data.result, snapshot);
+        setMainProgress(false);
+      } else renderDocument(true);
     }
   } catch (e) {
     conversionError = 'Notation conversion failed. Try again.';
@@ -2084,6 +2119,7 @@ function invalidateDocument() {
   clearBuild();
   clearHighlight();
   clearExports();
+  cabilnDrawing = null;
   lastCabiln = '';
   mainStale = true;
   renderCanvas.classList.add('stale');
@@ -2187,20 +2223,52 @@ function resetCabiln() {
   setMainProgress(false);
 }
 
+function acceptCabilnDrawing(data, source, view, sameDocument = false) {
+  const displayedSequence = data.normalized_cabiln || source;
+  if (data.normalized_cabiln) {
+    projectChanged();
+    replaceDocument({ text: displayedSequence, quality: null, canonical: null });
+    saveDraft();
+  }
+  acceptDocumentContext(data.context);
+  lastCabiln = displayedSequence;
+  acceptMainDrawing(data.svg, displayedSequence, 'cabiln');
+  rerollSeed = view.seed;
+  setStatus(cabilnStatus, [data.info, data.normalization_note, ...(data.warnings || [])].filter(Boolean).join(' · '),
+    data.warnings?.length ? 'warn' : 'ok');
+  cabilnInput.className = 'ok';
+  btnReroll.disabled = false;
+  setExportReady(data.svg, data.mol_block);
+  buildResidueUI(data.residue_map, data.residues, data.layout, data.crosslink_groups);
+  // Tabs can change the canvas height on the first render. Detect later resizes
+  // against the accepted view, while retaining the dimensions of the SVG itself.
+  cabilnDrawing = { source: displayedSequence, data, w: view.w, h: view.h,
+    seed: view.seed, canvas: canvasSize(renderCanvas) };
+  if (sameDocument) {
+    resChips.querySelectorAll('.res-chip').forEach(chip => {
+      const idx = parseInt(chip.dataset.residue);
+      if (idx === buildLeftRIdx) chip.style.outline = '2px solid #5a9ae0';
+      else if (idx === buildRightRIdx) chip.style.outline = '2px solid #e0a05a';
+    });
+  }
+  if (verifyMode && lastSmiles) triggerVerify();
+}
+
 async function doRenderCabiln(seq) {
   const request = startRequest('main-render');
   const sameDocument = seq === displayedSource && displayedNotation === 'cabiln';
   lastCabiln = '';
   clearExports();
+  cabilnDrawing = null;
   clearComparison();
   btnReroll.disabled = true;
   if (buildMode && !sameDocument) clearBuild();
-  const { w, h } = canvasSize(renderCanvas);
+  const view = { ...canvasSize(renderCanvas), seed: rerollSeed };
   try {
     const res  = await fetchCalculation('/render', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cabiln: seq, width: w, height: h, seed: rerollSeed }),
+      body: JSON.stringify({ cabiln: seq, width: view.w, height: view.h, seed: view.seed }),
       signal: request.signal,
     });
     const data = await readResponse(res);
@@ -2211,29 +2279,7 @@ async function doRenderCabiln(seq) {
       clearExports();
       btnReroll.disabled = true;
     } else {
-      const displayedSequence = data.normalized_cabiln || seq;
-      if (data.normalized_cabiln) {
-        projectChanged();
-        replaceDocument({ text: displayedSequence, quality: null, canonical: null });
-        saveDraft();
-      }
-      acceptDocumentContext(data.context);
-      lastCabiln = displayedSequence;
-      acceptMainDrawing(data.svg, displayedSequence, 'cabiln');
-      setStatus(cabilnStatus, [data.info, data.normalization_note, ...(data.warnings || [])].filter(Boolean).join(' · '),
-        data.warnings?.length ? 'warn' : 'ok');
-      cabilnInput.className = 'ok';
-      btnReroll.disabled = false;
-      setExportReady(data.svg, data.mol_block);
-      buildResidueUI(data.residue_map, data.residues, data.layout, data.crosslink_groups);
-      if (sameDocument) {
-        resChips.querySelectorAll('.res-chip').forEach(chip => {
-          const idx = parseInt(chip.dataset.residue);
-          if (idx === buildLeftRIdx) chip.style.outline = '2px solid #5a9ae0';
-          else if (idx === buildRightRIdx) chip.style.outline = '2px solid #e0a05a';
-        });
-      }
-      if (verifyMode && lastSmiles) triggerVerify();
+      acceptCabilnDrawing(data, seq, view, sameDocument);
     }
   } catch (e) {
     if (!request.current()) return;

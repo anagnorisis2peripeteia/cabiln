@@ -1,9 +1,44 @@
-const { test, expect, render, tile, site, selectChip, capture } = require('./fixtures');
+const { test, expect, render, tile, site, selectChip, capture, isCompletedResponse } = require('./fixtures');
 
 function deferred() {
   let resolve;
   const promise = new Promise(done => { resolve = done; });
   return { promise, resolve };
+}
+
+for (const previous of ['', 'G']) {
+  test(`immediate notation conversion draws its new input from ${previous || 'an empty document'}`, async ({ page }) => {
+    if (previous) await render(page, previous);
+    const source = 'K.[G(4,2).ac(1,2)]-A';
+    const requests = [];
+    page.on('request', request => {
+      const path = new URL(request.url()).pathname;
+      if (['/render', '/convert_notation'].includes(path)) requests.push(path);
+    });
+    const converted = page.waitForResponse(response => isCompletedResponse(response) && new URL(response.url()).pathname === '/convert_notation');
+    const rendered = page.waitForResponse(response => isCompletedResponse(response) && new URL(response.url()).pathname === '/render');
+    // Both events occur before the browser can start the pending drawing timer.
+    await page.evaluate(source => {
+      const input = document.getElementById('cabiln-input');
+      input.value = source;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      document.getElementById('btn-to-branch').click();
+    }, source);
+    const conversion = await converted;
+    expect(conversion.status(), await conversion.text()).toBe(200);
+    const result = (await conversion.json()).result;
+    const response = await rendered;
+    expect(response.status(), await response.text()).toBe(200);
+    const drawing = await response.json();
+    expect(response.request().postDataJSON().cabiln).toBe(result);
+    await expect(page.locator('#cabiln-input')).toHaveValue(result);
+    await expect(page.locator('#cabiln-input')).toHaveClass('ok');
+    await expect(page.locator('#render-pane')).toHaveAttribute('aria-busy', 'false');
+    await expect(page.locator('#residue-chips [data-residue]')).toHaveCount(4);
+    await expect(page.locator('#btn-mol')).toBeEnabled();
+    expect(drawing.residues.map(residue => residue.abbr).sort()).toEqual(['A', 'G', 'K', 'ac']);
+    expect(requests).toEqual(['/convert_notation', '/render']);
+  });
 }
 
 test('an older render cannot replace a newer peptide', async ({ page }, testInfo) => {
