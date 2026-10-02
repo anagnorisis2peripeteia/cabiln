@@ -972,6 +972,11 @@
     #main:has(#lib-panel.open) #examples-panel.open { grid-column: 1 / -1; grid-row: 2; width: auto; max-width: none; border-top: 1px solid var(--line-soft); }
   }
 
+  @media (min-width: 961px) and (max-width: 1100px) {
+    #build-panel:has(#build-preview:not([hidden])) .box-svg { height: 80px; }
+    #build-preview-canvas { height: 120px; }
+  }
+
   @media (max-width: 960px) {
     html, body { height: auto; min-height: 100%; overflow: auto; }
     body { min-height: 100dvh; }

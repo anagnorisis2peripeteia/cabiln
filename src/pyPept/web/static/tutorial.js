@@ -150,7 +150,9 @@ function startTutorial({ lesson = 'connect', loadPractice, getExample, getBuildS
       (reviewing ? `Edit completed${state.base ? ' and undone' : ''}. Back and Next review the instructions; Restart begins again.`
         : next.disabled ? 'Complete this step to continue.' : confirmation[step.id] || 'Ready to finish.');
     const previewReady = step.id === 'preview' && state.preview;
-    show.textContent = reviewing ? 'Show drawing' : previewReady ? 'Show preview' : help?.label || 'Show control';
+    const showLabel = reviewing ? 'Show drawing' : previewReady ? 'Show preview' : help?.label || 'Show control';
+    // Replacing the text during a press can cancel WebKit's click event.
+    if (show.textContent !== showLabel) show.textContent = showLabel;
     reveal = reviewing ? null : help?.action;
     const body = step.body.replaceAll('{replacement}', replacement);
     find('#tutorial-body').textContent = reviewing && step.id !== 'load'

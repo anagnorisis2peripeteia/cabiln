@@ -17,11 +17,24 @@ test('Show control preserves the browsed monomer and does not open an offscreen 
   await choosePracticeMonomer(page, 'G');
   await page.locator('.lib-row[data-abbr="G"]').hover();
   await expect(page.locator('#lib-preview')).toBeVisible();
+  let release;
+  const gate = new Promise(resolve => { release = resolve; });
+  await page.route('**/monomer_rgroups?abbr=DAla', async route => {
+    const response = await route.fetch();
+    await gate;
+    await route.fulfill({ response });
+  }, { times: 1 });
   await page.locator('.lib-row[data-abbr="DAla"] .lib-use').click();
   await expect(page.locator('#build-right-abbr')).toHaveText('DAla');
   const scroll = await page.locator('#lib-list').evaluate(el => el.scrollTop);
   expect(scroll).toBeGreaterThan(0);
-  await page.locator('#tutorial-show').click();
+  await expect(page.locator('#tutorial-next')).toBeDisabled();
+  // Finish the selected monomer's request while Show control is pressed.
+  await page.locator('#tutorial-show').hover();
+  await page.mouse.down();
+  release();
+  await expect(page.locator('#tutorial-next')).toBeEnabled();
+  await page.mouse.up();
   // The library preview opens after a 200 ms hover/focus debounce.
   await page.waitForTimeout(300);
   await expect(page.locator('#lib-preview')).toBeHidden();
