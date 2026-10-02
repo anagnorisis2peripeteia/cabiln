@@ -1,4 +1,4 @@
-const { test, expect, render, tile, site, selectChip, connect, capture, isCompletedResponse } = require('./fixtures');
+const { test, expect, render, tile, site, selectChip, connect, capture, isCompletedResponse, interceptOnce } = require('./fixtures');
 
 const tabCases = [
   { name: 'later segment', source: 'A%K.{G(4,2)}-A', occurrences: 4, markers: 0, groups: [[3]] },
@@ -202,7 +202,7 @@ test('registration explains empty input, failed previews and duplicate names wit
   await expect(page.locator('#smiles-in')).toHaveAttribute('aria-invalid', 'true');
   await expect(page.locator('#preview-error')).toContainText('Enter a SMILES string');
   await page.locator('#smiles-in').fill('NCC(=O)O');
-  await page.route('**/preview_monomer', route => route.abort('failed'), { times: 1 });
+  await interceptOnce(page, '**/preview_monomer', route => route.abort('failed'));
   await page.locator('#btn-preview').click();
   await expect(page.locator('#preview-error')).toContainText('try Preview again');
   await expect(page.locator('#smiles-in')).toHaveValue('NCC(=O)O');

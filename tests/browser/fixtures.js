@@ -116,6 +116,17 @@ function isCompletedResponse(response) {
     retryAfter <= 0 || retryAfter > 2;
 }
 
+async function interceptOnce(page, url, handler) {
+  // Expiring Chromium interception while a fulfilled response starts another
+  // fetch can strand that request. Keep the route installed until page cleanup.
+  let intercepted = false;
+  await page.route(url, route => {
+    if (intercepted) return route.fallback();
+    intercepted = true;
+    return handler(route);
+  });
+}
+
 async function render(page, source) {
   const received = page.waitForResponse(response =>
     isCompletedResponse(response) && new URL(response.url()).pathname === '/render' &&
@@ -221,4 +232,4 @@ async function residuePoint(page, rendered, occurrence, label = false) {
   return point;
 }
 
-module.exports = { test, expect, render, tile, site, selectChip, connect, capture, isCompletedResponse, residuePoint };
+module.exports = { test, expect, render, tile, site, selectChip, connect, capture, isCompletedResponse, residuePoint, interceptOnce };

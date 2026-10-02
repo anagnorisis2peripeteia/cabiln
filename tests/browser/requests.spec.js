@@ -1,4 +1,4 @@
-const { test, expect, render, tile, site, selectChip, capture, isCompletedResponse } = require('./fixtures');
+const { test, expect, render, tile, site, selectChip, capture, isCompletedResponse, interceptOnce } = require('./fixtures');
 
 function deferred() {
   let resolve;
@@ -12,11 +12,11 @@ for (const [endpoint, target, message] of [
 ]) test(`a stalled ${endpoint} request releases drawing and allows retry`, async ({ page }) => {
   const arrived = deferred();
   const release = deferred();
-  await page.route(`**/${endpoint}`, async route => {
+  await interceptOnce(page, `**/${endpoint}`, async route => {
     arrived.resolve();
     await release.promise;
     await route.abort();
-  }, { times: 1 });
+  });
   try {
     await page.locator('#btn-lib').click();
     await arrived.promise;
@@ -125,9 +125,9 @@ test('failed bond validation leaves a usable retry through the same site control
   await page.locator('#btn-build').click();
   await selectChip(page, 0, 'left', 'A');
   await tile(page, 'G', 'right');
-  await page.route('**/validate_bond', route => route.fulfill({
+  await interceptOnce(page, '**/validate_bond', route => route.fulfill({
     status: 503, contentType: 'application/json', body: JSON.stringify({ error: 'Temporary test outage' }),
-  }), { times: 1 });
+  }));
   await site(page, 'left', 2);
   await site(page, 'right', 1);
   await expect(page.locator('#build-status')).toContainText('Could not check A R2 with G R1');

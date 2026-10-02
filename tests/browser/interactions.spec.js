@@ -1,4 +1,4 @@
-const { test, expect, render, tile, site, selectChip, capture, residuePoint } = require('./fixtures');
+const { test, expect, render, tile, site, selectChip, capture, residuePoint, interceptOnce } = require('./fixtures');
 
 test('panels return focus on dismissal and Escape closes the active panel independently', async ({ page, browserName }) => {
   // Safari on macOS uses Option+Tab to include links in keyboard navigation.
@@ -120,7 +120,7 @@ test('failed library, example and drawing requests have working Retry actions in
     ['monomers', 'btn-lib', 'lib-list', '.lib-row'],
     ['examples', 'btn-examples', 'examples-list', '.example-row'],
   ]) {
-    await page.route(`**/${url}`, route => route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"Temporary failure"}' }), { times: 1 });
+    await interceptOnce(page, `**/${url}`, route => route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"Temporary failure"}' }));
     await page.locator(`#${button}`).click();
     await expect(page.locator(`#${container}`).getByRole('button', { name: 'Retry' })).toBeVisible();
     if (url === 'monomers') {
@@ -136,18 +136,18 @@ test('failed library, example and drawing requests have working Retry actions in
     }
     await page.locator(`#${button}`).click();
   }
-  await page.route('**/render', route => route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"Temporary renderer failure"}' }), { times: 1 });
+  await interceptOnce(page, '**/render', route => route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"Temporary renderer failure"}' }));
   await page.locator('#cabiln-input').fill('G-A');
   await expect(page.locator('#cabiln-input')).toHaveValue('G-A');
   await page.locator('#cabiln-status').getByRole('button', { name: 'Retry' }).click();
   await expect(page.locator('#cabiln-input')).toHaveClass('ok');
   await expect(page.locator('#btn-mol')).toBeEnabled();
   await page.locator('#btn-verify').click();
-  await page.route('**/render_reference', route => route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"Temporary reference failure"}' }), { times: 1 });
+  await interceptOnce(page, '**/render_reference', route => route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"Temporary reference failure"}' }));
   await page.locator('#smiles-input').fill('NCC(=O)O');
   await page.locator('#smiles-status').getByRole('button', { name: 'Retry' }).click();
   await expect(page.locator('#smiles-input')).toHaveClass('ok');
-  await page.route('**/verify', route => route.abort('failed'), { times: 1 });
+  await interceptOnce(page, '**/verify', route => route.abort('failed'));
   await page.locator('#smiles-input').fill('NCC(=O)N[C@@H](C)C(=O)O');
   await page.locator('#compare-bar').getByRole('button', { name: 'Retry' }).click();
   await expect(page.locator('#compare-bar .match')).toHaveText('✓ EXACT MATCH');

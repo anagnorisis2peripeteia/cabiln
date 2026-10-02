@@ -1,4 +1,4 @@
-const { test, expect, render, selectChip, site, capture, residuePoint, isCompletedResponse } = require('./fixtures');
+const { test, expect, render, selectChip, site, capture, residuePoint, isCompletedResponse, interceptOnce } = require('./fixtures');
 
 async function choosePracticeMonomer(page, abbr) {
   await page.goto(`${page.url()}?tutorial=1`);
@@ -19,11 +19,11 @@ test('Show control preserves the browsed monomer and does not open an offscreen 
   await expect(page.locator('#lib-preview')).toBeVisible();
   let release;
   const gate = new Promise(resolve => { release = resolve; });
-  await page.route('**/monomer_rgroups?abbr=DAla', async route => {
+  await interceptOnce(page, '**/monomer_rgroups?abbr=DAla', async route => {
     const response = await route.fetch();
     await gate;
     await route.fulfill({ response });
-  }, { times: 1 });
+  });
   await page.locator('.lib-row[data-abbr="DAla"] .lib-use').click();
   await expect(page.locator('#build-right-abbr')).toHaveText('DAla');
   const scroll = await page.locator('#lib-list').evaluate(el => el.scrollTop);
@@ -55,12 +55,12 @@ for (const preview of [false, true]) test(`completed connection supports Back an
     let release, arrived;
     const held = new Promise(resolve => { arrived = resolve; });
     const gate = new Promise(resolve => { release = resolve; });
-    await page.route('**/insert_bond', async route => {
+    await interceptOnce(page, '**/insert_bond', async route => {
       const response = await route.fetch();
       arrived();
       await gate;
       await route.fulfill({ response });
-    }, { times: 1 });
+    });
     await page.locator('#build-connect').click();
     await held;
     await page.locator('#tutorial-close').click();
@@ -195,11 +195,11 @@ for (const width of [1440, 390]) test(`Retatrutide Swap lesson preserves its bra
   await expect(practice.locator('#build-connect')).toBeDisabled();
   let release;
   const pending = new Promise(resolve => { release = resolve; });
-  await practice.route('**/replace_monomer', async route => {
+  await interceptOnce(practice, '**/replace_monomer', async route => {
     const response = await route.fetch();
     await pending;
     await route.fulfill({ response });
-  }, { times: 1 });
+  });
   const expected = source.replace('K.[AEEA', 'Orn.[AEEA');
   expect(expected).not.toBe(source);
   const previewResponse = practice.waitForResponse(response => isCompletedResponse(response) &&
@@ -243,20 +243,20 @@ for (const width of [1440, 390]) test(`Retatrutide Swap lesson preserves its bra
 
 test('example loading can fail, retry and finish after switching lessons without replacing the document', async ({ page }) => {
   await page.goto(`${page.url()}?tutorial=swap`);
-  await page.route('**/examples', route => route.fulfill({ status: 500,
-    contentType: 'application/json', body: '{"error":"Temporary failure"}' }), { times: 1 });
+  await interceptOnce(page, '**/examples', route => route.fulfill({ status: 500,
+    contentType: 'application/json', body: '{"error":"Temporary failure"}' }));
   await page.locator('#tutorial-load').click();
   await expect(page.locator('#tutorial-status')).toContainText('Could not load Retatrutide');
   await expect(page.locator('#tutorial-next')).toBeDisabled();
   let release, arrived;
   const held = new Promise(resolve => { arrived = resolve; });
   const gate = new Promise(resolve => { release = resolve; });
-  await page.route('**/examples', async route => {
+  await interceptOnce(page, '**/examples', async route => {
     const response = await route.fetch();
     arrived();
     await gate;
     await route.fulfill({ response });
-  }, { times: 1 });
+  });
   await page.locator('#tutorial-load').click();
   await held;
   await page.locator('#tutorial-lesson').selectOption('connect');
@@ -362,8 +362,8 @@ test('empty-canvas entry, failed drawing, dismissal and restart work without bro
   const opened = context.waitForEvent('page');
   await page.locator('#render-inner .tutorial-start').click();
   const practice = await opened;
-  await practice.route('**/render', route => route.fulfill({ status: 500,
-    contentType: 'application/json', body: '{"error":"Temporary failure"}' }), { times: 1 });
+  await interceptOnce(practice, '**/render', route => route.fulfill({ status: 500,
+    contentType: 'application/json', body: '{"error":"Temporary failure"}' }));
   await practice.locator('#tutorial-load').click();
   const retry = practice.locator('#cabiln-status').getByRole('button', { name: 'Retry' });
   await expect(retry).toBeVisible();

@@ -55,6 +55,10 @@ edit even after choosing another block in Library.
 Drawing selection checks bond margins and label interiors, zoom, touch, stale
 drawings, and rejection of background clicks and pan gestures.
 
+Use `interceptOnce` from `fixtures.js` for a single delayed or failed request.
+It keeps routing installed until page cleanup: expiring Chromium interception
+while a fulfilled response starts another fetch can leave that fetch stalled.
+
 For comparable browser timings, run the performance file alone against each
 revision with the same Python and browser:
 
