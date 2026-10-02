@@ -25,6 +25,7 @@ const source = { commit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root,
 
 async function freshPage(browser, app, name, body) {
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+  context.setDefaultTimeout(10_000);
   await context.tracing.start({ screenshots: true, snapshots: true, sources: true });
   const page = await context.newPage();
   const errors = [];
@@ -341,10 +342,17 @@ test('generated tutorial navigation keeps completed edits independent of panels 
     await next.click();
     if (!example.swap) {
       await site(page, 'left', 2);
-      if (example.suggestion) {
+      if (example.suggestion && monomer !== 'S') {
         await page.locator('#build-suggestion').click();
         count('suggestion');
-      } else await site(page, 'right', 1);
+      } else {
+        if (monomer === 'S') {
+          // Both serine's amine and hydroxyl can join the selected carboxyl.
+          await expect(page.locator('#build-suggestion')).toBeHidden();
+          count('ambiguousSites');
+        }
+        await site(page, 'right', 1);
+      }
     }
     if (example.preview || example.swap) {
       await page.locator('#build-preview-button').click();
