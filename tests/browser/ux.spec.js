@@ -272,18 +272,27 @@ test('palette refresh preserves unchanged rows and invalidates changed-definitio
     const response = await route.fetch();
     await route.fulfill({ response, headers: { ...response.headers(), 'x-library-version': 'changed-definition' } });
   });
-  // Replacing the row under the pointer can start a fresh preview immediately.
+  // Hold the new response: the pointer can reopen the replaced row's preview.
+  let releasePreview;
+  const released = new Promise(resolve => { releasePreview = resolve; });
+  await page.route('**/monomer_svg?abbr=G', async route => {
+    await released;
+    await route.continue();
+  });
   const preview = page.waitForRequest(request => {
     const url = new URL(request.url());
     return url.pathname === '/monomer_svg' && url.searchParams.get('abbr') === 'G';
   });
-  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
-  await expect(row).not.toHaveAttribute('data-identity');
-  await expect(page.locator('#lib-preview')).toBeHidden();
-  await page.locator('#lib-search').hover();
-  await row.hover();
-  await preview;
-  await expect(page.locator('#lib-preview svg').first()).toBeVisible();
+  try {
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+    await expect(row).not.toHaveAttribute('data-identity');
+    await expect(page.locator('#lib-preview')).toBeHidden();
+    await row.hover();
+    await preview;
+    await expect(page.locator('#lib-preview')).toBeHidden();
+    releasePreview();
+    await expect(page.locator('#lib-preview svg').first()).toBeVisible();
+  } finally { releasePreview(); }
 });
 
 test('narrow screens retain reachable panels, inputs, and builder controls', async ({ page }, testInfo) => {
