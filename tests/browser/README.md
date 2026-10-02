@@ -38,6 +38,8 @@ edit at desktop and mobile widths. Example loading covers failure and switching
 lessons while a response is pending.
 Selection guidance checks the exact owned atoms, visibility without hover, pointer
 selection, Highlight off, dismissal, Back and source changes followed by Undo.
+Delayed previews keep a waiting instruction; review text follows the completed
+edit even after choosing another block in Library.
 Drawing selection checks bond margins and label interiors, zoom, touch, stale
 drawings, and rejection of background clicks and pan gestures.
 

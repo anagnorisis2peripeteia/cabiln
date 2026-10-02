@@ -58,6 +58,8 @@ for (const preview of [false, true]) test(`completed connection supports Back an
   await expect(page.locator('#cabiln-input')).toHaveValue('A-G-DAla');
   await expect(page.locator('#cabiln-input')).toHaveClass('ok');
   await expect(next).toBeEnabled();
+  await page.locator('.lib-row[data-abbr="L"] .lib-use').click();
+  await expect(page.locator('#build-right-abbr')).toHaveText('L');
   for (const undone of [false, true]) {
     while (await page.locator('#tutorial-back').isEnabled()) {
       await page.locator('#tutorial-back').click();
@@ -67,6 +69,7 @@ for (const preview of [false, true]) test(`completed connection supports Back an
       await page.locator('#tutorial-show').click();
       await next.click();
       await expect(page.locator('#tutorial-progress')).toHaveText(`Step ${step + 1} of 9`);
+      if (step === 5) await expect(page.locator('#tutorial-body')).toContainText('A-G-DAla');
     }
     await expect(page.locator('#cabiln-input')).toHaveValue(undone ? 'A-G' : 'A-G-DAla');
     if (!undone) {
@@ -177,7 +180,16 @@ for (const width of [1440, 390]) test(`Retatrutide Swap lesson preserves its bra
   await practice.getByLabel('Replacement site for R4', { exact: true }).selectOption('4');
   await next.click();
   await expect(practice.locator('#build-connect')).toBeDisabled();
+  let release;
+  const pending = new Promise(resolve => { release = resolve; });
+  await practice.route('**/replace_monomer', async route => {
+    const response = await route.fetch();
+    await pending;
+    await route.fulfill({ response });
+  }, { times: 1 });
   await practice.getByRole('button', { name: 'Preview swap', exact: true }).click();
+  try { await expect(practice.locator('#tutorial-status')).toContainText('Please wait'); }
+  finally { release(); }
   const expected = source.replace('K.[AEEA', 'Orn.[AEEA');
   expect(expected).not.toBe(source);
   await expect(practice.locator('#build-preview-source')).toHaveText(expected);

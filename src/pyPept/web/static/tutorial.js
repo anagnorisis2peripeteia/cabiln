@@ -95,6 +95,7 @@ function startTutorial({ lesson = 'connect', loadPractice, getExample, getBuildS
     if (id === 'undo') return { target: '#build-connect', message: 'Apply the practice edit before trying Undo. Back revisits the earlier steps.' };
     if (!state.build.open) return { target: '#btn-build', message: 'Build is closed. Reopen it to continue.', label: 'Open Build', action: openBuild };
     if (state.build.action !== lesson) return { target: '#build-action', message: `Choose ${lesson === 'swap' ? 'Swap monomer' : 'Connect'} in the Build action menu for this exercise.` };
+    if (state.build.busy) return { target: '#build-status', message: 'Build is loading or checking your choices. Please wait.' };
     if (!state.left) return { target: hostTile(), message: `Click the marked ${current().residue} tile above the drawing.` };
     if (id === 'select') return null;
     if (!state.candidate) {
@@ -116,6 +117,7 @@ function startTutorial({ lesson = 'connect', loadPractice, getExample, getBuildS
     if (!disclosure.isOpen) return;
     const step = current().steps[index], state = readState(), help = recovery(state, step.id);
     const reviewing = state.review && !['undo', 'finish'].includes(step.id);
+    find('#tutorial-title').textContent = `${reviewing ? 'Review: ' : ''}${step.title}`;
     guideResidue(state.base && !state.review && (step.id === 'select' ||
       (!['load', 'explore', 'undo', 'finish'].includes(step.id) && !state.left)) ? current().host : null);
     const ready = reviewing || ({ load: state.base, explore: explored && state.base, select: state.left,
@@ -124,7 +126,7 @@ function startTutorial({ lesson = 'connect', loadPractice, getExample, getBuildS
     next.disabled = loading || !!loadError || !!help || !ready;
     load.disabled = loading;
     show.disabled = loading;
-    const replacement = state.build.right?.abbr || applied?.request.new_abbr || 'your chosen block';
+    const replacement = (state.review ? applied.request.new_abbr : state.build.right?.abbr) || 'your chosen block';
     const confirmation = { load: `${current().name} is loaded. Click Next.`,
       explore: 'G lights up in the drawing. Click Next.',
       select: `${current().residue} is selected in Build. Click Next.`,
@@ -153,7 +155,6 @@ function startTutorial({ lesson = 'connect', loadPractice, getExample, getBuildS
     const steps = current().steps;
     chooser.value = lesson;
     find('#tutorial-progress').textContent = `Step ${index + 1} of ${steps.length}`;
-    find('#tutorial-title').textContent = steps[index].title;
     back.disabled = index === 0;
     load.hidden = steps[index].id !== 'load';
     load.textContent = `Load ${current().name}`;

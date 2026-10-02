@@ -536,9 +536,13 @@ function createBuildPanel({ library, residueView, getDocument, commitDocument, i
     }
   }
 
+  function isPending() {
+    return requests.has('build-left', 'build-right', 'bond-check', 'swap-options', 'build-preview', 'sequence-edit');
+  }
+
   function updateControls() {
     const ready = panel.isOpen && !isStale() && !insertBetweenActive &&
-      !requests.has('build-left', 'build-right', 'bond-check', 'swap-options', 'build-preview', 'sequence-edit') &&
+      !isPending() &&
       (isSwapMode() ? !!swapRequest() : connectionValid && !!buildConnection());
     buildPreviewButton.disabled = !ready;
     buildConnect.disabled = !ready || (isSwapMode() && !swapState?.preview);
@@ -696,7 +700,7 @@ function createBuildPanel({ library, residueView, getDocument, commitDocument, i
     clear: clearBuild,
     get selection() { return [buildLeftRIdx, buildRightRIdx]; },
     get session() {
-      return { open: panel.isOpen, action: buildAction.value,
+      return { open: panel.isOpen, action: buildAction.value, busy: isPending(),
         left: buildLeft && { ...buildLeft, index: buildLeftRIdx },
         right: buildRight && { ...buildRight, index: buildRightRIdx },
         ready: !buildPreviewButton.disabled,
