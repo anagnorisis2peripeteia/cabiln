@@ -1227,5 +1227,6 @@ if (practiceMode) {
     getBuildState: () => build.session,
     isReady: source => !drawing.stale && !!drawing.cabiln && editor.present.text === source && editor.present.notation === 'cabiln',
     openBuild: () => build.open(), openLibrary: () => library.open(),
+    guideResidue: index => residueView.guideResidue(index),
   });
 }

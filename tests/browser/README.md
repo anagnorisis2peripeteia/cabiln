@@ -36,6 +36,8 @@ and Show control on a scrolled library have regression journeys. The Swap lesson
 loads Retatrutide, reviews its three occupied sites, replaces K17 and undoes the
 edit at desktop and mobile widths. Example loading covers failure and switching
 lessons while a response is pending.
+Selection guidance checks the exact owned atoms, visibility without hover, pointer
+selection, Highlight off, dismissal, Back and source changes followed by Undo.
 Drawing selection checks bond margins and label interiors, zoom, touch, stale
 drawings, and rejection of background clicks and pan gestures.
 

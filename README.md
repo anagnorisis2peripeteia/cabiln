@@ -35,7 +35,8 @@ See [deployment](docs/deployment.md) for hosting, process limits and recovery.
 ## Use the builder
 
 Open **Tutorial** in the top toolbar for lessons on building a peptide and
-swapping a branched residue in Retatrutide. It opens a separate practice tab.
+swapping a building block in Retatrutide. It opens a separate practice tab.
+The lessons explain the app's terms and mark the tile and drawing region to select.
 Practice edits do not read or replace your saved browser draft; use **Save
 project** if you want to keep them. Browse or search for your chosen amino acid;
 the guide follows the resulting product and helps reopen closed panels.

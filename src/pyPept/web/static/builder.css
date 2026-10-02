@@ -873,15 +873,31 @@
     border-color: rgba(255,255,255,.5);
   }
   .res-chip:focus-visible { box-shadow: 0 0 0 2px var(--surface-inset); }
-  #residue-chips.dimmed .res-chip:not(.hover) { opacity: .35; }
+  #residue-chips.dimmed .res-chip:not(.hover):not(.tutorial-residue) { opacity: .35; }
+  .res-chip.tutorial-residue {
+    border: 2px solid var(--focus);
+    box-shadow: 0 0 0 2px var(--surface-inset);
+    font-weight: 700;
+  }
+  .res-chip.tutorial-residue::after { content: ' ← choose'; font-family: var(--font-ui); }
 
   /* SVG residue highlighting */
-  #render-inner svg.has-highlight path:not(.res-hl),
-  #render-inner svg.has-highlight text:not(.res-hl) {
+  #render-inner svg.has-highlight path:not(.res-hl):not(.res-guide),
+  #render-inner svg.has-highlight text:not(.res-hl):not(.res-guide),
+  #render-inner svg.has-guide path:not(.res-guide):not(.res-hl),
+  #render-inner svg.has-guide text:not(.res-guide):not(.res-hl) {
     opacity: .12;
     transition: opacity .15s;
   }
   #render-inner svg .res-hl { transition: opacity .15s; }
+  .res-guide-frame {
+    fill: none;
+    stroke: #2866bd;
+    stroke-width: 2;
+    vector-effect: non-scaling-stroke;
+    pointer-events: none;
+  }
+  .canvas-wrap.dark .res-guide-frame { stroke: var(--focus); filter: invert(1); }
 
   .toolbar-label { color: var(--muted); font-size: 12px; white-space: nowrap; }
   .notation-actions, .drawing-toolbar, .viewport-controls {

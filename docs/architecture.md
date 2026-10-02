@@ -181,6 +181,9 @@ even when the guide is closed; Back and Next can then review completed steps
 without requiring the old selections. Unfinished steps still require valid
 selections. Undo restores the source through normal editor history. Retatrutide
 comes from the same cached catalog as Examples; the guide has no chemistry code.
+Residue selection steps mark the target tile and its owned atoms independently
+of hover highlighting. The cue clears on dismissal, step completion or source
+changes; it never changes Build selection or the Highlight preference.
 Practice mode bypasses browser draft loading, saving and clearing, including
 page-exit saves. Closing the guide keeps that protection for the practice tab.
 

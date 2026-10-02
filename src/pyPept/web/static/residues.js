@@ -10,6 +10,12 @@ function createResidueView({ inner, chips: resChips, canHighlight, onSelect }) {
   let chainData = [];
   let currentBranchSet = new Set();
   let xlinkByRes = {};
+  let guidedResidue = null;
+
+  function residueElements(svg, indices) {
+    const atoms = indices.flatMap(index => residueMap[index] || []);
+    return atoms.length ? svg.querySelectorAll(atoms.map(atom => `.atom-${atom}`).join(',')) : [];
+  }
 
   function highlightGroup(idxList) {
     if (!canHighlight()) return;
@@ -18,13 +24,7 @@ function createResidueView({ inner, chips: resChips, canHighlight, onSelect }) {
     const svg = inner.querySelector('svg');
     if (!svg) return;
     svg.classList.add('has-highlight');
-    for (const rIdx of idxList) {
-      const atoms = residueMap[rIdx] || [];
-      for (const aidx of atoms) {
-        svg.querySelectorAll(`.atom-${aidx}`).forEach(el =>
-          el.classList.add('res-hl'));
-      }
-    }
+    residueElements(svg, idxList).forEach(el => el.classList.add('res-hl'));
     resChips.classList.add('dimmed');
     resChips.querySelectorAll('.res-chip').forEach(c => {
       const ri = parseInt(c.dataset.residue);
@@ -39,6 +39,7 @@ function createResidueView({ inner, chips: resChips, canHighlight, onSelect }) {
 
   function render(data = {}, quality = null) {
     clearHighlight();
+    guideResidue(null);
     const { residue_map: resMap, residues, layout, crosslink_groups: crosslinkGroups } = data;
     residueMap = resMap || {};
     residueList = residues || [];
@@ -219,15 +220,11 @@ function createResidueView({ inner, chips: resChips, canHighlight, onSelect }) {
     if (rIdx === activeRIdx) return;
     clearHighlight();
     activeRIdx = rIdx;
-    const atoms = residueMap[rIdx] || [];
     const svg = inner.querySelector('svg');
     if (!svg) return;
 
     svg.classList.add('has-highlight');
-    for (const aidx of atoms) {
-      svg.querySelectorAll(`.atom-${aidx}`).forEach(el =>
-        el.classList.add('res-hl'));
-    }
+    residueElements(svg, [rIdx]).forEach(el => el.classList.add('res-hl'));
 
     resChips.classList.add('dimmed');
     resChips.querySelectorAll('.res-chip').forEach(c =>
@@ -243,6 +240,33 @@ function createResidueView({ inner, chips: resChips, canHighlight, onSelect }) {
     }
     resChips.classList.remove('dimmed');
     resChips.querySelectorAll('.res-chip.hover').forEach(c => c.classList.remove('hover'));
+  }
+
+  function guideResidue(index) {
+    if (index === guidedResidue) return;
+    guidedResidue = index;
+    const svg = inner.querySelector('svg');
+    resChips.querySelectorAll('.tutorial-residue').forEach(chip => chip.classList.remove('tutorial-residue'));
+    svg?.querySelectorAll('.res-guide').forEach(el => el.classList.remove('res-guide'));
+    svg?.querySelector('.res-guide-frame')?.remove();
+    svg?.classList.remove('has-guide');
+    if (index === null || !svg) return;
+    const elements = [...residueElements(svg, [index])];
+    if (!elements.length) return;
+    resChips.querySelector(`.res-chip[data-residue="${index}"]`)?.classList.add('tutorial-residue');
+    svg.classList.add('has-guide');
+    elements.forEach(el => el.classList.add('res-guide'));
+    const boxes = elements.map(el => el.getBBox());
+    const x = Math.min(...boxes.map(box => box.x)) - 8;
+    const y = Math.min(...boxes.map(box => box.y)) - 8;
+    const frame = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    for (const [name, value] of Object.entries({
+      class: 'res-guide-frame', x, y, rx: 6,
+      width: Math.max(...boxes.map(box => box.x + box.width)) - x + 8,
+      height: Math.max(...boxes.map(box => box.y + box.height)) - y + 8,
+      'aria-hidden': 'true',
+    })) frame.setAttribute(name, value);
+    svg.appendChild(frame);
   }
 
   function svgResidueIndex(target, svg) {
@@ -324,7 +348,7 @@ function createResidueView({ inner, chips: resChips, canHighlight, onSelect }) {
     resChips.classList.toggle('stale', stale);
     resChips.setAttribute('aria-disabled', String(stale));
     resChips.querySelectorAll('button').forEach(button => { button.disabled = stale; });
-    if (stale) clearHighlight();
+    if (stale) { clearHighlight(); guideResidue(null); }
   }
 
   function select(left = null, right = null) {
@@ -346,7 +370,7 @@ function createResidueView({ inner, chips: resChips, canHighlight, onSelect }) {
 
   const view = {
     render, clear, setStale, select, insertionAnchor,
-    clearHighlight, highlightGroup, highlightResidue,
+    clearHighlight, highlightGroup, highlightResidue, guideResidue,
     residue: index => residueList.find(residue => residue.idx === index),
     get residues() { return residueList; },
     get atoms() { return residueMap; },

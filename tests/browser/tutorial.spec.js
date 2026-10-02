@@ -103,11 +103,59 @@ for (const width of [1440, 390]) test(`Retatrutide Swap lesson preserves its bra
   const source = await practice.locator('#cabiln-input').inputValue();
   const next = practice.locator('#tutorial-next');
   await next.click();
+  await expect(practice.locator('.res-chip[data-residue="16"]')).toHaveClass(/tutorial-residue/);
+  await expect(practice.locator('.res-chip[data-residue="16"]')).toBeInViewport();
+  await expect(practice.locator('#render-inner .res-guide').first()).toBeVisible();
+  await expect(practice.locator('#tutorial-title')).toBeFocused();
+  await expect.poll(() => practice.locator('#render-inner svg').evaluate((svg, atoms) => {
+    const shapes = [...svg.querySelectorAll('path[class], text[class]')];
+    const owned = shapes.filter(shape => [...shape.classList].some(name =>
+      name.startsWith('atom-') && atoms.includes(Number(name.slice(5)))));
+    const guided = shapes.filter(shape => shape.classList.contains('res-guide'));
+    return owned.length > 0 && guided.length === owned.length && owned.every(shape =>
+      guided.includes(shape) && Number(getComputedStyle(shape).opacity) === 1);
+  }, original.residue_map[16])).toBe(true);
+  await practice.locator('.res-chip[data-residue="15"]').hover();
+  await practice.locator('#tutorial-title').hover();
+  await expect(practice.locator('#render-inner .res-hl')).toHaveCount(0);
+  await expect(practice.locator('#render-inner .res-guide-frame')).toBeVisible();
+  await practice.locator('#tutorial-close').click();
+  await expect(practice.locator('.tutorial-residue, .res-guide, .res-guide-frame')).toHaveCount(0);
+  await practice.locator('#btn-tutorial').click();
+  await expect(practice.locator('.res-chip[data-residue="16"]')).toHaveClass(/tutorial-residue/);
+  await practice.locator('#btn-hl').click();
+  await expect(practice.locator('#btn-hl')).toHaveAttribute('aria-pressed', 'false');
+  await expect(practice.locator('#render-inner .res-guide').first()).toHaveCSS('opacity', '1');
+  if (width === 1440) {
+    await render(practice, 'A-G');
+    await expect(practice.locator('.tutorial-residue, .res-guide, .res-guide-frame')).toHaveCount(0);
+    await practice.locator('#btn-undo').click();
+    await expect(practice.locator('#cabiln-input')).toHaveValue(source);
+    await expect(practice.locator('.res-chip[data-residue="16"]')).toHaveClass(/tutorial-residue/);
+  }
   await practice.locator('#tutorial-show').click();
   await practice.locator('#build-action').selectOption('swap');
   await practice.locator('#tutorial-show').click();
   await expect(practice.locator('.res-chip[data-residue="16"]')).toBeFocused();
-  await selectChip(practice, 16, 'left', 'K');
+  await expect(practice.locator('.res-chip[data-residue="16"]')).toBeInViewport();
+  if (width === 1440) {
+    const point = await practice.locator('#render-inner svg').evaluate((svg, atoms) => {
+      for (const path of svg.querySelectorAll('path.res-guide')) {
+        const owners = [...path.getAttribute('class').matchAll(/atom-(\d+)/g)].map(match => Number(match[1]));
+        if (!owners.every(atom => atoms.includes(atom))) continue;
+        const point = path.getPointAtLength(path.getTotalLength() / 2).matrixTransform(path.getScreenCTM());
+        if (document.elementFromPoint(point.x, point.y) === path) return { x: point.x, y: point.y };
+      }
+    }, original.residue_map[16]);
+    expect(point).toBeTruthy();
+    await practice.mouse.click(point.x, point.y);
+    await expect(practice.locator('#build-left-abbr')).toHaveText('K');
+  } else await selectChip(practice, 16, 'left', 'K');
+  await next.click();
+  await expect(practice.locator('.tutorial-residue, .res-guide, .res-guide-frame')).toHaveCount(0);
+  await practice.locator('#tutorial-back').click();
+  await expect(practice.locator('#render-inner .res-guide-frame')).toBeVisible();
+  await capture(practice, testInfo, 'retatrutide-marked-block');
   await next.click();
   await practice.locator('#lib-close').click();
   await practice.locator('#tutorial-show').click();
@@ -156,6 +204,7 @@ for (const width of [1440, 390]) test(`Retatrutide Swap lesson preserves its bra
   expect(await practice.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await practice.locator('#tutorial-lesson').selectOption('connect');
   await expect(practice.locator('#tutorial-load')).toHaveText('Load A–G');
+  await expect(practice.locator('.tutorial-residue, .res-guide, .res-guide-frame')).toHaveCount(0);
   await expect(practice.locator('#cabiln-input')).toHaveValue(source);
   await practice.close();
   await expect(page.locator('#cabiln-input')).toHaveValue('ac-K-am');
@@ -215,7 +264,7 @@ for (const width of [1440, 390]) {
     await expect(practice.locator('#draft-status')).toContainText('Practice tab');
     await practice.locator('#tutorial-load').click();
     await next.click();
-    await expect(practice.locator('#tutorial-title')).toHaveText('Find a residue in the drawing');
+    await expect(practice.locator('#tutorial-title')).toHaveText('Match a tile to the drawing');
     await practice.locator('#tutorial-show').click();
     await expect(practice.locator('#render-inner .res-hl').first()).toBeVisible();
     await next.click();

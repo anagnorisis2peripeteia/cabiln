@@ -1,43 +1,43 @@
-function startTutorial({ lesson = 'connect', loadPractice, getExample, getBuildState, isReady, openBuild, openLibrary }) {
+function startTutorial({ lesson = 'connect', loadPractice, getExample, getBuildState, isReady, openBuild, openLibrary, guideResidue }) {
   const find = selector => document.querySelector(selector);
   const lessons = {
-    connect: { source: 'A-G', name: 'A–G', host: 1, residue: 'glycine', steps: [
-      { id: 'load', title: 'Start with two residues', target: '#cabiln-input',
-        body: 'Load A–G: alanine joined to glycine. This practice tab leaves your saved draft untouched. Practice edits are not saved automatically.' },
-      { id: 'explore', title: 'Find a residue in the drawing',
-        body: 'Hover over glycine in the drawing or focus the G tile to light up its atoms. On a touch screen, tap the tile.' },
-      { id: 'select', title: 'Select glycine in Build',
-        body: 'Open Build, then click or tap glycine in the main drawing or its G tile. Aim at an atom label or bond; drag to pan. Its numbered attachment sites appear in Build.' },
-      { id: 'choose', title: 'Choose a monomer to add', target: '#lib-list',
-        body: 'Browse or search Library and choose Use beside an amino acid, such as A (alanine) or L (leucine). This exercise uses a monomer with an unused R1 site. Filter can narrow the choices.' },
+    connect: { source: 'A-G', name: 'A–G', host: 1, residue: 'G (glycine)', steps: [
+      { id: 'load', title: 'Build a chain of three blocks', target: '#cabiln-input',
+        body: 'A peptide is a chain of building blocks called amino acids. Click Load A–G to start with two blocks, A and G. You will add a third. This practice tab leaves your saved work untouched; practice edits are not saved automatically.' },
+      { id: 'explore', title: 'Match a tile to the drawing',
+        body: 'The coloured tiles above the drawing each represent one building block. Hover over the G tile, or tap it on a touch screen. Its part of the drawing lights up. G is short for glycine; you do not need to recognise its chemical structure.' },
+      { id: 'select', title: 'Choose the marked G tile',
+        body: 'Open Build, then click the G tile marked “choose” above the drawing. G appears under Current residue: “residue” means a building block already in your chain. You can also click a line or letter inside the outlined part of the main drawing.' },
+      { id: 'choose', title: 'Choose a block to add', target: '#lib-list',
+        body: 'Library lists building blocks, called monomers in the app. Find A (alanine) by browsing or searching, then click Use on its row. A appears under New monomer. L (leucine) works for this exercise too.' },
       { id: 'sites', title: 'Choose the connection', target: '#build-left-rgroups',
-        body: 'Choose R2 on glycine, then R1 on your chosen monomer. Used sites cannot be selected. Connect becomes available when the reaction is valid.' },
-      { id: 'preview', title: 'Preview the product', target: '#build-preview-button',
-        body: 'Choose Preview. Check the proposed molecule, reaction and sequence before applying the connection. The result uses the monomer you chose.' },
-      { id: 'apply', title: 'Apply the connection', target: '#build-connect',
-        body: 'Choose Connect. The main drawing and residue tiles update to the product.' },
+        body: 'R1, R2 and R3 label connection points on a block. Under Current residue, click R2. Under New monomer, click R1. This joins the end of G to the start of your new block. Crossed-out points are already in use.' },
+      { id: 'preview', title: 'Check the chain before adding', target: '#build-preview-button',
+        body: 'Click Preview. The preview shows your proposed chain, with {replacement} added after G. Under Proposed CABILN, check for A-G-{replacement}: CABILN is the text form of the drawing. Your working chain stays A-G until you click Connect.' },
+      { id: 'apply', title: 'Add the new block', target: '#build-connect',
+        body: 'Click Connect. The tiles above the main drawing should now read A, G, {replacement}. The new block is part of your chain.' },
       { id: 'undo', title: 'Undo the edit', target: '#btn-undo',
-        body: 'Choose Undo to return to A–G. Redo can restore the connection. Both work with notation conversions and other sequence edits too.' },
+        body: 'Click Undo beside the sequence box. The third tile disappears and A–G returns. Redo adds it again. Back in this guide only revisits instructions; it does not undo edits.' },
       { id: 'finish', title: 'Continue exploring', target: '#btn-project-save',
-        body: 'Save project keeps an editable copy on your device. PNG and MOL export the structure. Choose the Swap in Retatrutide lesson above to practise replacing a branched residue, or close this tab to return to your original work.' },
+        body: 'You have selected, added and removed a building block. Save project downloads an editable copy; PNG downloads a picture. Choose Swap in Retatrutide above to practise replacing a block in a larger chain, or close this tab to return to your original work.' },
     ] },
-    swap: { source: null, name: 'Retatrutide', host: 16, residue: 'K17', steps: [
+    swap: { source: null, name: 'Retatrutide', host: 16, residue: 'K at position 17', steps: [
       { id: 'load', title: 'Try a swap in Retatrutide', target: '#cabiln-input',
-        body: 'Load Retatrutide from Examples. You will replace its lipid-bearing lysine while keeping the branch and both backbone connections. This is a practice edit; your saved work stays untouched.' },
-      { id: 'select', title: 'Select the branched lysine',
-        body: 'Open Build and choose Swap monomer. Select K17: the second of the two adjacent K tiles, immediately before the branch. You can also select its atoms in the drawing. Show control points to the tile.' },
-      { id: 'choose', title: 'Choose an eligible replacement', target: '#lib-list',
-        body: 'Library now shows replacements that can keep every connection. Search for Orn (L-ornithine) and choose Select. You can try another eligible monomer too; selecting one does not change the peptide.' },
+        body: 'Click Load Retatrutide to open an example peptide: a chain of building blocks. You will replace one block while keeping everything attached to it. The next step marks the block for you. This practice tab leaves your saved work untouched.' },
+      { id: 'select', title: 'Choose the marked K tile',
+        body: 'Open Build. Set Action to Swap monomer: “monomer” means a building block. Then click the K tile marked “choose” above the drawing. This is block 17, called lysine. Its part of the drawing is also outlined; you can click a line or letter inside it.' },
+      { id: 'choose', title: 'Choose a replacement block', target: '#lib-list',
+        body: 'Search Library for Orn and click Select on its row. Orn is the code for ornithine, another building block. Only replacements that can keep all the current connections are listed. Your chain stays unchanged while you choose.' },
       { id: 'sites', title: 'Review all three connections', target: '#build-swap-mapping',
-        body: 'Check the two backbone connections and the AEEA branch. Each current site maps to its own compatible replacement site. The numbers may differ; the menus let you change the mapping.' },
+        body: 'The three rows keep the links to the previous block K, the next block A, and the side arm labelled AEEA. R numbers label connection points. For Orn, leave the suggested R1 → R1, R2 → R2 and R4 → R4 choices, then click Next.' },
       { id: 'preview', title: 'Preview the replacement', target: '#build-preview-button',
-        body: 'Choose Preview swap. Inspect the complete peptide and the site mapping. Expand Proposed CABILN to see the new notation. Apply stays disabled until this product has been validated.' },
+        body: 'Click Preview swap. Check that the long side arm is still attached in the preview drawing. The app checks all three connections before enabling Apply swap. Your working chain stays unchanged until you apply.' },
       { id: 'apply', title: 'Apply the swap', target: '#build-connect',
-        body: 'Choose Apply swap. The selected K becomes your replacement, and the lipid branch remains attached. Changing a mapping or monomer requires a new preview.' },
+        body: 'Click Apply swap. The marked K tile becomes {replacement}, and the long side arm stays attached. If you change the replacement or any connection point, preview again before applying.' },
       { id: 'undo', title: 'Restore Retatrutide', target: '#btn-undo',
-        body: 'Choose Undo to restore the original Retatrutide. Redo restores your swap. Back in this guide revisits instructions without changing the molecule.' },
+        body: 'Click Undo beside the sequence box. K returns in place of {replacement}. Redo restores your swap. Back in this guide only revisits instructions; it does not undo edits.' },
       { id: 'finish', title: 'Try another replacement', target: '#btn-project-save',
-        body: 'You can swap other residues, including ones with branches or crosslinks. Eligibility comes from the monomer library and the occupied sites. Save project keeps your edit; close this tab to return to your original work.' },
+        body: 'You have replaced a block without disconnecting its neighbours or side arm. Try another block, or choose Build a peptide above to practise adding one. Save project downloads an editable copy. Close this practice tab to return to your original work.' },
     ] },
   };
   const panel = find('#tutorial-panel'), button = find('#btn-tutorial');
@@ -65,6 +65,7 @@ function startTutorial({ lesson = 'connect', loadPractice, getExample, getBuildS
         frame = null;
         target?.classList.remove('tutorial-target');
         target = null;
+        guideResidue(null);
       }
     },
   });
@@ -94,19 +95,20 @@ function startTutorial({ lesson = 'connect', loadPractice, getExample, getBuildS
     if (id === 'undo') return { target: '#build-connect', message: 'Apply the practice edit before trying Undo. Back revisits the earlier steps.' };
     if (!state.build.open) return { target: '#btn-build', message: 'Build is closed. Reopen it to continue.', label: 'Open Build', action: openBuild };
     if (state.build.action !== lesson) return { target: '#build-action', message: `Choose ${lesson === 'swap' ? 'Swap monomer' : 'Connect'} in the Build action menu for this exercise.` };
-    if (!state.left) return { target: hostTile(), message: `Select ${current().residue} in the drawing or its tile to continue.` };
+    if (!state.left) return { target: hostTile(), message: `Click the marked ${current().residue} tile above the drawing.` };
     if (id === 'select') return null;
     if (!state.candidate) {
-      if (find('#lib-panel').hidden) return { target: '#btn-lib', message: 'Library is closed. Reopen it to choose a monomer.', label: 'Open Library', action: openLibrary };
-      return { target: '#lib-list', message: lesson === 'swap' ? 'Choose Select beside an eligible replacement, such as Orn.'
-        : 'Browse or search, then choose Use beside a monomer with an unused R1 site, such as A or L.' };
+      if (find('#lib-panel').hidden) return { target: '#btn-lib', message: 'Library is closed. Reopen it to choose a building block.', label: 'Open Library', action: openLibrary };
+      return { target: '#lib-list', message: lesson === 'swap' ? 'Search for Orn, then click Select on its row.'
+        : 'Find A (alanine) or L (leucine) in Library, then click Use on its row.' };
     }
     if (id === 'choose') return null;
     if (!state.connection) return lesson === 'swap'
-      ? { target: '#build-swap-mapping', message: 'Give each connection a different replacement site, then wait for the monomer to load.' }
+      ? { target: '#build-swap-mapping', message: 'Each row needs a different connection point. For Orn, use R1, R2 and R4 in order.' }
       : { target: state.build.left.selectedSlot === 2 ? '#build-right-rgroups' : '#build-left-rgroups',
-        message: 'Choose glycine R2 and your monomer’s R1, then wait for the connection check.' };
-    if (id === 'apply' && lesson === 'swap' && !state.preview) return { target: '#build-preview-button', message: 'Preview this mapping before applying the swap.' };
+        message: state.build.left.selectedSlot === 2 ? 'Click R1 under New monomer, then wait for the connection check.'
+          : 'Click R2 under Current residue (G).' };
+    if (id === 'apply' && lesson === 'swap' && !state.preview) return { target: '#build-preview-button', message: 'Click Preview swap before applying this replacement.' };
     return null;
   }
 
@@ -114,19 +116,31 @@ function startTutorial({ lesson = 'connect', loadPractice, getExample, getBuildS
     if (!disclosure.isOpen) return;
     const step = current().steps[index], state = readState(), help = recovery(state, step.id);
     const reviewing = state.review && !['undo', 'finish'].includes(step.id);
+    guideResidue(state.base && !state.review && (step.id === 'select' ||
+      (!['load', 'explore', 'undo', 'finish'].includes(step.id) && !state.left)) ? current().host : null);
     const ready = reviewing || ({ load: state.base, explore: explored && state.base, select: state.left,
       choose: state.candidate, sites: state.connection, preview: state.preview, apply: state.product,
       undo: !!applied && state.base, finish: true })[step.id];
     next.disabled = loading || !!loadError || !!help || !ready;
     load.disabled = loading;
     show.disabled = loading;
+    const replacement = state.build.right?.abbr || applied?.request.new_abbr || 'your chosen block';
+    const confirmation = { load: `${current().name} is loaded. Click Next.`,
+      explore: 'G lights up in the drawing. Click Next.',
+      select: `${current().residue} is selected in Build. Click Next.`,
+      choose: `${replacement} is selected. Click Next.`,
+      sites: 'The connection choices are ready. Click Next.',
+      preview: 'Preview ready. Your chain is unchanged. Click Next.',
+      apply: `${replacement} is now in your chain. Click Next.`,
+      undo: `${current().name} is restored. Click Next.` };
     status.textContent = loading ? `Loading ${current().name}…` : loadError || help?.message ||
       (reviewing ? `Edit completed${state.base ? ' and undone' : ''}. Back and Next review the instructions; Restart begins again.`
-        : next.disabled ? 'Complete this step to continue.' : 'Ready to continue.');
+        : next.disabled ? 'Complete this step to continue.' : confirmation[step.id] || 'Ready to finish.');
     show.textContent = reviewing ? 'Show drawing' : help?.label || 'Show control';
     reveal = reviewing ? null : help?.action;
+    const body = step.body.replaceAll('{replacement}', replacement);
     find('#tutorial-body').textContent = reviewing && step.id !== 'load'
-      ? `${step.body} You already completed this edit with ${applied.request.new_abbr}; continue to review the next step.` : step.body;
+      ? `${body} You already completed this edit with ${applied.request.new_abbr}; continue to review the next step.` : body;
     const element = find(reviewing ? '#render-canvas' : help?.target || step.target || hostTile());
     if (target !== element) {
       target?.classList.remove('tutorial-target');
