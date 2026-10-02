@@ -1209,5 +1209,6 @@ if (practiceMode) {
   document.getElementById('btn-clear-draft').hidden = true;
   startTutorial({ loadPractice: () => commitDocument('A-G', 'cabiln'),
     isReady: source => !drawing.stale && !!drawing.cabiln && editor.present.text === source && editor.present.notation === 'cabiln',
+    openBuild: () => build.open(), openLibrary: () => library.open(),
   });
 }

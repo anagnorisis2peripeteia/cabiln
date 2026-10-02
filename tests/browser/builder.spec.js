@@ -1,5 +1,5 @@
 const fs = require('node:fs');
-const { test, expect, render, tile, site, selectChip, connect, capture, isCompletedResponse } = require('./fixtures');
+const { test, expect, render, tile, site, selectChip, connect, capture, isCompletedResponse, residuePoint } = require('./fixtures');
 
 test('panels persist independently and the library starts a peptide', async ({ page }, testInfo) => {
   await expect(page.locator('#btn-mol')).toBeDisabled();
@@ -132,7 +132,9 @@ test('SVG selection connects the intended existing cysteines', async ({ page }, 
   await clickSvgOccurrence(page, data, 0);
   await expect(page.locator('#build-left-abbr')).toHaveText('C');
   await expect(page.locator('#build-left-rgroups button')).toHaveCount(4);
-  await selectChip(page, 2, 'right', 'C');
+  const point = await residuePoint(page, data, 2);
+  await page.mouse.click(point.x, point.y);
+  await expect(page.locator('#build-right-abbr')).toHaveText('C');
   await site(page, 'left', 4);
   await site(page, 'right', 4);
   const { submitted } = await connect(page);
@@ -140,6 +142,34 @@ test('SVG selection connects the intended existing cysteines', async ({ page }, 
   await expect(page.locator('#residue-chips [data-residue]')).toHaveText(['C', 'A', 'C']);
   await expect(page.locator('#residue-chips .xlink-chip')).toHaveCount(2);
   await capture(page, testInfo, 'disulfide-through-svg-and-chip');
+});
+
+test('drawing selection accepts bond margins and label interiors with highlight off and after zoom', async ({ page }) => {
+  const data = await render(page, 'A-G');
+  await page.locator('#btn-build').click();
+  await page.locator('.lib-row').first().waitFor();
+  await page.locator('#btn-hl').click();
+  for (const label of [false, true]) {
+    const point = await residuePoint(page, data, 1, label);
+    await page.mouse.click(point.x, point.y);
+    await expect(page.locator('#build-left-abbr')).toHaveText('G');
+    await expect(page.locator('#build-left-rgroups button')).toHaveCount(3);
+    await page.locator('#build-left-change').click();
+  }
+  const canvas = page.locator('#render-canvas');
+  await canvas.click({ position: { x: 12, y: 12 } });
+  await expect(page.locator('#build-left-abbr')).toHaveText('—');
+  const point = await residuePoint(page, data, 1);
+  await page.mouse.move(point.x, point.y);
+  await page.mouse.down();
+  await page.mouse.move(point.x + 45, point.y + 25, { steps: 5 });
+  await page.mouse.up();
+  await expect(page.locator('#build-left-abbr')).toHaveText('—');
+  await canvas.focus();
+  await page.keyboard.press('+');
+  const zoomed = await residuePoint(page, data, 1);
+  await page.mouse.click(zoomed.x, zoomed.y);
+  await expect(page.locator('#build-left-abbr')).toHaveText('G');
 });
 
 test('backbone end sites close a cycle through the builder', async ({ page }, testInfo) => {

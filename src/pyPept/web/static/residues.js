@@ -258,9 +258,49 @@ function createResidueView({ inner, chips: resChips, canHighlight, onSelect }) {
   function wireUpSvgHover() {
     const svg = inner.querySelector('svg');
     if (!svg) return;
+    let hitShapes;
+    function residueAt(event) {
+      const direct = svgResidueIndex(event.target, svg);
+      if (direct !== undefined) return direct;
+      const matrix = svg.getScreenCTM();
+      if (!matrix) return;
+      const point = new DOMPoint(event.clientX, event.clientY).matrixTransform(matrix.inverse());
+      let nearest, distance = ((event.pointerType === 'touch' ? 12 : 8) / Math.hypot(matrix.a, matrix.b)) ** 2;
+      // Cache geometry in drawing coordinates; pan and zoom only change the matrix.
+      hitShapes ??= [...svg.querySelectorAll('path[class]')].flatMap(path => {
+        const classes = path.getAttribute('class');
+        const owners = [...new Set([...classes.matchAll(/atom-(\d+)/g)]
+          .map(match => atomToRes[Number(match[1])]))];
+        // A shared bond is ambiguous away from its painted stroke.
+        if (owners.length !== 1 || owners[0] === undefined) return [];
+        let points = null;
+        if (/\bbond-\d+/.test(classes)) {
+          const length = path.getTotalLength(), count = Math.max(1, Math.ceil(length / 6));
+          points = Array.from({ length: count + 1 }, (_, i) => path.getPointAtLength(length * i / count));
+        }
+        return [{ owner: owners[0], box: path.getBBox(), points }];
+      });
+      for (const shape of hitShapes) {
+        const { x, y, width, height } = shape.box;
+        let gap = Math.max(x - point.x, 0, point.x - x - width) ** 2 +
+          Math.max(y - point.y, 0, point.y - y - height) ** 2;
+        if (gap > distance) continue;
+        if (shape.points) {
+          gap = Infinity;
+          for (let i = 1; i < shape.points.length; i++) {
+            const a = shape.points[i - 1], b = shape.points[i];
+            const dx = b.x - a.x, dy = b.y - a.y;
+            const t = Math.max(0, Math.min(1, ((point.x - a.x) * dx + (point.y - a.y) * dy) / (dx * dx + dy * dy || 1)));
+            gap = Math.min(gap, (point.x - a.x - t * dx) ** 2 + (point.y - a.y - t * dy) ** 2);
+          }
+        }
+        if (gap <= distance) { distance = gap; nearest = shape.owner; }
+      }
+      return nearest;
+    }
     svg.addEventListener('mousemove', e => {
       if (!canHighlight()) return;
-      const rIdx = svgResidueIndex(e.target, svg);
+      const rIdx = residueAt(e);
       if (rIdx === undefined) return clearHighlight();
       const xlinks = xlinkByRes[rIdx];
       if (xlinks && xlinks.length) {
@@ -271,7 +311,7 @@ function createResidueView({ inner, chips: resChips, canHighlight, onSelect }) {
     });
     svg.addEventListener('mouseleave', clearHighlight);
     svg.addEventListener('click', e => {
-      const rIdx = svgResidueIndex(e.target, svg);
+      const rIdx = residueAt(e);
       const residue = residueList.find(r => r.idx === rIdx);
       if (residue) onSelect(residue);
     });

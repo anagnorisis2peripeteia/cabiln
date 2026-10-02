@@ -1,4 +1,4 @@
-const { test, expect, render, selectChip, site, capture } = require('./fixtures');
+const { test, expect, render, selectChip, site, capture, residuePoint } = require('./fixtures');
 
 for (const width of [1440, 390]) {
   test(`guided practice builds, previews and undoes without changing saved work at ${width}px`, async ({ page, context }, testInfo) => {
@@ -11,9 +11,9 @@ for (const width of [1440, 390]) {
     await expect(page.locator('#smiles-input')).toHaveClass('ok');
     await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('cabiln.draft.v1'))?.reference)).toBe('NCC(=O)O');
     const saved = await page.evaluate(() => localStorage.getItem('cabiln.draft.v1'));
-    await page.locator('#btn-help').click();
+    await expect(page.locator('#tutorial-launch')).toBeVisible();
     const opened = context.waitForEvent('page');
-    await page.locator('#help-panel .tutorial-start').click();
+    await page.locator('#tutorial-launch').click();
     const practice = await opened;
     await practice.setViewportSize({ width, height: 900 });
     const next = practice.locator('#tutorial-next');
@@ -30,7 +30,7 @@ for (const width of [1440, 390]) {
     await practice.locator('#btn-build').click();
     await selectChip(practice, 1, 'left', 'G');
     await next.click();
-    await practice.locator('#lib-search').fill('Alanine');
+    if (width === 1440) await practice.locator('#lib-search').fill('Alanine');
     await practice.locator('.lib-row[data-abbr="A"] .lib-use').click();
     await next.click();
     await expect(next).toBeDisabled();
@@ -91,4 +91,69 @@ test('empty-canvas entry, failed drawing, dismissal and restart work without bro
   await expect(practice.locator('#tutorial-next')).toBeEnabled();
   await expect(practice.locator('#draft-status')).toContainText('not saved automatically');
   await practice.close();
+});
+
+for (const width of [1440, 390]) test(`tutorial recovers closed panels and follows a browsed monomer and changed selection at ${width}px`, async ({ page }) => {
+  await page.setViewportSize({ width, height: 900 });
+  await page.goto(`${page.url()}?tutorial=1`);
+  const next = page.locator('#tutorial-next');
+  const rendered = page.waitForResponse(response => response.url().endsWith('/render') && response.request().postDataJSON()?.cabiln === 'A-G');
+  await page.locator('#tutorial-load').click();
+  const data = await (await rendered).json();
+  await next.click();
+  await page.locator('#tutorial-show').click();
+  await next.click();
+  await page.locator('#btn-build').click();
+  if (width === 1440) {
+    await page.locator('.lib-row').first().waitFor();
+    const point = await residuePoint(page, data, 1);
+    await page.mouse.click(point.x, point.y);
+    await expect(page.locator('#build-left-abbr')).toHaveText('G');
+  } else await selectChip(page, 1, 'left', 'G');
+  await next.click();
+  await page.locator('#lib-close').click();
+  await page.locator('#tutorial-show').click();
+  await expect(page.locator('#lib-panel')).toBeVisible();
+  await page.locator('.lib-row[data-abbr="L"] .lib-use').click();
+  await expect(page.locator('#lib-search')).toHaveValue('');
+  await next.click();
+  await site(page, 'left', 2);
+  await site(page, 'right', 1);
+  await expect(next).toBeEnabled();
+  await page.locator('#build-close').click();
+  await expect(next).toBeDisabled();
+  await page.locator('#tutorial-show').click();
+  await expect(page.locator('#build-panel')).toBeVisible();
+  await expect(page.locator('#tutorial-status')).toContainText('glycine');
+  await selectChip(page, 1, 'left', 'G');
+  await page.locator('.lib-row[data-abbr="L"] .lib-use').click();
+  await site(page, 'left', 2);
+  await site(page, 'right', 1);
+  if (width === 390) await next.click();
+  await page.locator('#build-preview-button').click();
+  await expect(page.locator('#build-preview-source')).toHaveText('A-G-L');
+  await expect(next).toBeEnabled();
+  await page.locator('.lib-row[data-abbr="V"] .lib-use').click();
+  await expect(next).toBeDisabled();
+  await site(page, 'right', 1);
+  await page.locator('#build-preview-button').click();
+  await expect(page.locator('#build-preview-source')).toHaveText('A-G-V');
+  await page.locator('#build-preview-close').click();
+  if (width === 390) await expect(next).toBeDisabled();
+  await page.locator('#tutorial-show').click();
+  await page.locator('#build-preview-button').click();
+  await expect(page.locator('#build-preview-source')).toHaveText('A-G-V');
+  if (width === 390) await next.click();
+  await page.locator('#build-connect').click();
+  if (width === 1440) {
+    // Applying before advancing the guide already satisfies the connection and preview steps.
+    await next.click();
+    await next.click();
+  }
+  await next.click();
+  await page.locator('#btn-undo').click();
+  await next.click();
+  await expect(page.locator('#cabiln-input')).toHaveValue('A-G');
+  await next.click();
+  await expect(page.locator('#tutorial-panel')).toBeHidden();
 });

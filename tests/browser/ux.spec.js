@@ -1,4 +1,4 @@
-const { test, expect, render, selectChip, site, connect, capture, isCompletedResponse } = require('./fixtures');
+const { test, expect, render, selectChip, site, connect, capture, isCompletedResponse, residuePoint } = require('./fixtures');
 
 test('invalid bracket syntax keeps the last valid drawing without accepting changed chemistry', async ({ page }) => {
   for (const source of [
@@ -18,7 +18,7 @@ test('invalid bracket syntax keeps the last valid drawing without accepting chan
 });
 
 test('editing retains the drawing and zoom while stale atom controls stay disabled', async ({ page }, testInfo) => {
-  await render(page, 'A-G');
+  const data = await render(page, 'A-G');
   await page.locator('#btn-build').click();
   await selectChip(page, 1, 'left', 'G');
   await page.locator('#render-canvas').hover();
@@ -38,6 +38,8 @@ test('editing retains the drawing and zoom while stale atom controls stay disabl
     await expect(page.locator('#btn-mol')).toBeDisabled();
     await expect(page.locator('.res-chip[data-residue="1"]')).toBeDisabled();
     await page.locator('.res-chip[data-residue="1"]').dispatchEvent('click');
+    const point = await residuePoint(page, data, 1);
+    await page.mouse.click(point.x, point.y);
     await expect(page.locator('#build-left-abbr')).toHaveText('—');
     await capture(page, testInfo, 'previous-drawing-updating');
   } finally { release(); }

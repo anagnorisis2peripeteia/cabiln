@@ -192,4 +192,32 @@ async function capture(page, testInfo, name) {
   await testInfo.attach(`${name}.json`, { path: statePath, contentType: 'application/json' });
 }
 
-module.exports = { test, expect, render, tile, site, selectChip, connect, capture, isCompletedResponse };
+async function residuePoint(page, rendered, occurrence, label = false) {
+  const point = await page.evaluate(({ atoms, label }) => {
+    for (const path of document.querySelectorAll('#render-inner svg path[class]')) {
+      const classes = path.getAttribute('class');
+      const owners = [...classes.matchAll(/atom-(\d+)/g)].map(match => Number(match[1]));
+      if (!owners.length || !owners.every(atom => atoms.includes(atom))) continue;
+      if (classes.includes('bond-') === label) continue;
+      const box = path.getBoundingClientRect();
+      let x = box.x + box.width / 2, y = box.y + box.height / 2;
+      if (!label) {
+        const length = path.getTotalLength(), matrix = path.getScreenCTM();
+        const start = path.getPointAtLength(0).matrixTransform(matrix);
+        const end = path.getPointAtLength(length).matrixTransform(matrix);
+        const mid = path.getPointAtLength(length / 2).matrixTransform(matrix);
+        const span = Math.hypot(end.x - start.x, end.y - start.y);
+        if (span < 20) continue;
+        x = mid.x - (end.y - start.y) / span * 5;
+        y = mid.y + (end.x - start.x) / span * 5;
+      }
+      const hit = document.elementFromPoint(x, y);
+      if (hit?.closest('#render-inner') && !/atom-\d+/.test(hit.getAttribute('class') || '')) return { x, y };
+    }
+    return null;
+  }, { atoms: rendered.residue_map[String(occurrence)], label });
+  expect(point, label ? 'An unpainted atom-label interior' : 'A point 5px beside an owned bond').not.toBeNull();
+  return point;
+}
+
+module.exports = { test, expect, render, tile, site, selectChip, connect, capture, isCompletedResponse, residuePoint };

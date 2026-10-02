@@ -29,6 +29,10 @@ Library journeys check actual matches when the selected site changes, filter
 reset and search, and recovery from missing reaction data. Tutorial journeys
 exercise the full build/preview/Undo route at desktop and mobile widths, failed
 drawings, keyboard dismissal, restart and isolation from saved browser drafts.
+They also cover reopening closed panels, browsing without search, changing the
+chosen amino acid, and invalidating completed steps when selections are cleared.
+Drawing selection checks bond margins and label interiors, zoom, touch, stale
+drawings, and rejection of background clicks and pan gestures.
 
 For comparable browser timings, run the performance file alone against each
 revision with the same Python and browser:

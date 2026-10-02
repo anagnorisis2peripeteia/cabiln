@@ -1,4 +1,4 @@
-const { test, expect, render, tile, site, selectChip, capture } = require('./fixtures');
+const { test, expect, render, tile, site, selectChip, capture, residuePoint } = require('./fixtures');
 
 test('panels return focus on dismissal and Escape closes the active panel independently', async ({ page }) => {
   for (const [button, panel, focused] of [
@@ -73,7 +73,7 @@ test('touch pan and pinch preserve selection and work at a narrow viewport', asy
   page.on('pageerror', error => errors.push(error.message));
   try {
     await page.goto(app.url);
-    await render(page, 'G-A');
+    const data = await render(page, 'G-A');
     const canvas = page.locator('#render-canvas');
     await canvas.scrollIntoViewIfNeeded();
     const box = await canvas.boundingBox();
@@ -94,6 +94,11 @@ test('touch pan and pinch preserve selection and work at a narrow viewport', asy
     await page.locator('[data-viewport="render-canvas"]').getByRole('button', { name: 'Reset view' }).tap();
     await expect(view).toHaveCSS('transform', 'matrix(1, 0, 0, 1, 0, 0)');
     await page.locator('#btn-build').tap();
+    await canvas.scrollIntoViewIfNeeded();
+    const point = await residuePoint(page, data, 0);
+    await page.touchscreen.tap(point.x, point.y);
+    await expect(page.locator('#build-left-abbr')).toHaveText('G');
+    await page.locator('#build-left-change').tap();
     await page.locator('#residue-chips [data-residue="0"]').tap();
     await expect(page.locator('#build-left-abbr')).toHaveText('G');
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);

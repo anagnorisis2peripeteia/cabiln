@@ -34,13 +34,15 @@ See [deployment](docs/deployment.md) for hosting, process limits and recovery.
 
 ## Use the builder
 
-Open **Help → Start guided tutorial** for a hands-on walkthrough of selection,
+Open **Tutorial** in the top toolbar for a walkthrough of selection,
 attachment sites, preview, Connect and Undo. It opens a separate practice tab.
 Practice edits do not read or replace your saved browser draft; use **Save
-project** if you want to keep them. The empty drawing also links to the tutorial.
+project** if you want to keep them. Browse or search for your chosen amino acid;
+the guide follows the resulting product and helps reopen closed panels.
 
 Open **Library** and choose **Use** beside a monomer to start a peptide.
-Select a residue chip or an atom in the drawing, choose another monomer, then
+Open **Build**, select a residue tile or click/tap an atom label or bond in the
+drawing, choose another monomer, then
 select a free attachment site on each side. The selected sites light up in the
 previews. **Preview** shows the proposed structure, reaction and CABILN before
 **Connect** applies the change. You can also select two existing residues to

@@ -96,7 +96,7 @@ function createBuildPanel({ library, residueView, getDocument, commitDocument, i
     buildInsertRow.style.display = 'none';
     buildInsertBtn.textContent = '⊕ Insert Between';
     buildLeftAbbr.textContent = '—';
-    buildLeftSvg.innerHTML = '<div class="box-placeholder">Click a chip above</div>';
+    buildLeftSvg.innerHTML = '<div class="box-placeholder">Select a residue in the drawing or its tile</div>';
     buildLeftRg.innerHTML = '';
     buildLeftSite.hidden = true;
     buildRightAbbr.textContent = '—';
@@ -113,7 +113,7 @@ function createBuildPanel({ library, residueView, getDocument, commitDocument, i
     buildHint.textContent = getDocument().notation !== 'cabiln' ? 'Convert this input to CABILN before building'
       : isSwapMode() ? 'Select the residue to replace; every existing connection will be kept'
       : getDocument().text.trim()
-      ? 'Select a residue, then choose Use beside a library monomer'
+      ? 'Select a residue in the drawing or its tile, then choose Use in the library'
       : 'Choose Use beside a monomer to start a peptide';
     residueView.select();
     const filtered = library.resetFilter();
@@ -277,7 +277,7 @@ function createBuildPanel({ library, residueView, getDocument, commitDocument, i
         return;
       }
       commitDocument(data.result, 'cabiln');
-      buildHint.textContent = `${abbr} inserted — select chips to continue building`;
+      buildHint.textContent = `${abbr} inserted — select a residue to continue building`;
       if (library.loaded) library.render();
     } catch (e) {
       if (!request.current()) return;

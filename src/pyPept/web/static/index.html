@@ -27,6 +27,7 @@
     <div class="toolbar-group" role="group" aria-label="Help and registration">
       <a id="register-link" class="hbtn" href="/register" target="_blank" rel="noopener" title="Register a new monomer in a new tab" hidden><svg class="ui-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M8 3v10M3 8h10"/></svg>Register</a>
       <button type="button" id="btn-help" class="hbtn" aria-controls="help-panel" aria-expanded="false">Help</button>
+      <a id="tutorial-launch" class="hbtn tutorial-start" href="/?tutorial=1" target="_blank" rel="noopener" title="Open guided practice in a separate tab">Tutorial ↗</a>
       <button type="button" id="btn-tutorial" class="hbtn" aria-controls="tutorial-panel" aria-expanded="false" hidden>Tutorial</button>
     </div>
   </div>
@@ -35,7 +36,7 @@
 <section id="help-panel" class="help-panel" aria-labelledby="help-title" hidden>
   <div class="help-heading"><h2 id="help-title">Working with CABILN</h2><button type="button" id="help-close" class="panel-close" aria-label="Close help">✕</button></div>
   <p><a class="hbtn tutorial-start" href="/?tutorial=1" target="_blank" rel="noopener">Start guided tutorial ↗</a> Build a short peptide in a separate practice tab. Your current work stays here.</p>
-  <p>Type a sequence, or choose SMILES, BILN or HELM and convert it. Open Build, select a residue, then choose Use in the library and choose free numbered sites. Preview shows the proposed molecule; Connect applies it. Nested brackets keep their own attachment parent. Undo and Redo restore sequence edits.</p>
+  <p>Type a sequence, or choose SMILES, BILN or HELM and convert it. Open Build, select a residue in the drawing or its tile, then choose Use in the library and choose free numbered sites. Click or tap an atom label or bond to select; drag to pan. Preview shows the proposed molecule; Connect applies it. Nested brackets keep their own attachment parent. Undo and Redo restore sequence edits.</p>
   <p>To replace a residue, choose Swap monomer in Build. The library filters replacements against every existing connection. Review the numbered site mapping and preview the full product, then Apply swap. Site numbers can differ; the preview shows any reformatted notation. Undo restores the original.</p>
   <p>Keep layout preserves your grouping. Canonical exports order the resolved monomer graph under a recorded convention and library binding. Imported structures can include inferred stereochemistry or preserved synthetic regions; open Import quality for details. Valid synthetic sites remain editable.</p>
   <p>Save project downloads your source, notation drafts, original reference and conversion details. Opening checks the definitions and reaction rules before loading. PNG and MOL export the current drawing and molecule.</p>
@@ -107,7 +108,7 @@
         <option value="swap">Swap monomer</option>
       </select>
     </label>
-    <span class="build-hint" id="build-hint" role="status" aria-live="polite">Select a residue, then choose Use beside a library monomer</span>
+    <span class="build-hint" id="build-hint" role="status" aria-live="polite">Select a residue in the drawing or its tile, then choose Use in the library</span>
     <button type="button" id="build-close" class="panel-close" title="Close Build" aria-label="Close Build panel">✕</button>
   </div>
   <div class="build-boxes">
@@ -115,7 +116,7 @@
       <div class="box-label"><span id="build-left-label">Current residue</span><button type="button" class="box-clear-btn" id="build-left-change" title="Clear selection" aria-label="Clear current residue selection">Clear</button></div>
       <div class="box-abbr" id="build-left-abbr">—</div>
       <div class="box-svg" id="build-left-svg">
-        <div class="box-placeholder">Click a chip above</div>
+        <div class="box-placeholder">Select a residue in the drawing or its tile</div>
       </div>
       <div class="rgroup-buttons" id="build-left-rgroups" role="group" aria-labelledby="build-left-label"></div>
       <p class="site-detail" id="build-left-site" hidden></p>
@@ -206,7 +207,7 @@
         <button type="button" class="hbtn" data-zoom="reset" title="Reset zoom and pan (0 or Home when the drawing has focus)">Reset view</button>
       </div>
     </div>
-    <div id="render-canvas" class="canvas-wrap" role="group" aria-label="Peptide structure; drag to pan, pinch or scroll to zoom. Keyboard: arrows to pan, plus or minus to zoom, zero to reset">
+    <div id="render-canvas" class="canvas-wrap" role="group" aria-label="Peptide structure; click or tap a residue to select in Build, drag to pan, pinch or scroll to zoom. Keyboard: arrows to pan, plus or minus to zoom, zero to reset">
       <div class="canvas-inner" id="render-inner">
         <div class="placeholder"><strong>Your peptide appears here</strong>Enter a sequence above, browse Examples, or open Build.<a class="hbtn tutorial-start" href="/?tutorial=1" target="_blank" rel="noopener">Try the guided tutorial ↗</a></div>
       </div>
