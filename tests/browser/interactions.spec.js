@@ -1,6 +1,10 @@
 const { test, expect, render, tile, site, selectChip, capture, residuePoint } = require('./fixtures');
 
 test('panels return focus on dismissal and Escape closes the active panel independently', async ({ page }) => {
+  await page.keyboard.press('Tab');
+  await expect(page.getByRole('link', { name: 'Skip to peptide drawing' })).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#render-canvas')).toBeFocused();
   for (const [button, panel, focused] of [
     ['btn-lib', 'lib-panel', 'lib-search'],
     ['btn-examples', 'examples-panel', 'examples-close'],

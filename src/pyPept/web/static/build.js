@@ -347,7 +347,7 @@ function createBuildPanel({ library, residueView, getDocument, commitDocument, i
       buildLeftSvg.innerHTML = data.svg || '';
       buildLeft = { abbr, rgroups: data.rgroups || [], selectedSlot: null };
       renderRgroupButtons(buildLeftRg, buildLeft, 'left');
-      buildHint.textContent = buildRight ? 'Choose an attachment site on each side' : 'Choose Use beside a library monomer';
+      buildHint.textContent = buildRight ? 'Choose a free numbered site on each block' : 'Choose Use beside a library monomer';
       library.updateFilterStatus();
       if (library.filterActive && library.loaded) library.render();
       updateInsertBetweenUI();
@@ -410,7 +410,7 @@ function createBuildPanel({ library, residueView, getDocument, commitDocument, i
       buildRight = { abbr, rgroups: data.rgroups || [], selectedSlot: null };
       renderRgroupButtons(buildRightRg, buildRight, 'right');
       buildHint.textContent = isSwapMode() ? 'Review each site mapping, then preview the replacement'
-        : buildLeft ? 'Choose an attachment site on each side' : 'Select a residue in the sequence';
+        : buildLeft ? 'Choose a free numbered site on each block' : 'Select a residue in the sequence';
       updateInsertBetweenUI();
       checkBuildValidity();
     } catch (e) {
@@ -526,7 +526,7 @@ function createBuildPanel({ library, residueView, getDocument, commitDocument, i
 
     const request = requests.start('bond-check', updateControls);
 
-    buildStatus.textContent = 'Checking bond...';
+    buildStatus.textContent = 'Checking connection…';
     buildStatus.className = 'build-status';
 
     try {
@@ -543,7 +543,7 @@ function createBuildPanel({ library, residueView, getDocument, commitDocument, i
       if (!res.ok) throw new Error(data.error || 'Connection check unavailable');
       if (data.valid) {
         buildReaction = data.reaction ? `Reaction: ${data.reaction.replaceAll('_', ' ')}` : 'Bond formation';
-        buildStatus.textContent = `Valid: ${data.reaction || 'bond'} (R${buildLeft.selectedSlot}↔R${buildRight.selectedSlot})`;
+        buildStatus.textContent = `Ready to connect ${buildLeft.abbr} R${buildLeft.selectedSlot} → ${buildRight.abbr} R${buildRight.selectedSlot}`;
         buildStatus.className = 'build-status valid';
         connectionValid = true;
       } else {

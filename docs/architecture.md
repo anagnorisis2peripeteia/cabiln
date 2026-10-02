@@ -179,6 +179,8 @@ accepting a changed library.
 Builder and registration share theme tokens. Panels open independently and
 share Escape/focus behaviour. Drawing canvases use the same mouse, touch and
 keyboard controls. Molecular atom colours are separate from interface colours.
+Build places both selections before their actions in reading and keyboard order.
+Technical Library metadata and preview details have explicit disclosures.
 [Drawing performance](drawing-performance.md) describes layout and notation reuse.
 
 The optional tutorial runs in a separate `?tutorial=1` or `?tutorial=swap` tab.
@@ -189,6 +191,8 @@ the completed edit. Unfinished steps require valid selections and use
 Build's pending-request state for loading instructions. Undo restores the source
 through normal editor history. Retatrutide comes from the same cached catalog as
 Examples; the guide has no chemistry code.
+The desktop guide reserves its own column. On smaller screens, a resize observer
+reserves space matching the guide's height so it can accommodate changing text.
 Residue selection steps mark the target tile and its owned atoms independently
 of hover highlighting. The cue clears on dismissal, step completion or source
 changes; it never changes Build selection or the Highlight preference.

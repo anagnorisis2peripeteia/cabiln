@@ -118,6 +118,11 @@ test('visible Use action and keyboard sites build a peptide with undo and redo',
   await site(page, 'right', 1);
   await expect(page.locator('#build-left-svg .site-selected').first()).toBeVisible();
   await expect(page.locator('#build-right-svg .site-selected').first()).toBeVisible();
+  await page.locator('#build-right-rgroups button:enabled').last().focus();
+  await page.keyboard.press('Tab');
+  await expect(page.locator('#build-preview-button')).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(page.locator('#build-connect')).toBeFocused();
   await capture(page, testInfo, 'keyboard-connection-ready');
   await connect(page);
   await expect(page.locator('#cabiln-input')).toHaveValue('A-G-A');

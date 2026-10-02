@@ -50,6 +50,7 @@ class MonomerLibrary {
     });
 
     this.search.addEventListener('input', () => this.render());
+    document.getElementById('lib-details').addEventListener('change', () => this.hidePreview());
     for (const control of [this.category, this.collection]) control.addEventListener('change', () => this.render());
     this.resetButton.addEventListener('click', () => {
       this.search.value = this.category.value = this.collection.value = '';

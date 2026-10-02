@@ -4,6 +4,12 @@ test('library favourites and recent choices persist without editing the peptide'
   await render(page, 'G');
   await page.locator('#btn-lib').click();
   const alanine = page.locator('.lib-row[data-abbr="A"]');
+  await expect(alanine.locator('.lib-meta')).toBeHidden();
+  await page.getByLabel('Site details', { exact: true }).check();
+  await expect(alanine.locator('.lib-meta')).toBeVisible();
+  await expect(alanine.locator('.lib-meta')).toContainText('backbone_n');
+  await page.getByLabel('Site details', { exact: true }).uncheck();
+  await expect(alanine.locator('.lib-meta')).toBeHidden();
   await alanine.getByRole('button', { name: 'Favourite A', exact: true }).click();
   await expect(page.locator('#cabiln-input')).toHaveValue('G');
   await page.getByLabel('Library collection', { exact: true }).selectOption('favourites');

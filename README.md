@@ -44,6 +44,9 @@ the guide follows the resulting product. **Show control** locates the next contr
 or offers to reopen a closed panel. **Back** reviews instructions without changing
 the molecule; **Undo** reverses an edit, and **Restart** reloads the starting
 peptide. Closing the guide keeps the tab in practice mode.
+On desktop, the guide sits beside the workspace. On smaller screens, **Show
+control** brings the target into the space above the guide. After a preview is
+ready, **Show preview** brings that drawing into view.
 
 Open **Library** and choose **Use** beside a monomer to start a peptide.
 Open **Build**, select a residue tile or click/tap an atom label or bond in the
@@ -53,7 +56,8 @@ structure, reaction and CABILN before **Connect** applies the change. You can al
 select two existing residues to
 connect them, or insert a monomer between neighbouring backbone residues.
 The product preview marks the changed block in blue and the new connections in
-orange. When only one compatible site pair remains, **Use … R… → … R…** offers
+orange. Open **Reaction and notation** for the reaction details and proposed
+source. When only one compatible site pair remains, **Use … R… → … R…** offers
 to select it; you still review and apply the connection yourself.
 
 **Filter** in Library opens Build when needed. Select a residue in the drawing or
@@ -64,6 +68,7 @@ Category and collection menus narrow the list further. Star a monomer to keep
 it in **Favourites**, or choose **Recently used** for your last twelve choices.
 These preferences stay in this browser; practice tabs keep separate, temporary
 choices. **Reset** clears search and filters without changing the peptide.
+**Site details** shows each monomer's attachment codes and leaving groups.
 
 Choose **Swap monomer** in Build to replace a selected residue. The library
 shows candidates with compatible sites for its existing connections; choose

@@ -99,6 +99,11 @@ for (const example of [
     const proposed = await page.locator('#build-preview-source').textContent();
     expect(product.cabiln_echo).toBe(proposed);
     if (example.name === 'backbone addition') {
+      await expect(page.locator('#build-preview-source')).toBeHidden();
+      await page.getByText('Reaction and notation', { exact: true }).click();
+      await expect(page.locator('#build-preview-source')).toBeVisible();
+      await expect(page.locator('#build-preview-reaction')).toBeVisible();
+      await page.getByText('Reaction and notation', { exact: true }).click();
       const palette = page.waitForResponse(response => isCompletedResponse(response) && new URL(response.url()).pathname === '/monomers');
       await page.evaluate(() => window.dispatchEvent(new Event('focus')));
       await palette;
@@ -108,7 +113,7 @@ for (const example of [
         for (const id of ['build-left', 'build-right', 'build-preview-button', 'build-connect', 'build-preview-canvas']) {
           await expect(page.locator(`#${id}`)).toBeInViewport({ ratio: 1 });
         }
-        expect((await page.locator('#render-pane').boundingBox()).height).toBeGreaterThan(0);
+        expect((await page.locator('#render-canvas').boundingBox()).height).toBeGreaterThan(viewport.height * .3);
       }
       await capture(page, testInfo, 'connection-preview');
       await page.setViewportSize({ width: 390, height: 844 });

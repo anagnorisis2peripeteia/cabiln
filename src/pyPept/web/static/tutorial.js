@@ -13,7 +13,7 @@ function startTutorial({ lesson = 'connect', loadPractice, getExample, getBuildS
       { id: 'sites', title: 'Choose the connection', target: '#build-left-rgroups',
         body: 'R1, R2 and R3 label connection points on a block. Under Current residue, click R2. Under New monomer, click R1, or use the suggested pair if offered. This joins the end of G to the start of your new block. Crossed-out points are already in use.' },
       { id: 'preview', title: 'Check the chain before adding', target: '#build-preview-button',
-        body: 'Click Preview. Blue glow marks {replacement}, the new block after G. Orange glow marks its new link. Under Proposed CABILN, check for A-G-{replacement}: CABILN is the text form of the drawing. Your working chain stays A-G until you click Connect.' },
+        body: 'Click Preview below the two blocks. Blue glow marks {replacement}, your new block; orange marks its link to G. Open Reaction and notation to see A-G-{replacement}, the text form of the drawing. Your chain stays A-G until you click Connect.' },
       { id: 'apply', title: 'Add the new block', target: '#build-connect',
         body: 'Click Connect. The tiles above the main drawing should now read A, G, {replacement}. The new block is part of your chain.' },
       { id: 'undo', title: 'Undo the edit', target: '#btn-undo',
@@ -50,6 +50,9 @@ function startTutorial({ lesson = 'connect', loadPractice, getExample, getBuildS
   const observer = new MutationObserver(() => {
     if (frame === null) frame = requestAnimationFrame(() => { frame = null; check(); });
   });
+  const sizeObserver = new ResizeObserver(() => {
+    document.documentElement.style.setProperty('--tutorial-clearance', `${Math.ceil(panel.getBoundingClientRect().height) + 24}px`);
+  });
   const disclosure = createPanel({ panel, button, closeButton: find('#tutorial-close'),
     focus: find('#tutorial-title'),
     onChange(open) {
@@ -59,8 +62,11 @@ function startTutorial({ lesson = 'connect', loadPractice, getExample, getBuildS
           observer.observe(find(selector), { subtree: true, childList: true, attributes: true, characterData: true });
         }
         showStep();
+        sizeObserver.observe(panel);
       } else {
         observer.disconnect();
+        sizeObserver.disconnect();
+        document.documentElement.style.removeProperty('--tutorial-clearance');
         cancelAnimationFrame(frame);
         frame = null;
         target?.classList.remove('tutorial-target');
@@ -85,7 +91,12 @@ function startTutorial({ lesson = 'connect', loadPractice, getExample, getBuildS
 
   function recovery(state, id) {
     if (id === 'load' || id === 'finish' || state.review) return null;
-    if (!state.base) return { target: '#tutorial-restart', message: `Wait for the drawing, or use Restart to load ${current().name} again.` };
+    if (!state.base) {
+      if (find('#render-pane').getAttribute('aria-busy') === 'true') {
+        return { target: '#render-progress', message: 'Updating the drawing. You can continue when it is ready.' };
+      }
+      return { target: '#tutorial-restart', message: `Use Restart to load ${current().name} again.` };
+    }
     if (id === 'explore') {
       if (!explored && find('#btn-hl').getAttribute('aria-pressed') === 'false') {
         return { target: '#btn-hl', message: 'Enable Highlight to explore the atoms.', label: 'Enable Highlight', action: () => find('#btn-hl').click() };
@@ -138,12 +149,13 @@ function startTutorial({ lesson = 'connect', loadPractice, getExample, getBuildS
     status.textContent = loading ? `Loading ${current().name}…` : loadError || help?.message ||
       (reviewing ? `Edit completed${state.base ? ' and undone' : ''}. Back and Next review the instructions; Restart begins again.`
         : next.disabled ? 'Complete this step to continue.' : confirmation[step.id] || 'Ready to finish.');
-    show.textContent = reviewing ? 'Show drawing' : help?.label || 'Show control';
+    const previewReady = step.id === 'preview' && state.preview;
+    show.textContent = reviewing ? 'Show drawing' : previewReady ? 'Show preview' : help?.label || 'Show control';
     reveal = reviewing ? null : help?.action;
     const body = step.body.replaceAll('{replacement}', replacement);
     find('#tutorial-body').textContent = reviewing && step.id !== 'load'
       ? `${body} You already completed this edit with ${applied.request.new_abbr}; continue to review the next step.` : body;
-    const element = find(reviewing ? '#render-canvas' : help?.target || step.target || hostTile());
+    const element = find(reviewing ? '#render-canvas' : help?.target || (previewReady ? '#build-preview-canvas' : step.target) || hostTile());
     if (target !== element) {
       target?.classList.remove('tutorial-target');
       target = element;

@@ -3,11 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#18191c">
 <title>CABILN Live Renderer</title>
 <link rel="stylesheet" href="/static/theme.css">
 <link rel="stylesheet" href="/static/builder.css">
 </head>
 <body>
+<a class="skip-link" href="#render-canvas">Skip to peptide drawing</a>
 
 <header>
   <h1 class="title">CABILN <span>Peptide builder · pyPept</span></h1>
@@ -57,7 +59,7 @@
         <option value="helm">HELM</option>
       </select>
     </div>
-    <textarea id="cabiln-input"
+    <textarea id="cabiln-input" name="sequence" translate="no"
               placeholder="Enter a sequence, e.g. fmoc-A-G-L-am"
               spellcheck="false" autocomplete="off" aria-describedby="cabiln-status conversion-status quality-summary"></textarea>
     <div id="notation-actions" class="notation-actions" role="group" aria-label="Notation">
@@ -79,7 +81,7 @@
     </div>
   </div>
   <div class="sequence-summary">
-    <div id="residue-chips" role="group" aria-label="Residues and connections"></div>
+    <div id="residue-chips" role="group" aria-label="Residues and connections" translate="no"></div>
     <div class="sequence-feedback">
       <div id="cabiln-status" class="statusbar" role="status" aria-live="polite" aria-atomic="true"></div>
       <div id="draft-notice" class="draft-notice" hidden>
@@ -114,29 +116,26 @@
   </div>
   <div class="build-boxes">
     <div class="build-box" id="build-left">
-      <div class="box-label"><span id="build-left-label">Current residue</span><button type="button" class="box-clear-btn" id="build-left-change" title="Clear selection" aria-label="Clear current residue selection">Clear</button></div>
-      <div class="box-abbr" id="build-left-abbr">—</div>
+      <div class="box-label"><span id="build-left-label">Current residue</span><strong class="box-abbr" id="build-left-abbr" translate="no">—</strong><button type="button" class="box-clear-btn" id="build-left-change" title="Clear selection" aria-label="Clear current residue selection">Clear</button></div>
       <div class="box-svg" id="build-left-svg">
         <div class="box-placeholder">Select a residue in the drawing or its tile</div>
       </div>
       <div class="rgroup-buttons" id="build-left-rgroups" role="group" aria-labelledby="build-left-label"></div>
       <p class="site-detail" id="build-left-site" hidden></p>
     </div>
-    <div class="build-arrow">
-      <div class="arrow-icon" aria-hidden="true">⟷</div>
-      <button type="button" class="hbtn" id="build-suggestion" hidden></button>
-      <button type="button" class="hbtn" id="build-preview-button" aria-controls="build-preview" aria-expanded="false" disabled>Preview</button>
-      <button type="button" class="build-connect-btn" id="build-connect" disabled>Connect</button>
-      <div class="build-status" id="build-status" role="status" aria-live="polite" aria-atomic="true"></div>
-    </div>
     <div class="build-box" id="build-right">
-      <div class="box-label"><span id="build-right-label">New monomer</span><button type="button" class="box-clear-btn" id="build-right-change" title="Clear selection" aria-label="Clear new monomer selection">Clear</button></div>
-      <div class="box-abbr" id="build-right-abbr">—</div>
+      <div class="box-label"><span id="build-right-label">New monomer</span><strong class="box-abbr" id="build-right-abbr" translate="no">—</strong><button type="button" class="box-clear-btn" id="build-right-change" title="Clear selection" aria-label="Clear new monomer selection">Clear</button></div>
       <div class="box-svg" id="build-right-svg">
         <div class="box-placeholder">Choose Use in the library</div>
       </div>
       <div class="rgroup-buttons" id="build-right-rgroups" role="group" aria-labelledby="build-right-label"></div>
       <p class="site-detail" id="build-right-site" hidden></p>
+    </div>
+    <div class="build-actions">
+      <div class="build-status" id="build-status" role="status" aria-live="polite" aria-atomic="true"></div>
+      <button type="button" class="hbtn" id="build-suggestion" hidden></button>
+      <button type="button" class="hbtn" id="build-preview-button" aria-controls="build-preview" aria-expanded="false" disabled>Preview</button>
+      <button type="button" class="build-connect-btn" id="build-connect" disabled>Connect</button>
     </div>
   </div>
   <section id="build-swap-mapping" hidden aria-labelledby="build-swap-title" tabindex="-1">
@@ -147,13 +146,11 @@
   <section id="build-preview" aria-label="Connection preview" aria-busy="false" hidden>
     <div class="build-header">
       <h3 class="panel-title">Product preview</h3>
-      <span class="build-hint">Not applied · Your sequence is unchanged</span>
+      <span class="build-hint">Not applied yet</span>
       <button type="button" class="box-clear-btn" id="build-preview-close">Hide preview</button>
     </div>
     <div id="build-preview-status" role="status" aria-live="polite" aria-atomic="true"></div>
-    <p id="build-preview-reaction"></p>
     <p id="build-preview-changes" hidden></p>
-    <p class="site-explanation">Free-site groups describe the unconnected sites; the reaction can replace or rearrange them.</p>
     <div class="viewport-controls" data-viewport="build-preview-canvas" role="group" aria-label="Drawing zoom">
       <button type="button" class="hbtn" id="build-preview-focus" aria-controls="build-preview-canvas" disabled>Focus change</button>
       <button type="button" class="hbtn" data-zoom="out" aria-label="Zoom out">−</button>
@@ -163,9 +160,14 @@
     <div id="build-preview-canvas" class="canvas-wrap" title="Drag to pan; pinch or scroll to zoom; double-click to reset. Keyboard: arrows, plus, minus and zero">
       <div id="build-preview-inner" class="canvas-inner"></div>
     </div>
-    <details id="build-preview-notation" hidden>
-      <summary>Proposed CABILN</summary>
-      <code id="build-preview-source"></code>
+    <details class="preview-details">
+      <summary>Reaction and notation</summary>
+      <p id="build-preview-reaction" translate="no"></p>
+      <p class="site-explanation">Free-site groups describe the unconnected sites; the reaction can replace or rearrange them.</p>
+      <div id="build-preview-notation" hidden>
+        <p>Proposed CABILN</p>
+        <code id="build-preview-source" translate="no"></code>
+      </div>
     </details>
   </section>
   <div id="build-insert-row" style="display:none;">
@@ -195,7 +197,10 @@
       <button type="button" id="lib-reset" class="hbtn" aria-label="Reset library filters" hidden>Reset</button>
     </div>
     <div id="lib-preferences-note" class="lib-note" role="status" hidden></div>
-    <div id="lib-count" role="status" aria-live="polite"></div>
+    <div class="lib-summary">
+      <div id="lib-count" role="status" aria-live="polite"></div>
+      <label class="lib-details-toggle"><input type="checkbox" id="lib-details"> Site details</label>
+    </div>
     <div id="lib-filter-status" role="status" aria-live="polite">Filter finds monomers that can connect to a residue in Build.</div>
     <div id="lib-status" class="statusbar warn" role="status" aria-live="polite" hidden></div>
     <div id="lib-list" tabindex="-1" role="group" aria-label="Monomer choices"><div class="placeholder">Loading…</div></div>

@@ -272,6 +272,19 @@ for (const width of [1440, 390]) {
     await practice.setViewportSize({ width, height: 900 });
     const next = practice.locator('#tutorial-next');
     await expect(next).toBeDisabled();
+    if (width === 1440) {
+      const workspace = await practice.locator('#main').boundingBox();
+      const guide = await practice.locator('#tutorial-panel').boundingBox();
+      expect(workspace.x + workspace.width).toBeLessThanOrEqual(guide.x);
+    } else {
+      for (const height of [600, 900]) {
+        await practice.setViewportSize({ width, height });
+        await expect.poll(() => practice.evaluate(() => {
+          const guide = document.querySelector('#tutorial-panel').getBoundingClientRect();
+          return parseFloat(getComputedStyle(document.body).paddingBottom) >= guide.height + 12;
+        })).toBe(true);
+      }
+    }
     await expect(practice.locator('#btn-restore-draft')).toBeHidden();
     await expect(practice.locator('#draft-status')).toContainText('Practice tab');
     await practice.locator('#tutorial-load').click();
@@ -293,6 +306,13 @@ for (const width of [1440, 390]) {
     await next.click();
     await practice.locator('#build-preview-button').click();
     await expect(practice.locator('#build-preview-source')).toHaveText('A-G-A');
+    await practice.getByRole('button', { name: 'Show preview', exact: true }).click();
+    await expect(practice.locator('#build-preview-canvas')).toBeInViewport({ ratio: 1 });
+    if (width === 390) {
+      const preview = await practice.locator('#build-preview-canvas').boundingBox();
+      const guide = await practice.locator('#tutorial-panel').boundingBox();
+      expect(preview.y + preview.height).toBeLessThanOrEqual(guide.y);
+    }
     await capture(practice, testInfo, 'tutorial-preview');
     await next.click();
     await practice.locator('#build-connect').click();

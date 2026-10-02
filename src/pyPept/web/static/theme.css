@@ -27,10 +27,15 @@
   --font-code: "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
   --radius-control: 6px;
   --radius-panel: 8px;
+  --control-height: 32px;
+  --control-height-small: 28px;
 }
 
 [hidden] { display: none !important; }
 button, input, select { font-family: inherit; }
+button, a, select, summary, label { touch-action: manipulation; }
+input, textarea { accent-color: var(--action); caret-color: var(--focus); }
+::selection { background: var(--selection); color: var(--text); }
 button:focus-visible, a:focus-visible, input:focus-visible,
 textarea:focus-visible, select:focus-visible, summary:focus-visible, [tabindex]:focus-visible {
   outline: 2px solid var(--focus);
