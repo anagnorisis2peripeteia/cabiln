@@ -34,12 +34,22 @@ See [deployment](docs/deployment.md) for hosting, process limits and recovery.
 
 ## Use the builder
 
+Open **Help → Start guided tutorial** for a hands-on walkthrough of selection,
+attachment sites, preview, Connect and Undo. It opens a separate practice tab.
+Practice edits do not read or replace your saved browser draft; use **Save
+project** if you want to keep them. The empty drawing also links to the tutorial.
+
 Open **Library** and choose **Use** beside a monomer to start a peptide.
 Select a residue chip or an atom in the drawing, choose another monomer, then
 select a free attachment site on each side. The selected sites light up in the
 previews. **Preview** shows the proposed structure, reaction and CABILN before
 **Connect** applies the change. You can also select two existing residues to
 connect them, or insert a monomer between neighbouring backbone residues.
+
+**Filter** in Library opens Build when needed. Select a residue tile to match
+its free attachment sites, then choose a numbered site to narrow the results.
+The library states which residue and site it is matching. Turn Filter off to
+show all monomers again. Search works within the filtered list.
 
 Choose **Swap monomer** in Build to replace a selected residue. The library
 shows candidates with compatible sites for its existing connections. Review the

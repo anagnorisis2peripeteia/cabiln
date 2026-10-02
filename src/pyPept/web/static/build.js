@@ -110,7 +110,8 @@ function createBuildPanel({ library, residueView, getDocument, commitDocument, i
     updateControls();
     buildStatus.textContent = isSwapMode() ? 'Select the residue to replace' : 'Choose a residue and a monomer to connect';
     buildStatus.className = 'build-status';
-    buildHint.textContent = isSwapMode() ? 'Select the residue to replace; every existing connection will be kept'
+    buildHint.textContent = getDocument().notation !== 'cabiln' ? 'Convert this input to CABILN before building'
+      : isSwapMode() ? 'Select the residue to replace; every existing connection will be kept'
       : getDocument().text.trim()
       ? 'Select a residue, then choose Use beside a library monomer'
       : 'Choose Use beside a monomer to start a peptide';
@@ -313,6 +314,7 @@ function createBuildPanel({ library, residueView, getDocument, commitDocument, i
     buildLeft = null;
     connectionValid = false;
     updateControls();
+    if (library.filterActive && library.loaded) library.render();
     buildStatus.textContent = '';
 
     try {
@@ -327,7 +329,7 @@ function createBuildPanel({ library, residueView, getDocument, commitDocument, i
       buildLeft = { abbr, rgroups: data.rgroups || [], selectedSlot: null };
       renderRgroupButtons(buildLeftRg, buildLeft, 'left');
       buildHint.textContent = buildRight ? 'Choose an attachment site on each side' : 'Choose Use beside a library monomer';
-      library.setFilterEnabled(!isSwapMode());
+      library.updateFilterStatus();
       if (library.filterActive && library.loaded) library.render();
       updateInsertBetweenUI();
       if (isSwapMode()) loadSwapOptions();
@@ -667,12 +669,13 @@ function createBuildPanel({ library, residueView, getDocument, commitDocument, i
   });
 
   return {
+    open: () => panel.open(),
     selectResidue: selectBuildResidue,
     useMonomer: useLibraryMonomer,
     clear: clearBuild,
     get selection() { return [buildLeftRIdx, buildRightRIdx]; },
     get filters() {
-      return { building: panel.isOpen, left: buildLeft, insertBetween: insertBetweenActive,
+      return { building: panel.isOpen, notation: getDocument().notation, left: buildLeft, insertBetween: insertBetweenActive,
         replacements: panel.isOpen && isSwapMode() ? (swapState?.candidates || []) : null,
         awaitingSelection: !swapState };
     },

@@ -1,15 +1,17 @@
 // Monomer discovery, library revisions, filtering and hover previews.
 class MonomerLibrary {
-  constructor({ getFilters, onUse, onChanged }) {
+  constructor({ getFilters, onUse, onChanged, onFilter }) {
     this.getFilters = getFilters;
     this.onUse = onUse;
     this.onChanged = onChanged;
+    this.onFilter = onFilter;
     this.loaded = false;
     this.version = null;
     this.monomers = [];
     this.previewCache = {};
     this.previewTimer = null;
     this.reactionPairs = null;
+    this.reactionError = '';
     this.filterActive = false;
     this.panel = document.getElementById('lib-panel');
     this.search = document.getElementById('lib-search');
@@ -20,6 +22,7 @@ class MonomerLibrary {
     this.preview = document.getElementById('lib-preview');
     this.button = document.getElementById('btn-lib');
     this.filterButton = document.getElementById('btn-rxn-filter');
+    this.filterStatus = document.getElementById('lib-filter-status');
     this.disclosure = createPanel({ panel: this.panel, button: this.button,
       closeButton: this.closeButton, focus: this.search,
       onChange: open => {
@@ -30,15 +33,12 @@ class MonomerLibrary {
 
     this.search.addEventListener('input', () => this.render());
 
-    this.filterButton.addEventListener('click', async () => {
-      if (!Array.isArray(this.reactionPairs)) {
-        await this.loadReactions();
-        if (!Array.isArray(this.reactionPairs) || !this.getFilters().left) return;
-      }
-      this.filterActive = !this.filterActive;
-      this.filterButton.classList.toggle('active', this.filterActive);
-      this.filterButton.setAttribute('aria-pressed', String(this.filterActive));
+    this.filterButton.addEventListener('click', () => {
+      const active = !this.filterActive;
+      if (active) this.onFilter();
+      this.filterActive = active;
       this.render();
+      if (active && !this.reactionError) this.loadReactions();
     });
 
     window.addEventListener('focus', () => {
@@ -113,9 +113,11 @@ class MonomerLibrary {
   }
 
   async loadReactions() {
-    if (this.reactionPairs !== null) return;
+    if (this.reactionPairs !== null || requests.has('reactions')) return;
     const request = requests.start('reactions');
-    this.status.hidden = true;
+    this.reactionError = '';
+    this.updateFilterStatus();
+    if (this.filterActive && this.loaded) this.render();
     try {
       // Both endpoints share one calculation worker. Let the palette finish so
       // a quick reaction-list request cannot force it into a one-second retry.
@@ -125,13 +127,15 @@ class MonomerLibrary {
       if (!request.current()) return;
       if (!Array.isArray(data)) throw new Error(data.error || 'Reaction data is unavailable');
       this.reactionPairs = data;
-      if (this.filterActive && this.loaded) this.render();
     } catch (error) {
       if (!request.current()) return;
       this.reactionPairs = null;
-      showRetry(this.status, 'Reaction filter unavailable. ' + error.message, () => this.loadReactions());
-      this.status.hidden = false;
-    } finally { request.finish(); }
+      this.reactionError = 'Reaction filter unavailable. ' + error.message;
+    } finally {
+      request.finish();
+      this.updateFilterStatus();
+      if (this.filterActive && this.loaded) this.render();
+    }
   }
 
   attachmentTypes(cts) {
@@ -140,8 +144,16 @@ class MonomerLibrary {
   }
 
   render(q = this.search.value.trim().toLowerCase()) {
-    const { left: buildLeft, insertBetween: insertBetweenActive, replacements, awaitingSelection } = this.getFilters();
+    const filters = this.getFilters();
+    const { left: buildLeft, insertBetween: insertBetweenActive, replacements, awaitingSelection } = filters;
+    this.updateFilterStatus(filters);
+    if (!this.loaded) return;
     const swapping = replacements !== null;
+    if (this.filterActive && buildLeft && this.reactionPairs === null) {
+      this.count.textContent = this.reactionError ? 'Matches unavailable' : 'Loading matches…';
+      this.list.innerHTML = '';
+      return;
+    }
     const catalog = swapping ? replacements : this.monomers;
     let filtered = q
       ? catalog.filter(m => m.searchText.includes(q))
@@ -303,14 +315,35 @@ class MonomerLibrary {
 
   setDark(dark) { this.preview.classList.toggle('dark', dark); }
 
-  setFilterEnabled(enabled) { this.filterButton.disabled = !enabled; }
+  updateFilterStatus({ left, replacements, notation } = this.getFilters()) {
+    this.filterButton.hidden = replacements !== null;
+    this.filterButton.classList.toggle('active', this.filterActive);
+    this.filterButton.setAttribute('aria-pressed', String(this.filterActive));
+    this.filterStatus.title = '';
+    if (replacements !== null) {
+      this.filterStatus.textContent = 'Swap matches every connected site automatically.';
+    } else if (this.reactionError) {
+      showRetry(this.filterStatus, this.reactionError, () => this.loadReactions());
+    } else if (!this.filterActive) {
+      this.filterStatus.textContent = 'Filter finds monomers that can connect to a residue in Build.';
+    } else if (notation !== 'cabiln') {
+      this.filterStatus.textContent = 'Convert this input to CABILN before filtering attachment sites.';
+    } else if (!left) {
+      this.filterStatus.textContent = 'Select a residue tile above to filter. For a new peptide, choose Use first.';
+    } else if (this.reactionPairs === null) {
+      this.filterStatus.textContent = 'Loading reaction rules…';
+    } else {
+      const site = left.rgroups.find(group => group.slot === left.selectedSlot);
+      this.filterStatus.textContent = site
+        ? `Compatible with ${left.abbr} · R${site.slot} (${site.chem_type.replaceAll('_', ' ')}).`
+        : `Compatible with ${left.abbr} · any free site. Choose a site in Build to narrow the list.`;
+    }
+  }
 
   resetFilter() {
     const active = this.filterActive;
     this.filterActive = false;
-    this.setFilterEnabled(false);
-    this.filterButton.classList.remove('active');
-    this.filterButton.setAttribute('aria-pressed', 'false');
+    this.updateFilterStatus();
     return active;
   }
 }

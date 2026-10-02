@@ -1,5 +1,6 @@
 // Page preferences and reference lifetime.
 const drawing = new DrawingState();
+const practiceMode = new URLSearchParams(window.location.search).get('tutorial') === '1';
 let darkMode   = true;
 let hlEnabled  = true;
 let cabilnTimer = null;
@@ -82,6 +83,7 @@ const library = new MonomerLibrary({
   getFilters: () => build.filters,
   onUse: (abbr, explicit) => { if (!build.useMonomer(abbr, explicit)) insertAbbr(abbr); },
   onChanged: () => { if (build.filters.building) build.clear(); },
+  onFilter: () => build.open(),
 });
 
 // Document data belongs to the editor; these timers belong to browser storage.
@@ -119,6 +121,7 @@ function updateHistoryControls() {
 
 function saveDraft() {
   clearTimeout(saveDraftTimer);
+  if (practiceMode) return;
   if (savedDraft || draftCleared) return; // Recovery and explicit clearing stay intact.
   try {
     window.localStorage.setItem(DRAFT_KEY, JSON.stringify({ version: 1,
@@ -223,6 +226,11 @@ btnDismissDraft.addEventListener('click', () => {
 
 function offerSavedDraft() {
   btnRestoreDraft.hidden = btnDismissDraft.hidden = true;
+  if (practiceMode) {
+    draftStatus.textContent = 'Practice tab · edits are not saved automatically';
+    draftNotice.hidden = false;
+    return;
+  }
   try {
     const saved = JSON.parse(window.localStorage.getItem(DRAFT_KEY));
     if (!saved || saved.version !== 1 || !saved.document ||
@@ -460,6 +468,7 @@ createPanel({ panel: helpPanel, button: btnHelp,
   closeButton: document.getElementById('help-close'),
 });
 document.getElementById('btn-clear-draft').addEventListener('click', () => {
+  if (practiceMode) return;
   requests.cancel('project-open');
   clearTimeout(saveDraftTimer);
   finishDraftRecovery();
@@ -972,7 +981,7 @@ function resetCabiln() {
   renderCanvas.classList.remove('stale');
   residueView.setStale(false);
   mainViewport.reset();
-  setInner(renderInner, '<div class="placeholder"><strong>Your peptide appears here</strong>Enter a sequence above, browse Examples, or open Build.</div>');
+  setInner(renderInner, '<div class="placeholder"><strong>Your peptide appears here</strong>Enter a sequence above, browse Examples, or open Build.<a class="hbtn tutorial-start" href="/?tutorial=1" target="_blank" rel="noopener">Try the guided tutorial ↗</a></div>');
   residueView.clear();
   setMainProgress(false);
 }
@@ -1196,3 +1205,9 @@ async function triggerVerify() {
 
 offerSavedDraft();
 updateHistoryControls();
+if (practiceMode) {
+  document.getElementById('btn-clear-draft').hidden = true;
+  startTutorial({ loadPractice: () => commitDocument('A-G', 'cabiln'),
+    isReady: source => !drawing.stale && !!drawing.cabiln && editor.present.text === source && editor.present.notation === 'cabiln',
+  });
+}

@@ -75,13 +75,14 @@ function page(script, { registration = false, storedDraft = null, now = Date.now
   const downloads = [];
   const storage = new Map(storedDraft ? [['cabiln.draft.v1', JSON.stringify(storedDraft)]] : []);
   const window = new Element();
+  window.location = { search: '' };
   window.localStorage = {
     getItem: key => storage.get(key) || null,
     setItem: (key, value) => storage.set(key, value),
     removeItem: key => storage.delete(key),
   };
   const context = vm.createContext({
-    console, AbortController, Blob,
+    console, AbortController, Blob, URLSearchParams,
     Date: class extends Date { static now() { return now(); } },
     URL: { createObjectURL(blob) { downloads.push(blob); return 'blob:project'; }, revokeObjectURL() {} },
     Event: class { constructor(type) { this.type = type; } },

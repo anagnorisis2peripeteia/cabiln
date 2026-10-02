@@ -1776,13 +1776,12 @@ test('reaction loading failure stays visible and does not poison the retry cache
   latestRequest(ui, '/reactions').resolve({ error: 'Server remains busy' }, false, 503);
   await pending;
   assert.equal(ui.run('library.reactionPairs'), null);
-  assert.equal(ui.element('lib-status').hidden, false);
-  assert.match(ui.element('lib-status').textContent, /Server remains busy/);
+  assert.match(ui.element('lib-filter-status').textContent, /Server remains busy/);
   pending = ui.run('library.loadReactions()');
   latestRequest(ui, '/reactions').resolve([['backbone_n', 'backbone_c']]);
   await pending;
   assert.equal(ui.run('library.reactionPairs.length'), 1);
-  assert.equal(ui.element('lib-status').hidden, true);
+  assert.doesNotMatch(ui.element('lib-filter-status').textContent, /unavailable|Server remains busy/);
 });
 
 test('ordinary browser drafts are prepared against their saved binding before recovery', async () => {

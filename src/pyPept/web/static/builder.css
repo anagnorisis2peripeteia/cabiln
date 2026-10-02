@@ -87,6 +87,34 @@
   .help-heading, .help-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   .help-heading h2 { flex: 1; font-size: 14px; }
   .help-panel p { max-width: 1050px; line-height: 1.5; margin: 8px 0; color: var(--muted); }
+  .placeholder .tutorial-start { display: flex; width: fit-content; margin: 12px auto 0; pointer-events: auto; }
+  #tutorial-panel {
+    position: fixed;
+    right: 16px;
+    bottom: 16px;
+    z-index: 100;
+    width: min(380px, calc(100vw - 24px));
+    max-height: 42dvh;
+    overflow: auto;
+    padding: 12px 16px;
+    border: 1px solid var(--selection-line);
+    border-radius: 8px;
+    background: var(--surface-panel);
+    box-shadow: 0 6px 28px #0005;
+  }
+  #tutorial-progress { flex: 1; color: var(--muted); font-size: 12px; }
+  #tutorial-title { font-size: 15px; margin-bottom: 8px; }
+  #tutorial-body { line-height: 1.5; }
+  #tutorial-status { color: var(--muted); font-size: 12px; margin: 8px 0; }
+  .tutorial-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+  #tutorial-next { background: var(--action); color: var(--action-ink); margin-left: auto; }
+  .tutorial-target { outline: 2px solid var(--focus); outline-offset: 4px; }
+  @media (max-width: 960px) {
+    html.tutorial-open { scroll-padding-bottom: 280px; }
+    html.tutorial-open body { padding-bottom: 280px; }
+    #tutorial-panel { right: 12px; bottom: 12px; max-height: 36dvh; }
+    .tutorial-target { scroll-margin-bottom: 280px; }
+  }
   .import-quality { color: var(--muted); font-size: 12px; line-height: 1.5; }
   .import-quality summary { cursor: pointer; padding: 3px 0; color: var(--text); }
   .import-quality[data-status="review"] summary { color: var(--warning); }
@@ -466,6 +494,7 @@
     border-bottom: 1px solid var(--line-soft);
   }
   #lib-status { flex-shrink: 0; padding: 4px 14px; }
+  #lib-filter-status { flex-shrink: 0; padding: 6px 14px; font-size: 12px; color: var(--muted); }
 
   #lib-list {
     flex: 1;

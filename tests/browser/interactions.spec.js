@@ -110,8 +110,18 @@ test('failed library, example and drawing requests have working Retry actions in
   ]) {
     await page.route(`**/${url}`, route => route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"Temporary failure"}' }), { times: 1 });
     await page.locator(`#${button}`).click();
+    await expect(page.locator(`#${container}`).getByRole('button', { name: 'Retry' })).toBeVisible();
+    if (url === 'monomers') {
+      await page.locator('#lib-search').fill('Glycine');
+      await page.locator('#btn-rxn-filter').click();
+      await expect(page.locator(`#${container}`).getByRole('button', { name: 'Retry' })).toBeVisible();
+    }
     await page.locator(`#${container}`).getByRole('button', { name: 'Retry' }).click();
     await expect(page.locator(success).first()).toBeVisible();
+    if (url === 'monomers') {
+      await page.locator('#build-close').click();
+      await page.locator('#lib-search').fill('');
+    }
     await page.locator(`#${button}`).click();
   }
   await page.route('**/render', route => route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"Temporary renderer failure"}' }), { times: 1 });

@@ -1,0 +1,94 @@
+const { test, expect, render, selectChip, site, capture } = require('./fixtures');
+
+for (const width of [1440, 390]) {
+  test(`guided practice builds, previews and undoes without changing saved work at ${width}px`, async ({ page, context }, testInfo) => {
+    await page.setViewportSize({ width, height: 900 });
+    await expect(page.locator('#tutorial-panel')).toBeHidden();
+    await expect(page.locator('#btn-tutorial')).toBeHidden();
+    await render(page, 'ac-K-am');
+    await page.locator('#btn-verify').click();
+    await page.locator('#smiles-input').fill('NCC(=O)O');
+    await expect(page.locator('#smiles-input')).toHaveClass('ok');
+    await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('cabiln.draft.v1'))?.reference)).toBe('NCC(=O)O');
+    const saved = await page.evaluate(() => localStorage.getItem('cabiln.draft.v1'));
+    await page.locator('#btn-help').click();
+    const opened = context.waitForEvent('page');
+    await page.locator('#help-panel .tutorial-start').click();
+    const practice = await opened;
+    await practice.setViewportSize({ width, height: 900 });
+    const next = practice.locator('#tutorial-next');
+    await expect(next).toBeDisabled();
+    await expect(practice.locator('#btn-restore-draft')).toBeHidden();
+    await expect(practice.locator('#draft-status')).toContainText('Practice tab');
+    await practice.locator('#tutorial-load').click();
+    await next.click();
+    await expect(practice.locator('#tutorial-title')).toHaveText('Find a residue in the drawing');
+    await practice.locator('#tutorial-show').click();
+    await expect(practice.locator('#render-inner .res-hl').first()).toBeVisible();
+    await next.click();
+    await expect(next).toBeDisabled();
+    await practice.locator('#btn-build').click();
+    await selectChip(practice, 1, 'left', 'G');
+    await next.click();
+    await practice.locator('#lib-search').fill('Alanine');
+    await practice.locator('.lib-row[data-abbr="A"] .lib-use').click();
+    await next.click();
+    await expect(next).toBeDisabled();
+    await site(practice, 'left', 2);
+    await site(practice, 'right', 1);
+    await next.click();
+    await practice.locator('#build-preview-button').click();
+    await expect(practice.locator('#build-preview-source')).toHaveText('A-G-A');
+    await capture(practice, testInfo, 'tutorial-preview');
+    await next.click();
+    await practice.locator('#build-connect').click();
+    await next.click();
+    await practice.locator('#btn-undo').click();
+    await next.click();
+    await expect(practice.locator('#cabiln-input')).toHaveValue('A-G');
+    await expect(practice.locator('#cabiln-input')).toHaveClass('ok');
+    await expect(next).toHaveText('Finish');
+    await next.click();
+    await expect(practice.locator('#tutorial-panel')).toBeHidden();
+    await expect(practice.locator('#btn-tutorial')).toBeFocused();
+    expect(await practice.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await practice.locator('#btn-help').click();
+    await expect(practice.locator('#btn-clear-draft')).toBeHidden();
+    await practice.reload();
+    await expect(practice.locator('#btn-restore-draft')).toBeHidden();
+    await practice.close();
+    await expect(page.locator('#cabiln-input')).toHaveValue('ac-K-am');
+    await expect(page.locator('#smiles-input')).toHaveValue('NCC(=O)O');
+    expect(await page.evaluate(() => localStorage.getItem('cabiln.draft.v1'))).toBe(saved);
+  });
+}
+
+test('empty-canvas entry, failed drawing, dismissal and restart work without browser storage', async ({ page, context }) => {
+  await context.addInitScript(() => {
+    Object.defineProperty(window, 'localStorage', { get() { throw new Error('Storage blocked'); } });
+  });
+  const opened = context.waitForEvent('page');
+  await page.locator('#render-inner .tutorial-start').click();
+  const practice = await opened;
+  await practice.route('**/render', route => route.fulfill({ status: 500,
+    contentType: 'application/json', body: '{"error":"Temporary failure"}' }), { times: 1 });
+  await practice.locator('#tutorial-load').click();
+  const retry = practice.locator('#cabiln-status').getByRole('button', { name: 'Retry' });
+  await expect(retry).toBeVisible();
+  await expect(practice.locator('#tutorial-next')).toBeDisabled();
+  await retry.click();
+  await expect(practice.locator('#tutorial-next')).toBeEnabled();
+  await practice.locator('#tutorial-title').focus();
+  await practice.keyboard.press('Escape');
+  await expect(practice.locator('#tutorial-panel')).toBeHidden();
+  await expect(practice.locator('#btn-tutorial')).toBeFocused();
+  await practice.keyboard.press('Enter');
+  await practice.locator('#tutorial-next').click();
+  await render(practice, 'G');
+  await practice.locator('#tutorial-restart').click();
+  await expect(practice.locator('#tutorial-progress')).toHaveText('Step 1 of 9');
+  await expect(practice.locator('#cabiln-input')).toHaveValue('A-G');
+  await expect(practice.locator('#tutorial-next')).toBeEnabled();
+  await expect(practice.locator('#draft-status')).toContainText('not saved automatically');
+  await practice.close();
+});
