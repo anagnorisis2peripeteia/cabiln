@@ -22,7 +22,8 @@ properties and monomer ownership remain authoritative. Unsupported structures
 and failed validation use the existing CoordGen renderer.
 
 Explicit odd layout seeds retain Indigo and even seeds retain the CoordGen
-search. The first GUI reroll selects seed 2, so it changes engines from the default. The CoordGen search stops when it reaches zero atom overlaps: its
+search. The first click of **Layout** selects seed 2, so it changes engines from
+the default. The CoordGen search stops when it reaches zero atom overlaps: its
 nonnegative score cannot improve further, and equal scores never replace the
 current winner.
 

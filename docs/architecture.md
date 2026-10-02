@@ -142,7 +142,7 @@ See [recognition](decomposition.md) for result fields, ambiguity and limits.
 | `builder.js` | Page wiring, document transitions, rendering, conversion and project controls |
 | `drawing.js` | Accepted source, SVG, MOL atom order, layout and export eligibility |
 | `build.js` | Selected residues/sites, connection validation, insertion, swap mappings and previews |
-| `residues.js` | Atom maps, residue/group tabs, selection highlights and insertion positions |
+| `residues.js` | Atom maps, residue/group tabs, selection highlights, tutorial cues and insertion positions |
 | `library.js` | Discovery, library revisions, filtering and hover previews |
 | `requests.js` | Cancellation, current-request checks, waits, calculation retries and response errors |
 | `project.js` | Saved-project format and document/context validation helpers |
@@ -178,9 +178,11 @@ keyboard controls. Molecular atom colours are separate from interface colours.
 The optional tutorial runs in a separate `?tutorial=1` or `?tutorial=swap` tab.
 It reads the Build session and accepted drawings. Build reports successful edits
 even when the guide is closed; Back and Next can then review completed steps
-without requiring the old selections. Unfinished steps still require valid
-selections. Undo restores the source through normal editor history. Retatrutide
-comes from the same cached catalog as Examples; the guide has no chemistry code.
+without requiring the old selections. Review text retains the replacement from
+the completed edit. Unfinished steps require valid selections and use
+Build's pending-request state for loading instructions. Undo restores the source
+through normal editor history. Retatrutide comes from the same cached catalog as
+Examples; the guide has no chemistry code.
 Residue selection steps mark the target tile and its owned atoms independently
 of hover highlighting. The cue clears on dismissal, step completion or source
 changes; it never changes Build selection or the Highlight preference.

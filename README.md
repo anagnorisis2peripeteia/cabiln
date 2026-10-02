@@ -36,32 +36,37 @@ See [deployment](docs/deployment.md) for hosting, process limits and recovery.
 
 Open **Tutorial** in the top toolbar for lessons on building a peptide and
 swapping a building block in Retatrutide. It opens a separate practice tab.
-The lessons explain the app's terms and mark the tile and drawing region to select.
+The lessons explain the app's terms and mark the tile and drawing region to select,
+so you do not need to recognise the chemical structure.
 Practice edits do not read or replace your saved browser draft; use **Save
 project** if you want to keep them. Browse or search for your chosen amino acid;
-the guide follows the resulting product and helps reopen closed panels.
-Back revisits instructions without changing the molecule; Restart reloads the
-lesson's starting peptide.
+the guide follows the resulting product. **Show control** locates the next control
+or offers to reopen a closed panel. **Back** reviews instructions without changing
+the molecule; **Undo** reverses an edit, and **Restart** reloads the starting
+peptide. Closing the guide keeps the tab in practice mode.
 
 Open **Library** and choose **Use** beside a monomer to start a peptide.
 Open **Build**, select a residue tile or click/tap an atom label or bond in the
-drawing, choose another monomer, then
-select a free attachment site on each side. The selected sites light up in the
-previews. **Preview** shows the proposed structure, reaction and CABILN before
-**Connect** applies the change. You can also select two existing residues to
+drawing, choose another monomer, then select a free attachment site on each side.
+The selected sites light up in the previews. **Preview** shows the proposed
+structure, reaction and CABILN before **Connect** applies the change. You can also
+select two existing residues to
 connect them, or insert a monomer between neighbouring backbone residues.
 
-**Filter** in Library opens Build when needed. Select a residue tile to match
-its free attachment sites, then choose a numbered site to narrow the results.
-The library states which residue and site it is matching. Turn Filter off to
-show all monomers again. Search works within the filtered list.
+**Filter** in Library opens Build when needed. Select a residue in the drawing or
+its tile to match its free attachment sites, then choose a numbered site to narrow
+the results. The library states which residue and site it is matching. Turn
+Filter off to show all monomers again. Search works within the filtered list.
 
 Choose **Swap monomer** in Build to replace a selected residue. The library
-shows candidates with compatible sites for its existing connections. Review the
-mapping from each occupied R-group to a distinct replacement site; different
-site numbers are supported. **Preview swap** assembles the proposed product before
-**Apply swap** becomes available. Neighbours, branches and ring closures stay
-connected. Site renumbering can change the notation's layout. Chemistry filters
+shows candidates with compatible sites for its existing connections; choose
+**Select** beside a replacement. Review the mapping from each occupied R-group
+to a distinct replacement site in **Keep all connections**; different site numbers
+are supported. **Change** on the replacement card keeps the original residue
+selected while you choose again. **Preview swap** assembles the proposed product
+before **Apply swap** becomes available. Changing the replacement or mapping requires
+a new preview. Neighbours, branches and ring closures stay connected.
+Site renumbering can change the notation's layout. Chemistry filters
 narrow the choices; full assembly can still reject a candidate.
 **Learn Swap** opens the Retatrutide lesson directly from Build.
 

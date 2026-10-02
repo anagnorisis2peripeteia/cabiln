@@ -2,7 +2,7 @@
 
 | Guide | Contents |
 | --- | --- |
-| [Getting started](../README.md) | Installation, builder controls, Python use and registration |
+| [Getting started](../README.md) | Installation, guided practice, builder controls, swaps, Python use and registration |
 | [Notation](notation.md) | Monomers, slots, branches, crosslinks and format conversion |
 | [Canonical notation](canonical-notation.md) | Recursive scopes, graph equality, ordering and versioning |
 | [Recognition](decomposition.md) | Structure-to-monomer search, ownership, ambiguity and limits |
