@@ -973,6 +973,7 @@
   }
 
   @media (min-width: 961px) and (max-width: 1100px) {
+    #cabiln-input { min-width: 220px; }
     #build-panel:has(#build-preview:not([hidden])) .box-svg { height: 80px; }
     #build-preview-canvas { height: 120px; }
   }
