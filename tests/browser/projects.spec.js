@@ -193,17 +193,21 @@ test('a busy project save offers Retry without losing the document', async ({ pa
   await expect(page.locator('#project-status')).toContainText('Project saved');
 });
 
-test('short server admission pressure retries a current render without losing input', async ({ page }) => {
+test('worker renewal retries a current monomer selection without losing input', async ({ page }) => {
+  await render(page, 'A-G');
+  await page.locator('#btn-build').click();
   let attempts = 0;
-  await page.route('**/render', async route => {
+  await page.route('**/monomer_rgroups?*', async route => {
     attempts++;
-    if (attempts === 1) {
+    if (attempts <= 3) {
       await route.fulfill({ status: 503, headers: { 'Retry-After': '1' },
         contentType: 'application/json', body: JSON.stringify({ error: 'Chemistry workers are busy' }) });
     } else await route.continue();
   });
-  await page.locator('#cabiln-input').fill('A-G');
+  await page.locator('#residue-chips [data-residue="1"]').click();
+  await expect(page.locator('#build-left-abbr')).toHaveText('G');
+  await expect(page.locator('#build-left-rgroups button').first()).toBeVisible();
   await expect(page.locator('#cabiln-input')).toHaveClass('ok');
   await expect(page.locator('#cabiln-input')).toHaveValue('A-G');
-  expect(attempts).toBe(2);
+  expect(attempts).toBe(4);
 });

@@ -1,5 +1,5 @@
 // Only use this for calculations that do not write library definitions.
-// A busy single-worker server may reject overlapping previews and renders.
+// Allow routine worker renewal as well as overlapping previews and renders.
 async function fetchCalculation(url, { timeoutMs, ...options } = {}) {
   if (timeoutMs !== undefined) {
     const deadline = AbortSignal.timeout(timeoutMs);
@@ -9,7 +9,7 @@ async function fetchCalculation(url, { timeoutMs, ...options } = {}) {
     if (options.signal?.aborted) throw options.signal.reason || new Error('Request cancelled');
     const response = await fetch(url, options);
     const retryAfter = Number(response.headers?.get('Retry-After'));
-    if (response.status !== 503 || attempt >= 2 || !Number.isFinite(retryAfter) ||
+    if (response.status !== 503 || attempt >= 4 || !Number.isFinite(retryAfter) ||
         retryAfter <= 0 || retryAfter > 2) return response;
     await response.body?.cancel();
     await new Promise((resolve, reject) => {

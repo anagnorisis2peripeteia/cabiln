@@ -1125,10 +1125,10 @@ test('a terminal conversion error stays visible after its drawing has settled', 
   const converting = ui.element('btn-to-cabiln-bracket').click();
   latestRequest(ui, '/render_reference').resolve({ ...glycineDrawing, context: binding });
   await new Promise(setImmediate);
-  for (let attempt = 0; attempt < 3; attempt++) {
+  for (let attempt = 0; attempt < 5; attempt++) {
     latestRequest(ui, '/to_cabiln').resolve({ error: 'Chemistry capacity is busy; retry shortly' }, false, 503, { 'Retry-After': '1' });
     await new Promise(setImmediate);
-    if (attempt < 2) await ui.timers();
+    if (attempt < 4) await ui.timers();
   }
   await converting;
   ui.run(`acceptDocumentContext(${JSON.stringify(binding)}); saveDraft()`);
@@ -1673,17 +1673,19 @@ test('help is keyboard dismissible and production script cannot force reload on 
   assert.doesNotMatch(source, /location\.reload|\/server_id/);
 });
 
-test('a busy calculation retries after Retry-After and uses the same current document', async () => {
+test('worker renewal retries after Retry-After and uses the same current document', async () => {
   const ui = page('builder.js');
   ui.element('cabiln-input').value = 'A-G';
   const pending = ui.run('doRenderCabiln("A-G")');
-  latestRequest(ui, '/render').resolve({ error: 'Chemistry workers are busy' }, false, 503, { 'Retry-After': '1' });
-  await new Promise(setImmediate);
-  assert.equal(ui.requests.length, 1);
-  await ui.timers();
-  assert.equal(ui.requests.length, 2);
-  assert.equal(ui.requests[1].options.body, ui.requests[0].options.body);
-  ui.requests[1].resolve(rendered);
+  for (let attempt = 0; attempt < 4; attempt++) {
+    latestRequest(ui, '/render').resolve({ error: 'Chemistry workers are busy' }, false, 503, { 'Retry-After': '1' });
+    await new Promise(setImmediate);
+    assert.equal(ui.requests.length, attempt + 1);
+    await ui.timers();
+    assert.equal(ui.requests.length, attempt + 2);
+    assert.equal(ui.requests.at(-1).options.body, ui.requests[0].options.body);
+  }
+  ui.requests.at(-1).resolve(rendered);
   await pending;
   assert.equal(ui.element('cabiln-input').className, 'ok');
 });
@@ -1753,8 +1755,8 @@ test('clearing a drawing waiting for library metadata cancels its submission', a
   }
 });
 
-test('persistent overload is visible after two retries and other errors are never retried', async () => {
-  for (const [status, header, attempts] of [[503, '1', 3], [503, '30', 1], [503, '', 1], [500, '1', 1]]) {
+test('persistent overload is visible after four retries and other errors are never retried', async () => {
+  for (const [status, header, attempts] of [[503, '1', 5], [503, '30', 1], [503, '', 1], [500, '1', 1]]) {
     const ui = page('builder.js');
     ui.element('cabiln-input').value = 'A-G';
     const pending = ui.run('doRenderCabiln("A-G")');

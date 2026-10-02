@@ -378,7 +378,7 @@ property('render-completion-order', [fc.scheduler(), fc.array(fc.record({ source
 const foregroundCase = fc.record({
   format: fc.boolean(), drawingStarted: fc.boolean(),
   presentation: fc.constantFrom('missing', 'valid', 'changed-binding'),
-  drawingBusy: fc.integer({ min: 0, max: 2 }), conversionBusy: fc.integer({ min: 0, max: 2 }),
+  drawingBusy: fc.integer({ min: 0, max: 4 }), conversionBusy: fc.integer({ min: 0, max: 4 }),
   outcome: fc.constantFrom('success', 'network', 'error'),
 }).chain(example => fc.constantFrom('none', 'conversion', 'reference',
   ...(!example.format || example.drawingStarted ? ['drawing'] : []),
