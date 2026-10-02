@@ -327,6 +327,12 @@ for (const width of [1440, 390]) {
     await expect(practice.locator('#draft-status')).toContainText('Practice tab');
     await expectCue(practice, '#tutorial-load', 'Click Load A–G');
     await expect(practice.locator('#tutorial-details')).not.toHaveAttribute('open');
+    if (width === 390) {
+      await practice.setViewportSize({ width: 320, height: 568 });
+      await expect(practice.locator('#tutorial-instruction')).toBeInViewport({ ratio: .995 });
+      await expectCue(practice, '#tutorial-load', 'Click Load A–G');
+      await practice.setViewportSize({ width, height: 900 });
+    }
     await practice.locator('#tutorial-load').click();
     await expectCue(practice, '#tutorial-next', 'Next step →');
     await next.click();

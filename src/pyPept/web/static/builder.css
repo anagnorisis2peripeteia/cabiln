@@ -145,7 +145,7 @@
   @media (max-width: 960px) {
     html.tutorial-open { scroll-padding-bottom: var(--tutorial-clearance, 280px); }
     html.tutorial-open body { padding-bottom: var(--tutorial-clearance, 280px); }
-    #tutorial-panel { right: 12px; bottom: 12px; max-height: 36dvh; }
+    #tutorial-panel { right: 12px; bottom: 12px; max-height: min(50dvh, max(280px, 36dvh)); }
     .tutorial-target { scroll-margin-block: 12px; }
   }
   .import-quality { color: var(--muted); font-size: 12px; line-height: 1.5; }
