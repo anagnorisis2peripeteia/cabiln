@@ -6,6 +6,33 @@ function deferred() {
   return { promise, resolve };
 }
 
+for (const [endpoint, target, message] of [
+  ['reactions', '#lib-filter-status', 'Reaction filter unavailable'],
+  ['monomers', '#lib-list', 'Could not load monomers.'],
+]) test(`a stalled ${endpoint} request releases drawing and allows retry`, async ({ page }) => {
+  const arrived = deferred();
+  const release = deferred();
+  await page.route(`**/${endpoint}`, async route => {
+    arrived.resolve();
+    await release.promise;
+    await route.abort();
+  }, { times: 1 });
+  try {
+    await page.locator('#btn-lib').click();
+    await arrived.promise;
+    await page.locator('#cabiln-input').fill('G-A');
+    await expect(page.locator('#cabiln-input')).toHaveClass('ok');
+    const status = page.locator(target);
+    await expect(status).toContainText(message);
+    release.resolve();
+    const recovered = page.waitForResponse(response => isCompletedResponse(response) && new URL(response.url()).pathname === `/${endpoint}`);
+    await status.getByRole('button', { name: 'Retry' }).click();
+    expect((await recovered).status()).toBe(200);
+    await expect(status).not.toContainText(message);
+    await expect(page.locator('#cabiln-input')).toHaveValue('G-A');
+  } finally { release.resolve(); }
+});
+
 for (const previous of ['', 'G']) {
   test(`immediate notation conversion draws its new input from ${previous || 'an empty document'}`, async ({ page }) => {
     if (previous) await render(page, previous);

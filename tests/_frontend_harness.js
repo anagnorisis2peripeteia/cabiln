@@ -82,7 +82,7 @@ function page(script, { registration = false, storedDraft = null, now = Date.now
     removeItem: key => storage.delete(key),
   };
   const context = vm.createContext({
-    console, AbortController, Blob, URLSearchParams,
+    console, AbortController, AbortSignal, Blob, URLSearchParams,
     Date: class extends Date { static now() { return now(); } },
     URL: { createObjectURL(blob) { downloads.push(blob); return 'blob:project'; }, revokeObjectURL() {} },
     Event: class { constructor(type) { this.type = type; } },

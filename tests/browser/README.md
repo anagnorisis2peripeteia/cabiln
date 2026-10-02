@@ -26,7 +26,7 @@ building/verification at a 390 px viewport. Interaction journeys cover independe
 Escape dismissal and focus return, keyboard examples, shared zoom/reset controls,
 real touch pan/pinch, in-place Retry, and visible warnings with expandable details.
 Library journeys check actual matches when the selected site changes, filter
-reset and search, and recovery from missing reaction data. Tutorial journeys
+reset and search, and recovery from missing or stalled reaction data. Tutorial journeys
 exercise the full build/preview/Undo route at desktop and mobile widths, failed
 drawings, keyboard dismissal, restart and isolation from saved browser drafts.
 They also cover reopening closed panels, browsing without search, changing the

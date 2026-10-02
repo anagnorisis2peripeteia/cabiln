@@ -138,7 +138,7 @@ class MonomerLibrary {
     const request = requests.start('library');
     if (!this.loaded) showLoading(this.list, 'Loading monomers…');
     try {
-      const res = await fetchCalculation('/monomers', { signal: request.signal });
+      const res = await fetchCalculation('/monomers', { signal: request.signal, timeoutMs: 10_000 });
       const data = await readResponse(res);
       if (!request.current()) return;
       if (!Array.isArray(data)) throw new Error(data.error || 'Invalid monomer library');
@@ -182,7 +182,7 @@ class MonomerLibrary {
       // Both endpoints share one calculation worker. Let the palette finish so
       // a quick reaction-list request cannot force it into a one-second retry.
       if (requests.has('library') && !await request.waitFor('library')) return;
-      const res = await fetchCalculation('/reactions', { signal: request.signal });
+      const res = await fetchCalculation('/reactions', { signal: request.signal, timeoutMs: 10_000 });
       const data = await readResponse(res);
       if (!request.current()) return;
       if (!Array.isArray(data)) throw new Error(data.error || 'Reaction data is unavailable');

@@ -1,6 +1,10 @@
 // Only use this for calculations that do not write library definitions.
 // A busy single-worker server may reject overlapping previews and renders.
-async function fetchCalculation(url, options = {}) {
+async function fetchCalculation(url, { timeoutMs, ...options } = {}) {
+  if (timeoutMs !== undefined) {
+    const deadline = AbortSignal.timeout(timeoutMs);
+    options.signal = options.signal ? AbortSignal.any([options.signal, deadline]) : deadline;
+  }
   for (let attempt = 0; ; attempt++) {
     if (options.signal?.aborted) throw options.signal.reason || new Error('Request cancelled');
     const response = await fetch(url, options);

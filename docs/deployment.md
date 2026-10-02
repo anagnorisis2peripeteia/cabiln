@@ -89,6 +89,9 @@ retention separately. The application stores no server-side document database.
 Busy calculations return 503 with `Retry-After`; deadlines terminate the worker
 and return 504. Disconnects terminate active calculations. The browser makes up
 to two cancellable retries for brief overload, then displays a Retry control.
+Monomer and reaction-list requests have a 10-second browser deadline, including
+response bodies and overload retries. A stalled Library request then offers
+Retry and releases waiting drawings. Chemistry jobs retain the server's limit.
 Registration writes are never retried automatically. Workers prepare palette
 data before reporting readiness; changing the library rebuilds that cache.
 
