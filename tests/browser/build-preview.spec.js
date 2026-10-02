@@ -111,7 +111,8 @@ for (const example of [
       for (const viewport of [{ width: 1280, height: 800 }, { width: 1024, height: 768 }, { width: 1440, height: 1000 }]) {
         await page.setViewportSize(viewport);
         for (const id of ['build-left', 'build-right', 'build-preview-button', 'build-connect', 'build-preview-canvas']) {
-          await expect(page.locator(`#${id}`)).toBeInViewport({ ratio: 1 });
+          // Intersection rounding can clip a fraction of a CSS pixel in Firefox.
+          await expect(page.locator(`#${id}`)).toBeInViewport({ ratio: .995 });
         }
         expect((await page.locator('#render-canvas').boundingBox()).height).toBeGreaterThan(viewport.height * .3);
       }

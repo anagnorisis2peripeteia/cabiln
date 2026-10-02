@@ -108,6 +108,8 @@ replacing current work. Help groups instructions by task, including storage and
 **Clear saved browser draft**. **Undo clear** recovers that copy until the next edit.
 Undo remains available when browser storage is unavailable; use **Save project**
 to keep the session outside the browser.
+If the server cannot finish the project check, Retry repeats the save without
+discarding your current work.
 
 ## Build a peptide in Python
 

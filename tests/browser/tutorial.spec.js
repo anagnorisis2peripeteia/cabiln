@@ -1,4 +1,4 @@
-const { test, expect, render, selectChip, site, capture, residuePoint } = require('./fixtures');
+const { test, expect, render, selectChip, site, capture, residuePoint, isCompletedResponse } = require('./fixtures');
 
 async function choosePracticeMonomer(page, abbr) {
   await page.goto(`${page.url()}?tutorial=1`);
@@ -187,11 +187,16 @@ for (const width of [1440, 390]) test(`Retatrutide Swap lesson preserves its bra
     await pending;
     await route.fulfill({ response });
   }, { times: 1 });
+  const expected = source.replace('K.[AEEA', 'Orn.[AEEA');
+  expect(expected).not.toBe(source);
+  const previewResponse = practice.waitForResponse(response => isCompletedResponse(response) &&
+    response.url().endsWith('/render') && response.request().postDataJSON()?.cabiln === expected,
+  { timeout: 35_000 }); // Server deadline plus its bounded admission retries.
   await practice.getByRole('button', { name: 'Preview swap', exact: true }).click();
   try { await expect(practice.locator('#tutorial-status')).toContainText('Please wait'); }
   finally { release(); }
-  const expected = source.replace('K.[AEEA', 'Orn.[AEEA');
-  expect(expected).not.toBe(source);
+  const previewDrawing = await previewResponse;
+  expect(previewDrawing.status(), await previewDrawing.text()).toBe(200);
   await expect(practice.locator('#build-preview-source')).toHaveText(expected);
   await expect(practice.locator('#build-preview-reaction')).toHaveText('R1 → R1 · R2 → R2 · R4 → R4');
   await capture(practice, testInfo, 'retatrutide-swap-preview');

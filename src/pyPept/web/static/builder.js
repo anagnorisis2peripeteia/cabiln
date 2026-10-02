@@ -391,7 +391,10 @@ async function saveProject() {
     saveDraft();
     setProjectStatus('Project saved. It includes source, notation drafts, original reference and import details.');
   } catch (error) {
-    if (request.current()) setProjectStatus(error.message || 'Could not save the project. Your work is unchanged.', true);
+    if (request.current()) {
+      setProjectStatus(error.message || 'Could not save the project. Your work is unchanged.', true);
+      showRetry(projectStatus, projectStatus.textContent, saveProject);
+    }
   } finally { request.finish(); }
 }
 btnProjectSave.addEventListener('click', saveProject);

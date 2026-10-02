@@ -173,6 +173,26 @@ test('a cleared recovery draft can be recovered without overwriting new work', a
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('cabiln.draft.v1')).document.text)).toBe('A-G-L');
 });
 
+test('a busy project save offers Retry without losing the document', async ({ page }) => {
+  await render(page, 'A-G');
+  await page.route('**/prepare_project', route => route.fulfill({
+    status: 503, contentType: 'application/json', headers: { 'Retry-After': '1' },
+    body: JSON.stringify({ error: 'Chemistry capacity is busy; retry shortly' }),
+  }));
+  await page.locator('#btn-project-save').click();
+  const retry = page.locator('#project-status').getByRole('button', { name: 'Retry', exact: true });
+  await expect(retry).toBeVisible();
+  await expect(page.locator('#cabiln-input')).toHaveValue('A-G');
+  await expect(page.locator('#btn-project-save')).toBeEnabled();
+  await page.unroute('**/prepare_project');
+  const download = page.waitForEvent('download');
+  await retry.click();
+  const saved = await download;
+  const project = JSON.parse(await fs.readFile(await saved.path(), 'utf8'));
+  expect(project.document.text).toBe('A-G');
+  await expect(page.locator('#project-status')).toContainText('Project saved');
+});
+
 test('short server admission pressure retries a current render without losing input', async ({ page }) => {
   let attempts = 0;
   await page.route('**/render', async route => {
