@@ -18,7 +18,7 @@ header {
   gap: 12px;
 }
 header .title { flex: 1; font-size: 16px; font-weight: 600; letter-spacing: -.025em; }
-header .title span { color: var(--muted); font-size: 12px; font-weight: 400; white-space: nowrap; }
+header .title span { display: block; margin-top: 3px; color: var(--muted); font-size: 12px; font-weight: 400; white-space: nowrap; }
 header a {
   display: inline-flex;
   align-items: center;
@@ -33,19 +33,22 @@ header a {
 }
 header a:hover { background: var(--surface-hover); }
 
-.page { max-width: 860px; margin: 0 auto; padding: 24px 20px; }
+.page { max-width: 1120px; margin: 0 auto; padding: 24px 20px; }
 .card {
   background: var(--surface-panel);
   border: 1px solid var(--line-soft);
   border-radius: var(--radius-panel);
-  padding: 20px;
-  margin-bottom: 18px;
+  padding: 16px;
+  margin-bottom: 16px;
 }
-.card h2 { font-size: 16px; font-weight: 600; margin-bottom: 18px; }
+.card h2 { font-size: 16px; font-weight: 600; margin-bottom: 12px; }
 
 .field { min-width: 0; margin-bottom: 16px; }
 .field label { display: block; font-size: 12px; font-weight: 500; margin-bottom: 6px; }
-.field-help { color: var(--muted); font-size: 12px; line-height: 1.5; margin: -2px 0 8px; }
+.field-help { max-width: 72ch; color: var(--muted); font-size: 12px; line-height: 1.5; margin: 6px 0 8px; }
+.field-error { color: var(--error); line-height: 1.5; margin-top: 8px; overflow-wrap: anywhere; }
+.field-error:empty { display: none; }
+summary { min-height: 32px; padding: 8px 0; cursor: pointer; color: var(--muted); }
 .field input, .field select, .field textarea {
   width: 100%;
   min-height: 36px;
@@ -85,20 +88,20 @@ header a:hover { background: var(--surface-hover); }
 .btn-success:hover { background: var(--action-hover); border-color: var(--action-hover); }
 .btn:disabled { background: var(--surface-raised); border-color: var(--line); color: var(--muted); opacity: .6; cursor: default; }
 
-#preview-section { display: none; }
+#preview-section { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+#preview-section > .card { min-width: 0; }
 #preview-canvas {
-  background: #fff;
+  background: var(--canvas-dark);
   border-radius: var(--radius-control);
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 280px;
+  height: 240px;
   margin-bottom: 16px;
   overflow: hidden;
 }
-#preview-canvas svg { max-width: 100%; display: block; }
-.preview-message { color: var(--canvas-text); font-size: 13px; line-height: 1.6; padding: 20px; text-align: center; }
-.preview-message.err { color: var(--canvas-error); }
+#preview-canvas svg { max-width: 100%; max-height: 100%; display: block; filter: invert(1); mix-blend-mode: screen; }
+.preview-message, .loading-state { color: var(--muted); font-size: 13px; line-height: 1.6; padding: 20px; text-align: center; }
 
 .detected-types {
   background: var(--surface-inset);
@@ -114,7 +117,7 @@ header a:hover { background: var(--surface-hover); }
 }
 .detected-types:empty { display: none; }
 .detected-types .slot { color: var(--success); }
-.detected-types .lg { color: var(--muted); font-size: 11px; }
+.detected-types .lg { color: var(--muted); font-size: 12px; }
 
 #status-msg {
   margin-top: 12px;
@@ -137,6 +140,13 @@ header a:hover { background: var(--surface-hover); }
   .btn { width: 100%; }
 }
 
-@media (pointer: coarse) {
-  .btn, header a, .field input, .field select { min-height: 44px; }
+@media (max-width: 800px) {
+  #preview-section { grid-template-columns: minmax(0, 1fr); gap: 0; }
 }
+
+@media (pointer: coarse) {
+  .btn, header a, .field input, .field select, summary { min-height: 44px; }
+  .field input, .field textarea, .field select { font-size: 16px; }
+}
+
+body { padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }

@@ -35,6 +35,10 @@
 button, input, select { font-family: inherit; }
 button, a, select, summary, label { touch-action: manipulation; }
 input, textarea { accent-color: var(--action); caret-color: var(--focus); }
+input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
+html { scrollbar-color: var(--line) var(--surface-base); }
+a { text-underline-offset: .2em; }
+[role="status"] { font-variant-numeric: tabular-nums; }
 ::selection { background: var(--selection); color: var(--text); }
 button:focus-visible, a:focus-visible, input:focus-visible,
 textarea:focus-visible, select:focus-visible, summary:focus-visible, [tabindex]:focus-visible {

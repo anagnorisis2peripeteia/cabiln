@@ -213,6 +213,16 @@ test('library hover preview appears and closes when the pointer leaves', async (
   await page.locator('.lib-row[data-abbr="G"]').hover();
   await expect(page.locator('#lib-preview svg').first()).toBeVisible();
   await capture(page, testInfo, 'library-preview');
+  await page.locator('#lib-preview').hover();
+  await page.waitForTimeout(200);
+  await expect(page.locator('#lib-preview')).toBeVisible();
+  await page.locator('#lib-preview').focus();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#lib-preview')).toBeHidden();
+  await expect(page.locator('#lib-search')).toBeFocused();
+  await expect(page.locator('#lib-panel')).toBeVisible();
+  await page.locator('.lib-row[data-abbr="G"]').hover();
+  await expect(page.locator('#lib-preview')).toBeVisible();
   await page.locator('#cabiln-input').hover();
   await expect(page.locator('#lib-preview')).toBeHidden();
 });

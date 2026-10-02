@@ -718,7 +718,7 @@ test('recursive sibling tabs return to their parent and highlight exact descenda
 test('editing monomer SMILES invalidates detected chemistry and registration', async () => {
   const ui = page('register.js');
   ui.element('smiles-in').value = 'NCC(=O)O';
-  const pending = ui.element('btn-preview').dispatchEvent({ type: 'click' });
+  const pending = ui.element('preview-form').dispatchEvent({ type: 'submit' });
   ui.requests[0].resolve(preview);
   await pending;
   await ui.input('smiles-in', 'CC(=O)O');
@@ -730,7 +730,7 @@ test('editing monomer SMILES invalidates detected chemistry and registration', a
 test('a monomer preview arriving after an edit is discarded', async () => {
   const ui = page('register.js');
   ui.element('smiles-in').value = 'NCC(=O)O';
-  const pending = ui.element('btn-preview').dispatchEvent({ type: 'click' });
+  const pending = ui.element('preview-form').dispatchEvent({ type: 'submit' });
   await ui.input('smiles-in', 'CC(=O)O');
   ui.requests[0].resolve(preview);
   await pending;
@@ -742,7 +742,7 @@ test('a busy monomer preview retries, but editing cancels its retry', async () =
   for (const edited of [false, true]) {
     const ui = page('register.js');
     ui.element('smiles-in').value = 'NCC(=O)O';
-    const pending = ui.element('btn-preview').click();
+    const pending = ui.element('preview-form').dispatchEvent({ type: 'submit' });
     ui.requests[0].resolve({ error: 'Chemistry capacity is busy' }, false, 503, { 'Retry-After': '1' });
     await new Promise(setImmediate);
     assert.equal(ui.element('btn-preview').disabled, true);
@@ -752,7 +752,7 @@ test('a busy monomer preview retries, but editing cancels its retry', async () =
       await pending;
       assert.equal(ui.requests.length, 1);
       assert.equal(ui.run('detectedData'), null);
-      assert.equal(ui.element('preview-section').style.display, 'none');
+      assert.equal(ui.element('preview-section').hidden, true);
     } else {
       assert.equal(ui.requests.length, 2);
       assert.equal(ui.requests[1].options.body, ui.requests[0].options.body);
@@ -1262,10 +1262,10 @@ test('file reading is cancelled by reference input edits before upload rendering
 test('a failed second preview cannot reuse the earlier chemistry', async () => {
   const ui = page('register.js');
   ui.element('smiles-in').value = 'NCC(=O)O';
-  let pending = ui.element('btn-preview').dispatchEvent({ type: 'click' });
+  let pending = ui.element('preview-form').dispatchEvent({ type: 'submit' });
   ui.requests[0].resolve(preview);
   await pending;
-  pending = ui.element('btn-preview').dispatchEvent({ type: 'click' });
+  pending = ui.element('preview-form').dispatchEvent({ type: 'submit' });
   ui.requests[1].reject(new Error('Network error'));
   await pending;
   assert.equal(ui.run('detectedData'), null);
@@ -1277,13 +1277,13 @@ test('registration uses preview chemistry and permits a second record after succ
   ui.element('smiles-in').value = 'NCC(=O)O';
   await ui.input('abbr-in', 'TestGly');
   await ui.input('name-in', 'Test glycine');
-  let pending = ui.element('btn-preview').dispatchEvent({ type: 'click' });
-  assert.equal(ui.element('preview-section').style.display, 'block');
+  let pending = ui.element('preview-form').dispatchEvent({ type: 'submit' });
+  assert.equal(ui.element('preview-section').hidden, false);
   ui.requests[0].resolve(preview);
   await pending;
   assert.equal(ui.element('btn-register').disabled, false);
   ui.element('chuckles-out').value = 'UNRELATED EDIT';
-  pending = ui.element('btn-register').dispatchEvent({ type: 'click' });
+  pending = ui.element('registration-form').dispatchEvent({ type: 'submit' });
   assert.equal(JSON.parse(ui.requests[1].options.body).chuckles, preview.chuckles);
   ui.requests[1].resolve({ total: 1000 });
   await pending;
@@ -1291,7 +1291,7 @@ test('registration uses preview chemistry and permits a second record after succ
   assert.equal(ui.element('btn-register').textContent, '✓ Registered');
   await ui.input('smiles-in', 'CC(=O)O');
   await ui.input('abbr-in', 'TestAc');
-  pending = ui.element('btn-preview').dispatchEvent({ type: 'click' });
+  pending = ui.element('preview-form').dispatchEvent({ type: 'submit' });
   ui.requests[2].resolve({ ...preview, chuckles: 'CC([2*])=O' });
   await pending;
   assert.equal(ui.element('btn-register').disabled, false);
@@ -1454,7 +1454,7 @@ test('palette and preview show library quality issues as escaped text', async ()
   latestRequest(ui, '/monomers').resolve([monomer]);
   await pending;
   assert.match(ui.element('lib-list').innerHTML, /lib-quality.*Review &lt;atom&gt; mapping/);
-  assert.match(ui.element('lib-list').innerHTML, /aria-label="G: Glycine. Library quality: Review/);
+  assert.match(ui.element('lib-list').innerHTML, /aria-label="Choose G: Glycine. Library quality: Review/);
   previewRow(ui);
   ui.run(`library.showPreview(${JSON.stringify({ ...preview, quality: monomer.quality })}, previewRow)`);
   assert.match(ui.element('lib-preview').innerHTML, /Library quality: Review &lt;atom&gt; mapping/);
@@ -1469,7 +1469,7 @@ test('informational library notes remain escaped and separate from amber warning
   latestRequest(ui, '/monomers').resolve([monomer]);
   await pending;
   assert.doesNotMatch(ui.element('lib-list').innerHTML, /lib-quality|Library quality:/);
-  assert.match(ui.element('lib-list').innerHTML, /aria-label="G: Glycine"/);
+  assert.match(ui.element('lib-list').innerHTML, /aria-label="Choose G: Glycine"/);
   previewRow(ui);
   ui.run(`library.showPreview(${JSON.stringify({ ...preview, quality: monomer.quality })}, previewRow)`);
   assert.match(ui.element('lib-preview').innerHTML,
@@ -1479,7 +1479,7 @@ test('informational library notes remain escaped and separate from amber warning
   monomer.quality.issues.push({ severity: 'warning', code: 'uncertain_stereo', message: 'Review <stereo> assignment' });
   ui.run(`library.monomers = ${JSON.stringify([monomer])}; library.render('')`);
   assert.match(ui.element('lib-list').innerHTML, /lib-quality.*Review &lt;stereo&gt; assignment/);
-  assert.match(ui.element('lib-list').innerHTML, /aria-label="G: Glycine. Library quality: Review &lt;stereo&gt; assignment"/);
+  assert.match(ui.element('lib-list').innerHTML, /aria-label="Choose G: Glycine. Library quality: Review &lt;stereo&gt; assignment"/);
   assert.doesNotMatch(ui.element('lib-list').innerHTML, /Legacy/);
   ui.run(`library.showPreview(${JSON.stringify({ ...preview, quality: monomer.quality })}, previewRow)`);
   assert.match(ui.element('lib-preview').innerHTML, /class="prev-meta">Library notes: Legacy &lt;atom&gt; numbering &amp; labels/);

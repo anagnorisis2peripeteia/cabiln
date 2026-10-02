@@ -139,7 +139,9 @@ test('help explains data handling and clearing a browser draft preserves the cur
   await expect(page.locator('#draft-status')).toContainText('Draft saved');
   await page.locator('#btn-help').click();
   await expect(page.locator('#help-panel')).toContainText('server hosting this page');
+  await page.getByText('Privacy and reporting a problem', { exact: true }).click();
   await expect(page.getByRole('link', { name: 'Report a problem' })).toHaveAttribute('href', 'https://github.com/anagnorisis2peripeteia/pyPept/issues');
+  await page.getByText('Save, restore and export your work', { exact: true }).click();
   await page.locator('#btn-clear-draft').click();
   await expect(page.locator('#cabiln-input')).toHaveValue('A-G');
   await expect(page.locator('#btn-undo')).toBeEnabled();
@@ -149,6 +151,26 @@ test('help explains data handling and clearing a browser draft preserves the cur
   await page.reload();
   await expect(page.locator('#btn-restore-draft')).toBeHidden();
   await expect(page.locator('#cabiln-input')).toHaveValue('');
+});
+
+test('a cleared recovery draft can be recovered without overwriting new work', async ({ page }) => {
+  await render(page, 'A-G');
+  await expect(page.locator('#draft-status')).toContainText('Draft saved');
+  const original = await page.evaluate(() => localStorage.getItem('cabiln.draft.v1'));
+  await page.reload();
+  await page.locator('#btn-help').click();
+  await page.getByText('Save, restore and export your work', { exact: true }).click();
+  await page.locator('#btn-clear-draft').click();
+  await page.locator('#btn-undo-clear-draft').click();
+  expect(await page.evaluate(() => localStorage.getItem('cabiln.draft.v1'))).toBe(original);
+  await expect(page.locator('#cabiln-input')).toHaveValue('');
+  await page.locator('#btn-restore-draft').click();
+  await expect(page.locator('#cabiln-input')).toHaveValue('A-G');
+  await expect(page.locator('#cabiln-input')).toHaveClass('ok');
+  await page.locator('#btn-clear-draft').click();
+  await render(page, 'A-G-L');
+  await expect(page.locator('#btn-undo-clear-draft')).toBeHidden();
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('cabiln.draft.v1')).document.text)).toBe('A-G-L');
 });
 
 test('short server admission pressure retries a current render without losing input', async ({ page }) => {

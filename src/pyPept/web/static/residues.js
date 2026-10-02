@@ -85,8 +85,9 @@ function createResidueView({ inner, chips: resChips, canHighlight, onSelect }) {
       if (preserved) {
         chip.dataset.quality = preserved;
         chip.title += ` · ${preserved === 'opaque' ? 'Opaque preserved fragment' : 'Synthetic preserved region'}; available sites remain editable`;
-        chip.setAttribute('aria-label', chip.title);
       }
+      chip.setAttribute('aria-label', chip.title);
+      chip.setAttribute('aria-pressed', 'false');
       chip.style.background = RES_COLORS[r.colorIdx % RES_COLORS.length];
       const xlinks = xlinkByMember[r.idx];
       if (!simpleHover && xlinks && xlinks.length) {
@@ -103,15 +104,16 @@ function createResidueView({ inner, chips: resChips, canHighlight, onSelect }) {
     }
 
     function makeSeparator(text, memberIdxs) {
-      const el = document.createElement('span');
+      const el = document.createElement(memberIdxs?.length ? 'button' : 'span');
+      if (memberIdxs?.length) el.type = 'button';
       el.className = 'res-chip branch-chip';
       el.style.background = '#3a3a50';
       el.style.fontWeight = '700';
       el.textContent = text;
       el.dataset.members = JSON.stringify(memberIdxs || []);
       if (memberIdxs && memberIdxs.length) {
-        el.tabIndex = 0;
         el.setAttribute('aria-label', `Highlight ${text} group`);
+        el.addEventListener('click', () => view.highlightGroup(memberIdxs));
         el.addEventListener('mouseenter', () => view.highlightGroup(memberIdxs));
         el.addEventListener('mouseleave', clearHighlight);
         el.addEventListener('focus', () => view.highlightGroup(memberIdxs));
@@ -121,15 +123,15 @@ function createResidueView({ inner, chips: resChips, canHighlight, onSelect }) {
     }
 
     function makeXlinkChip(tag, members) {
-      const el = document.createElement('span');
+      const el = document.createElement('button');
+      el.type = 'button';
       el.className = 'res-chip branch-chip xlink-chip';
       el.style.background = '#503a4a';
       el.style.fontWeight = '700';
-      el.style.fontSize = '0.8em';
       el.textContent = tag;
       el.dataset.members = JSON.stringify(members);
-      el.tabIndex = 0;
       el.setAttribute('aria-label', `Highlight connection ${tag}`);
+      el.addEventListener('click', () => view.highlightGroup(members));
       el.addEventListener('mouseenter', () => view.highlightGroup(members));
       el.addEventListener('mouseleave', clearHighlight);
       el.addEventListener('focus', () => view.highlightGroup(members));
@@ -354,6 +356,7 @@ function createResidueView({ inner, chips: resChips, canHighlight, onSelect }) {
   function select(left = null, right = null) {
     resChips.querySelectorAll('.res-chip').forEach(chip => {
       const index = parseInt(chip.dataset.residue);
+      if (chip.dataset.residue !== undefined) chip.setAttribute('aria-pressed', String(index === left || index === right));
       chip.style.outline = index === left ? '2px solid #5a9ae0'
         : index === right ? '2px solid #e0a05a' : '';
     });

@@ -56,6 +56,10 @@ jobs:
     if: needs.changes.outputs.application == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: [chromium, firefox, webkit]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -79,13 +83,14 @@ jobs:
           npm ci --prefix tests/browser
       - name: Check Linux execution limits in the frozen environment
         run: python -m pytest tests/test_runtime.py tests/test_launch_chemistry.py tests/test_projects.py -q
-      - name: Install Chromium
+      - name: Install browser
         working-directory: tests/browser
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install --with-deps ${{ matrix.engine }}
       - name: Exercise builder, panels, registration and exports
         working-directory: tests/browser
         env:
           CABILN_PYTHON: python
+          CABILN_BROWSER_ENGINE: ${{ matrix.engine }}
           CABILN_BROWSER_INSTALLED: '1'
           CABILN_EXECUTION: process
           CABILN_WORKER_MEMORY_MB: '1024'
@@ -95,7 +100,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: browser-results
+          name: browser-results-${{ matrix.engine }}
           path: ${{ runner.temp }}/cabiln-browser
           if-no-files-found: ignore
 

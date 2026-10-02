@@ -539,7 +539,7 @@ property('registration-preview-and-write-ownership', [fc.scheduler(), fc.record(
   const responses = [];
   for (const [index, source] of example.sources.entries()) {
     await ui.input('smiles-in', source);
-    tasks.push(ui.element('btn-preview').click());
+    tasks.push(ui.element('preview-form').dispatchEvent({ type: 'submit' }));
     const request = pending(ui, '/preview_monomer').at(-1);
     responses.push(scheduler.schedule(Promise.resolve(), `preview:${index}:${source}`).then(async () => {
       count('previewCompletion');
@@ -558,8 +558,8 @@ property('registration-preview-and-write-ownership', [fc.scheduler(), fc.record(
   }
   assert.equal(ui.element('chuckles-out').value, `CHUCKLES:${example.sources.length - 1}`);
   ui.element('chuckles-out').value = 'UNTRUSTED DISPLAY EDIT';
-  const writing = ui.element('btn-register').click();
-  await ui.element('btn-register').click();
+  const writing = ui.element('registration-form').dispatchEvent({ type: 'submit' });
+  await ui.element('registration-form').dispatchEvent({ type: 'submit' });
   const write = pending(ui, '/register_monomer');
   assert.equal(write.length, 1, 'A double click cannot duplicate a library write');
   assert.equal(JSON.parse(write[0].options.body).chuckles, `CHUCKLES:${example.sources.length - 1}`);

@@ -10,6 +10,7 @@ let lastSmiles  = '';
 let projectContext = null;
 let projectRevision = 0;
 let draftCleared = false;
+let clearedDraft = null;
 let referenceOriginal = null;
 let referenceContext = null;
 
@@ -59,6 +60,7 @@ const draftNotice = document.getElementById('draft-notice');
 const draftStatus = document.getElementById('draft-status');
 const btnRestoreDraft = document.getElementById('btn-restore-draft');
 const btnDismissDraft = document.getElementById('btn-dismiss-draft');
+const btnUndoClearDraft = document.getElementById('btn-undo-clear-draft');
 const renderPane = document.getElementById('render-pane');
 const renderProgress = document.getElementById('render-progress');
 const renderProgressLabel = document.getElementById('render-progress-label');
@@ -135,7 +137,7 @@ function saveDraft() {
       context: projectContext || editor.present.context }));
     draftStatus.textContent = 'Draft saved in this browser';
   } catch (error) {
-    draftStatus.textContent = 'Draft storage is unavailable; this session still supports Undo';
+    draftStatus.textContent = 'Draft storage is unavailable. Use Save project to keep your work; this session still supports Undo.';
   }
   draftNotice.hidden = false;
 }
@@ -201,6 +203,8 @@ function finishDraftRecovery() {
 }
 function beginDraftEdit() {
   draftCleared = false;
+  clearedDraft = null;
+  btnUndoClearDraft.hidden = true;
   if (!savedDraft) return;
   finishDraftRecovery();
   draftStatus.textContent = 'New draft started in this browser';
@@ -345,12 +349,7 @@ function downloadProject(project) {
   if (blob.size > CabilnProject.MAX_FILE_BYTES) {
     throw new Error('The project exceeds 2 MiB. Shorten unused drafts or the reference before saving.');
   }
-  const link = document.createElement('a');
-  const url = URL.createObjectURL(blob);
-  link.href = url;
-  link.download = 'peptide.cabiln.json';
-  link.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  downloadBlob(blob, 'peptide.cabiln.json');
 }
 
 async function restoreBoundDraft(project) {
@@ -476,13 +475,28 @@ document.getElementById('btn-clear-draft').addEventListener('click', () => {
   if (practiceMode) return;
   requests.cancel('project-open');
   clearTimeout(saveDraftTimer);
-  finishDraftRecovery();
-  draftCleared = true;
   try {
+    const raw = window.localStorage.getItem(DRAFT_KEY);
     window.localStorage.removeItem(DRAFT_KEY);
+    clearedDraft = raw ? { raw, recovery: savedDraft } : null;
+    finishDraftRecovery();
+    draftCleared = true;
+    btnUndoClearDraft.hidden = !clearedDraft;
     draftStatus.textContent = 'Saved browser draft cleared. Current work and Undo are unchanged; the next edit starts a new draft.';
   } catch (error) { draftStatus.textContent = 'Browser storage is unavailable. No draft could be removed.'; }
   draftNotice.hidden = false;
+});
+btnUndoClearDraft.addEventListener('click', () => {
+  if (!clearedDraft) return;
+  try {
+    window.localStorage.setItem(DRAFT_KEY, clearedDraft.raw);
+    savedDraft = clearedDraft.recovery;
+    draftCleared = false;
+    clearedDraft = null;
+    btnUndoClearDraft.hidden = true;
+    btnRestoreDraft.hidden = btnDismissDraft.hidden = !savedDraft;
+    draftStatus.textContent = savedDraft ? 'Saved draft recovered. Choose Restore saved draft to load it.' : 'Saved browser draft recovered.';
+  } catch (error) { draftStatus.textContent = 'Could not recover the saved draft. Check browser storage and try Undo clear again.'; }
 });
 
 async function loadCapabilities() {
@@ -631,10 +645,7 @@ btnPng.addEventListener('click', () => {
 btnMol.addEventListener('click', async () => {
   if (!drawing.molBlock) return;
   const blob = new Blob([drawing.molBlock], { type: 'chemical/x-mdl-molfile' });
-  const a = document.createElement('a');
-  a.download = 'structure.mol';
-  a.href = URL.createObjectURL(blob);
-  a.click();
+  downloadBlob(blob, 'structure.mol');
 });
 
 // notation conversion
@@ -858,8 +869,8 @@ function updateDrawingControls() {
 
 // render helpers
 function canvasSize(el) {
-  return { w: Math.max(el.clientWidth || 600, 400),
-           h: Math.max(el.clientHeight || 500, 300) };
+  return { w: Math.min(4096, Math.max(el.clientWidth || 600, 400)),
+           h: Math.min(4096, Math.max(el.clientHeight || 500, 300)) };
 }
 
 function setInner(inner, html) {
@@ -912,7 +923,7 @@ function invalidateDocument() {
   renderCanvas.classList.add('stale');
   residueView.setStale(true);
   btnReroll.textContent = '⟳ Layout';
-  cabilnInput.className = '';
+  setInputState(cabilnInput, '');
   setStatus(cabilnStatus, '');
 }
 
@@ -971,7 +982,7 @@ function mainRenderError(message, invalidInput = false, diagnostic = null) {
     }
   }
   if (!invalidInput) showRetry(cabilnStatus, message, () => renderDocument(true));
-  cabilnInput.className = invalidInput ? 'err' : '';
+  setInputState(cabilnInput, invalidInput ? 'err' : '');
 }
 
 async function doRenderForeign(txt) {
@@ -1000,7 +1011,7 @@ async function doRenderForeign(txt) {
       residueView.clear();
       setStatus(cabilnStatus, '', 'ok');
       showStructureInfo(cabilnStatus, data, { lead: data.format });
-      cabilnInput.className = 'ok';
+      setInputState(cabilnInput, 'ok');
     }
   } catch (e) {
     if (!request.current()) return;
@@ -1034,7 +1045,7 @@ function acceptCabilnDrawing(data, source, view, sameDocument = false) {
   displayMainDrawing(data.svg);
   setStatus(cabilnStatus, '', data.warnings?.length ? 'warn' : 'ok');
   showStructureInfo(cabilnStatus, data);
-  cabilnInput.className = 'ok';
+  setInputState(cabilnInput, 'ok');
   residueView.render(data, editor.present.quality);
   // Tabs can change the canvas height on the first render. Detect later resizes
   // against the accepted view, while retaining the dimensions of the SVG itself.
@@ -1082,7 +1093,7 @@ function clearReference() {
   smilesTimer = null;
   requests.cancel('reference-render', 'sequence-edit');
   lastSmiles = '';
-  smilesInput.className = '';
+  setInputState(smilesInput, '');
   setStatus(smilesStatus, '');
   clearComparison();
 }
@@ -1157,7 +1168,7 @@ async function renderMolReference(text, name, request = requests.start('referenc
       smilesInput.value = lastSmiles;
       acceptReferenceContext(data.context);
       saveDraft();
-      smilesInput.className = 'ok';
+      setInputState(smilesInput, 'ok');
       if (drawing.cabiln) triggerVerify();
     }
   } catch (err) {
@@ -1179,20 +1190,20 @@ async function doRenderRef(txt) {
       setInner(smilesInner, `<div class="placeholder err">${escHtml(data.error)}</div>`);
       setStatus(smilesStatus, data.error, 'error');
       if (!invalidInputResponse(res)) showRetry(smilesStatus, data.error, restoreReferenceDrawing);
-      smilesInput.className = invalidInputResponse(res) ? 'err' : '';
+      setInputState(smilesInput, invalidInputResponse(res) ? 'err' : '');
     } else {
       setInner(smilesInner, data.svg);
       lastSmiles = data.smiles || '';
       acceptReferenceContext(data.context);
       setStatus(smilesStatus, '', 'ok');
       showStructureInfo(smilesStatus, data, { lead: data.format });
-      smilesInput.className = 'ok';
+      setInputState(smilesInput, 'ok');
       if (drawing.cabiln) triggerVerify();
     }
   } catch (e) {
     if (!request.current()) return;
     showRetry(smilesStatus, 'Could not reach the renderer. Your reference input is preserved.', restoreReferenceDrawing);
-    smilesInput.className = '';
+    setInputState(smilesInput, '');
   } finally {
     request.finish();
   }
@@ -1210,12 +1221,13 @@ async function triggerVerify() {
   const request = requests.start('verify');
   const smiles = lastSmiles;
   const cabiln = drawing.cabiln;
+  compareBar.textContent = 'Comparing structures…';
   try {
     const res = await postCalculation('/verify', { smiles, cabiln }, request.signal);
     const data = await readResponse(res);
     if (!request.current() || lastSmiles !== smiles || drawing.cabiln !== cabiln) return;
     if (data.error) {
-      compareBar.innerHTML = `<span class="nomatch">Error: ${escHtml(data.error)}</span>`;
+      showRetry(compareBar, data.error, triggerVerify);
       return;
     }
     const badge = data.match
@@ -1234,7 +1246,7 @@ async function triggerVerify() {
       `CABILN: ${escHtml(data.cabiln_canonical.slice(0, 80))}${data.cabiln_canonical.length > 80 ? '…' : ''}</span>`;
   } catch (e) {
     if (!request.current()) return;
-    compareBar.innerHTML = '<span class="nomatch">Verify error</span>';
+    showRetry(compareBar, 'Could not compare the structures. Both inputs are preserved.', triggerVerify);
   } finally {
     request.finish();
   }

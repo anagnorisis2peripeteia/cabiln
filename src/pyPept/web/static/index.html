@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#18191c">
 <title>CABILN Live Renderer</title>
 <link rel="stylesheet" href="/static/theme.css">
@@ -38,17 +38,36 @@
 <section id="help-panel" class="help-panel" aria-labelledby="help-title" hidden>
   <div class="help-heading"><h2 id="help-title">Working with CABILN</h2><button type="button" id="help-close" class="panel-close" aria-label="Close help">✕</button></div>
   <p><a class="hbtn tutorial-start" href="/?tutorial=1" target="_blank" rel="noopener">Start guided tutorial ↗</a> Build a short peptide or practise a swap in Retatrutide in a separate tab. Your current work stays here.</p>
-  <p>Type a sequence, or choose SMILES, BILN or HELM and convert it. Open Build, select a residue in the drawing or its tile, then choose Use in the library and choose free numbered sites. Click or tap an atom label or bond to select; drag to pan. Preview shows the proposed molecule; Connect applies it. Nested brackets keep their own attachment parent. Undo and Redo restore sequence edits.</p>
-  <p>To replace a residue, choose Swap monomer in Build. The library filters replacements against every existing connection. Review the numbered site mapping and preview the full product, then Apply swap. Site numbers can differ; the preview shows any reformatted notation. Undo restores the original.</p>
-  <p>Keep layout preserves your grouping. Canonical exports order the resolved monomer graph under a recorded convention and library binding. Imported structures can include inferred stereochemistry or preserved synthetic regions; open Import quality for details. Valid synthetic sites remain editable.</p>
-  <p>Save project downloads your source, notation drafts, original reference and conversion details. Opening checks the definitions and reaction rules before loading. PNG and MOL export the current drawing and molecule.</p>
-  <p>Drawing controls work with mouse, touch and keyboard. Focus a drawing and use arrow keys to pan, + or − to zoom, and 0 or Home to reset. Escape closes the active panel and returns focus to its button.</p>
-  <p>Your inputs and uploaded structures are sent to the server hosting this page for chemistry processing. Browser drafts stay in this browser's local storage; project files download to your device. Clearing a draft removes that browser copy only. Avoid putting private structures in public feedback.</p>
-  <div class="help-actions"><button type="button" id="btn-clear-draft" class="hbtn">Clear saved browser draft</button><a class="hbtn" href="https://github.com/anagnorisis2peripeteia/pyPept/issues" target="_blank" rel="noopener noreferrer">Report a problem</a></div>
+  <details><summary>Start a peptide and add a monomer</summary>
+    <p>A monomer is one building block; a residue is that block inside your peptide. Type a sequence, choose an Example, or open Build to start.</p>
+    <p>In Build, select a residue in the drawing or its tile, then choose Use in the library. Choose a free numbered site on each side. These R-sites are attachment points. Used sites cannot connect again. Preview shows the proposed molecule; Connect applies it. Undo and Redo restore sequence edits.</p>
+    <p>Search the library by abbreviation, name or type. Filter narrows it to compatible attachment sites; Site details shows their chemistry. Stars keep favourites in this browser. Register adds a new monomer when this server allows it.</p>
+  </details>
+  <details><summary>Swap a monomer without losing its connections</summary>
+    <p>Choose Swap monomer in Build, then select the residue to replace. The library checks every existing connection. Select a replacement, review which numbered sites match, and preview the full product. Apply swap commits it; Undo restores the original. Site numbers can differ, and the preview shows any reformatted notation.</p>
+  </details>
+  <details><summary>Convert notation and check a structure</summary>
+    <p>Choose SMILES, BILN or HELM beside Sequence to enter another format, then convert to CABILN. Bracket [ ] and Branch % describe connections in different ways. Nested brackets keep their own attachment parent.</p>
+    <p>Keep layout preserves your grouping. Canonical uses a standard ordering of the resolved monomer graph, recorded with the library definitions. Imported structures may contain inferred stereochemistry or preserved synthetic regions; open Import quality to review them. Valid synthetic sites remain editable.</p>
+    <p>Verify compares the peptide with a reference. Paste its SMILES, BILN or HELM, or upload a MOL/SDF file. The result reports whether the molecular structures match.</p>
+  </details>
+  <details><summary>Save, restore and export your work</summary>
+    <p>Save project downloads your source, notation drafts, original reference and conversion details. Open project checks definitions and reaction rules before loading. PNG exports the drawing; MOL exports the molecular structure.</p>
+    <p>Browser drafts are saved locally as you edit. On return, Restore saved draft loads that work. Practice tabs do not save automatically. Clearing a draft removes the browser copy only; Undo clear restores it until your next edit.</p>
+    <div class="help-actions"><button type="button" id="btn-clear-draft" class="hbtn">Clear saved browser draft</button></div>
+  </details>
+  <details><summary>Drawing, touch and keyboard controls</summary>
+    <p>Click or tap an atom label or bond to select its residue in Build; drag to pan. Pinch or scroll to zoom. With the drawing focused, use arrow keys to pan, + or − to zoom, and 0 or Home to reset. The visible zoom buttons work too.</p>
+    <p>Tab moves between controls. Enter or Space activates a focused button, including residue and branch tiles. Escape dismisses a monomer preview first, then closes the active panel and returns focus to its button. Dark changes the drawing background; Highlight turns residue highlighting on or off.</p>
+  </details>
+  <details><summary>Privacy and reporting a problem</summary>
+    <p>Your inputs and uploaded structures go to the server hosting this page for chemistry processing. Browser drafts stay in this browser's local storage; project files download to your device. Avoid putting private structures in public feedback.</p>
+    <a class="hbtn" href="https://github.com/anagnorisis2peripeteia/pyPept/issues" target="_blank" rel="noopener noreferrer">Report a problem</a>
+  </details>
 </section>
 
 <!-- input bar (always visible) -->
-<div id="input-bar">
+<section id="input-bar" aria-label="Peptide editor">
   <div id="input-bar-row">
     <div class="sequence-format">
       <label class="seq-label" id="cabiln-label" for="cabiln-input">Sequence</label>
@@ -61,7 +80,7 @@
     </div>
     <textarea id="cabiln-input" name="sequence" translate="no"
               placeholder="Enter a sequence, e.g. fmoc-A-G-L-am"
-              spellcheck="false" autocomplete="off" aria-describedby="cabiln-status conversion-status quality-summary"></textarea>
+              spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off" aria-describedby="cabiln-status conversion-status quality-summary"></textarea>
     <div id="notation-actions" class="notation-actions" role="group" aria-label="Notation">
       <span class="toolbar-label">Convert</span>
       <select id="notation-policy" class="hbtn" aria-label="Notation formatting" title="Canonical formatting uses a standard order for chains, branches and connection labels">
@@ -88,6 +107,7 @@
         <span id="draft-status" role="status" aria-live="polite" aria-atomic="true"></span>
         <button type="button" id="btn-restore-draft" class="hbtn">Restore saved draft</button>
         <button type="button" id="btn-dismiss-draft" class="hbtn">Dismiss</button>
+        <button type="button" id="btn-undo-clear-draft" class="hbtn" hidden>Undo clear</button>
       </div>
     </div>
   </div>
@@ -98,7 +118,7 @@
     <div id="quality-details"></div>
   </details>
   <div id="canonical-status" class="statusbar" hidden></div>
-</div>
+</section>
 
 <!-- build panel -->
 <section id="build-panel" aria-labelledby="build-title">
@@ -157,7 +177,7 @@
       <button type="button" class="hbtn" data-zoom="in" aria-label="Zoom in">+</button>
       <button type="button" class="hbtn" data-zoom="reset" title="Reset zoom and pan (0 or Home when the drawing has focus)">Reset view</button>
     </div>
-    <div id="build-preview-canvas" class="canvas-wrap" title="Drag to pan; pinch or scroll to zoom; double-click to reset. Keyboard: arrows, plus, minus and zero">
+    <div id="build-preview-canvas" class="canvas-wrap" role="group" aria-label="Product preview drawing; arrows to pan, plus or minus to zoom, zero to reset" title="Drag to pan; pinch or scroll to zoom; double-click to reset. Keyboard: arrows, plus, minus and zero">
       <div id="build-preview-inner" class="canvas-inner"></div>
     </div>
     <details class="preview-details">
@@ -183,7 +203,7 @@
   <aside id="lib-panel" aria-labelledby="lib-title">
     <div id="lib-header">
       <h2 class="panel-title" id="lib-title">Monomer Library</h2>
-      <input id="lib-search" type="search" placeholder="Search abbr / name / type…" autocomplete="off" aria-label="Search monomer library" aria-describedby="lib-count">
+      <input id="lib-search" name="monomer-search" type="search" placeholder="Search abbr / name / type…" autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off" aria-label="Search monomer library" aria-describedby="lib-count">
       <button type="button" id="btn-rxn-filter" class="hbtn" title="Filter by compatible attachment sites" aria-describedby="lib-filter-status" aria-pressed="false"><svg class="ui-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M2 3h12L9 9v4l-2 1V9z"/></svg>Filter</button>
       <button type="button" id="lib-close" class="panel-close" title="Close Library" aria-label="Close monomer library">✕</button>
     </div>
@@ -203,9 +223,9 @@
     </div>
     <div id="lib-filter-status" role="status" aria-live="polite">Filter finds monomers that can connect to a residue in Build.</div>
     <div id="lib-status" class="statusbar warn" role="status" aria-live="polite" hidden></div>
-    <div id="lib-list" tabindex="-1" role="group" aria-label="Monomer choices"><div class="placeholder">Loading…</div></div>
+    <div id="lib-list" tabindex="0" role="group" aria-label="Monomer choices"><div class="placeholder">Loading…</div></div>
   </aside>
-  <div id="lib-preview"></div>
+  <div id="lib-preview" role="group" aria-label="Monomer structure preview" tabindex="0"></div>
 
   <!-- render mode -->
   <section id="render-pane" aria-label="Peptide drawing" aria-busy="false">
@@ -261,8 +281,8 @@
         <button type="button" id="btn-s2c" class="hbtn" title="Convert SMILES → % CABILN (branch form)" aria-label="Convert reference to branch notation">Use branch %</button>
         <button type="button" id="btn-s2c-bracket" class="hbtn" title="Convert SMILES → [] CABILN (bracket form)" aria-label="Convert reference to bracket notation">Use bracket [ ]</button>
       </div>
-      <textarea id="smiles-input" placeholder="Paste SMILES, BILN, or HELM here…"
-                spellcheck="false" autocomplete="off" aria-describedby="smiles-status"></textarea>
+      <textarea id="smiles-input" name="reference" translate="no" placeholder="Paste SMILES, BILN, or HELM here…"
+                spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off" aria-describedby="smiles-status"></textarea>
       <div id="smiles-status" class="statusbar" role="status" aria-live="polite" aria-atomic="true"></div>
       <div class="viewport-controls" data-viewport="smiles-canvas" role="group" aria-label="Drawing zoom">
         <button type="button" class="hbtn" data-zoom="out" aria-label="Zoom out">−</button>

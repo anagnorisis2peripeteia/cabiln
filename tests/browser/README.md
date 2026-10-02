@@ -10,8 +10,10 @@ used in production; omit `CABILN_EXECUTION=process` for local thread-pool mode:
 
 ```sh
 npm ci
-npx playwright install chromium
+npx playwright install chromium firefox webkit
 CABILN_EXECUTION=process npm test
+CABILN_EXECUTION=process CABILN_BROWSER_ENGINE=firefox npm test
+CABILN_EXECUTION=process CABILN_BROWSER_ENGINE=webkit npm test
 ```
 
 The suite covers building chains, caps, branches, disulfides, cycles and
@@ -24,7 +26,16 @@ keyboard building, attachment highlights, Undo/Redo, format drafts, recovery,
 unavailable storage, preserved stereo warnings, library revision refreshes, and
 building/verification at a 390 px viewport. Interaction journeys cover independent
 Escape dismissal and focus return, keyboard examples, shared zoom/reset controls,
-real touch pan/pinch, in-place Retry, and visible warnings with expandable details.
+touch selection, interrupted dragging, in-place Retry, and visible warnings with
+expandable details. Chromium additionally exercises real multi-finger pan/pinch
+through CDP; that input API is unavailable in the other engines.
+Registration checks empty input, failed previews, duplicate abbreviations and
+keyboard submission. Draft clearing checks recovery before a new edit.
+The accessibility journey runs axe-core on empty, library, selected residue,
+Swap, Help, Examples, preview, Verify, light drawing, tutorial, narrow layout and
+registration states. Reduced motion keeps contrast checks out of transitional
+colours. Reports retain incomplete checks for manual review; a passing scan is
+not an accessibility certification or a physical-device/screen-reader test.
 Library journeys check actual matches when the selected site changes, filter
 reset and search, and recovery from missing or stalled reaction data. Tutorial journeys
 exercise the full build/preview/Undo route at desktop and mobile widths, failed
@@ -67,7 +78,16 @@ uses the installed wheel with Python isolation; release CI sets this and runs
 with the production worker memory limit.
 
 `CABILN_BROWSER_CHANNEL=chrome` uses installed Chrome. Without it, Playwright's
-Chromium is used. The viewport is fixed at 1440 × 1000, with one worker.
+Chromium is used. `CABILN_BROWSER_ENGINE=firefox` or `webkit` selects another
+engine. CI runs the suite on all three against the same release wheel. The
+default viewport is 1440 × 1000, with one worker; responsive journeys override it.
+On macOS, WebKit follows the system's keyboard navigation preference. Enable
+Keyboard navigation before testing Tab between buttons, or set
+`defaults write org.webkit.Playwright AppleKeyboardUIMode -int 2` for the test
+browser only. Restore its previous value after testing; use `defaults delete
+org.webkit.Playwright AppleKeyboardUIMode` if no value was previously set.
+The skip-link journey uses Option+Tab on macOS WebKit to include links, matching
+[Safari's keyboard behaviour](https://github.com/microsoft/playwright/issues/5609).
 `CABILN_BROWSER_ARTIFACTS` selects the report directory; the default is
 `cabiln-browser-acceptance` beneath the system temporary directory.
 

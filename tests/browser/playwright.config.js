@@ -2,12 +2,13 @@ const os = require('node:os');
 const path = require('node:path');
 const { defineConfig } = require('@playwright/test');
 
-// Install with npm ci and npx playwright install chromium in this directory.
+// Install with npm ci and npx playwright install chromium firefox webkit.
 // The Python environment must have the project's [web] dependencies installed.
 // CABILN_APP_ROOT selects a frozen checkout; CABILN_PYTHON selects its interpreter.
 // CABILN_BROWSER_CHANNEL=chrome uses an installed Chrome instead of Chromium.
 const outputDir = process.env.CABILN_BROWSER_ARTIFACTS ||
   path.join(os.tmpdir(), 'cabiln-browser-acceptance');
+const browserName = process.env.CABILN_BROWSER_ENGINE || 'chromium';
 
 module.exports = defineConfig({
   testDir: __dirname,
@@ -23,7 +24,8 @@ module.exports = defineConfig({
   ],
   use: {
     headless: true,
-    channel: process.env.CABILN_BROWSER_CHANNEL || undefined,
+    browserName,
+    channel: browserName === 'chromium' ? process.env.CABILN_BROWSER_CHANNEL || undefined : undefined,
     viewport: { width: 1440, height: 1000 },
     locale: 'en-GB',
     colorScheme: 'light',

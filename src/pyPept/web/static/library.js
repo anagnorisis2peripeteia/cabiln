@@ -96,12 +96,6 @@ class MonomerLibrary {
         this.use(row.dataset.abbr, true);
       }
     });
-    this.list.addEventListener('keydown', event => {
-      if (event.target.matches('.lib-row') && ['Enter', ' '].includes(event.key)) {
-        event.preventDefault();
-        this.use(event.target.dataset.abbr);
-      }
-    });
     for (const type of ['mouseover', 'focusin']) {
       this.list.addEventListener(type, event => {
         const row = event.target.closest('.lib-row');
@@ -111,9 +105,26 @@ class MonomerLibrary {
     for (const type of ['mouseout', 'focusout']) {
       this.list.addEventListener(type, event => {
         const row = event.target.closest('.lib-row');
-        if (row && !row.contains(event.relatedTarget)) this.hidePreview();
+        if (!row || row.contains(event.relatedTarget) || this.preview.contains(event.relatedTarget)) return;
+        clearTimeout(this.previewTimer);
+        if (type === 'focusout') this.hidePreview();
+        else this.previewTimer = setTimeout(() => this.hidePreview(), 150);
       });
     }
+    this.preview.addEventListener('mouseenter', () => clearTimeout(this.previewTimer));
+    this.preview.addEventListener('mouseleave', () => {
+      if (!this.preview.contains(document.activeElement)) this.hidePreview();
+    });
+    this.preview.addEventListener('focusout', event => {
+      if (!this.preview.contains(event.relatedTarget)) this.hidePreview();
+    });
+    window.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && this.preview.style.display === 'block') {
+        event.preventDefault();
+        if (this.preview.contains(document.activeElement)) this.search.focus();
+        this.hidePreview();
+      }
+    }, { capture: true });
   }
 
   open(options) { this.disclosure.open(options); }
@@ -217,6 +228,7 @@ class MonomerLibrary {
   }
 
   render(q = this.search.value.trim().toLowerCase()) {
+    this.hidePreview();
     const filters = this.getFilters();
     const { left: buildLeft, insertBetween: insertBetweenActive, replacements, awaitingSelection } = filters;
     this.updateFilterStatus(filters);
@@ -291,15 +303,17 @@ class MonomerLibrary {
         if (m.cterm_abbr) parts.push(`C: ${escHtml(m.cterm_abbr)} (${escHtml(m.cterm_leaving)})`);
         lg = '  ' + parts.join(' | ');
       }
-      const label = m.abbr + ': ' + m.name + (qualityText ? '. Library quality: ' + qualityText : '');
-      return `<div class="lib-row" data-abbr="${escAttr(m.abbr)}" tabindex="0" aria-label="${escAttr(label)}">
-        <div class="lib-abbr">${escHtml(m.abbr)}</div>
-        <div class="lib-info">
-          <div class="lib-name" title="${escAttr(m.name)}">${escHtml(m.name)}</div>
-          <div class="lib-meta">${escHtml(m.chem_types || '')}${lg}</div>
-          ${qualityText ? `<div class="lib-quality" title="${escAttr(qualityText)}">${escHtml(qualityText)}</div>` : ''}
-        </div>
-        ${badge}
+      const label = `Choose ${m.abbr}: ${m.name}` + (qualityText ? '. Library quality: ' + qualityText : '');
+      return `<div class="lib-row" data-abbr="${escAttr(m.abbr)}">
+        <button type="button" class="lib-choice" aria-label="${escAttr(label)}">
+          <span class="lib-abbr">${escHtml(m.abbr)}</span>
+          <span class="lib-info">
+            <span class="lib-name" title="${escAttr(m.name)}">${escHtml(m.name)}</span>
+            <span class="lib-meta">${escHtml(m.chem_types || '')}${lg}</span>
+            ${qualityText ? `<span class="lib-quality" title="${escAttr(qualityText)}">${escHtml(qualityText)}</span>` : ''}
+          </span>
+          ${badge}
+        </button>
         <button type="button" class="lib-favourite" aria-label="Favourite ${escAttr(m.abbr)}" aria-pressed="${this.favourites.has(m.abbr)}" title="Keep in favourites">★</button>
         <button type="button" class="lib-use" aria-label="${swapping ? 'Select' : 'Use'} ${escAttr(m.abbr)} ${swapping ? 'as replacement' : 'in builder'}" title="${swapping ? 'Select a replacement to preview' : 'Choose this monomer in the builder'}">${swapping ? 'Select' : 'Use'}</button>
       </div>`;
@@ -377,15 +391,20 @@ class MonomerLibrary {
     const hasReagent = !!(data.svg_reagent || (data.variants && data.variants.some(v => v.svg_reagent)));
     this.preview.classList.toggle('has-reagent', hasReagent);
     const rect = row.getBoundingClientRect();
-    const previewH = hasReagent ? 240 : 202;
-    let top = Math.max(8, rect.top - 40);
-    if (top + previewH > window.innerHeight - 8) {
-      top = window.innerHeight - 8 - previewH;
-    }
-    top = Math.max(8, top);
-    this.preview.style.left = (rect.right + 8) + 'px';
-    this.preview.style.top  = top + 'px';
+    this.preview.style.maxHeight = '';
     this.preview.style.display = 'block';
+    const size = this.preview.getBoundingClientRect();
+    this.preview.style.left = Math.max(8, Math.min(rect.right + 8, window.innerWidth - size.width - 8)) + 'px';
+    if (window.innerWidth > 960 && rect.right + size.width + 16 <= window.innerWidth) {
+      this.preview.style.top = Math.max(8, Math.min(rect.top - 40, window.innerHeight - size.height - 8)) + 'px';
+    } else {
+      const above = rect.top - 16, below = window.innerHeight - rect.bottom - 16;
+      const useAbove = above >= size.height || above > below;
+      const height = Math.min(size.height, useAbove ? above : below);
+      if (height < 80) { this.hidePreview(); return; }
+      this.preview.style.maxHeight = height + 'px';
+      this.preview.style.top = (useAbove ? rect.top - height - 8 : rect.bottom + 8) + 'px';
+    }
   }
 
   hidePreview() {

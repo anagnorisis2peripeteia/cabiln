@@ -35,7 +35,8 @@ async function startApp(workerInfo, registration) {
   fs.mkdirSync(path.dirname(logPath), { recursive: true });
   const log = fs.createWriteStream(logPath);
   fs.writeFileSync(path.join(workerInfo.project.outputDir, 'application.json'), JSON.stringify({
-    appRoot, python, installed, browserChannel: process.env.CABILN_BROWSER_CHANNEL || 'chromium',
+    appRoot, python, installed, browser: workerInfo.project.use.browserName,
+    browserChannel: workerInfo.project.use.channel,
     viewport: workerInfo.project.use.viewport,
   }, null, 2));
   const server = spawn(python, [

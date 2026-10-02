@@ -27,6 +27,7 @@ for (const example of tabCases) {
       const tab = tabs.nth(idx);
       const members = JSON.parse(await tab.getAttribute('data-members'));
       if (!members.length) continue;
+      await expect(tab).toHaveRole('button');
       await tab.hover();
       const highlighted = await page.locator('#residue-chips [data-residue].hover').evaluateAll(elements =>
         elements.map(el => Number(el.dataset.residue)).sort((a, b) => a - b));
@@ -44,6 +45,9 @@ for (const example of tabCases) {
       }, { members, ownership: data.residue_map });
       expect(actual.count).toBeGreaterThan(0);
       expect(actual.correct).toBe(true);
+      await tab.focus();
+      await page.keyboard.press('Space');
+      expect(await page.locator('#render-inner .res-hl').count()).toBe(actual.count);
     }
     await capture(page, testInfo, 'tabs-and-atom-ownership');
   });
@@ -189,6 +193,34 @@ test('a read-only instance exposes rendering while registration stays unavailabl
   expect(response.status()).toBe(403);
   expect(await response.json()).toEqual({ detail: 'This monomer library is read-only.' });
   await expect(page.locator('body')).toContainText('This monomer library is read-only.');
+});
+
+test('registration explains empty input, failed previews and duplicate names with keyboard recovery', async ({ page, app }) => {
+  await page.goto(`${app.url}/register`);
+  await page.locator('#btn-preview').click();
+  await expect(page.locator('#smiles-in')).toBeFocused();
+  await expect(page.locator('#smiles-in')).toHaveAttribute('aria-invalid', 'true');
+  await expect(page.locator('#preview-error')).toContainText('Enter a SMILES string');
+  await page.locator('#smiles-in').fill('NCC(=O)O');
+  await page.route('**/preview_monomer', route => route.abort('failed'), { times: 1 });
+  await page.locator('#btn-preview').click();
+  await expect(page.locator('#preview-error')).toContainText('try Preview again');
+  await expect(page.locator('#smiles-in')).toHaveValue('NCC(=O)O');
+  await expect(page.locator('#btn-register')).toBeHidden();
+  await page.locator('#btn-preview').click();
+  await expect(page.locator('#preview-canvas svg')).toBeVisible();
+  await expect(page.locator('#preview-error')).toBeEmpty();
+  await expect(page.locator('#btn-register')).toBeDisabled();
+  await expect(page.locator('#registration-guide')).toContainText('abbreviation and full name');
+  await page.locator('#abbr-in').fill('G');
+  await page.locator('#name-in').fill('Keyboard glycine');
+  await page.locator('#name-in').press('Enter');
+  await expect(page.locator('#status-msg.err')).toContainText(/already|exists/i);
+  await expect(page.locator('#preview-canvas svg')).toBeVisible();
+  await page.locator('#abbr-in').fill('KeyboardGly');
+  await page.locator('#abbr-in').press('Enter');
+  await expect(page.locator('#status-msg.ok')).toContainText('KeyboardGly registered');
+  await expect(page.locator('#btn-register')).toBeDisabled();
 });
 
 test('attachment-form choices load the selected family member before its sites', async ({ page }, testInfo) => {

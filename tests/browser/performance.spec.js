@@ -71,7 +71,7 @@ test('measure feedback and completed chemistry for edits, connections and larger
   }
   const result = {
     application: process.env.CABILN_APP_ROOT || 'current checkout',
-    browser: process.env.CABILN_BROWSER_CHANNEL || 'chromium',
+    browser: testInfo.project.use.channel || testInfo.project.use.browserName,
     viewport: testInfo.project.use.viewport,
     edits, connections, largerPeptides,
     note: 'Event to visible feedback and to completed drawing/chips; both sampled after two animation frames. Includes network and chemistry in completedMs. Excludes automation polling. First edit is cold only when run alone. Local samples, not field INP or production percentiles.',

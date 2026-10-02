@@ -2,76 +2,82 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Register Monomer — pyPept</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#18191c">
+<title>Register monomer — CABILN</title>
 <link rel="stylesheet" href="/static/theme.css">
 <link rel="stylesheet" href="/static/register.css">
 </head>
 <body>
 <header>
-  <h1 class="title">Register monomer <span>— pyPept</span></h1>
+  <h1 class="title">Register monomer <span>CABILN · pyPept</span></h1>
   <a href="/"><svg class="ui-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M7 3L2 8l5 5M2 8h12"/></svg>Back to renderer</a>
 </header>
 
 <main class="page">
-  <section class="card" aria-labelledby="smiles-step">
+  <form id="preview-form" class="card" aria-labelledby="smiles-step" novalidate>
     <h2 id="smiles-step">1. Enter SMILES</h2>
     <div class="field">
       <label for="smiles-in">Full monomer SMILES</label>
-      <p id="smiles-help" class="field-help">Include all atoms and leaving groups.</p>
-      <textarea id="smiles-in" placeholder="e.g.  NCC(=O)O  (glycine)  or  O=C(O)CN1C(=O)C=CC1=O  (Mal-Gly)" spellcheck="false" autocomplete="off" aria-describedby="smiles-help"></textarea>
+      <p id="smiles-help" class="field-help">SMILES is a text description of a molecule. Include all atoms and leaving groups; the preview detects where this block can connect.</p>
+      <textarea id="smiles-in" name="smiles" translate="no" placeholder="e.g. NCC(=O)O for glycine" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off" aria-describedby="smiles-help preview-error" required></textarea>
+      <p id="preview-error" class="field-error" role="alert"></p>
     </div>
-    <button type="button" class="btn btn-primary" id="btn-preview">Preview &amp; detect R-groups</button>
-  </section>
+    <button type="submit" class="btn btn-primary" id="btn-preview">Preview &amp; detect R-groups</button>
+  </form>
 
-  <div id="preview-section">
+  <div id="preview-section" hidden>
     <section class="card" aria-labelledby="preview-step">
-      <h2 id="preview-step">2. Review detected R-groups</h2>
-      <div id="preview-canvas" role="group" aria-label="Monomer preview"><div class="preview-message">Preview the monomer to inspect its attachment sites.</div></div>
+      <h2 id="preview-step">2. Review attachment sites</h2>
+      <p class="field-help">The numbered markers match the R-sites listed below. These are where the block can connect; check that they match your intended monomer.</p>
+      <div id="preview-canvas" role="group" aria-label="Monomer with numbered attachment sites" aria-busy="false"><div class="preview-message">Preview the monomer to inspect its attachment sites.</div></div>
       <div id="detected-display" class="detected-types" role="status" aria-live="polite"></div>
-      <div class="field">
+      <details class="field">
+        <summary>Generated notation</summary>
         <label for="chuckles-out">CHUCKLES</label>
         <p id="chuckles-help" class="field-help">Generated from the previewed SMILES.</p>
-        <textarea id="chuckles-out" spellcheck="false" autocomplete="off" readonly aria-describedby="chuckles-help"></textarea>
-      </div>
+        <textarea id="chuckles-out" name="chuckles" translate="no" spellcheck="false" autocomplete="off" readonly aria-describedby="chuckles-help"></textarea>
+      </details>
     </section>
 
-    <section class="card" aria-labelledby="metadata-step">
+    <form id="registration-form" class="card" aria-labelledby="metadata-step">
       <h2 id="metadata-step">3. Name and register</h2>
       <div class="field-row">
         <div class="field">
-          <label for="abbr-in">Abbreviation (unique token)</label>
-          <input id="abbr-in" type="text" placeholder="e.g.  MalGly" autocomplete="off">
+          <label for="abbr-in">Abbreviation (required)</label>
+          <input id="abbr-in" name="abbreviation" type="text" placeholder="e.g. MalGly" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" required aria-describedby="abbr-help">
+          <p id="abbr-help" class="field-help">A unique token to use in your sequences.</p>
         </div>
         <div class="field">
-          <label for="name-in">Full name</label>
-          <input id="name-in" type="text" placeholder="e.g.  Maleimidoglycine" autocomplete="off">
+          <label for="name-in">Full name (required)</label>
+          <input id="name-in" name="monomer-name" type="text" placeholder="e.g. Maleimidoglycine" autocomplete="off" required>
         </div>
       </div>
       <div class="field-row">
         <div class="field">
           <label for="type-in">Type</label>
-          <select id="type-in">
-            <option value="aa">aa</option>
-            <option value="cap">cap</option>
-            <option value="linker">linker</option>
+          <select id="type-in" name="type">
+            <option value="aa">Amino acid</option>
+            <option value="cap">Cap</option>
+            <option value="linker">Linker</option>
           </select>
         </div>
         <div class="field">
           <label for="subtype-in">Subtype</label>
-          <select id="subtype-in">
-            <option value="natural">natural</option>
-            <option value="modified">modified</option>
-            <option value="cap">cap</option>
-            <option value="protecting">protecting</option>
-            <option value="label">label</option>
-            <option value="linker">linker</option>
+          <select id="subtype-in" name="subtype">
+            <option value="natural">Natural</option>
+            <option value="modified">Modified</option>
+            <option value="cap">Cap</option>
+            <option value="protecting">Protecting group</option>
+            <option value="label">Label</option>
+            <option value="linker">Linker</option>
           </select>
         </div>
       </div>
-      <button type="button" class="btn btn-success" id="btn-register" disabled>Register monomer</button>
+      <p id="registration-guide" class="field-help">Preview the molecule, then enter an abbreviation and full name.</p>
+      <button type="submit" class="btn btn-success" id="btn-register" disabled aria-describedby="registration-guide">Register monomer</button>
       <div id="status-msg" role="status" aria-live="polite" aria-atomic="true"></div>
-    </section>
+    </form>
   </div>
 </main>
 

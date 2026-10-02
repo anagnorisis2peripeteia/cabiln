@@ -75,6 +75,13 @@ function makeZoomable(canvas, inner) {
       if (!pointers.size) canvas.style.cursor = 'grab';
     });
   }
+  window.addEventListener('blur', () => {
+    for (const id of pointers.keys()) {
+      if (canvas.hasPointerCapture(id)) canvas.releasePointerCapture(id);
+    }
+    pointers.clear();
+    canvas.style.cursor = 'grab';
+  });
   canvas.addEventListener('click', e => {
     // A completed pan must not also select the atom under the pointer.
     if (moved) { e.preventDefault(); e.stopImmediatePropagation(); moved = false; }
@@ -150,6 +157,20 @@ const createPanel = (() => {
 
 function showLoading(element, message) {
   element.innerHTML = `<div class="loading-state" role="status"><span class="spinner" aria-hidden="true"></span><span>${escHtml(message)}</span></div>`;
+}
+
+function setInputState(element, state = '') {
+  element.className = state;
+  element.setAttribute('aria-invalid', String(state === 'err'));
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.download = filename;
+  link.href = url;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 function showRetry(element, message, retry) {

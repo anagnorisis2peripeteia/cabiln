@@ -46,8 +46,10 @@ class Element {
     return Promise.all((this.listeners.get(event.type) || []).map(fn => fn(event)));
   }
   querySelectorAll() { return []; }
+  getBoundingClientRect() { return { x: 0, y: 0, top: 0, right: 0, bottom: 0, left: 0, width: 0, height: 0 }; }
   setAttribute(name, value) { this.attributes.set(name, String(value)); }
   getAttribute(name) { return this.attributes.get(name) ?? null; }
+  removeAttribute(name) { this.attributes.delete(name); }
   querySelector() { return null; }
   appendChild(element) { this.children.push(element); }
   click() { return this.dispatchEvent({ type: 'click' }); }
@@ -75,6 +77,8 @@ function page(script, { registration = false, storedDraft = null, now = Date.now
   const downloads = [];
   const storage = new Map(storedDraft ? [['cabiln.draft.v1', JSON.stringify(storedDraft)]] : []);
   const window = new Element();
+  window.innerWidth = 1440;
+  window.innerHeight = 1000;
   window.location = { search: '' };
   window.localStorage = {
     getItem: key => storage.get(key) || null,

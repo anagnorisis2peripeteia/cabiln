@@ -181,6 +181,12 @@ share Escape/focus behaviour. Drawing canvases use the same mouse, touch and
 keyboard controls. Molecular atom colours are separate from interface colours.
 Build places both selections before their actions in reading and keyboard order.
 Technical Library metadata and preview details have explicit disclosures.
+Residue, branch and library choices use native buttons. Library refreshes retain
+unchanged definitions and rows; filtering uses precomputed search text and site
+types. At laptop widths, opening both sidebars places
+Examples below the drawings. Help uses native task disclosures. Registration
+shares the charcoal surfaces and reviews sites alongside naming on wide screens.
+Input validation exposes its state through both text feedback and `aria-invalid`.
 [Drawing performance](drawing-performance.md) describes layout and notation reuse.
 
 The optional tutorial runs in a separate `?tutorial=1` or `?tutorial=swap` tab.

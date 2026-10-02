@@ -84,7 +84,8 @@ Site renumbering can change the notation's layout. Chemistry filters
 narrow the choices; full assembly can still reject a candidate.
 **Learn Swap** opens the Retatrutide lesson directly from Build.
 
-Hover over residue or branch tabs to highlight their atoms. Library tiles also
+Hover, tap or keyboard-activate residue or branch tiles to highlight their atoms.
+Selected residue buttons also expose their selection state to assistive tools. Library tiles
 support insertion and right-click selection. Drawing, reference and product
 preview canvases have zoom and reset controls, keyboard panning, and touch
 pan/pinch. Escape closes the active panel and returns focus to its control.
@@ -103,8 +104,10 @@ selections so you can retry.
 Browser drafts retain the sequence, format drafts and reference. After reloading,
 choose **Restore saved draft** to recover them. **Save project** downloads a
 portable file; **Open project** checks its saved definitions and chemistry before
-replacing current work. Help explains storage and offers **Clear saved draft**.
-Undo remains available when browser storage is unavailable.
+replacing current work. Help groups instructions by task, including storage and
+**Clear saved browser draft**. **Undo clear** recovers that copy until the next edit.
+Undo remains available when browser storage is unavailable; use **Save project**
+to keep the session outside the browser.
 
 ## Build a peptide in Python
 
@@ -178,7 +181,10 @@ instance with:
 cabiln --enable-registration
 ```
 
-Preview detects attachment sites before registration. The server validates the
+Preview detects attachment sites before registration. Review its numbered markers
+beside the naming form; **Generated notation** contains the detected CHUCKLES.
+Empty input and failed previews explain how to continue without losing entries.
+The server validates the
 slots and metadata, rejects duplicate symbols, and replaces the SDF atomically
 under a file lock.
 
@@ -218,7 +224,8 @@ python -m pytest tests/test_distribution.py
 
 The distribution check builds an sdist and wheel and installs them outside the
 checkout; it needs package-index access. CI tests Python 3.9, 3.11 and 3.13.
-The browser suite uses Node 20 or newer; CI uses Node 22.
+The browser suite uses Node 20 or newer; CI uses Node 22 and tests Chromium,
+Firefox and WebKit. Automated accessibility scans accompany the interaction tests.
 
 See [browser checks](tests/browser/README.md) for Playwright setup and
 [generated tests and replay](tools/README.md#generated-tests) for Hypothesis and
