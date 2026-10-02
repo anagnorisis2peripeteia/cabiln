@@ -1,6 +1,7 @@
 // Page preferences and reference lifetime.
 const drawing = new DrawingState();
-const practiceMode = new URLSearchParams(window.location.search).get('tutorial') === '1';
+const tutorialLesson = new URLSearchParams(window.location.search).get('tutorial');
+const practiceMode = ['1', 'swap'].includes(tutorialLesson);
 let darkMode   = true;
 let hlEnabled  = true;
 let cabilnTimer = null;
@@ -89,8 +90,10 @@ const library = new MonomerLibrary({
 // Document data belongs to the editor; these timers belong to browser storage.
 const DRAFT_KEY = 'cabiln.draft.v1';
 const editor = new CabilnDocument();
+let tutorial = null;
 const build = createBuildPanel({ library, residueView,
   getDocument: () => editor.present, commitDocument, isStale: () => drawing.stale,
+  onApply: edit => tutorial?.recordApplied(edit),
 });
 let saveDraftTimer = null;
 let savedDraft = null;
@@ -528,6 +531,15 @@ const verifyPanel = createPanel({ panel: document.getElementById('verify-pane'),
 });
 
 let examplesLoaded = false;
+let exampleCatalog = null;
+function getExamples() {
+  if (!exampleCatalog) exampleCatalog = (async () => {
+    const data = await readResponse(await fetchCalculation('/examples'));
+    if (!Array.isArray(data)) throw new Error(data.error || 'Invalid examples');
+    return data;
+  })().catch(error => { exampleCatalog = null; throw error; });
+  return exampleCatalog;
+}
 createPanel({ panel: examplesPanel, button: btnExamples, closeButton: examplesClose,
   onChange(open) { if (open && !examplesLoaded) loadExamples(); },
 });
@@ -536,10 +548,8 @@ async function loadExamples() {
   const request = requests.start('examples');
   showLoading(examplesList, 'Loading examples…');
   try {
-    const res = await fetchCalculation('/examples', { signal: request.signal });
-    const data = await readResponse(res);
+    const data = await getExamples();
     if (!request.current()) return;
-    if (!Array.isArray(data)) throw new Error(data.error || 'Invalid examples');
     renderExamples(data);
     examplesLoaded = true;
   } catch (e) {
@@ -1207,7 +1217,14 @@ offerSavedDraft();
 updateHistoryControls();
 if (practiceMode) {
   document.getElementById('btn-clear-draft').hidden = true;
-  startTutorial({ loadPractice: () => commitDocument('A-G', 'cabiln'),
+  tutorial = startTutorial({ lesson: tutorialLesson === 'swap' ? 'swap' : 'connect',
+    loadPractice: source => commitDocument(source, 'cabiln'),
+    getExample: async name => {
+      const example = (await getExamples()).flatMap(category => category.items).find(item => item.name === name);
+      if (!example) throw new Error(`Example ${name} is unavailable.`);
+      return example.cabiln;
+    },
+    getBuildState: () => build.session,
     isReady: source => !drawing.stale && !!drawing.cabiln && editor.present.text === source && editor.present.notation === 'cabiln',
     openBuild: () => build.open(), openLibrary: () => library.open(),
   });

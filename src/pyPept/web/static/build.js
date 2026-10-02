@@ -1,5 +1,5 @@
 // Connection and replacement sessions own selection, validation and preview lifetimes.
-function createBuildPanel({ library, residueView, getDocument, commitDocument, isStale }) {
+function createBuildPanel({ library, residueView, getDocument, commitDocument, isStale, onApply }) {
   let connectionValid = false;
   let buildLeft    = null;  // { abbr, rgroups: [{slot, chem_type, used}], selectedSlot }
   let buildRight   = null;  // { abbr, rgroups: [{slot, chem_type, used}], selectedSlot }
@@ -96,15 +96,22 @@ function createBuildPanel({ library, residueView, getDocument, commitDocument, i
     buildInsertRow.style.display = 'none';
     buildInsertBtn.textContent = '⊕ Insert Between';
     buildLeftAbbr.textContent = '—';
+    document.getElementById('build-left-label').textContent = isSwapMode() ? '1 · Residue to replace' : 'Current residue';
     buildLeftSvg.innerHTML = '<div class="box-placeholder">Select a residue in the drawing or its tile</div>';
     buildLeftRg.innerHTML = '';
     buildLeftSite.hidden = true;
     buildRightAbbr.textContent = '—';
-    document.getElementById('build-right-label').textContent = isSwapMode() ? 'Replacement monomer' : 'New monomer';
-    document.getElementById('build-title').textContent = isSwapMode() ? 'Swap Monomer' : 'Build by Connection';
+    document.getElementById('build-right-label').textContent = isSwapMode() ? '2 · Eligible replacement' : 'New monomer';
+    document.getElementById('build-title').textContent = 'Build';
+    document.getElementById('build-swap-tutorial').hidden = !isSwapMode();
     buildPanel.classList.toggle('swapping', isSwapMode());
     buildConnect.textContent = isSwapMode() ? 'Apply swap' : 'Connect';
-    buildRightSvg.innerHTML = '<div class="box-placeholder">Choose Use in the library</div>';
+    buildPreviewButton.textContent = isSwapMode() ? 'Preview swap' : 'Preview';
+    const changeReplacement = document.getElementById('build-right-change');
+    changeReplacement.textContent = isSwapMode() ? 'Change' : 'Clear';
+    changeReplacement.title = isSwapMode() ? 'Choose another replacement' : 'Clear selection';
+    changeReplacement.setAttribute('aria-label', isSwapMode() ? 'Change replacement monomer' : 'Clear new monomer selection');
+    buildRightSvg.innerHTML = `<div class="box-placeholder">${isSwapMode() ? 'Select a residue to see eligible replacements in Library' : 'Choose Use in the library'}</div>`;
     buildRightRg.innerHTML = '';
     buildRightSite.hidden = true;
     updateControls();
@@ -149,8 +156,8 @@ function createBuildPanel({ library, residueView, getDocument, commitDocument, i
       const candidates = data.candidates.map(m => ({ ...m, quality: quality.get(m.abbr),
         searchText: [m.abbr, m.name, m.type, m.chem_types].join(' ').toLowerCase() }));
       swapState = { ...data, candidates, candidate: null, mapping: {}, preview: null };
-      buildStatus.textContent = 'Choose a replacement from the filtered library';
-      buildHint.textContent = 'Only monomers with compatible sites for every connection are shown';
+      buildStatus.textContent = `${candidates.length} eligible replacements in Library`;
+      buildHint.textContent = `${data.requirements.length} connections to keep · Choose a replacement, review the mapping, then preview`;
       library.render();
     } catch (error) {
       if (request.current()) {
@@ -179,7 +186,7 @@ function createBuildPanel({ library, residueView, getDocument, commitDocument, i
       const label = document.createElement('label');
       label.className = 'swap-site';
       const text = document.createElement('span');
-      text.textContent = `Current R${need.slot} →`;
+      text.textContent = `${buildLeft.abbr} R${need.slot} →`;
       const select = document.createElement('select');
       select.className = 'hbtn';
       select.dataset.slot = need.slot;
@@ -199,8 +206,8 @@ function createBuildPanel({ library, residueView, getDocument, commitDocument, i
         if (buildRight) renderRgroupButtons(buildRightRg, buildRight, 'right');
       });
       const partner = document.createElement('small');
-      partner.textContent = need.internal ? `joins the replacement site mapped from R${need.partner_slot}`
-        : `keeps ${need.partner_abbr} (residue ${need.partner_idx + 1}) R${need.partner_slot}`;
+      partner.textContent = need.internal ? `Keeps the internal link to the site mapped from R${need.partner_slot}`
+        : `Keeps ${need.partner_abbr} (residue ${need.partner_idx + 1}) R${need.partner_slot}`;
       label.appendChild(text);
       label.appendChild(select);
       label.appendChild(partner);
@@ -287,7 +294,12 @@ function createBuildPanel({ library, residueView, getDocument, commitDocument, i
     }
   }
   document.getElementById('build-left-change').addEventListener('click', clearBuild);
-  document.getElementById('build-right-change').addEventListener('click', clearBuild);
+  document.getElementById('build-right-change').addEventListener('click', () => {
+    const residue = isSwapMode() && residueView.residue(buildLeftRIdx);
+    if (!residue) { clearBuild(); return; }
+    selectBuildResidue(residue);
+    if (!library.isOpen) library.open();
+  });
 
   async function loadBuildLeft(abbr, rIdx) {
     clearBuildPreview();
@@ -308,6 +320,7 @@ function createBuildPanel({ library, residueView, getDocument, commitDocument, i
     const sequence = getDocument().text.trim();
     buildLeftRIdx = rIdx;
     buildLeftAbbr.textContent = abbr;
+    if (isSwapMode()) document.getElementById('build-left-label').textContent = `1 · Replace residue ${rIdx + 1}`;
     showLoading(buildLeftSvg, 'Loading attachment sites…');
     buildLeftRg.innerHTML = '';
     buildLeftSite.hidden = true;
@@ -349,7 +362,7 @@ function createBuildPanel({ library, residueView, getDocument, commitDocument, i
     const sequence = getDocument().text.trim();
     buildRightRIdx = rIdx !== undefined ? rIdx : null;
     buildRightAbbr.textContent = abbr;
-    document.getElementById('build-right-label').textContent = isSwapMode() ? 'Replacement monomer'
+    document.getElementById('build-right-label').textContent = isSwapMode() ? '2 · Eligible replacement'
       : rIdx !== undefined ? 'Current residue' : 'New monomer';
     showLoading(buildRightSvg, 'Loading attachment sites…');
     buildRightRg.innerHTML = '';
@@ -405,13 +418,20 @@ function createBuildPanel({ library, residueView, getDocument, commitDocument, i
   function renderRgroupButtons(container, state, side) {
     container.innerHTML = '';
     state.rgroups.forEach(rg => {
-      const btn = document.createElement('button');
-      btn.className = 'rgroup-btn';
+      const swapping = isSwapMode();
+      const btn = document.createElement(swapping ? 'span' : 'button');
+      btn.className = swapping ? 'site-tag' : 'rgroup-btn';
       if (rg.used) btn.classList.add('used');
-      btn.disabled = isSwapMode() || !!rg.used;
-      btn.setAttribute('aria-pressed', String(state.selectedSlot === rg.slot));
+      if (!swapping) {
+        btn.disabled = !!rg.used;
+        btn.setAttribute('aria-pressed', String(state.selectedSlot === rg.slot));
+      }
       if (state.selectedSlot === rg.slot) btn.classList.add('selected');
-      btn.textContent = `R${rg.slot} ${(rg.chem_type || '').replaceAll('_', ' ')}${rg.used ? (isSwapMode() ? ' · connected' : ' · used') : ''}`;
+      const mapped = swapping && (rg.used || (side === 'right' && Object.values(swapState?.mapping || {}).includes(rg.slot)));
+      btn.classList.toggle('mapped', !!mapped);
+      btn.textContent = swapping
+        ? `R${rg.slot} · ${mapped ? (side === 'left' ? 'linked' : 'mapped') : 'free'}`
+        : `R${rg.slot} ${(rg.chem_type || '').replaceAll('_', ' ')}${rg.used ? ' · used' : ''}`;
       btn.title = `R${rg.slot}: ${rg.chem_type || 'unknown'} · Free-site group: ${rg.leaving || '[H] (implicit)'}${rg.used ? ' — already connected' : ''}`;
       if (!isSwapMode() && !rg.used) {
         btn.addEventListener('click', () => selectRgroup(side, rg.slot));
@@ -657,6 +677,7 @@ function createBuildPanel({ library, residueView, getDocument, commitDocument, i
         return;
       }
       commitDocument(data.result, 'cabiln');
+      onApply?.({ action: swapping ? 'swap' : 'connect', request: connection, result: data.result });
       buildHint.textContent = swapping ? 'Monomer replaced — Undo restores the original peptide'
         : 'Connection added — select a residue to continue building';
     } catch (e) {
@@ -674,6 +695,13 @@ function createBuildPanel({ library, residueView, getDocument, commitDocument, i
     useMonomer: useLibraryMonomer,
     clear: clearBuild,
     get selection() { return [buildLeftRIdx, buildRightRIdx]; },
+    get session() {
+      return { open: panel.isOpen, action: buildAction.value,
+        left: buildLeft && { ...buildLeft, index: buildLeftRIdx },
+        right: buildRight && { ...buildRight, index: buildRightRIdx },
+        ready: !buildPreviewButton.disabled,
+        preview: !buildPreviewPanel.hidden ? buildPreviewSource.textContent : null };
+    },
     get filters() {
       return { building: panel.isOpen, notation: getDocument().notation, left: buildLeft, insertBetween: insertBetweenActive,
         replacements: panel.isOpen && isSwapMode() ? (swapState?.candidates || []) : null,

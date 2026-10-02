@@ -147,7 +147,7 @@ See [recognition](decomposition.md) for result fields, ambiguity and limits.
 | `requests.js` | Cancellation, current-request checks, waits, calculation retries and response errors |
 | `project.js` | Saved-project format and document/context validation helpers |
 | `ui.js` | Viewport controls, panels, loading/retry presentation and status details |
-| `tutorial.js` | Optional practice walkthrough and checkpoints on visible application state |
+| `tutorial.js` | Practice lessons, live prerequisites and completed-edit review |
 
 Editing invalidates selections, comparisons and exports while retaining the last
 valid drawing. Free typing has a 180 ms delay; explicit actions render
@@ -175,8 +175,12 @@ share Escape/focus behaviour. Drawing canvases use the same mouse, touch and
 keyboard controls. Molecular atom colours are separate from interface colours.
 [Drawing performance](drawing-performance.md) describes layout and notation reuse.
 
-The optional tutorial runs in a separate `?tutorial=1` tab. It observes the
-existing controls and accepted drawings; it has no chemistry implementation.
+The optional tutorial runs in a separate `?tutorial=1` or `?tutorial=swap` tab.
+It reads the Build session and accepted drawings. Build reports successful edits
+even when the guide is closed; Back and Next can then review completed steps
+without requiring the old selections. Unfinished steps still require valid
+selections. Undo restores the source through normal editor history. Retatrutide
+comes from the same cached catalog as Examples; the guide has no chemistry code.
 Practice mode bypasses browser draft loading, saving and clearing, including
 page-exit saves. Closing the guide keeps that protection for the practice tab.
 

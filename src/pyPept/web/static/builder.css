@@ -103,6 +103,8 @@
     box-shadow: 0 6px 28px #0005;
   }
   #tutorial-progress { flex: 1; color: var(--muted); font-size: 12px; }
+  .tutorial-lesson { display: flex; align-items: center; gap: 8px; margin: 8px 0 12px; color: var(--muted); font-size: 12px; }
+  .tutorial-lesson select { flex: 1; min-width: 0; }
   #tutorial-title { font-size: 15px; margin-bottom: 8px; }
   #tutorial-body { line-height: 1.5; }
   #tutorial-status { color: var(--muted); font-size: 12px; margin: 8px 0; }
@@ -664,10 +666,19 @@
     min-height: 180px;
   }
   .build-action-label { display: flex; align-items: center; gap: 8px; font-size: 12px; }
-  #build-swap-mapping { grid-column: 1; grid-row: 3; margin-top: 10px; }
-  .swap-site { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 6px 0; font-size: 12px; }
-  .swap-site small { color: var(--muted); }
-  #build-panel.swapping .rgroup-btn.used { opacity: 1; text-decoration: none; }
+  #build-swap-mapping { margin-top: 10px; padding: 10px 12px; background: var(--surface-inset); border: 1px solid var(--line-soft); border-radius: var(--radius-panel); }
+  .swap-site { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 3px 8px; padding: 7px 0; font-size: 12px; }
+  .swap-site + .swap-site { border-top: 1px solid var(--line-soft); }
+  .swap-site select { min-width: 0; width: 100%; }
+  .swap-site small { grid-column: 1 / -1; color: var(--muted); }
+  .site-tag { font: 11px var(--font-code); color: var(--muted); padding: 2px 4px; }
+  .site-tag.mapped { color: var(--text); background: var(--selection); border-radius: 3px; }
+  #build-panel.swapping .build-boxes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; min-height: 0; }
+  #build-panel.swapping .build-arrow { grid-row: 2; grid-column: 1 / -1; flex-direction: row; flex-wrap: wrap; justify-content: flex-start; }
+  #build-panel.swapping .arrow-icon { display: none; }
+  #build-panel.swapping .box-svg { height: 104px; min-height: 104px; flex: none; }
+  #build-panel.swapping .rgroup-buttons { padding: 5px 6px; gap: 3px; }
+  #build-panel.swapping .build-status { text-align: left; flex: 1; min-width: 140px; }
   .build-box {
     flex: 1;
     background: var(--surface-inset);
@@ -820,6 +831,13 @@
       border-top: 0;
       border-left: 1px solid var(--line-soft);
     }
+    #build-panel.open.swapping { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 16px; align-items: start; }
+    #build-panel.swapping #build-swap-mapping { grid-column: 2; grid-row: 2; margin: 0; }
+    #build-panel.swapping #build-preview { grid-column: 1 / -1; grid-row: 3; margin-top: 12px; padding: 10px 0 0; border-left: 0; border-top: 1px solid var(--line-soft); }
+  }
+  @media (min-width: 1280px) {
+    #build-panel.open.swapping:has(#build-preview:not([hidden])) { grid-template-columns: minmax(0, 1fr) minmax(0, .75fr) minmax(0, 1fr); }
+    #build-panel.swapping #build-preview { grid-column: 3; grid-row: 2; margin-top: 0; padding: 0 0 0 14px; border-top: 0; border-left: 1px solid var(--line-soft); }
   }
   #build-insert-row { align-items: center; gap: 10px; padding: 8px 2px 0; }
   #build-insert-info { font-size: 11px; color: var(--muted); flex: 1; }

@@ -74,6 +74,11 @@ profile nightly. Browser servers and library changes use temporary local copies.
 These campaigns sample supported feature combinations; they do not exhaust the
 possible peptides or editing histories.
 
+`CABILN_FUZZ_CASE=browser-tutorial-lifecycle` selects generated Build and Swap
+lesson histories. It varies preview use, viewport width, guide and panel closures,
+Back/Next and Undo/Redo, checking the document against the expected edit after
+each action.
+
 Failures retain reduced inputs, seeds, dependency versions and replay information.
 Python artifacts include source/library hashes, Hypothesis's example database
 and reproduction decorator. Replay with the recorded versions and

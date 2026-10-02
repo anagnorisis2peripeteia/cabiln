@@ -34,11 +34,13 @@ See [deployment](docs/deployment.md) for hosting, process limits and recovery.
 
 ## Use the builder
 
-Open **Tutorial** in the top toolbar for a walkthrough of selection,
-attachment sites, preview, Connect and Undo. It opens a separate practice tab.
+Open **Tutorial** in the top toolbar for lessons on building a peptide and
+swapping a branched residue in Retatrutide. It opens a separate practice tab.
 Practice edits do not read or replace your saved browser draft; use **Save
 project** if you want to keep them. Browse or search for your chosen amino acid;
 the guide follows the resulting product and helps reopen closed panels.
+Back revisits instructions without changing the molecule; Restart reloads the
+lesson's starting peptide.
 
 Open **Library** and choose **Use** beside a monomer to start a peptide.
 Open **Build**, select a residue tile or click/tap an atom label or bond in the
@@ -56,10 +58,11 @@ show all monomers again. Search works within the filtered list.
 Choose **Swap monomer** in Build to replace a selected residue. The library
 shows candidates with compatible sites for its existing connections. Review the
 mapping from each occupied R-group to a distinct replacement site; different
-site numbers are supported. **Preview** assembles the proposed product before
+site numbers are supported. **Preview swap** assembles the proposed product before
 **Apply swap** becomes available. Neighbours, branches and ring closures stay
 connected. Site renumbering can change the notation's layout. Chemistry filters
 narrow the choices; full assembly can still reject a candidate.
+**Learn Swap** opens the Retatrutide lesson directly from Build.
 
 Hover over residue or branch tabs to highlight their atoms. Library tiles also
 support insertion and right-click selection. Drawing, reference and product

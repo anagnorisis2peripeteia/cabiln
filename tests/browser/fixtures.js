@@ -145,7 +145,7 @@ async function site(page, side, slot) {
 async function selectChip(page, idx, side, abbr) {
   await page.locator(`#residue-chips [data-residue="${idx}"]`).click();
   await expect(page.locator(`#build-${side}-abbr`)).toHaveText(abbr);
-  await expect(page.locator(`#build-${side}-rgroups button`).first()).toBeVisible();
+  await expect(page.locator(`#build-${side}-rgroups`).locator('button, .site-tag').first()).toBeVisible();
 }
 
 async function connect(page) {

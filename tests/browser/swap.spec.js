@@ -33,6 +33,16 @@ for (const sample of [
     expect(await previewSwap(page)).toBe(sample.expected);
     await expect(page.locator('#cabiln-input')).toHaveValue(sample.source);
     if (sample.selected === 'K') {
+      await page.locator('#lib-close').click();
+      await page.getByRole('button', { name: 'Change replacement monomer', exact: true }).click();
+      await expect(page.locator('#lib-panel')).toBeVisible();
+      await expect(page.locator('#build-left-abbr')).toHaveText('K');
+      await expect(page.locator('#residue-chips [data-residue="1"]')).toHaveCSS('outline-color', 'rgb(90, 154, 224)');
+      await expect(page.locator('#build-preview')).toBeHidden();
+      await expect(page.locator('#build-connect')).toBeDisabled();
+      await expect(page.locator('#build-right-abbr')).toHaveText('—');
+      await tile(page, sample.to);
+      await previewSwap(page);
       // Two individually compatible choices cannot consume the same site.
       await page.getByLabel('Replacement site for R4', { exact: true }).selectOption('1');
       await expect(page.locator('#build-preview')).toBeHidden();

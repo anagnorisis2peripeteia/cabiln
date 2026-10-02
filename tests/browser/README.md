@@ -30,7 +30,12 @@ reset and search, and recovery from missing reaction data. Tutorial journeys
 exercise the full build/preview/Undo route at desktop and mobile widths, failed
 drawings, keyboard dismissal, restart and isolation from saved browser drafts.
 They also cover reopening closed panels, browsing without search, changing the
-chosen amino acid, and invalidating completed steps when selections are cleared.
+chosen amino acid, and invalidating unfinished steps when selections are cleared.
+Direct Connect, completion while the guide is closed, Back after Apply and Undo,
+and Show control on a scrolled library have regression journeys. The Swap lesson
+loads Retatrutide, reviews its three occupied sites, replaces K17 and undoes the
+edit at desktop and mobile widths. Example loading covers failure and switching
+lessons while a response is pending.
 Drawing selection checks bond margins and label interiors, zoom, touch, stale
 drawings, and rejection of background clicks and pan gestures.
 

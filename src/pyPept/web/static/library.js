@@ -218,7 +218,7 @@ class MonomerLibrary {
           ${qualityText ? `<div class="lib-quality" title="${escAttr(qualityText)}">${escHtml(qualityText)}</div>` : ''}
         </div>
         ${badge}
-        <button type="button" class="lib-use" aria-label="Use ${escAttr(m.abbr)} in builder" title="Choose this monomer in the builder">Use</button>
+        <button type="button" class="lib-use" aria-label="${swapping ? 'Select' : 'Use'} ${escAttr(m.abbr)} ${swapping ? 'as replacement' : 'in builder'}" title="${swapping ? 'Select a replacement to preview' : 'Choose this monomer in the builder'}">${swapping ? 'Select' : 'Use'}</button>
       </div>`;
     });
     this.list.innerHTML = rows.join('');

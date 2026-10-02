@@ -16,10 +16,10 @@ assert.ok(seed === undefined || (/^-?\d+$/.test(process.env.CABILN_FUZZ_SEED) &&
 assert.ok(!process.env.CABILN_FUZZ_PATH || /^\d+(?::\d+)*$/.test(process.env.CABILN_FUZZ_PATH), 'CABILN_FUZZ_PATH must contain colon-separated non-negative integers');
 const artifacts = process.env.CABILN_FUZZ_ARTIFACTS || path.join(os.tmpdir(), 'cabiln-browser-fuzz');
 fs.mkdirSync(artifacts, { recursive: true });
-assert.ok(!process.env.CABILN_FUZZ_CASE || ['browser-branch-graphs', 'browser-editable-history', 'browser-delayed-ownership', 'browser-cache-revalidation'].includes(process.env.CABILN_FUZZ_CASE), 'Unknown CABILN_FUZZ_CASE');
+assert.ok(!process.env.CABILN_FUZZ_CASE || ['browser-branch-graphs', 'browser-editable-history', 'browser-delayed-ownership', 'browser-cache-revalidation', 'browser-tutorial-lifecycle'].includes(process.env.CABILN_FUZZ_CASE), 'Unknown CABILN_FUZZ_CASE');
 const observedApplications = new Map();
 const root = path.resolve(__dirname, '../..');
-const sourceFiles = ['builder.js', 'ui.js', 'residues.js', 'library.js', 'document.js', 'project.js', 'requests.js', 'register.js'].map(name => `src/pyPept/web/static/${name}`).concat(['tests/browser/fixtures.js', 'tests/browser/fuzz.spec.cjs', 'tests/browser/fuzz.config.js', 'tests/browser/package-lock.json']);
+const sourceFiles = ['builder.js', 'build.js', 'tutorial.js', 'drawing.js', 'ui.js', 'residues.js', 'library.js', 'document.js', 'project.js', 'requests.js', 'register.js'].map(name => `src/pyPept/web/static/${name}`).concat(['tests/browser/fixtures.js', 'tests/browser/fuzz.spec.cjs', 'tests/browser/fuzz.config.js', 'tests/browser/package-lock.json']);
 const source = { commit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(),
   sha256: Object.fromEntries(sourceFiles.map(name => [name, crypto.createHash('sha256').update(fs.readFileSync(path.join(root, name))).digest('hex')])) };
 
@@ -36,7 +36,7 @@ async function freshPage(browser, app, name, body) {
   page.on('response', response => {
     const url = response.url();
     const asset = new URL(url).pathname;
-    if (!/\/(builder|ui|residues|library|document|project|requests|register)\.js$/.test(asset)) return;
+    if (!sourceFiles.includes(`src/pyPept/web${asset}`)) return;
     const status = response.status();
     const captured = (async () => {
       if (status === 304) {
@@ -300,6 +300,73 @@ test('generated browser edit and build histories preserve the independent timeli
   await campaign(name, browserCommands, async (history, count) => freshPage(browser, app, name, async page => {
     await page.clock.install({ time: new Date('2026-09-30T12:00:00Z') });
     await fc.asyncModelRun(() => ({ model: { source: '', undo: [], redo: [] }, real: { page, count } }), history);
+  }), browser);
+});
+
+test('generated tutorial navigation keeps completed edits independent of panels and history', async ({ browser, app }) => {
+  const name = 'browser-tutorial-lifecycle';
+  test.skip(process.env.CABILN_FUZZ_CASE && process.env.CABILN_FUZZ_CASE !== name);
+  const route = fc.record({ swap: fc.boolean(), preview: fc.boolean(), closed: fc.boolean(),
+    width: fc.constantFrom(1440, 390), monomer: fc.constantFrom('DAla', 'L', 'V', 'S'),
+    actions: fc.array(fc.constantFrom('back', 'next', 'show', 'guide', 'build', 'library', 'undo', 'redo'),
+      { minLength: 8, maxLength: profile === 'deep' ? 40 : 20 }) });
+  await campaign(name, route, async (example, count) => freshPage(browser, app, name, async page => {
+    await page.setViewportSize({ width: example.width, height: 900 });
+    await page.goto(`${app.url}/?tutorial=${example.swap ? 'swap' : '1'}`);
+    await page.locator('#tutorial-load').click();
+    const next = page.locator('#tutorial-next');
+    await next.click();
+    if (!example.swap) {
+      await page.locator('#tutorial-show').click();
+      await next.click();
+    }
+    const original = await page.locator('#cabiln-input').inputValue();
+    await page.locator('#btn-build').click();
+    if (example.swap) await page.locator('#build-action').selectOption('swap');
+    await selectChip(page, example.swap ? 16 : 1, 'left', example.swap ? 'K' : 'G');
+    await next.click();
+    const monomer = example.swap ? 'Orn' : example.monomer;
+    await tile(page, monomer);
+    await next.click();
+    if (!example.swap) { await site(page, 'left', 2); await site(page, 'right', 1); }
+    if (example.preview || example.swap) {
+      await page.locator('#build-preview-button').click();
+      await expect(page.locator('#build-preview-inner svg')).toBeVisible();
+      count('preview');
+    } else count('directConnect');
+    if (example.closed) await page.locator('#tutorial-close').click();
+    await page.locator('#build-connect').click();
+    const product = example.swap ? original.replace('K.[AEEA', 'Orn.[AEEA') : `A-G-${monomer}`;
+    expect(product).not.toBe(original);
+    await expect(page.locator('#cabiln-input')).toHaveValue(product);
+    await expect(page.locator('#cabiln-input')).toHaveClass('ok');
+    if (example.closed) { await page.locator('#btn-tutorial').click(); count('applyWithGuideClosed'); }
+    count(example.swap ? 'swap' : 'connect');
+    count(`width${example.width}`);
+    let index = example.swap ? 3 : 4, undone = false;
+    const undoStep = example.swap ? 6 : 7;
+    for (const action of example.actions) {
+      count(action);
+      if (action === 'back' && index > 0) { await page.locator('#tutorial-back').click(); index--; }
+      if (action === 'next' && index < undoStep) { await next.click(); index++; }
+      if (action === 'show') await page.locator('#tutorial-show').click();
+      if (action === 'guide') { await page.locator('#tutorial-close').click(); await page.locator('#btn-tutorial').click(); }
+      if (action === 'build') await page.locator('#btn-build').click();
+      if (action === 'library') await page.locator('#btn-lib').click();
+      if (action === 'undo' && !undone) { await page.locator('#btn-undo').click(); undone = true; }
+      if (action === 'redo' && undone) { await page.locator('#btn-redo').click(); undone = false; }
+      await expect(page.locator('#cabiln-input')).toHaveValue(undone ? original : product);
+      await expect(page.locator('#cabiln-input')).toHaveClass('ok');
+      await expect(page.locator('#tutorial-progress')).toHaveText(`Step ${index + 1} of ${undoStep + 2}`);
+      if (index < undoStep || undone) await expect(next).toBeEnabled();
+      else await expect(next).toBeDisabled();
+    }
+    while (index < undoStep) { await next.click(); index++; }
+    if (!undone) await page.locator('#btn-undo').click();
+    await next.click();
+    await next.click();
+    await expect(page.locator('#tutorial-panel')).toBeHidden();
+    await expect(page.locator('#cabiln-input')).toHaveValue(original);
   }), browser);
 });
 

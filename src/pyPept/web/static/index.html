@@ -35,7 +35,7 @@
 
 <section id="help-panel" class="help-panel" aria-labelledby="help-title" hidden>
   <div class="help-heading"><h2 id="help-title">Working with CABILN</h2><button type="button" id="help-close" class="panel-close" aria-label="Close help">✕</button></div>
-  <p><a class="hbtn tutorial-start" href="/?tutorial=1" target="_blank" rel="noopener">Start guided tutorial ↗</a> Build a short peptide in a separate practice tab. Your current work stays here.</p>
+  <p><a class="hbtn tutorial-start" href="/?tutorial=1" target="_blank" rel="noopener">Start guided tutorial ↗</a> Build a short peptide or practise a swap in Retatrutide in a separate tab. Your current work stays here.</p>
   <p>Type a sequence, or choose SMILES, BILN or HELM and convert it. Open Build, select a residue in the drawing or its tile, then choose Use in the library and choose free numbered sites. Click or tap an atom label or bond to select; drag to pan. Preview shows the proposed molecule; Connect applies it. Nested brackets keep their own attachment parent. Undo and Redo restore sequence edits.</p>
   <p>To replace a residue, choose Swap monomer in Build. The library filters replacements against every existing connection. Review the numbered site mapping and preview the full product, then Apply swap. Site numbers can differ; the preview shows any reformatted notation. Undo restores the original.</p>
   <p>Keep layout preserves your grouping. Canonical exports order the resolved monomer graph under a recorded convention and library binding. Imported structures can include inferred stereochemistry or preserved synthetic regions; open Import quality for details. Valid synthetic sites remain editable.</p>
@@ -101,7 +101,7 @@
 <!-- build panel -->
 <section id="build-panel" aria-labelledby="build-title">
   <div class="build-header">
-    <h2 class="panel-title" id="build-title">Build by Connection</h2>
+    <h2 class="panel-title" id="build-title">Build</h2>
     <label class="build-action-label">Action
       <select id="build-action" class="hbtn" aria-label="Build action">
         <option value="connect">Connect</option>
@@ -109,6 +109,7 @@
       </select>
     </label>
     <span class="build-hint" id="build-hint" role="status" aria-live="polite">Select a residue in the drawing or its tile, then choose Use in the library</span>
+    <a id="build-swap-tutorial" class="hbtn tutorial-start" data-lesson="swap" href="/?tutorial=swap" target="_blank" rel="noopener" hidden>Learn Swap ↗</a>
     <button type="button" id="build-close" class="panel-close" title="Close Build" aria-label="Close Build panel">✕</button>
   </div>
   <div class="build-boxes">
@@ -137,9 +138,9 @@
       <p class="site-detail" id="build-right-site" hidden></p>
     </div>
   </div>
-  <section id="build-swap-mapping" hidden aria-labelledby="build-swap-title">
-    <h3 class="panel-title" id="build-swap-title">Keep these connections</h3>
-    <p class="site-explanation">Each connection needs its own compatible replacement site. Review the mapping, then preview the complete product before applying.</p>
+  <section id="build-swap-mapping" hidden aria-labelledby="build-swap-title" tabindex="-1">
+    <h3 class="panel-title" id="build-swap-title">3 · Keep all connections</h3>
+    <p class="site-explanation">Current site → replacement site. Each connection needs a different compatible site. Numbers can change.</p>
     <div id="build-swap-sites"></div>
   </section>
   <section id="build-preview" aria-label="Connection preview" aria-busy="false" hidden>
@@ -184,7 +185,7 @@
     <div id="lib-count" role="status" aria-live="polite"></div>
     <div id="lib-filter-status" role="status" aria-live="polite">Filter finds monomers that can connect to a residue in Build.</div>
     <div id="lib-status" class="statusbar warn" role="status" aria-live="polite" hidden></div>
-    <div id="lib-list"><div class="placeholder">Loading…</div></div>
+    <div id="lib-list" tabindex="-1" role="group" aria-label="Monomer choices"><div class="placeholder">Loading…</div></div>
   </aside>
   <div id="lib-preview"></div>
 
@@ -264,6 +265,12 @@
 
 <section id="tutorial-panel" aria-labelledby="tutorial-title" hidden>
   <div class="help-heading"><span id="tutorial-progress"></span><button type="button" id="tutorial-close" class="panel-close" aria-label="Close tutorial">✕</button></div>
+  <label class="tutorial-lesson">Lesson
+    <select id="tutorial-lesson" class="hbtn">
+      <option value="connect">Build a peptide</option>
+      <option value="swap">Swap in Retatrutide</option>
+    </select>
+  </label>
   <h2 id="tutorial-title" tabindex="-1"></h2>
   <p id="tutorial-body"></p>
   <div id="tutorial-status" role="status" aria-live="polite"></div>
