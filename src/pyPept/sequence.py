@@ -15,7 +15,12 @@ from dataclasses import dataclass
 import numpy as np
 from rdkit import Chem
 
-from pyPept.source import SourceText, join as _source_join, sub as _source_sub
+from pyPept.source import (
+    SourceError,
+    SourceText,
+    join as _source_join,
+    sub as _source_sub,
+)
 from pyPept.notation import MAX_NOTATION_CHARACTERS, split_outside
 # Compatibility imports preserve the existing library entry points.
 from pyPept.attachments import _attachment_idx, _rgroup_atom_idx, _slot_for_attachment
@@ -313,6 +318,10 @@ class Sequence:
         self.__parse_biln()
         self.__parse_biln_bonds()
 
+    def _source_error(self, message, *, hint, index=-1):
+        span = self.s_sources[index].token if self.s_sources else None
+        return SourceError(message, hint=hint, span=span)
+
     def __parse_biln(self):
         """Split BILN string into individual monomers, do some basic checks,
         then construct the monomers and store the chemical representations
@@ -343,12 +352,13 @@ class Sequence:
                     self.s_sources.append(resname.tracker.occurrence(resname))
                 resname = re.sub(r'^[\[{](.*?)[\]}]$', '\\1', resname)
 
-
                 if resname not in self.monomer_df.index:
                     if resname in self.monomer_df.attrs.get('_ambiguous_aliases', {}):
-                        raise ValueError(
+                        raise self._source_error(
                             f"Ambiguous monomer alias '{resname}' names multiple library entries; "
-                            "use a canonical symbol instead.")
+                            "use a canonical symbol instead.",
+                            hint="Open Library and use the abbreviation of the intended building block.",
+                        )
                     # 1) Check stored abbreviations and unambiguous CSV aliases.
                     synonyms = self.monomer_df.attrs.get('_synonyms', {})
                     if resname in synonyms:
@@ -369,17 +379,21 @@ class Sequence:
                             if not chosen:
                                 chosen = [v for v in variants if v.startswith('_')]
                         else:
-                            raise ValueError(
+                            raise self._source_error(
                                 f"Degenerate cap '{resname}' used mid-chain "
-                                f"(position {res_idx}); cannot resolve variant.")
+                                f"(position {res_idx}); cannot resolve variant.",
+                                hint="Place this cap at a chain end, or choose its explicit attachment form in Library.",
+                            )
                         if chosen:
                             resname = chosen[0]
                         else:
                             raise ValueError(
                                 f"Monomer {resname!r} has no terminal variant for this position.")
                     else:
-                        raise ValueError(
-                            f"Monomer {resname!r} is not in the monomer library.")
+                        raise self._source_error(
+                            f"Monomer {resname!r} is not in the monomer library.",
+                            hint="Check the abbreviation in Library, then replace this name with a listed building block.",
+                        )
 
                 mm_info = self.monomer_df.loc[resname, :].to_dict()
                 mm_value = {'m_name': resname,
@@ -402,7 +416,6 @@ class Sequence:
                 self.s_chains["s_cType"][num_chain] = 'mixed'
 
             self.s_chains["s_monomerIDs"][num_chain] = monomer_ids
-
 
     def __append_monomer(self, monomer):
         """Place a new monomer at the end of the sequence, i.e.
@@ -545,7 +558,6 @@ class Sequence:
 
         self.__only_unique_bonds()
 
-
     def __add_bond(self, m_id1, atom1, m_id2, atom2, slot1=None, slot2=None):
         """
         Add an entry in the bond list
@@ -568,8 +580,11 @@ class Sequence:
             raise ValueError("A bond cannot join the same attachment slot to itself.")
         for monomer_id, slot in endpoints:
             if (monomer_id, slot) in self._used_slots:
-                raise ValueError(
-                    f"Residue {monomer_id} R{slot} is already used by another bond.")
+                raise self._source_error(
+                    f"Residue {monomer_id} R{slot} is already used by another bond.",
+                    index=monomer_id,
+                    hint=f"Block {monomer_id + 1} uses R{slot} already. Choose a free connection point in Build or remove the duplicate link.",
+                )
         self._used_slots.update(endpoints)
         self.s_nbonds += 1
         entry = [m_id1, atom1, m_id2, atom2]

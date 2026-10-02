@@ -103,6 +103,12 @@ Serialization returns output occurrence order and layout. The renderer uses
 that layout for explicit segments, nested groups and link tabs. Assembly's atom
 owners determine which atoms each tab highlights. Reaction steps preserve those
 owners in the actual reactant order.
+Assembly also retains the bonds formed by each numbered-site connection,
+including multiple bonds from a cycloaddition and closures within one occurrence.
+Edit results can include the verified output occurrence order and affected
+connections. Build uses those records to mark its product preview; repeated
+symbols and reordered source are never matched by name. Preview styling applies
+to its SVG DOM and leaves the accepted drawing and exports unchanged.
 
 `inputs.format_source` verifies occurrences, definitions, connections and the
 assembled product after formatting. Canonical export uses the shared graph
@@ -143,7 +149,7 @@ See [recognition](decomposition.md) for result fields, ambiguity and limits.
 | `drawing.js` | Accepted source, SVG, MOL atom order, layout and export eligibility |
 | `build.js` | Selected residues/sites, connection validation, insertion, swap mappings and previews |
 | `residues.js` | Atom maps, residue/group tabs, selection highlights, tutorial cues and insertion positions |
-| `library.js` | Discovery, library revisions, filtering and hover previews |
+| `library.js` | Discovery, library revisions, filters, favourites, recent choices and hover previews |
 | `requests.js` | Cancellation, current-request checks, waits, calculation retries and response errors |
 | `project.js` | Saved-project format and document/context validation helpers |
 | `ui.js` | Viewport controls, panels, loading/retry presentation and status details |
@@ -188,6 +194,9 @@ of hover highlighting. The cue clears on dismissal, step completion or source
 changes; it never changes Build selection or the Highlight preference.
 Practice mode bypasses browser draft loading, saving and clearing, including
 page-exit saves. Closing the guide keeps that protection for the practice tab.
+Library preferences use a separate browser storage key. Practice tabs neither
+read nor write it. Connection suggestions reuse the library's reaction index;
+only an explicit selection starts validation, and Apply still assembles the edit.
 
 ## HTTP and execution
 
@@ -196,6 +205,9 @@ thread pool. Production sends allowed operations to bounded child processes,
 which enforce transport limits, deadlines and cancellation. Static assets and
 health responses stay in the parent; authenticated registration uses the parent
 and the library write lock. See [runtime](runtime-execution.md).
+Input errors can carry a repair hint and an original source span from the parser.
+The browser converts those code-point offsets to DOM selection offsets; it does
+not search for a matching monomer name or infer a location from an error string.
 
 Render caches have entry and retained-byte limits, locks and library-version
 keys. Monomer previews use molecule copies. Responses of at least 1,000 bytes

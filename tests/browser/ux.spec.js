@@ -1,5 +1,50 @@
 const { test, expect, render, selectChip, site, connect, capture, isCompletedResponse, residuePoint } = require('./fixtures');
 
+test('an unknown monomer points to its exact text and explains recovery', async ({ page }) => {
+  await render(page, 'A-G');
+  const input = page.locator('#cabiln-input');
+  await input.fill('A-G-NotAMonomer-G');
+  await expect(input).toHaveClass('err');
+  await expect(page.locator('#cabiln-status')).toContainText('Library');
+  await page.getByRole('button', { name: 'Select problem in sequence', exact: true }).click();
+  expect(await input.evaluate(el => el.value.slice(el.selectionStart, el.selectionEnd))).toBe('NotAMonomer');
+  await expect(input).toBeFocused();
+  await input.fill('  A-🧬-G  ');
+  await expect(page.locator('#cabiln-status')).toContainText('🧬');
+  await page.getByRole('button', { name: 'Select problem in sequence', exact: true }).click();
+  expect(await input.evaluate(el => el.value.slice(el.selectionStart, el.selectionEnd))).toBe('🧬');
+  await input.fill('A-G-A-G');
+  await expect(input).toHaveClass('ok');
+  await expect(page.getByRole('button', { name: 'Select problem in sequence', exact: true })).toHaveCount(0);
+});
+
+test('a failed connection check explains the selected sites and retries without losing them', async ({ page }) => {
+  await render(page, 'A-G');
+  await page.locator('#btn-build').click();
+  await selectChip(page, 1, 'left', 'G');
+  await page.locator('#lib-search').fill('am');
+  await page.locator('.lib-row[data-abbr="am"] .lib-use').click();
+  await site(page, 'left', 2);
+  await page.route('**/validate_bond', route => route.abort('failed'));
+  await site(page, 'right', 1);
+  const status = page.locator('#build-status');
+  await expect(status).toContainText('G R2');
+  await expect(status).toContainText('am R1');
+  await expect(page.locator('#cabiln-input')).toHaveValue('A-G');
+  await page.unroute('**/validate_bond');
+  await status.getByRole('button', { name: 'Retry', exact: true }).click();
+  await expect(page.locator('#build-connect')).toBeEnabled();
+  await expect(page.locator('#build-left-rgroups button.selected')).toHaveText(/^R2 /);
+  await expect(page.locator('#build-right-rgroups button.selected')).toHaveText(/^R1 /);
+  await page.route('**/insert_bond', route => route.abort('failed'));
+  await page.locator('#build-connect').click();
+  await expect(status).toContainText('Could not connect G R2 with am R1');
+  await expect(page.locator('#cabiln-input')).toHaveValue('A-G');
+  await page.unroute('**/insert_bond');
+  await status.getByRole('button', { name: 'Retry', exact: true }).click();
+  await expect(page.locator('#cabiln-input')).toHaveValue('A-G-am');
+});
+
 test('invalid bracket syntax keeps the last valid drawing without accepting changed chemistry', async ({ page }) => {
   for (const source of [
     'ac-K.[[K(4,2).A(1,2)garbage].ac(4,2)]-am',

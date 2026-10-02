@@ -18,6 +18,15 @@ class Span:
     end: int
 
 
+class SourceError(ValueError):
+    """An input failure with a repair hint and an optional original source span."""
+
+    def __init__(self, message, *, hint, span=None):
+        super().__init__(message)
+        self.hint = hint
+        self.span = span
+
+
 @dataclass(frozen=True)
 class Occurrence:
     """Original token and attachment ownership for one resolved occurrence.

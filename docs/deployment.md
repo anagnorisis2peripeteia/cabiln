@@ -8,7 +8,7 @@ disabled; it does not describe the live service's deployment trigger.
 ## Release procedure
 
 1. Push the candidate to a branch and check its **Tests** and **Fuzzing** workflows.
-   All jobs must pass for the exact code being promoted.
+   All applicable jobs must pass for the exact code being promoted.
 2. Retain the candidate artifacts and the previous passing release outside CI's
    retention window.
 3. Fast-forward `master` to the verified candidate. This triggers the live deploy.
@@ -23,6 +23,14 @@ curl -fsS https://cabiln.onrender.com/ready
 ```
 
 The [CI workflows](../.github/workflows/) provide current release evidence.
+For changes confined to the documented Markdown paths, CI checks local links,
+module references, Python snippet syntax and the executable README examples.
+Chemistry, browser, fuzz and release-image jobs are skipped. Mixed changes run
+both documentation and application checks. An unavailable comparison base,
+new branch, manual run or scheduled campaign runs the full checks.
+Markdown-only releases do not produce a retained image or wheel; use a full
+manual run when those artifacts are needed. The live service still auto-deploys
+from `master`, including documentation changes.
 A passing functional check does not measure concurrent-user capacity: measure
 editing latency, peak memory and cancellation under representative hosted load
 before increasing concurrency.

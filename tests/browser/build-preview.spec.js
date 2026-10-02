@@ -1,5 +1,61 @@
 const { test, expect, render, selectChip, site, tile, connect, capture, isCompletedResponse } = require('./fixtures');
 
+test('a unique compatible connection is offered without applying or hiding site controls', async ({ page }) => {
+  await render(page, 'A-G');
+  await page.locator('#btn-build').click();
+  await selectChip(page, 1, 'left', 'G');
+  await tile(page, 'am', 'right');
+  const suggestion = page.locator('#build-suggestion');
+  await expect(suggestion).toContainText('R2');
+  await expect(suggestion).toContainText('R1');
+  await expect(page.locator('#build-connect')).toBeDisabled();
+  await suggestion.click();
+  await expect(page.locator('#build-left-rgroups button.selected')).toHaveText(/^R2 /);
+  await expect(page.locator('#build-right-rgroups button.selected')).toHaveText(/^R1 /);
+  await expect(page.locator('#build-connect')).toBeEnabled();
+  await expect(page.locator('#cabiln-input')).toHaveValue('A-G');
+  await page.locator('#build-close').click();
+  await expect(suggestion).toBeHidden();
+  await render(page, 'G');
+  await page.locator('#btn-build').click();
+  await selectChip(page, 0, 'left', 'G');
+  await tile(page, 'A', 'right');
+  await expect(suggestion).toBeHidden();
+  await expect(page.locator('#build-left-rgroups button')).not.toHaveCount(0);
+});
+
+test('product preview marks the added occurrence even when the same monomer is already present', async ({ page }) => {
+  await render(page, 'A-G');
+  await page.locator('#btn-build').click();
+  await selectChip(page, 1, 'left', 'G');
+  await tile(page, 'A', 'right');
+  await site(page, 'left', 2);
+  await site(page, 'right', 1);
+  const response = page.waitForResponse(response => isCompletedResponse(response) && new URL(response.url()).pathname === '/render');
+  await page.locator('#build-preview-button').click();
+  const product = await (await response).json();
+  await expect(page.locator('#build-preview-changes')).toContainText('Add A');
+  await expect(page.locator('#build-preview-inner .edit-residue').first()).toBeVisible();
+  await expect(page.locator('#build-preview-inner .edit-connection').first()).toBeVisible();
+  const marks = await page.evaluate(() => {
+    const svg = document.querySelector('#build-preview-inner svg');
+    return {
+      residues: [...svg.querySelectorAll('.edit-residue')].map(el => el.getAttribute('class')),
+      links: [...svg.querySelectorAll('.edit-connection')].map(el => el.getAttribute('class')),
+    };
+  });
+  expect(marks.residues.length).toBeGreaterThan(0);
+  expect(marks.links.length).toBeGreaterThan(0);
+  const markedAtoms = new Set(marks.residues.flatMap(classes => [...classes.matchAll(/\batom-(\d+)\b/g)].map(match => Number(match[1]))));
+  expect([...markedAtoms].sort((a, b) => a - b)).toEqual(product.residue_map['2'].slice().sort((a, b) => a - b));
+  expect(product.residue_map['0'].some(index => markedAtoms.has(index))).toBe(false);
+  const connection = product.connection_bonds.find(link => link.endpoints.some(end => end.residue === 2));
+  expect([...new Set(marks.links.flatMap(classes => [...classes.matchAll(/\bbond-(\d+)\b/g)].map(match => Number(match[1]))))]).toEqual(connection.bonds);
+  await expect(page.locator('#cabiln-input')).toHaveValue('A-G');
+  await page.locator('#build-preview-close').click();
+  await expect(page.locator('#build-preview-inner .edit-residue')).toHaveCount(0);
+});
+
 for (const example of [
   { name: 'backbone addition', source: 'A-G', host: 1, left: 'G', right: 'A', slots: [2, 1], groups: ['[OH]', '[H]'], reaction: /amide/i },
   { name: 'N-terminal cap', source: 'K-G', host: 0, left: 'K', right: 'ac', slots: [1, 2], groups: ['[H]', '[OH]'], reaction: /amide/i },
@@ -31,6 +87,9 @@ for (const example of [
     const product = await (await drawing).json();
     await expect(page.locator('#build-preview-inner svg')).toBeVisible();
     await expect(page.locator('#build-preview-reaction')).toHaveText(example.reaction);
+    const markedBonds = await page.locator('#build-preview-inner .edit-connection').evaluateAll(elements =>
+      [...new Set(elements.flatMap(el => [...el.classList].filter(name => /^bond-\d+$/.test(name))))]);
+    expect(markedBonds).toHaveLength(example.name === 'alkyne–azide cycloaddition' ? 2 : 1);
     const left = `${example.left} (residue ${example.host + 1}) R${example.slots[0]}`;
     const right = `${example.right} (${example.target === undefined ? 'new' : `residue ${example.target + 1}`}) R${example.slots[1]}`;
     await expect(page.locator('#build-preview-status')).toContainText(`${left} ↔ ${right}`);

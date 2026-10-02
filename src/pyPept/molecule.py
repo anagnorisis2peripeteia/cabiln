@@ -105,7 +105,8 @@ class Molecule:
                 identity = parent[identity]
             return identity
 
-        for edge in peptide.connections:
+        self._connections = peptide.connections
+        for connection_id, edge in enumerate(peptide.connections):
             left, right = edge.endpoints
             root1 = find_root(left.occurrence_id)
             root2 = find_root(right.occurrence_id)
@@ -122,8 +123,13 @@ class Molecule:
             intramolecular = root1 == root2
             try:
                 product = run_bond_smirks(
-                    pool[root1], pool[root2], labels[left], labels[right],
-                    reaction, intramolecular,
+                    pool[root1],
+                    pool[root2],
+                    labels[left],
+                    labels[right],
+                    reaction,
+                    intramolecular,
+                    connection_id=connection_id,
                 )
             except ValueError as exc:
                 raise ValueError(
@@ -348,4 +354,13 @@ class Molecule:
         for atom in self.mol.GetAtoms():
             if atom.HasProp('_residue_idx'):
                 mapping.setdefault(atom.GetIntProp('_residue_idx'), []).append(atom.GetIdx())
+        return mapping
+
+    def get_connection_bond_map(self):
+        """Return each connection's surviving reaction bonds in molecule order."""
+        mapping = {edge: [] for edge in self._connections}
+        for bond in self.mol.GetBonds():
+            if bond.HasProp("_connection_idx"):
+                edge = self._connections[bond.GetIntProp("_connection_idx")]
+                mapping[edge].append(bond.GetIdx())
         return mapping

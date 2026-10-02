@@ -83,11 +83,17 @@ def test_fuzz_reaction_products_preserve_spectators_and_target_only_selected_por
     if reverse:
         molecules.reverse()
         first, second = second, first
-    product = run_bond_smirks(*molecules, first, second, REACTIONS[reaction_id], False)
+    product = run_bond_smirks(
+        *molecules, first, second, REACTIONS[reaction_id], False, connection_id=7
+    )
     literal = Chem.MolFromSmiles(expected.format(tail=tail))
     assert literal is not None
     assert Chem.MolToSmiles(product) == Chem.MolToSmiles(literal)
     assert not any(atom.GetAtomicNum() == 0 for atom in product.GetAtoms())
+    assert any(
+        bond.HasProp("_connection_idx") and bond.GetIntProp("_connection_idx") == 7
+        for bond in product.GetBonds()
+    )
     # A requested port absent from the molecule must not silently use another.
     with pytest.raises(ValueError, match="produced no products"):
         run_bond_smirks(*molecules, first + 2000, second, REACTIONS[reaction_id], False)

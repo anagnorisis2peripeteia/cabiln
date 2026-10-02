@@ -25,6 +25,20 @@ class Selection:
 
 
 @dataclass(frozen=True)
+class EditResult:
+    text: str
+    occurrence_order: tuple[int, ...]
+    changed_occurrences: tuple[int, ...]
+    connections: tuple[Connection, ...]
+
+
+def _edit_result(text, order, changed, connections, with_details):
+    if not with_details:
+        return text
+    return EditResult(text, tuple(order), tuple(changed), tuple(connections))
+
+
+@dataclass(frozen=True)
 class _Edit:
     span: Span
     replacement: str
@@ -180,7 +194,14 @@ class PeptideDocument:
             return None
         return {"choices": choices, "mapping": mapping}
 
-    def replace_monomer(self, selection: Selection, symbol: str, mapping: dict[int, int]) -> str:
+    def replace_monomer(
+        self,
+        selection: Selection,
+        symbol: str,
+        mapping: dict[int, int],
+        *,
+        with_details=False,
+    ):
         """Replace one definition, preserving all neighbours and explicit site choices."""
         index = self._index(selection)
         replacement = Peptide.from_sequence(Sequence(symbol))
@@ -223,6 +244,7 @@ class PeptideDocument:
         # Renumbered sites are written from the graph, never by guessing which
         # parenthesised numbers in nested notation refer to this occurrence.
         text = None
+        order = tuple(node.id for node in expected.occurrences)
         if all(old == new for old, new in mapping.items()):
             span = self.sequence.s_sources[index].token
             candidate = self.source[:span.start] + symbol + self.source[span.end:]
@@ -238,6 +260,7 @@ class PeptideDocument:
                 replace(item, token=item.definition.token) for item in expected.occurrences
             )), notation)
             text = emitted.text
+            order = emitted.occurrence_order
             parsed = Peptide.from_sequence(Sequence(text, track_source=True), emitted.occurrence_order)
             if not self._same_replacement(parsed, expected):
                 raise EditError("Replacement notation would change another monomer or connection")
@@ -248,7 +271,12 @@ class PeptideDocument:
         actual = Molecule(parsed, depiction=None).get_molecule("ROMol")
         if not compare_structures(intended, actual).exact:
             raise EditError("Replacement notation would change the assembled product")
-        return text
+        connections = [
+            edge
+            for edge in expected.connections
+            if any(site.occurrence_id == index for site in edge.endpoints)
+        ]
+        return _edit_result(text, order, (index,), connections, with_details)
 
     @staticmethod
     def _same_replacement(actual, expected):
@@ -319,13 +347,23 @@ class PeptideDocument:
         return [_Edit(Span(occurrence.entry.end, occurrence.entry.end), suffix)]
 
     def connect(
-        self, host: Selection, host_slot: int, target: Selection, target_slot: int
-    ) -> str:
+        self,
+        host: Selection,
+        host_slot: int,
+        target: Selection,
+        target_slot: int,
+        *,
+        with_details=False,
+    ):
         a, b = self._index(host), self._index(target)
         editable = self._editable_brackets(a, b)
         if editable is not self:
             return editable.connect(
-                editable.select(a), host_slot, editable.select(b), target_slot
+                editable.select(a),
+                host_slot,
+                editable.select(b),
+                target_slot,
+                with_details=with_details,
             )
         if a == b:
             raise ValueError("Choose two different residues for a crosslink")
@@ -338,15 +376,27 @@ class PeptideDocument:
         expected = set(self.peptide.connections) | {
             Connection(Endpoint(a, host_slot), Endpoint(b, target_slot))
         }
-        return self._apply(edits, expected)
+        return self._apply(edits, expected, with_details=with_details)
 
     def attach(
-        self, host: Selection, host_slot: int, symbol: str, new_slot: int
-    ) -> str:
+        self,
+        host: Selection,
+        host_slot: int,
+        symbol: str,
+        new_slot: int,
+        *,
+        with_details=False,
+    ):
         index = self._index(host)
         editable = self._editable_brackets(index)
         if editable is not self:
-            return editable.attach(editable.select(index), host_slot, symbol, new_slot)
+            return editable.attach(
+                editable.select(index),
+                host_slot,
+                symbol,
+                new_slot,
+                with_details=with_details,
+            )
         self._free_slot(index, host_slot)
         definition = self._new_definition(symbol, new_slot)
         occurrence = self.sequence.s_sources[index]
@@ -393,7 +443,7 @@ class PeptideDocument:
         expected = set(self.peptide.connections) | {
             Connection(Endpoint(index, host_slot), Endpoint(new_index, new_slot))
         }
-        return self._apply(edits, expected, definition)
+        return self._apply(edits, expected, definition, with_details=with_details)
 
     def insert_backbone(self, after: Selection, symbol: str) -> str:
         index = self._index(after)
@@ -491,7 +541,7 @@ class PeptideDocument:
         annotation = "." + opening + body + closing
         return _Edit(removed, replacement), annotation
 
-    def _apply(self, edits, expected_edges, new_definition=None):
+    def _apply(self, edits, expected_edges, new_definition=None, *, with_details=False):
         pieces, cursor = [], 0
         for edit in sorted(edits, key=lambda item: (item.span.start, item.span.end)):
             if edit.span.start < cursor:
@@ -542,4 +592,13 @@ class PeptideDocument:
                 "Edit would change connections beyond the selected attachment"
             )
         Molecule(updated_peptide)
-        return result
+        connections = sorted(
+            expected_edges - set(self.peptide.connections),
+            key=lambda edge: tuple(
+                (site.occurrence_id, site.slot) for site in edge.endpoints
+            ),
+        )
+        changed = (len(self.peptide.occurrences),) if new_definition is not None else ()
+        return _edit_result(
+            result, identities.values(), changed, connections, with_details
+        )

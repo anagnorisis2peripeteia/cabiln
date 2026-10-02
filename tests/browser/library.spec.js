@@ -1,5 +1,71 @@
 const { test, expect, render, selectChip, site } = require('./fixtures');
 
+test('library favourites and recent choices persist without editing the peptide', async ({ page, context }) => {
+  await render(page, 'G');
+  await page.locator('#btn-lib').click();
+  const alanine = page.locator('.lib-row[data-abbr="A"]');
+  await alanine.getByRole('button', { name: 'Favourite A', exact: true }).click();
+  await expect(page.locator('#cabiln-input')).toHaveValue('G');
+  await page.getByLabel('Library collection', { exact: true }).selectOption('favourites');
+  await expect(page.locator('.lib-row')).toHaveCount(1);
+  await expect(alanine).toBeVisible();
+  await alanine.locator('.lib-use').click();
+  await expect(page.locator('#build-right-abbr')).toHaveText('A');
+  await expect(page.locator('#cabiln-input')).toHaveValue('G');
+  await page.reload();
+  await page.locator('#btn-lib').click();
+  await page.getByLabel('Library collection', { exact: true }).selectOption('recent');
+  await expect(alanine).toBeVisible();
+  await page.getByLabel('Library collection', { exact: true }).selectOption('favourites');
+  await expect(alanine.getByRole('button', { name: 'Favourite A', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  const saved = await page.evaluate(() => localStorage.getItem('cabiln.library.v1'));
+  const practice = await context.newPage();
+  await practice.goto(`${new URL(page.url()).origin}/?tutorial=1`);
+  await practice.getByRole('button', { name: 'Load A–G', exact: true }).click();
+  await practice.locator('#btn-lib').click();
+  await expect(practice.getByRole('button', { name: 'Favourite A', exact: true })).toHaveAttribute('aria-pressed', 'false');
+  await practice.getByRole('button', { name: 'Favourite G', exact: true }).click();
+  await practice.locator('.lib-row[data-abbr="G"] .lib-use').click();
+  await practice.close();
+  expect(await page.evaluate(() => localStorage.getItem('cabiln.library.v1'))).toBe(saved);
+  await alanine.hover();
+  await expect(page.locator('#lib-preview')).toBeVisible();
+  await alanine.getByRole('button', { name: 'Favourite A', exact: true }).click();
+  await expect(page.locator('.lib-row')).toHaveCount(0);
+  await expect(page.locator('#lib-preview')).toBeHidden();
+  await expect(page.locator('#lib-list')).toContainText('favourites');
+});
+
+test('unavailable preference storage keeps favourites usable in the current tab', async ({ page }) => {
+  await page.addInitScript(() => { Storage.prototype.setItem = () => { throw new Error('storage unavailable'); }; });
+  await page.reload();
+  await page.locator('#btn-lib').click();
+  await page.getByRole('button', { name: 'Favourite A', exact: true }).click();
+  await expect(page.locator('#lib-preferences-note')).toContainText('this tab only');
+  await page.locator('#lib-collection').selectOption('favourites');
+  await expect(page.locator('.lib-row')).toHaveCount(1);
+  await expect(page.locator('.lib-row')).toHaveAttribute('data-abbr', 'A');
+  await expect(page.locator('#cabiln-input')).toHaveValue('');
+});
+
+test('library categories combine with chemistry filters and can be reset', async ({ page }) => {
+  await render(page, 'K');
+  await page.locator('#btn-build').click();
+  await selectChip(page, 0, 'left', 'K');
+  await site(page, 'left', 2);
+  await page.locator('#btn-rxn-filter').click();
+  await page.getByLabel('Monomer category', { exact: true }).selectOption('cap');
+  await expect(page.locator('.lib-row[data-abbr="am"]')).toBeVisible();
+  await expect(page.locator('.lib-row[data-abbr="ac"]')).toHaveCount(0);
+  await expect(page.locator('.lib-row[data-abbr="A"]')).toHaveCount(0);
+  await page.locator('#lib-search').fill('nothing-matches-this');
+  await page.getByRole('button', { name: 'Reset library filters', exact: true }).click();
+  await expect(page.locator('#lib-search')).toHaveValue('');
+  await expect(page.locator('#btn-rxn-filter')).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.locator('.lib-row[data-abbr="A"]')).toBeVisible();
+  await expect(page.locator('.lib-row[data-abbr="ac"]')).toHaveCount(1);
+});
+
 test('Filter guides selection and changes the library for the chosen attachment site', async ({ page }) => {
   await render(page, 'K');
   await page.locator('#btn-lib').click();

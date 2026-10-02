@@ -1,16 +1,18 @@
 // Monomer discovery, library revisions, filtering and hover previews.
 class MonomerLibrary {
-  constructor({ getFilters, onUse, onChanged, onFilter }) {
+  constructor({ getFilters, onUse, onChanged, onFilter, onReactions = () => {}, persistPreferences = true }) {
     this.getFilters = getFilters;
     this.onUse = onUse;
     this.onChanged = onChanged;
     this.onFilter = onFilter;
+    this.onReactions = onReactions;
     this.loaded = false;
     this.version = null;
     this.monomers = [];
     this.previewCache = {};
     this.previewTimer = null;
     this.reactionPairs = null;
+    this.reactionIndex = new Set();
     this.reactionError = '';
     this.filterActive = false;
     this.panel = document.getElementById('lib-panel');
@@ -23,6 +25,22 @@ class MonomerLibrary {
     this.button = document.getElementById('btn-lib');
     this.filterButton = document.getElementById('btn-rxn-filter');
     this.filterStatus = document.getElementById('lib-filter-status');
+    this.category = document.getElementById('lib-category');
+    this.collection = document.getElementById('lib-collection');
+    this.resetButton = document.getElementById('lib-reset');
+    this.preferencesNote = document.getElementById('lib-preferences-note');
+    this.persistPreferences = persistPreferences;
+    this.favourites = new Set();
+    this.recent = [];
+    if (persistPreferences) {
+      try {
+        const saved = JSON.parse(localStorage.getItem('cabiln.library.v1'));
+        const symbols = values => Array.isArray(values)
+          ? values.filter(value => typeof value === 'string' && value.length <= 100) : [];
+        this.favourites = new Set(symbols(saved?.favourites).slice(0, 2000));
+        this.recent = [...new Set(symbols(saved?.recent))].slice(0, 12);
+      } catch (_) { /* Browsing also works without stored preferences. */ }
+    }
     this.disclosure = createPanel({ panel: this.panel, button: this.button,
       closeButton: this.closeButton, focus: this.search,
       onChange: open => {
@@ -32,6 +50,13 @@ class MonomerLibrary {
     });
 
     this.search.addEventListener('input', () => this.render());
+    for (const control of [this.category, this.collection]) control.addEventListener('change', () => this.render());
+    this.resetButton.addEventListener('click', () => {
+      this.search.value = this.category.value = this.collection.value = '';
+      this.resetFilter();
+      this.render();
+      this.search.focus();
+    });
 
     this.filterButton.addEventListener('click', () => {
       const active = !this.filterActive;
@@ -48,19 +73,32 @@ class MonomerLibrary {
     // Keep one set of listeners while search replaces the rows.
     this.list.addEventListener('click', event => {
       const row = event.target.closest('.lib-row');
-      if (row) this.onUse(row.dataset.abbr, !!event.target.closest('.lib-use'));
+      if (!row) return;
+      const favourite = event.target.closest('.lib-favourite');
+      if (favourite) {
+        const abbr = row.dataset.abbr;
+        if (this.favourites.has(abbr)) this.favourites.delete(abbr);
+        else this.favourites.add(abbr);
+        this.savePreferences();
+        if (this.collection.value === 'favourites') {
+          const index = [...this.list.children].indexOf(row);
+          this.render();
+          const remaining = this.list.querySelectorAll('.lib-favourite');
+          (remaining[Math.min(index, remaining.length - 1)] || this.collection).focus();
+        } else favourite.setAttribute('aria-pressed', String(this.favourites.has(abbr)));
+      } else this.use(row.dataset.abbr, !!event.target.closest('.lib-use'));
     });
     this.list.addEventListener('contextmenu', event => {
       const row = event.target.closest('.lib-row');
       if (row && this.getFilters().building) {
         event.preventDefault();
-        this.onUse(row.dataset.abbr, true);
+        this.use(row.dataset.abbr, true);
       }
     });
     this.list.addEventListener('keydown', event => {
       if (event.target.matches('.lib-row') && ['Enter', ' '].includes(event.key)) {
         event.preventDefault();
-        this.onUse(event.target.dataset.abbr);
+        this.use(event.target.dataset.abbr);
       }
     });
     for (const type of ['mouseover', 'focusin']) {
@@ -80,6 +118,22 @@ class MonomerLibrary {
   open(options) { this.disclosure.open(options); }
   close() { this.disclosure.close(); }
 
+  use(abbr, explicit = false) {
+    this.onUse(abbr, explicit);
+    this.recent = [abbr, ...this.recent.filter(symbol => symbol !== abbr)].slice(0, 12);
+    this.savePreferences();
+  }
+
+  savePreferences() {
+    if (!this.persistPreferences) return;
+    try {
+      localStorage.setItem('cabiln.library.v1', JSON.stringify({ favourites: [...this.favourites], recent: this.recent }));
+    } catch (_) {
+      this.preferencesNote.textContent = 'Favourites and recent choices are kept for this tab only.';
+      this.preferencesNote.hidden = false;
+    }
+  }
+
   async load() {
     const request = requests.start('library');
     if (!this.loaded) showLoading(this.list, 'Loading monomers…');
@@ -97,6 +151,12 @@ class MonomerLibrary {
         searchText: [monomer.abbr, monomer.name, monomer.type, monomer.chem_types].join(' ').toLowerCase(),
         attachmentTypes: this.attachmentTypes(monomer.chem_types),
       }));
+      const selectedCategory = this.category.value;
+      const labels = { aa: 'Amino acids', cap: 'Caps', linker: 'Linkers', scaffold: 'Scaffolds', other: 'Other blocks' };
+      const categories = [...new Set(this.monomers.map(m => m.degenerate ? 'cap' : m.type || 'other'))].sort();
+      this.category.innerHTML = '<option value="">All categories</option>' + categories.map(type =>
+        `<option value="${escAttr(type)}">${escHtml(labels[type] || type)}</option>`).join('');
+      this.category.value = categories.includes(selectedCategory) ? selectedCategory : '';
       this.previewCache = {};
       this.hidePreview();
       this.loaded = true;
@@ -127,15 +187,27 @@ class MonomerLibrary {
       if (!request.current()) return;
       if (!Array.isArray(data)) throw new Error(data.error || 'Reaction data is unavailable');
       this.reactionPairs = data;
+      this.reactionIndex = new Set(data.flatMap(([a, b]) => [a + '|' + b, b + '|' + a]));
     } catch (error) {
       if (!request.current()) return;
       this.reactionPairs = null;
+      this.reactionIndex.clear();
       this.reactionError = 'Reaction filter unavailable. ' + error.message;
     } finally {
       request.finish();
       this.updateFilterStatus();
       if (this.filterActive && this.loaded) this.render();
+      this.onReactions();
     }
+  }
+
+  compatibleTypes(left, right) {
+    return this.reactionIndex.has(left + '|' + right);
+  }
+
+  compatiblePairs(left, right) {
+    return left.filter(site => !site.used).flatMap(a => right.filter(b =>
+      !b.used && this.compatibleTypes(a.chem_type, b.chem_type)).map(b => [a.slot, b.slot]));
   }
 
   attachmentTypes(cts) {
@@ -158,9 +230,15 @@ class MonomerLibrary {
     let filtered = q
       ? catalog.filter(m => m.searchText.includes(q))
       : catalog;
+    if (this.category.value) filtered = filtered.filter(m => (m.degenerate ? 'cap' : m.type || 'other') === this.category.value);
+    if (this.collection.value === 'favourites') filtered = filtered.filter(m => this.favourites.has(m.abbr));
+    if (this.collection.value === 'recent') {
+      const order = new Map(this.recent.map((abbr, index) => [abbr, index]));
+      filtered = filtered.filter(m => order.has(m.abbr)).sort((a, b) => order.get(a.abbr) - order.get(b.abbr));
+    }
+    this.resetButton.hidden = !(q || this.category.value || this.collection.value || this.filterActive);
 
     if (this.filterActive && buildLeft && Array.isArray(this.reactionPairs)) {
-      const pairSet = new Set(this.reactionPairs.map(([a, b]) => a + '|' + b));
       let lcts;
       if (buildLeft.selectedSlot !== null) {
         const selRg = buildLeft.rgroups.find(r => r.slot === buildLeft.selectedSlot);
@@ -171,7 +249,7 @@ class MonomerLibrary {
       filtered = filtered.filter(m => {
         const mcts = m.attachmentTypes;
         return mcts.some(mct => lcts.some(lct =>
-          pairSet.has(lct + '|' + mct) || pairSet.has(mct + '|' + lct)
+          this.compatibleTypes(lct, mct)
         ));
       });
     }
@@ -186,7 +264,10 @@ class MonomerLibrary {
 
     if (!filtered.length) {
       this.list.innerHTML = `<div class="placeholder">${swapping && awaitingSelection
-        ? 'Select a residue to find replacements' : 'No matches'}</div>`;
+        ? 'Select a residue to find replacements'
+        : this.collection.value === 'favourites' ? 'No favourites match. Star a monomer in All monomers to keep it here.'
+        : this.collection.value === 'recent' ? 'No recent choices match. Choose a monomer from All monomers to start.'
+        : 'No matches'}</div>`;
       return;
     }
 
@@ -218,6 +299,7 @@ class MonomerLibrary {
           ${qualityText ? `<div class="lib-quality" title="${escAttr(qualityText)}">${escHtml(qualityText)}</div>` : ''}
         </div>
         ${badge}
+        <button type="button" class="lib-favourite" aria-label="Favourite ${escAttr(m.abbr)}" aria-pressed="${this.favourites.has(m.abbr)}" title="Keep in favourites">★</button>
         <button type="button" class="lib-use" aria-label="${swapping ? 'Select' : 'Use'} ${escAttr(m.abbr)} ${swapping ? 'as replacement' : 'in builder'}" title="${swapping ? 'Select a replacement to preview' : 'Choose this monomer in the builder'}">${swapping ? 'Select' : 'Use'}</button>
       </div>`;
     });

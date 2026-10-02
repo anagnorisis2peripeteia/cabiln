@@ -52,11 +52,18 @@ The selected sites light up in the previews. **Preview** shows the proposed
 structure, reaction and CABILN before **Connect** applies the change. You can also
 select two existing residues to
 connect them, or insert a monomer between neighbouring backbone residues.
+The product preview marks the changed block in blue and the new connections in
+orange. When only one compatible site pair remains, **Use … R… → … R…** offers
+to select it; you still review and apply the connection yourself.
 
 **Filter** in Library opens Build when needed. Select a residue in the drawing or
 its tile to match its free attachment sites, then choose a numbered site to narrow
 the results. The library states which residue and site it is matching. Turn
 Filter off to show all monomers again. Search works within the filtered list.
+Category and collection menus narrow the list further. Star a monomer to keep
+it in **Favourites**, or choose **Recently used** for your last twelve choices.
+These preferences stay in this browser; practice tabs keep separate, temporary
+choices. **Reset** clears search and filters without changing the peptide.
 
 Choose **Swap monomer** in Build to replace a selected residue. The library
 shows candidates with compatible sites for its existing connections; choose
@@ -66,6 +73,8 @@ are supported. **Change** on the replacement card keeps the original residue
 selected while you choose again. **Preview swap** assembles the proposed product
 before **Apply swap** becomes available. Changing the replacement or mapping requires
 a new preview. Neighbours, branches and ring closures stay connected.
+The preview marks the replacement in blue and the retained connections in orange.
+**Focus change** centres and enlarges that region; **Reset view** shows the whole peptide.
 Site renumbering can change the notation's layout. Chemistry filters
 narrow the choices; full assembly can still reject a candidate.
 **Learn Swap** opens the Retatrutide lesson directly from Build.
@@ -82,6 +91,9 @@ Use Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z in the sequence input or builder controls.
 Changing input format retains that format's draft and conversion warnings.
 During updates, the previous drawing stays visible and is marked as outdated;
 selection and exports resume when the current input has a valid drawing.
+Unknown monomer errors offer **Select problem** to locate the name in your
+sequence and explain how to correct it. Failed connection checks keep your
+selections so you can retry.
 
 Browser drafts retain the sequence, format drafts and reference. After reloading,
 choose **Restore saved draft** to recover them. **Save project** downloads a

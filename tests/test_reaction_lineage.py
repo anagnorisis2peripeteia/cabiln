@@ -48,10 +48,63 @@ def test_later_reaction_step_inherits_from_the_immediate_product():
         ],
     }
     product = run_bond_smirks(
-        owned("[101*]N", 5), owned("[202*]C", 8), 101, 202, entry, False
+        owned("[101*]N", 5),
+        owned("[202*]C", 8),
+        101,
+        202,
+        entry,
+        False,
+        connection_id=17,
     )
     assert Chem.MolToSmiles(product) == "CN"
     assert [atom.GetIntProp("_residue_idx") for atom in product.GetAtoms()] == [8, 5]
+    assert product.GetBondWithIdx(0).GetIntProp("_connection_idx") == 17
+
+
+@pytest.mark.parametrize(
+    "notation,counts",
+    [
+        ("A-G-A", [1, 1]),
+        (
+            "C.!r(4,4)-C.!r",
+            [1, 1],
+        ),  # Two different connections between the same blocks.
+        ("K.!r(2,4).!r(4,2)", [1]),  # Both ends belong to one block.
+        ("ac-Pra.!r(4,4)-A-G-AzK.!r(4,4)-am", [1, 1, 1, 1, 1, 2]),
+    ],
+)
+def test_connection_bonds_identify_exact_junctions_after_assembly(notation, counts):
+    assembly = Molecule(Sequence(notation), depiction=None)
+    mapping = assembly.get_connection_bond_map()
+    assert [len(bonds) for bonds in mapping.values()] == counts
+    marked = []
+    for edge, indices in mapping.items():
+        owners = {end.occurrence_id for end in edge.endpoints}
+        for index in indices:
+            bond = assembly.mol.GetBondWithIdx(index)
+            assert {
+                atom.GetIntProp("_residue_idx")
+                for atom in (bond.GetBeginAtom(), bond.GetEndAtom())
+            } == owners
+            elements = sorted(
+                atom.GetSymbol() for atom in (bond.GetBeginAtom(), bond.GetEndAtom())
+            )
+            assert elements == (
+                ["S", "S"]
+                if notation.startswith("C.") and edge.left.slot == 4
+                else ["C", "N"]
+            )
+        marked.extend(indices)
+    assert len(marked) == len(set(marked))
+    # Every junction between different block owners is accounted for, without
+    # including internal template bonds or the terminal leaving groups.
+    cross_block = {
+        bond.GetIdx()
+        for bond in assembly.mol.GetBonds()
+        if bond.GetBeginAtom().GetIntProp("_residue_idx")
+        != bond.GetEndAtom().GetIntProp("_residue_idx")
+    }
+    assert cross_block <= set(marked)
 
 
 def test_reaction_restores_only_owners_lost_at_the_junction(monkeypatch):

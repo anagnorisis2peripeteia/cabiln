@@ -18,6 +18,21 @@ function makeZoomable(canvas, inner) {
     applyTransform();
   }
 
+  function focus(elements) {
+    if (!elements.length) return;
+    reset();
+    const boxes = [...elements].map(element => element.getBoundingClientRect());
+    const left = Math.min(...boxes.map(box => box.left)), right = Math.max(...boxes.map(box => box.right));
+    const top = Math.min(...boxes.map(box => box.top)), bottom = Math.max(...boxes.map(box => box.bottom));
+    const viewport = canvas.getBoundingClientRect();
+    scale = Math.max(0.2, Math.min(20, (viewport.width - 48) / Math.max(1, right - left),
+      (viewport.height - 48) / Math.max(1, bottom - top)));
+    tx = (viewport.left + viewport.width / 2 - (left + right) / 2) * scale;
+    ty = (viewport.top + viewport.height / 2 - (top + bottom) / 2) * scale;
+    applyTransform();
+    canvas.scrollIntoView({ block: 'center' });
+  }
+
   canvas.addEventListener('wheel', e => {
     e.preventDefault();
     zoom(e.deltaY < 0 ? 1.12 : 1 / 1.12);
@@ -89,7 +104,7 @@ function makeZoomable(canvas, inner) {
       if (action === 'reset') reset();
     });
   });
-  return { reset };
+  return { reset, focus };
 }
 
 // Nonmodal panels retain independent lifetimes; Escape dismisses the panel

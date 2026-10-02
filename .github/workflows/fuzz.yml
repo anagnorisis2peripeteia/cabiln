@@ -25,7 +25,20 @@ env:
   CABILN_FUZZ_SEED: ${{ inputs.seed || '' }}
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      application: ${{ steps.scope.outputs.application }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: scope
+        run: python tools/ci_scope.py
+
   python:
+    needs: changes
+    if: needs.changes.outputs.application == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: ${{ (github.event_name == 'schedule' || inputs.profile == 'deep') && 60 || 20 }}
     strategy:
@@ -74,6 +87,8 @@ jobs:
           retention-days: 14
 
   frontend:
+    needs: changes
+    if: needs.changes.outputs.application == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
@@ -99,6 +114,8 @@ jobs:
           retention-days: 14
 
   browser:
+    needs: changes
+    if: needs.changes.outputs.application == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: ${{ (github.event_name == 'schedule' || inputs.profile == 'deep') && 60 || 20 }}
     env:

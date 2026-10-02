@@ -222,6 +222,7 @@ def parse_source(cabiln: str, warning_sink=None, *, track_source=False):
     legacy conversion can change instance ordering.
     """
     from pyPept.sequence import Sequence
+    from pyPept.source import SourceError
 
     messages = []
     parsed_source = cabiln
@@ -234,9 +235,14 @@ def parse_source(cabiln: str, warning_sink=None, *, track_source=False):
         if parsed_source == cabiln:
             raise
         messages.clear()
-        sequence = Sequence(
-            parsed_source, warning_sink=messages.append, track_source=track_source
-        )
+        try:
+            sequence = Sequence(
+                parsed_source, warning_sink=messages.append, track_source=track_source
+            )
+        except SourceError as error:
+            # The fallback rewrites source positions before parsing. Its spans
+            # cannot select the original input that the user still sees.
+            raise SourceError(str(error), hint=error.hint) from error
     if warning_sink is not None:
         for message in messages:
             warning_sink(message)

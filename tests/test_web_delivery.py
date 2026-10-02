@@ -8,6 +8,35 @@ import pytest
 from pyPept.web.app import create_app
 
 
+@pytest.mark.parametrize(
+    "source,word",
+    [
+        ("A-G-Nope-G", "Nope"),
+        ("K.[G(4,2).Missing(1,2)]-A", "Missing"),
+        ("A-🧬-G", "🧬"),
+    ],
+)
+def test_render_errors_keep_original_source_locations_and_repair_hints(source, word):
+    with TestClient(create_app()) as client:
+        response = client.post("/render", json={"cabiln": source})
+    assert response.status_code == 400
+    diagnostic = response.json()
+    assert "Library" in diagnostic["hint"]
+    span = diagnostic["source_span"]
+    assert source[span["start"] : span["end"]] == word
+    assert word in diagnostic["error"]
+
+
+def test_error_in_rewritten_legacy_source_does_not_point_into_the_wrong_text():
+    with TestClient(create_app()) as client:
+        response = client.post("/render", json={"cabiln": "A-D.(4,1)-A-am%G-Nope-am"})
+    assert response.status_code == 400
+    diagnostic = response.json()
+    assert "Nope" in diagnostic["error"]
+    assert "Library" in diagnostic["hint"]
+    assert "source_span" not in diagnostic
+
+
 @pytest.mark.parametrize("path", ["/", "/static/builder.js", "/static/builder.css"])
 def test_browser_assets_negotiate_compression_without_changing_content(path):
     with TestClient(create_app()) as client:

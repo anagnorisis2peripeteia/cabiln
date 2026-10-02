@@ -488,6 +488,9 @@
     transition: border-color .15s;
   }
   #lib-search:focus { border-color: var(--focus); }
+  #lib-browse { display: flex; flex-shrink: 0; gap: 6px; padding: 6px 12px; }
+  #lib-browse select { min-width: 0; flex: 1; width: 0; padding-inline: 6px; }
+  .lib-note { padding: 4px 14px; font-size: 11px; color: var(--muted); }
   #lib-count {
     flex-shrink: 0;
     padding: 4px 14px;
@@ -509,7 +512,7 @@
 
   .lib-row {
     display: grid;
-    grid-template-columns: 64px minmax(0, 1fr) auto auto;
+    grid-template-columns: 56px minmax(0, 1fr) auto 30px auto;
     align-items: start;
     gap: 6px;
     padding: 8px 12px;
@@ -520,7 +523,7 @@
   .lib-row:hover, .lib-row:focus-within { background: var(--surface-hover); }
   .lib-row:focus-visible { outline-offset: -3px; }
   .lib-use {
-    grid-column: 4;
+    grid-column: 5;
     align-self: center;
     min-width: 46px;
     min-height: 32px;
@@ -535,6 +538,19 @@
   }
   .lib-use:hover { background: var(--surface-hover); color: var(--text); }
   .lib-use:disabled { opacity: .5; cursor: default; }
+  .lib-favourite {
+    grid-column: 4;
+    align-self: center;
+    min-height: 32px;
+    border: 1px solid transparent;
+    border-radius: var(--radius-control);
+    padding: 3px;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .lib-favourite:hover { border-color: var(--line); }
+  .lib-favourite[aria-pressed="true"] { color: var(--focus); background: var(--surface-raised); }
   .lib-row.hidden { display: none; }
   .lib-abbr {
     font-family: var(--font-code);
@@ -808,6 +824,12 @@
   }
   #build-preview-status.error { color: var(--error); }
   #build-preview-reaction { margin: 4px 0; font-size: 12px; color: var(--text); }
+  #build-preview-changes { margin: 4px 0; font-size: 12px; }
+  #build-preview-inner { --changed-block: #287fc7; --changed-connection: #c96c0c; }
+  /* The canvas inverts the complete molecule, including its glow. */
+  .dark #build-preview-inner { --changed-block: #915500; --changed-connection: #0a5bbd; }
+  #build-preview-inner .edit-residue { filter: drop-shadow(0 0 2px var(--changed-block)) drop-shadow(0 0 2px var(--changed-block)); }
+  #build-preview-inner .edit-connection { stroke: var(--changed-connection) !important; filter: drop-shadow(0 0 2px var(--changed-connection)) drop-shadow(0 0 3px var(--changed-connection)); }
   .site-explanation { margin: 4px 0 8px; font-size: 11px; color: var(--muted); }
   #build-preview-canvas { height: 220px; }
   #build-preview-notation { margin-top: 6px; font-size: 12px; color: var(--muted); }
@@ -980,14 +1002,15 @@
     .build-boxes { flex-direction: column; }
     .build-arrow { flex-direction: row; }
     .build-arrow .arrow-icon { transform: rotate(90deg); }
-    .lib-row { grid-template-columns: 56px minmax(0, 1fr) auto; }
+    .lib-row { grid-template-columns: 56px minmax(0, 1fr) 32px auto; }
     .lib-badge { grid-column: 2; }
-    .lib-use { grid-column: 3; grid-row: 1 / span 2; }
+    .lib-favourite { grid-column: 3; grid-row: 1 / span 2; }
+    .lib-use { grid-column: 4; grid-row: 1 / span 2; }
     .build-box .box-svg { min-height: 120px; }
   }
 
   @media (pointer: coarse) {
-    .hbtn, .panel-close, .box-clear-btn, .rgroup-btn, .build-connect-btn, .lib-use { min-height: 44px; }
+    .hbtn, .panel-close, .box-clear-btn, .rgroup-btn, .build-connect-btn, .lib-use, .lib-favourite { min-height: 44px; }
     .panel-close { min-width: 44px; }
     .res-chip { min-height: 36px; padding-top: 7px; padding-bottom: 7px; }
   }

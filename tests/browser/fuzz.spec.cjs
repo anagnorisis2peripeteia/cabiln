@@ -307,6 +307,7 @@ test('generated tutorial navigation keeps completed edits independent of panels 
   const name = 'browser-tutorial-lifecycle';
   test.skip(process.env.CABILN_FUZZ_CASE && process.env.CABILN_FUZZ_CASE !== name);
   const route = fc.record({ swap: fc.boolean(), preview: fc.boolean(), closed: fc.boolean(),
+    favourite: fc.boolean(), category: fc.boolean(), focus: fc.boolean(), suggestion: fc.boolean(),
     width: fc.constantFrom(1440, 390), monomer: fc.constantFrom('DAla', 'L', 'V', 'S'),
     actions: fc.array(fc.constantFrom('back', 'next', 'show', 'guide', 'build', 'library', 'undo', 'redo'),
       { minLength: 8, maxLength: profile === 'deep' ? 40 : 20 }) });
@@ -326,12 +327,34 @@ test('generated tutorial navigation keeps completed edits independent of panels 
     await selectChip(page, example.swap ? 16 : 1, 'left', example.swap ? 'K' : 'G');
     await next.click();
     const monomer = example.swap ? 'Orn' : example.monomer;
+    if (example.category) {
+      await page.locator('#lib-category').selectOption('aa');
+      count('category');
+    }
+    if (example.favourite) {
+      await page.locator('#lib-search').fill(monomer);
+      await page.getByRole('button', { name: `Favourite ${monomer}`, exact: true }).click();
+      await page.locator('#lib-collection').selectOption('favourites');
+      count('favourite');
+    }
     await tile(page, monomer);
     await next.click();
-    if (!example.swap) { await site(page, 'left', 2); await site(page, 'right', 1); }
+    if (!example.swap) {
+      await site(page, 'left', 2);
+      if (example.suggestion) {
+        await page.locator('#build-suggestion').click();
+        count('suggestion');
+      } else await site(page, 'right', 1);
+    }
     if (example.preview || example.swap) {
       await page.locator('#build-preview-button').click();
       await expect(page.locator('#build-preview-inner svg')).toBeVisible();
+      if (example.focus) {
+        await page.locator('#build-preview-focus').click();
+        await expect(page.locator('#build-preview-inner .edit-residue').first()).toBeInViewport();
+        await page.locator('#build-preview [data-zoom="reset"]').click();
+        count('focusChange');
+      }
       count('preview');
     } else count('directConnect');
     if (example.closed) await page.locator('#tutorial-close').click();

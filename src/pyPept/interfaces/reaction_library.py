@@ -353,28 +353,63 @@ def _target_smirks(smirks, slot_a, slot_b, iso1, iso2):
     return re.sub(r'\[(\d+)\*\]', replace, smirks)
 
 
-def _inherit_residue_ownership(product, reactants):
+def _inherit_residue_ownership(product, reactants, connection_id=None):
     """Carry lineage from the actual reactant order after every reaction step.
 
     Mapped product atoms lose custom properties in RDKit. Its reactant indices
     refer to this step's inputs, not necessarily the original monomer pair.
     Restore ownership before those inputs are replaced by the next product.
     """
+    mapped = set()
     for atom in product.GetAtoms():
         # Unmapped atoms already retain their original owner. Only mapped
         # junction atoms lose it; avoid reassigning the entire growing chain.
         if atom.HasProp('_residue_idx'):
             continue
+        if connection_id is not None and atom.HasProp("old_mapno"):
+            mapped.add(atom.GetIdx())
         if atom.HasProp('react_idx') and atom.HasProp('react_atom_idx'):
             source = reactants[atom.GetIntProp('react_idx')].GetAtomWithIdx(
                 atom.GetIntProp('react_atom_idx'))
             if source.HasProp('_residue_idx'):
                 atom.SetIntProp('_residue_idx', source.GetIntProp('_residue_idx'))
 
+    # RDKit copies spectator bonds but rebuilds bonds between mapped atoms.
+    # Restore earlier connection labels there, and label this step's new bonds.
+    for index in mapped:
+        for bond in product.GetAtomWithIdx(index).GetBonds():
+            other = bond.GetOtherAtomIdx(index)
+            if other not in mapped or other < index:
+                continue
+            left, right = bond.GetBeginAtom(), bond.GetEndAtom()
+            previous = None
+            if (
+                left.HasProp("react_idx")
+                and right.HasProp("react_idx")
+                and left.GetIntProp("react_idx") == right.GetIntProp("react_idx")
+            ):
+                previous = reactants[left.GetIntProp("react_idx")].GetBondBetweenAtoms(
+                    left.GetIntProp("react_atom_idx"),
+                    right.GetIntProp("react_atom_idx"),
+                )
+            if previous is None:
+                bond.SetIntProp("_connection_idx", connection_id)
+            elif previous.HasProp("_connection_idx"):
+                bond.SetIntProp(
+                    "_connection_idx", previous.GetIntProp("_connection_idx")
+                )
 
-def run_bond_smirks(frag1, frag2,
-                    iso1: int, iso2: int,
-                    entry: dict, intramolecular: bool):
+
+def run_bond_smirks(
+    frag1,
+    frag2,
+    iso1: int,
+    iso2: int,
+    entry: dict,
+    intramolecular: bool,
+    *,
+    connection_id=None,
+):
     """Execute a targeted reaction and preserve ownership through every step.
 
     Numbered dummies identify the two sites, independently of the slot labels
@@ -421,7 +456,7 @@ def run_bond_smirks(frag1, frag2,
 
         sanitized = []
         for product in products[0]:
-            _inherit_residue_ownership(product, reactants)
+            _inherit_residue_ownership(product, reactants, connection_id)
             try:
                 Chem.SanitizeMol(product)
             except Exception as exc:

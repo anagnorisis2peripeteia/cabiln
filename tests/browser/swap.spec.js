@@ -31,6 +31,21 @@ for (const sample of [
     await expect(page.locator('#build-swap-sites select')).toHaveCount(3);
     await expect(page.locator('#build-connect')).toBeDisabled();
     expect(await previewSwap(page)).toBe(sample.expected);
+    await expect(page.locator('#build-preview-changes')).toContainText(`Replace ${sample.selected} with ${sample.to}`);
+    const bonds = await page.locator('#build-preview-inner .edit-connection').evaluateAll(elements =>
+      [...new Set(elements.flatMap(el => [...el.classList].filter(name => /^bond-\d+$/.test(name))))]);
+    expect(bonds).toHaveLength(3);
+    const marked = page.locator('#build-preview-inner .edit-residue').first();
+    const before = await marked.boundingBox();
+    await page.getByRole('button', { name: 'Focus change', exact: true }).click();
+    const after = await marked.boundingBox();
+    expect(Math.hypot(after.width, after.height)).toBeGreaterThan(Math.hypot(before.width, before.height));
+    await expect(marked).toBeInViewport({ ratio: 1 });
+    const focused = await page.locator('#build-preview-inner').evaluate(el => el.style.transform);
+    await page.getByRole('button', { name: 'Focus change', exact: true }).click();
+    expect(await page.locator('#build-preview-inner').evaluate(el => el.style.transform)).toBe(focused);
+    await page.locator('#build-preview [data-zoom="reset"]').click();
+    expect(await marked.boundingBox()).toEqual(before);
     await expect(page.locator('#cabiln-input')).toHaveValue(sample.source);
     if (sample.selected === 'K') {
       await page.locator('#lib-close').click();

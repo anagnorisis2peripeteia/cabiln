@@ -24,6 +24,25 @@ from .schemas import (
 router = APIRouter()
 
 
+def _edit_response(edit):
+    positions = {
+        identity: index for index, identity in enumerate(edit.occurrence_order)
+    }
+    return {
+        "result": edit.text,
+        "change": {
+            "residues": [positions[identity] for identity in edit.changed_occurrences],
+            "connections": [
+                [
+                    {"residue": positions[site.occurrence_id], "slot": site.slot}
+                    for site in edge.endpoints
+                ]
+                for edge in edit.connections
+            ],
+        },
+    }
+
+
 def _initial_monomer(symbol):
     sequence = Sequence(symbol)
     if len(sequence.s_monomers) != 1:
@@ -41,11 +60,17 @@ def insert_bond(req: _InsertBondReq):
         host = document.select(req.host_residue_idx)
         if req.target_residue_idx >= 0:
             result = document.connect(
-                host, req.r_host, document.select(req.target_residue_idx), req.r_new
+                host,
+                req.r_host,
+                document.select(req.target_residue_idx),
+                req.r_new,
+                with_details=True,
             )
         else:
-            result = document.attach(host, req.r_host, req.new_abbr, req.r_new)
-        return {"result": result}
+            result = document.attach(
+                host, req.r_host, req.new_abbr, req.r_new, with_details=True
+            )
+        return _edit_response(result)
     except Exception as exc:
         return error_response(exc)
 
@@ -113,10 +138,16 @@ def replace_monomer(req: _ReplaceMonomerReq):
         context = checked_context(req.context)
         document = PeptideDocument(req.cabiln)
         result = document.replace_monomer(
-            document.select(req.residue_idx), req.new_abbr, req.slot_map
+            document.select(req.residue_idx),
+            req.new_abbr,
+            req.slot_map,
+            with_details=True,
         )
-        return {"result": result, "source_echo": req.cabiln,
-                "context": checked_context(context)}
+        return {
+            **_edit_response(result),
+            "source_echo": req.cabiln,
+            "context": checked_context(context),
+        }
     except Exception as exc:
         return error_response(exc)
 

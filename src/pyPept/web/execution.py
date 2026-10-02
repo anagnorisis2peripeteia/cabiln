@@ -88,13 +88,20 @@ def error_response(exc):
         return JSONResponse({"error": str(exc.detail)}, status_code=exc.status_code,
                             headers=exc.headers)
     if isinstance(exc, ValueError):
+        from pyPept.source import SourceError
+
         message = str(exc).split("\n")[0]
         if message.startswith("Old BILN crosslink notation detected:"):
             message = (
                 "This input uses legacy BILN crosslinks. Select BILN as the "
                 "input notation, then use Convert to CABILN."
             )
-        return JSONResponse({"error": message}, status_code=400)
+        payload = {"error": message}
+        if isinstance(exc, SourceError):
+            payload["hint"] = exc.hint
+            if exc.span is not None:
+                payload["source_span"] = {"start": exc.span.start, "end": exc.span.end}
+        return JSONResponse(payload, status_code=400)
     _internal_error(exc)
     return JSONResponse(
         {"error": "An internal error occurred.", "request_id": _request_id.get()},

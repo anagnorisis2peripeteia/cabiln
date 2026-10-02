@@ -13,6 +13,7 @@ function createBuildPanel({ library, residueView, getDocument, commitDocument, i
   const btnBuild      = document.getElementById('btn-build');
   const buildClose    = document.getElementById('build-close');
   const buildConnect  = document.getElementById('build-connect');
+  const buildSuggestion = document.getElementById('build-suggestion');
   const buildAction = document.getElementById('build-action');
   const swapMapping = document.getElementById('build-swap-mapping');
   const swapSites = document.getElementById('build-swap-sites');
@@ -20,6 +21,8 @@ function createBuildPanel({ library, residueView, getDocument, commitDocument, i
   const buildPreviewPanel = document.getElementById('build-preview');
   const buildPreviewStatus = document.getElementById('build-preview-status');
   const buildPreviewReaction = document.getElementById('build-preview-reaction');
+  const buildPreviewChanges = document.getElementById('build-preview-changes');
+  const buildPreviewFocus = document.getElementById('build-preview-focus');
   const buildPreviewInner = document.getElementById('build-preview-inner');
   const buildPreviewSource = document.getElementById('build-preview-source');
   const buildPreviewNotation = document.getElementById('build-preview-notation');
@@ -37,6 +40,8 @@ function createBuildPanel({ library, residueView, getDocument, commitDocument, i
   const buildInsertInfo = document.getElementById('build-insert-info');
   const buildInsertBtn = document.getElementById('build-insert-btn');
   const buildPreviewViewport = makeZoomable(document.getElementById('build-preview-canvas'), buildPreviewInner);
+  buildPreviewFocus.addEventListener('click', () => buildPreviewViewport.focus(
+    buildPreviewInner.querySelectorAll('.edit-residue, .edit-connection')));
   const previewPanel = createPanel({ panel: buildPreviewPanel, button: buildPreviewButton,
     closeButton: document.getElementById('build-preview-close'), toggle: false,
     onChange(open) { if (!open) discardPreview(); },
@@ -280,7 +285,7 @@ function createBuildPanel({ library, residueView, getDocument, commitDocument, i
       const data = await readResponse(res);
       if (!request.current() || getDocument().text.trim() !== val) return;
       if (data.error) {
-        buildHint.textContent = 'Insert failed: ' + data.error;
+        buildHint.textContent = `Could not insert ${abbr}: ${data.error}. Choose another backbone block in Library. Your sequence is unchanged.`;
         return;
       }
       commitDocument(data.result, 'cabiln');
@@ -288,7 +293,8 @@ function createBuildPanel({ library, residueView, getDocument, commitDocument, i
       if (library.loaded) library.render();
     } catch (e) {
       if (!request.current()) return;
-      buildHint.textContent = 'Insert failed';
+      showRetry(buildHint, `Could not insert ${abbr} between the selected blocks. Your sequence is unchanged.`,
+        () => doInsertBetween(abbr));
     } finally {
       request.finish();
     }
@@ -472,6 +478,24 @@ function createBuildPanel({ library, residueView, getDocument, commitDocument, i
     checkBuildValidity();
   }
 
+  function suggestedPair() {
+    if (!panel.isOpen || isSwapMode() || isStale() || insertBetweenActive || isPending() ||
+        !buildLeft || !buildRight || (buildLeft.selectedSlot && buildRight.selectedSlot)) return null;
+    const available = state => state.rgroups.filter(site => !state.selectedSlot || site.slot === state.selectedSlot);
+    const pairs = library.compatiblePairs(available(buildLeft), available(buildRight));
+    return pairs.length === 1 ? pairs[0] : null;
+  }
+
+  buildSuggestion.addEventListener('click', () => {
+    const pair = suggestedPair();
+    if (!pair) return;
+    [buildLeft.selectedSlot, buildRight.selectedSlot] = pair;
+    renderRgroupButtons(buildLeftRg, buildLeft, 'left');
+    renderRgroupButtons(buildRightRg, buildRight, 'right');
+    if (library.filterActive) library.render();
+    checkBuildValidity();
+  });
+
   async function checkBuildValidity() {
     clearBuildPreview();
     requests.cancel('bond-check');
@@ -516,19 +540,20 @@ function createBuildPanel({ library, residueView, getDocument, commitDocument, i
       }, request.signal);
       const data = await readResponse(res);
       if (!request.current()) return;
+      if (!res.ok) throw new Error(data.error || 'Connection check unavailable');
       if (data.valid) {
         buildReaction = data.reaction ? `Reaction: ${data.reaction.replaceAll('_', ' ')}` : 'Bond formation';
         buildStatus.textContent = `Valid: ${data.reaction || 'bond'} (R${buildLeft.selectedSlot}↔R${buildRight.selectedSlot})`;
         buildStatus.className = 'build-status valid';
         connectionValid = true;
       } else {
-        buildStatus.textContent = data.error || data.reason || 'No compatible reaction found';
+        buildStatus.textContent = `${buildLeft.abbr} R${buildLeft.selectedSlot} and ${buildRight.abbr} R${buildRight.selectedSlot}: ${data.error || data.reason || 'No supported reaction'}. Choose another free site or monomer.`;
         buildStatus.className = 'build-status invalid';
         connectionValid = false;
       }
     } catch (e) {
       if (!request.current()) return;
-      buildStatus.textContent = 'Validation error';
+      showRetry(buildStatus, `Could not check ${buildLeft.abbr} R${buildLeft.selectedSlot} with ${buildRight.abbr} R${buildRight.selectedSlot}. Your sequence is unchanged.`, checkBuildValidity);
       buildStatus.className = 'build-status invalid';
       connectionValid = false;
     } finally {
@@ -546,6 +571,12 @@ function createBuildPanel({ library, residueView, getDocument, commitDocument, i
       (isSwapMode() ? !!swapRequest() : connectionValid && !!buildConnection());
     buildPreviewButton.disabled = !ready;
     buildConnect.disabled = !ready || (isSwapMode() && !swapState?.preview);
+    const pair = suggestedPair();
+    buildSuggestion.hidden = !pair;
+    if (pair) {
+      buildSuggestion.textContent = `Use ${buildLeft.abbr} R${pair[0]} → ${buildRight.abbr} R${pair[1]}`;
+      buildSuggestion.title = 'The only compatible pair for these choices. You can change either site before connecting.';
+    }
   }
 
   function buildConnection() {
@@ -568,11 +599,41 @@ function createBuildPanel({ library, residueView, getDocument, commitDocument, i
     buildPreviewInner.innerHTML = '';
     buildPreviewStatus.textContent = '';
     buildPreviewReaction.textContent = '';
+    buildPreviewChanges.textContent = '';
+    buildPreviewChanges.hidden = true;
+    buildPreviewFocus.disabled = true;
     buildPreviewSource.textContent = '';
     buildPreviewNotation.hidden = true;
   }
 
   function clearBuildPreview() { previewPanel.close({ focus: false }); }
+
+  function markPreviewChanges(proposal, drawing, swapping) {
+    const changes = proposal.change;
+    const svg = buildPreviewInner.querySelector('svg');
+    if (!changes || !svg) return;
+    const atoms = new Set(changes.residues.flatMap(index => drawing.residue_map[index] || []));
+    for (const element of svg.querySelectorAll('[class*="atom-"]')) {
+      const indices = [...element.classList].filter(cls => /^atom-\d+$/.test(cls))
+        .map(cls => Number(cls.slice(5)));
+      if (indices.length && indices.every(index => atoms.has(index))) element.classList.add('edit-residue');
+    }
+    const key = ends => ends.map(end => `${end.residue}:${end.slot}`).sort().join('|');
+    const affected = new Set(changes.connections.map(key));
+    for (const connection of drawing.connection_bonds || []) {
+      if (!affected.has(key(connection.endpoints))) continue;
+      for (const index of connection.bonds) {
+        svg.querySelectorAll(`.bond-${index}`).forEach(element => element.classList.add('edit-connection'));
+      }
+    }
+    const action = swapping ? `Replace ${buildLeft.abbr} with ${buildRight.abbr}`
+      : changes.residues.length ? `Add ${buildRight.abbr}` : 'Join the selected blocks';
+    const block = changes.residues.length ? 'Blue glow: changed block. ' : '';
+    const connections = changes.connections.length ? `Orange glow: ${swapping ? 'kept' : 'new'} connections.` : 'No existing connections.';
+    buildPreviewChanges.textContent = `${action}. ${block}${connections}`;
+    buildPreviewChanges.hidden = false;
+    buildPreviewFocus.disabled = !svg.querySelector('.edit-residue, .edit-connection');
+  }
 
   buildPreviewButton.addEventListener('click', async () => {
     const swapping = isSwapMode();
@@ -626,6 +687,7 @@ function createBuildPanel({ library, residueView, getDocument, commitDocument, i
         && !CabilnProject.sameContext(getDocument().context, drawing.context);
       const notice = changedLibrary ? 'Library changed since the current drawing; preview uses current definitions.' : '';
       buildPreviewInner.innerHTML = drawing.svg;
+      markPreviewChanges(proposal, drawing, swapping);
       showStructureInfo(buildPreviewStatus, drawing, { lead: pair, notices: [notice] });
       buildPreviewSource.textContent = proposal.result;
       buildPreviewNotation.hidden = false;
@@ -670,7 +732,9 @@ function createBuildPanel({ library, residueView, getDocument, commitDocument, i
       const data = await readResponse(res);
       if (!request.current() || getDocument().text.trim() !== connection.cabiln) return;
       if (data.error) {
-        buildStatus.textContent = data.error;
+        buildStatus.textContent = `${data.error}. Your sequence is unchanged. ${swapping
+          ? 'Review the replacement and mapping, then preview again.'
+          : 'Check the selected blocks and connection points, then try again.'}`;
         buildStatus.className = 'build-status invalid';
         return;
       }
@@ -686,7 +750,13 @@ function createBuildPanel({ library, residueView, getDocument, commitDocument, i
         : 'Connection added — select a residue to continue building';
     } catch (e) {
       if (!request.current()) return;
-      buildStatus.textContent = swapping ? 'Swap failed. Your sequence is unchanged; preview to retry.' : 'Insert failed';
+      if (swapping) {
+        showRetry(buildStatus, 'Could not apply the swap. Your sequence is unchanged. Preview it again to retry.',
+          () => buildPreviewButton.click());
+      } else {
+        showRetry(buildStatus, `Could not connect ${buildLeft.abbr} R${connection.r_host} with ${buildRight.abbr} R${connection.r_new}. Your sequence is unchanged.`,
+          () => buildConnect.click());
+      }
       buildStatus.className = 'build-status invalid';
     } finally {
       request.finish();
@@ -694,6 +764,7 @@ function createBuildPanel({ library, residueView, getDocument, commitDocument, i
   });
 
   return {
+    refreshChoices: updateControls,
     open: () => panel.open(),
     selectResidue: selectBuildResidue,
     useMonomer: useLibraryMonomer,

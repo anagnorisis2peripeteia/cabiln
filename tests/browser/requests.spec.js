@@ -103,7 +103,7 @@ test('failed bond validation leaves a usable retry through the same site control
   }), { times: 1 });
   await site(page, 'left', 2);
   await site(page, 'right', 1);
-  await expect(page.locator('#build-status')).toHaveText('Temporary test outage');
+  await expect(page.locator('#build-status')).toContainText('Could not check A R2 with G R1');
   await expect(page.locator('#build-connect')).toBeDisabled();
   const right = page.locator('#build-right-rgroups button').filter({ hasText: /^R1 / });
   await right.click();

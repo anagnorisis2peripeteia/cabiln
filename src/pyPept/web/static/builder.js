@@ -81,10 +81,12 @@ const residueView = createResidueView({
 });
 
 const library = new MonomerLibrary({
+  persistPreferences: !practiceMode,
   getFilters: () => build.filters,
   onUse: (abbr, explicit) => { if (!build.useMonomer(abbr, explicit)) insertAbbr(abbr); },
   onChanged: () => { if (build.filters.building) build.clear(); },
   onFilter: () => build.open(),
+  onReactions: () => build.refreshChoices(),
 });
 
 // Document data belongs to the editor; these timers belong to browser storage.
@@ -938,11 +940,36 @@ function displayMainDrawing(svg) {
   residueView.setStale(false);
 }
 
-function mainRenderError(message, invalidInput = false) {
+function mainRenderError(message, invalidInput = false, diagnostic = null) {
   drawing.invalidate();
   updateDrawingControls();
   if (!drawing.hasDrawing) setInner(renderInner, `<div class="placeholder err">${escHtml(message)}</div>`);
   setStatus(cabilnStatus, message, invalidInput ? 'error' : 'warn');
+  if (invalidInput && diagnostic?.hint) {
+    const hint = document.createElement('span');
+    hint.textContent = ' ' + diagnostic.hint;
+    cabilnStatus.appendChild(hint);
+    const span = diagnostic.source_span;
+    const source = cabilnInput.value;
+    const trimmed = source.trim();
+    const characters = Array.from(trimmed);
+    const offset = source.indexOf(trimmed);
+    if (notationSelect.value === 'cabiln' && Number.isInteger(span?.start) && Number.isInteger(span?.end) &&
+        span.start >= 0 && span.end > span.start && span.end <= characters.length) {
+      const locate = document.createElement('button');
+      locate.type = 'button';
+      locate.className = 'hbtn';
+      locate.textContent = 'Select problem';
+      locate.setAttribute('aria-label', 'Select problem in sequence');
+      locate.addEventListener('click', () => {
+        if (cabilnInput.value !== source) return;
+        cabilnInput.focus();
+        cabilnInput.setSelectionRange(offset + characters.slice(0, span.start).join('').length,
+          offset + characters.slice(0, span.end).join('').length);
+      });
+      cabilnStatus.appendChild(locate);
+    }
+  }
   if (!invalidInput) showRetry(cabilnStatus, message, () => renderDocument(true));
   cabilnInput.className = invalidInput ? 'err' : '';
 }
@@ -964,7 +991,7 @@ async function doRenderForeign(txt) {
     if (!request.current() || cabilnInput.value.trim() !== txt ||
         notationSelect.value !== mode) return;
     if (data.error) {
-      mainRenderError(data.error, invalidInputResponse(res));
+      mainRenderError(data.error, invalidInputResponse(res), data);
     } else {
       acceptDocumentContext(data.context);
       displayMainDrawing(data.svg);
@@ -1036,7 +1063,7 @@ async function doRenderCabiln(seq) {
     if (!request.current() || cabilnInput.value.trim() !== seq ||
         notationSelect.value !== 'cabiln') return;
     if (data.error) {
-      mainRenderError(data.error, invalidInputResponse(res));
+      mainRenderError(data.error, invalidInputResponse(res), data);
     } else {
       acceptCabilnDrawing(data, seq, view, sameDocument);
     }

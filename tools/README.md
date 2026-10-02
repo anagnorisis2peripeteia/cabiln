@@ -23,6 +23,7 @@ The maintained validation commands are:
 python -m pytest -m "not distribution and not fuzz"
 node --test tests/test_frontend.js
 python -m pytest tests/test_distribution.py
+python tools/check_docs.py
 python tools/check_examples.py
 python -m pyPept.library_quality --output /tmp/library-quality-candidate.json
 python tools/benchmarks/decomposition.py --permutations 1 --output /tmp/cabiln-benchmark
@@ -32,6 +33,12 @@ The [browser suite](../tests/browser/README.md) checks GUI interactions against 
 isolated library. The [decomposition benchmark](../docs/decomposition-benchmark.md)
 uses independent reference structures, partitions and attachment expectations.
 Its external comparator and recorded results live in `benchmarks/`.
+
+`check_docs.py` validates local Markdown links and anchors, the architecture's
+module paths, and Python snippet syntax. `check_examples.py` executes the README's
+complete Python examples against the installed package. `ci_scope.py` selects
+documentation and application jobs from the Git diff; uncertain comparisons
+keep all checks enabled. See [deployment](../docs/deployment.md).
 
 The [library compatibility audit](../docs/library-quality.md) uses the package's
 current restoration and activation rules. It records exact per-definition

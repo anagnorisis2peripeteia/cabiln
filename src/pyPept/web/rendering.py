@@ -58,6 +58,16 @@ def render(req: _CabilnReq):
             "mol_block": block,
             "info": f"{romol.GetNumAtoms()} atoms · MW {ExactMolWt(romol):.2f}",
             "residue_map": {str(k): v for k, v in res_map.items()},
+            "connection_bonds": [
+                {
+                    "endpoints": [
+                        {"residue": end.occurrence_id, "slot": end.slot}
+                        for end in edge.endpoints
+                    ],
+                    "bonds": bonds,
+                }
+                for edge, bonds in mol.get_connection_bond_map().items()
+            ],
             **_render_presentation(seq, peptide, messages),
             "context": {
                 "project_version": 1,

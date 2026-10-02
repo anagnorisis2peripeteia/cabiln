@@ -124,6 +124,7 @@
     </div>
     <div class="build-arrow">
       <div class="arrow-icon" aria-hidden="true">⟷</div>
+      <button type="button" class="hbtn" id="build-suggestion" hidden></button>
       <button type="button" class="hbtn" id="build-preview-button" aria-controls="build-preview" aria-expanded="false" disabled>Preview</button>
       <button type="button" class="build-connect-btn" id="build-connect" disabled>Connect</button>
       <div class="build-status" id="build-status" role="status" aria-live="polite" aria-atomic="true"></div>
@@ -151,8 +152,10 @@
     </div>
     <div id="build-preview-status" role="status" aria-live="polite" aria-atomic="true"></div>
     <p id="build-preview-reaction"></p>
+    <p id="build-preview-changes" hidden></p>
     <p class="site-explanation">Free-site groups describe the unconnected sites; the reaction can replace or rearrange them.</p>
     <div class="viewport-controls" data-viewport="build-preview-canvas" role="group" aria-label="Drawing zoom">
+      <button type="button" class="hbtn" id="build-preview-focus" aria-controls="build-preview-canvas" disabled>Focus change</button>
       <button type="button" class="hbtn" data-zoom="out" aria-label="Zoom out">−</button>
       <button type="button" class="hbtn" data-zoom="in" aria-label="Zoom in">+</button>
       <button type="button" class="hbtn" data-zoom="reset" title="Reset zoom and pan (0 or Home when the drawing has focus)">Reset view</button>
@@ -182,6 +185,16 @@
       <button type="button" id="btn-rxn-filter" class="hbtn" title="Filter by compatible attachment sites" aria-describedby="lib-filter-status" aria-pressed="false"><svg class="ui-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M2 3h12L9 9v4l-2 1V9z"/></svg>Filter</button>
       <button type="button" id="lib-close" class="panel-close" title="Close Library" aria-label="Close monomer library">✕</button>
     </div>
+    <div id="lib-browse">
+      <select id="lib-category" class="hbtn" aria-label="Monomer category"><option value="">All categories</option></select>
+      <select id="lib-collection" class="hbtn" aria-label="Library collection">
+        <option value="">All monomers</option>
+        <option value="favourites">Favourites</option>
+        <option value="recent">Recently used</option>
+      </select>
+      <button type="button" id="lib-reset" class="hbtn" aria-label="Reset library filters" hidden>Reset</button>
+    </div>
+    <div id="lib-preferences-note" class="lib-note" role="status" hidden></div>
     <div id="lib-count" role="status" aria-live="polite"></div>
     <div id="lib-filter-status" role="status" aria-live="polite">Filter finds monomers that can connect to a residue in Build.</div>
     <div id="lib-status" class="statusbar warn" role="status" aria-live="polite" hidden></div>

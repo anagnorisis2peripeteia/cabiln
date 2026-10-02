@@ -71,6 +71,7 @@ def test_supported_reference_normalization_preserves_exact_stereo(
 
 
 def test_every_displayed_symbol_passes_its_http_selection_boundary(client, monkeypatch):
+    from pyPept.editor import EditResult
     from pyPept.web import builder
 
     class SelectionBoundary:
@@ -85,8 +86,8 @@ def test_every_displayed_symbol_passes_its_http_selection_boundary(client, monke
         def insert_backbone(self, selected, symbol):
             return symbol
 
-        def attach(self, host, r_host, symbol, r_new):
-            return symbol
+        def attach(self, host, r_host, symbol, r_new, *, with_details=False):
+            return EditResult(symbol, (), (), ()) if with_details else symbol
 
     response = client.get("/monomers")
     assert response.status_code == 200, response.text

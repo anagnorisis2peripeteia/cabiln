@@ -15,6 +15,45 @@ CHARGED = "<[1*]N[C@@H](C[O-])C([2*])=O>"
 RING = "<[1*]N[C@@H](CC%10CCCCC%10)C([2*])=O>"
 
 
+@pytest.mark.parametrize(
+    "source,host,slot,symbol,new_slot,expected_index",
+    [
+        ("A-G", 1, 2, "A", 1, 2),
+        ("A-G", 0, 1, "ac", 2, 0),
+        ("K.[G(4,2).A(1,2)]-A", 3, 1, "A", 2, 4),
+    ],
+)
+def test_edit_preview_metadata_follows_parser_order_not_repeated_names(
+    source, host, slot, symbol, new_slot, expected_index
+):
+    document = PeptideDocument(source)
+    details = document.attach(
+        document.select(host), slot, symbol, new_slot, with_details=True
+    )
+    assert details.text == document.attach(
+        document.select(host), slot, symbol, new_slot
+    )
+    assert details.occurrence_order[expected_index] == len(document.sequence.s_monomers)
+    response = TestClient(app).post(
+        "/insert_bond",
+        json={
+            "cabiln": source,
+            "host_residue_idx": host,
+            "r_host": slot,
+            "new_abbr": symbol,
+            "r_new": new_slot,
+        },
+    )
+    assert response.status_code == 200, response.text
+    change = response.json()["change"]
+    assert change["residues"] == [expected_index]
+    assert len(change["connections"]) == 1
+    assert {"residue": expected_index, "slot": new_slot} in change["connections"][0]
+    assert {"residue": details.occurrence_order.index(host), "slot": slot} in change[
+        "connections"
+    ][0]
+
+
 @pytest.mark.parametrize("source,index,symbol,mapping,expected", [
     ("ac-A-G-am", 1, "S", {1: 1, 2: 2}, "ac-S-G-am"),
     ("ac-K.G(4,2)-am", 1, "Orn", {1: 1, 2: 2, 4: 4}, "ac-Orn.G(4,2)-am"),
@@ -144,10 +183,22 @@ def test_newly_registered_definition_can_replace_with_renumbered_sites(tmp_path,
         candidate = next(m for m in options['candidates'] if m['abbr'] == 'SwapD')
         assert candidate['mapping'] == {1: 1, 2: 2, 4: slot}
         document = PeptideDocument(request.cabiln)
-        result = document.replace_monomer(document.select(1), 'SwapD', candidate['mapping'])
+        edit = document.replace_monomer(
+            document.select(1), "SwapD", candidate["mapping"], with_details=True
+        )
+        result = edit.text
         assert smiles(result) == smiles('ac-D.[G(4,1)]-am')
         assert f'{slot},1' in result
         assert 'SwapD' in result
+        assert edit.changed_occurrences == (1,)
+        assert {
+            site.slot
+            for edge in edit.connections
+            for site in edge.endpoints
+            if site.occurrence_id == 1
+        } == {1, 2, slot}
+        parsed = Sequence(result)
+        assert parsed.s_monomers[edit.occurrence_order.index(1)]["m_abbr"] == "SwapD"
     finally:
         monomer_store._invalidate_sdf()
 
