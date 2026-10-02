@@ -1,5 +1,22 @@
 const { test, expect, render, selectChip, site, capture, residuePoint, isCompletedResponse, interceptOnce } = require('./fixtures');
 
+async function expectCue(page, selector, label) {
+  await expect(page.locator('#tutorial-cue-label')).toHaveText(label);
+  await expect.poll(async () => {
+    const ring = await page.locator('#tutorial-cue-ring').boundingBox();
+    const target = await page.locator(selector).boundingBox();
+    return !!ring && !!target && Math.abs(ring.x + ring.width / 2 - target.x - target.width / 2) < 5 &&
+      Math.abs(ring.y + ring.height / 2 - target.y - target.height / 2) < 5;
+  }).toBe(true);
+  expect(await page.locator(selector).evaluate(el => {
+    const rect = el.getBoundingClientRect();
+    return el.contains(document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2));
+  }), 'The arrow must not intercept the real control').toBe(true);
+  if (await page.locator(selector).evaluate(el => !!el.closest('#tutorial-panel'))) {
+    await expect(page.locator('#tutorial-cue-pointer')).toBeHidden();
+  } else await expect(page.locator('#tutorial-cue-label')).toBeInViewport({ ratio: .995 });
+}
+
 async function choosePracticeMonomer(page, abbr) {
   await page.goto(`${page.url()}?tutorial=1`);
   await page.locator('#tutorial-load').click();
@@ -154,6 +171,7 @@ for (const width of [1440, 390]) test(`Retatrutide Swap lesson preserves its bra
   await practice.locator('#tutorial-show').click();
   await expect(practice.locator('.res-chip[data-residue="16"]')).toBeFocused();
   await expect(practice.locator('.res-chip[data-residue="16"]')).toBeInViewport();
+  await expectCue(practice, '.res-chip[data-residue="16"]', 'Click the marked K tile');
   if (width === 1440) {
     const point = await practice.locator('#render-inner svg').evaluate((svg, atoms) => {
       for (const path of svg.querySelectorAll('path.res-guide')) {
@@ -182,6 +200,7 @@ for (const width of [1440, 390]) test(`Retatrutide Swap lesson preserves its bra
   await expect(practice.locator('#build-swap-sites')).toContainText('AEEA');
   await practice.locator('#tutorial-show').click();
   await expect(practice.locator('#build-swap-mapping')).toBeFocused();
+  await expect(practice.locator('#tutorial-cue-label')).toHaveText('These three links stay attached');
   if (width === 1440) {
     const mapping = await practice.locator('#build-swap-sites').boundingBox();
     const panel = await practice.locator('#build-panel').boundingBox();
@@ -288,6 +307,7 @@ for (const width of [1440, 390]) {
     await page.locator('#tutorial-launch').click();
     const practice = await opened;
     await practice.setViewportSize({ width, height: 900 });
+    await practice.emulateMedia({ reducedMotion: width === 390 ? 'reduce' : 'no-preference' });
     const next = practice.locator('#tutorial-next');
     await expect(next).toBeDisabled();
     if (width === 1440) {
@@ -305,21 +325,43 @@ for (const width of [1440, 390]) {
     }
     await expect(practice.locator('#btn-restore-draft')).toBeHidden();
     await expect(practice.locator('#draft-status')).toContainText('Practice tab');
+    await expectCue(practice, '#tutorial-load', 'Click Load A–G');
+    await expect(practice.locator('#tutorial-details')).not.toHaveAttribute('open');
     await practice.locator('#tutorial-load').click();
+    await expectCue(practice, '#tutorial-next', 'Next step →');
     await next.click();
     await expect(practice.locator('#tutorial-title')).toHaveText('Match a tile to the drawing');
+    await expectCue(practice, '.res-chip[data-residue="1"]', 'Hover over G, or tap it');
+    if (width === 1440) {
+      const timings = await practice.locator('#tutorial-cue svg').evaluate(el => el.getAnimations().map(animation => animation.effect.getTiming()));
+      expect(timings).toHaveLength(1);
+      expect(timings[0].duration * timings[0].iterations).toBeLessThanOrEqual(5000);
+      await practice.emulateMedia({ reducedMotion: 'reduce' });
+    }
+    await expect.poll(() => practice.locator('#tutorial-cue').evaluate(el => el.getAnimations({ subtree: true }).length)).toBe(0);
+    await expectCue(practice, '.res-chip[data-residue="1"]', 'Hover over G, or tap it');
     await practice.locator('#tutorial-show').click();
     await expect(practice.locator('#render-inner .res-hl').first()).toBeVisible();
     await next.click();
     await expect(next).toBeDisabled();
+    await expectCue(practice, '#btn-build', 'Click Build');
     await practice.locator('#btn-build').click();
     await selectChip(practice, 1, 'left', 'G');
     await next.click();
-    if (width === 1440) await practice.locator('#lib-search').fill('Alanine');
+    if (width === 1440) {
+      await practice.locator('#lib-list').evaluate(el => { el.scrollTop = el.scrollHeight; });
+      await expectCue(practice, '#tutorial-show', 'Show me where');
+      await practice.locator('#tutorial-show').click();
+      await expectCue(practice, '.lib-row[data-abbr="A"] .lib-use', 'Click Use beside A');
+      await practice.locator('#lib-search').fill('Alanine');
+    }
     await practice.locator('.lib-row[data-abbr="A"] .lib-use').click();
     await next.click();
     await expect(next).toBeDisabled();
+    await expectCue(practice, '#build-left-rgroups button[title^="R2:"]', 'Click R2 under Current residue');
     await site(practice, 'left', 2);
+    if (width === 390) await practice.locator('#tutorial-show').click();
+    await expectCue(practice, '#build-right-rgroups button[title^="R1:"]', 'Click R1 under New monomer');
     await site(practice, 'right', 1);
     await next.click();
     await practice.locator('#build-preview-button').click();
@@ -342,6 +384,8 @@ for (const width of [1440, 390]) {
     await expect(next).toHaveText('Finish');
     await next.click();
     await expect(practice.locator('#tutorial-panel')).toBeHidden();
+    await expect(practice.locator('#tutorial-cue')).toBeHidden();
+    expect(await practice.locator('#tutorial-cue').evaluate(el => el.getAnimations({ subtree: true }).length)).toBe(0);
     await expect(practice.locator('#btn-tutorial')).toBeFocused();
     expect(await practice.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await practice.locator('#btn-help').click();
@@ -417,6 +461,7 @@ for (const width of [1440, 390]) test(`tutorial recovers closed panels and follo
   await page.locator('#tutorial-show').click();
   await expect(page.locator('#build-panel')).toBeVisible();
   await expect(page.locator('#tutorial-status')).toContainText('glycine');
+  await expectCue(page, '.res-chip[data-residue="1"]', 'Click the marked G tile');
   await selectChip(page, 1, 'left', 'G');
   await page.locator('.lib-row[data-abbr="L"] .lib-use').click();
   await site(page, 'left', 2);

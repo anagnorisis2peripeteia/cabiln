@@ -43,6 +43,7 @@ function startTutorial({ lesson = 'connect', loadPractice, getExample, getBuildS
   const panel = find('#tutorial-panel'), button = find('#btn-tutorial');
   const next = find('#tutorial-next'), back = find('#tutorial-back'), load = find('#tutorial-load');
   const status = find('#tutorial-status'), show = find('#tutorial-show'), chooser = find('#tutorial-lesson');
+  const cue = createTutorialCue(panel, show);
   let index = 0, target = null, frame = null, explored = false, applied = null, reveal = null;
   let loading = false, loadError = '', generation = 0;
   const current = () => lessons[lesson];
@@ -71,6 +72,7 @@ function startTutorial({ lesson = 'connect', loadPractice, getExample, getBuildS
         frame = null;
         target?.classList.remove('tutorial-target');
         target = null;
+        cue.clear();
         guideResidue(null);
       }
     },
@@ -124,7 +126,43 @@ function startTutorial({ lesson = 'connect', loadPractice, getExample, getBuildS
     return null;
   }
 
-  function check() {
+  function actionFor(step, help) {
+    let selector = help?.target || step.target || hostTile();
+    let label = {
+      load: `Click Load ${current().name}`,
+      explore: 'Hover over G, or tap it',
+      select: `Click the marked ${lesson === 'swap' ? 'K' : 'G'} tile`,
+      choose: lesson === 'swap' ? 'Click Select beside Orn' : 'Click Use beside A',
+      sites: 'Look over the three connections',
+      preview: lesson === 'swap' ? 'Click Preview swap' : 'Click Preview',
+      apply: lesson === 'swap' ? 'Click Apply swap' : 'Click Connect',
+      undo: 'Click Undo', finish: 'You did it! Click Finish',
+    }[step.id];
+    if (step.id === 'load') selector = '#tutorial-load';
+    if (selector === '#lib-list') {
+      const abbr = lesson === 'swap' ? 'Orn' : 'A';
+      const choice = `.lib-row[data-abbr="${abbr}"] .lib-use`;
+      selector = find(choice) ? choice : '#lib-search';
+      label = selector === '#lib-search' ? `Search for ${abbr}`
+        : `Click ${lesson === 'swap' ? 'Select' : 'Use'} beside ${abbr}`;
+    }
+    if (selector === '#build-left-rgroups' || selector === '#build-right-rgroups') {
+      const slot = selector === '#build-left-rgroups' ? 2 : 1;
+      label = `Click R${slot} under ${slot === 2 ? 'Current residue' : 'New monomer'}`;
+      selector += ` button[title^="R${slot}:"]`;
+    }
+    label = ({ '#btn-build': 'Click Build', '#btn-lib': 'Click Library',
+      '#btn-hl': 'Turn Highlight on', '#tutorial-restart': 'Click Restart to try again',
+      '#build-action': `Choose ${lesson === 'swap' ? 'Swap monomer' : 'Connect'}`,
+      '#build-preview-button': lesson === 'swap' ? 'Click Preview swap' : 'Click Preview',
+      '#build-connect': lesson === 'swap' ? 'Click Apply swap' : 'Click Connect',
+      '#build-status': 'Wait for the connection check', '#render-progress': 'Wait for the drawing',
+    })[selector] || label;
+    if (selector === hostTile() && step.id !== 'explore') label = `Click the marked ${lesson === 'swap' ? 'K' : 'G'} tile`;
+    return { element: find(selector), label };
+  }
+
+  function check(revealTarget = false) {
     if (!disclosure.isOpen) return;
     const step = current().steps[index], state = readState(), help = recovery(state, step.id);
     const reviewing = state.review && !['undo', 'finish'].includes(step.id);
@@ -158,11 +196,22 @@ function startTutorial({ lesson = 'connect', loadPractice, getExample, getBuildS
     find('#tutorial-body').textContent = reviewing && step.id !== 'load'
       ? `${body} You already completed this edit with ${applied.request.new_abbr}; continue to review the next step.` : body;
     const element = find(reviewing ? '#render-canvas' : help?.target || (previewReady ? '#build-preview-canvas' : step.target) || hostTile());
-    if (target !== element) {
+    const action = actionFor(step, help), complete = !next.disabled;
+    const reviewConnections = lesson === 'swap' && step.id === 'sites' && complete && !reviewing;
+    const focusTarget = complete ? element : action.element || element;
+    if (target !== focusTarget) {
       target?.classList.remove('tutorial-target');
-      target = element;
+      target = focusTarget;
       target?.classList.add('tutorial-target');
     }
+    panel.classList.toggle('step-complete', complete);
+    find('#tutorial-instruction').textContent = reviewConnections ? 'Check the three links, then click Next.' : complete
+      ? (step.id === 'finish' ? 'You did it! Click Finish.' : 'Click Next to keep going.') : action.label;
+    find('#tutorial-meter-fill').style.transform = `scaleX(${(index + Number(complete)) / current().steps.length})`;
+    if (loading || state.build.busy || (!state.base && find('#render-pane').getAttribute('aria-busy') === 'true')) cue.clear();
+    else cue.point(reviewConnections ? element : complete ? next : action.element,
+      reviewConnections ? 'These three links stay attached' : complete ? (step.id === 'finish' ? 'Finish!' : 'Next step →') : action.label,
+      { complete, reveal: revealTarget });
   }
 
   function showStep() {
@@ -173,7 +222,7 @@ function startTutorial({ lesson = 'connect', loadPractice, getExample, getBuildS
     load.hidden = steps[index].id !== 'load';
     load.textContent = `Load ${current().name}`;
     next.textContent = index === steps.length - 1 ? 'Finish' : 'Next';
-    check();
+    check(true);
   }
   function reset() {
     generation++;
@@ -238,6 +287,114 @@ function startTutorial({ lesson = 'connect', loadPractice, getExample, getBuildS
         : edit.request.host_residue_idx === current().host && edit.request.target_residue_idx === -1 &&
           edit.request.r_host === 2 && edit.request.r_new === 1;
       if (matches) { applied = edit; check(); }
+    },
+  };
+}
+
+function createTutorialCue(panel, show) {
+  const cue = document.getElementById('tutorial-cue');
+  const ring = document.getElementById('tutorial-cue-ring');
+  const pointer = document.getElementById('tutorial-cue-pointer');
+  const label = document.getElementById('tutorial-cue-label');
+  const arrow = pointer.querySelector('svg'), path = arrow.querySelector('path');
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)');
+  let target = null, caption = '', frame = null, animatedTarget = null;
+
+  function stopMotion() {
+    for (const animation of cue.getAnimations({ subtree: true })) animation.cancel();
+  }
+  function schedule() {
+    if (target && frame === null) frame = requestAnimationFrame(() => { frame = null; position(); });
+  }
+  const resize = new ResizeObserver(schedule);
+
+  function visibleBox(element) {
+    if (!element?.getClientRects().length) return null;
+    const box = element.getBoundingClientRect();
+    let left = Math.max(8, box.left), top = Math.max(8, box.top);
+    let right = Math.min(innerWidth - 8, box.right), bottom = Math.min(innerHeight - 8, box.bottom);
+    for (let parent = element.parentElement; parent; parent = parent.parentElement) {
+      const style = getComputedStyle(parent), bounds = parent.getBoundingClientRect();
+      if (/(auto|scroll|hidden|clip)/.test(style.overflowX)) {
+        left = Math.max(left, bounds.left); right = Math.min(right, bounds.right);
+      }
+      if (/(auto|scroll|hidden|clip)/.test(style.overflowY)) {
+        top = Math.max(top, bounds.top); bottom = Math.min(bottom, bounds.bottom);
+      }
+    }
+    if (!panel.contains(element)) {
+      const guide = panel.getBoundingClientRect();
+      if (innerWidth > 960) right = Math.min(right, guide.left - 8);
+      else bottom = Math.min(bottom, guide.top - 8);
+    }
+    if (right - left < Math.min(24, box.width * .75) || bottom - top < Math.min(20, box.height * .75)) return null;
+    return { left, top, right, bottom };
+  }
+
+  function position() {
+    if (!target || document.hidden) { cue.hidden = true; stopMotion(); return; }
+    let element = target, box = visibleBox(element);
+    if (!box) { element = show; box = visibleBox(element); }
+    if (!box) { cue.hidden = true; stopMotion(); return; }
+    label.textContent = element === target ? caption : 'Show me where';
+    cue.hidden = false;
+    const guide = panel.getBoundingClientRect(), inside = panel.contains(element);
+    cue.classList.toggle('internal', inside);
+    const area = { left: inside ? guide.left + 8 : 8, top: inside ? guide.top + 8 : 8,
+      right: inside ? guide.right - 8 : innerWidth > 960 ? guide.left - 8 : innerWidth - 8,
+      bottom: inside ? guide.bottom - 8 : innerWidth > 960 ? innerHeight - 8 : guide.top - 8 };
+    const width = pointer.offsetWidth, height = pointer.offsetHeight;
+    const below = box.top - height - 10 < area.top;
+    const x = Math.max(area.left, Math.min((box.left + box.right - width) / 2, area.right - width));
+    const y = below ? Math.min(box.bottom + 10, area.bottom - height) : box.top - height - 10;
+    pointer.style.left = `${x}px`;
+    pointer.style.top = `${Math.max(area.top, y)}px`;
+    pointer.classList.toggle('below', below);
+    arrow.style.marginLeft = `${Math.max(0, Math.min(width - 24, (box.left + box.right) / 2 - x - 12))}px`;
+    path.setAttribute('d', below ? 'M12 30V2M5 9l7-7 7 7' : 'M12 2v28M5 23l7 7 7-7');
+    Object.assign(ring.style, { left: `${box.left - 4}px`, top: `${box.top - 4}px`,
+      width: `${box.right - box.left + 8}px`, height: `${box.bottom - box.top + 8}px` });
+    if (animatedTarget !== element) {
+      stopMotion();
+      animatedTarget = element;
+      if (!reduced.matches) {
+        // Three nudges draw attention, then leave a steady arrow to follow.
+        const timing = { duration: 1100, iterations: 3, easing: 'ease-in-out' };
+        ring.animate([{ opacity: .35 }, { opacity: 1 }, { opacity: .35 }], timing);
+        if (!inside) arrow.animate([{ transform: 'translateY(0)' }, { transform: `translateY(${below ? -4 : 4}px)` }, { transform: 'translateY(0)' }], timing);
+      }
+    }
+  }
+  window.addEventListener('resize', schedule);
+  document.addEventListener('scroll', schedule, true);
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { cue.hidden = true; stopMotion(); }
+    else schedule();
+  });
+  reduced.addEventListener('change', () => { stopMotion(); schedule(); });
+  return {
+    point(element, text, { complete, reveal }) {
+      if (target !== element) {
+        resize.disconnect();
+        target = element;
+        animatedTarget = null;
+        for (const item of [target, panel, document.getElementById('input-bar'), document.getElementById('build-panel'), document.getElementById('main')]) {
+          if (item) resize.observe(item);
+        }
+      }
+      caption = text;
+      cue.classList.toggle('complete', complete);
+      if (!target) { cue.hidden = true; stopMotion(); return; }
+      if (reveal) target.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      schedule();
+    },
+    clear() {
+      target = animatedTarget = null;
+      cancelAnimationFrame(frame);
+      frame = null;
+      resize.disconnect();
+      cue.hidden = true;
+      stopMotion();
     },
   };
 }

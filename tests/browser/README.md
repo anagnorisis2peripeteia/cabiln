@@ -41,6 +41,8 @@ Library journeys check actual matches when the selected site changes, filter
 reset and search, and recovery from missing or stalled reaction data. Tutorial journeys
 exercise the full build/preview/Undo route at desktop and mobile widths, failed
 drawings, keyboard dismissal, restart and isolation from saved browser drafts.
+The same journeys check precise action cues, real controls receiving clicks,
+bounded animation and still-visible guidance with reduced motion.
 They also cover reopening closed panels, browsing without search, changing the
 chosen amino acid, and invalidating unfinished steps when selections are cleared.
 Direct Connect, completion while the guide is closed, Back after Apply and Undo,

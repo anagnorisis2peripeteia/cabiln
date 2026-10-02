@@ -36,8 +36,11 @@ See [deployment](docs/deployment.md) for hosting, process limits and recovery.
 
 Open **Tutorial** in the top toolbar for lessons on building a peptide and
 swapping a building block in Retatrutide. It opens a separate practice tab.
-The lessons explain the app's terms and mark the tile and drawing region to select,
-so you do not need to recognise the chemical structure.
+Follow the arrow or highlighted button for each action. The lessons mark the exact
+tile, connection point or control, then confirm success and point to **Next**.
+Open **Why this step?** for the explanation; you do not need to recognise the
+chemical structure. Brief animations settle into steady cues, and reduced-motion
+settings keep the cues still.
 Practice edits do not read or replace your saved browser draft; use **Save
 project** if you want to keep them. Browse or search for your chosen amino acid;
 the guide follows the resulting product. **Show control** locates the next control

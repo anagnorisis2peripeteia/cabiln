@@ -303,15 +303,19 @@
 
 <section id="tutorial-panel" aria-labelledby="tutorial-title" hidden>
   <div class="help-heading"><span id="tutorial-progress"></span><button type="button" id="tutorial-close" class="panel-close" aria-label="Close tutorial">✕</button></div>
-  <label class="tutorial-lesson">Lesson
-    <select id="tutorial-lesson" class="hbtn">
-      <option value="connect">Build a peptide</option>
-      <option value="swap">Swap in Retatrutide</option>
-    </select>
-  </label>
-  <h2 id="tutorial-title" tabindex="-1"></h2>
-  <p id="tutorial-body"></p>
-  <div id="tutorial-status" role="status" aria-live="polite"></div>
+  <div class="tutorial-meter" aria-hidden="true"><span id="tutorial-meter-fill"></span></div>
+  <div class="tutorial-content">
+    <label class="tutorial-lesson">Lesson
+      <select id="tutorial-lesson" class="hbtn">
+        <option value="connect">Build a peptide</option>
+        <option value="swap">Swap in Retatrutide</option>
+      </select>
+    </label>
+    <h2 id="tutorial-title" tabindex="-1"></h2>
+    <p id="tutorial-instruction"></p>
+    <details id="tutorial-details"><summary>Why this step?</summary><p id="tutorial-body"></p></details>
+    <div id="tutorial-status" role="status" aria-live="polite"></div>
+  </div>
   <div class="tutorial-actions">
     <button type="button" id="tutorial-load" class="hbtn">Load A–G</button>
     <button type="button" id="tutorial-show" class="hbtn">Show control</button>
@@ -320,6 +324,10 @@
     <button type="button" id="tutorial-restart" class="hbtn">Restart</button>
   </div>
 </section>
+<div id="tutorial-cue" aria-hidden="true" hidden>
+  <div id="tutorial-cue-ring"></div>
+  <div id="tutorial-cue-pointer"><span id="tutorial-cue-label"></span><svg width="24" height="32" viewBox="0 0 24 32"><path /></svg></div>
+</div>
 
 <script src="/static/requests.js" defer></script>
 <script src="/static/project.js" defer></script>

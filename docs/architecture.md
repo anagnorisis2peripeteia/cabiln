@@ -153,7 +153,7 @@ See [recognition](decomposition.md) for result fields, ambiguity and limits.
 | `requests.js` | Cancellation, current-request checks, waits, calculation retries and response errors |
 | `project.js` | Saved-project format and document/context validation helpers |
 | `ui.js` | Viewport controls, panels, loading/retry presentation and status details |
-| `tutorial.js` | Practice lessons, live prerequisites and completed-edit review |
+| `tutorial.js` | Practice lessons, action cues, live prerequisites and completed-edit review |
 
 Editing invalidates selections, comparisons and exports while retaining the last
 valid drawing. Free typing has a 180 ms delay; explicit actions render
@@ -199,6 +199,12 @@ through normal editor history. Retatrutide comes from the same cached catalog as
 Examples; the guide has no chemistry code.
 The desktop guide reserves its own column. On smaller screens, a resize observer
 reserves space matching the guide's height so it can accommodate changing text.
+Short action prompts accompany arrows and rings around the next control; completed
+steps point to Next. Explanations expand separately, with navigation outside the
+scrolling text. Cues follow scrolling and resizing, fall back to Show control when
+a target is out of view, and never intercept clicks. Three brief nudges stop after
+3.3 seconds; reduced motion uses steady cues. Closing or hiding the guide cancels
+its cue animations. Controls inside the guide use only a ring to avoid covering text.
 Residue selection steps mark the target tile and its owned atoms independently
 of hover highlighting. The cue clears on dismissal, step completion or source
 changes; it never changes Build selection or the Highlight preference.
