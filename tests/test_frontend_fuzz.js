@@ -620,7 +620,7 @@ property('selection-and-library-revisions', [fc.scheduler(), fc.array(fc.integer
     tasks.push(chips[id].click());
     const sites = ui.requests.at(-1);
     assert.match(sites.url, /^\/monomer_rgroups\?/);
-    await ui.run('window.dispatchEvent(new Event("focus"))');
+    ui.run('library.load()');
     const library = pending(ui, '/monomers').at(-1);
     responses.push(scheduler.schedule(Promise.resolve(), `sites:${revision}:${id}`).then(async () => {
       resolve(sites, { svg: `<svg>SITE:${revision}</svg>`, rgroups: [{ slot: 1, chem_type: 'backbone_n' }] });
