@@ -1,7 +1,7 @@
 {
   "audit_version": "cabiln-library-quality-v4",
   "generated_with_rdkit": "2026.03.6",
-  "library_sha256": "2c8425ef0cf58da19dd60b5258d03f94fce2086b4488d47803ae9c0d42f55ce7",
+  "library_sha256": "262409a40c5c3967b716ad325f0bb1adf3a61b755e56157411cc8c9d741ad941",
   "records": {
     "10Adec": {
       "activation": {
@@ -524,29 +524,25 @@
         "authored_sites": [],
         "differences": [],
         "expected_leaving": {
-          "10": "[H]",
           "4": "[H]",
           "5": "[H]",
           "6": "[H]",
           "7": "[H]",
-          "8": "[OH]",
-          "9": "[H]"
+          "8": "[OH]"
         },
-        "expected_template": "[4*]N([5*])c1ccc2c(-c3ccc(C(=O)N([6*])CCCCCN4C(=O)C=C([7*])C4=O)cc3C([8*])=O)c3ccc(=[N+]([9*])[10*])c(S(=O)(=O)O)c-3oc2c1S(=O)(=O)[O-]",
+        "expected_template": "[4*]N([5*])c1ccc2c(-c3ccc(C(=O)N([6*])CCCCCN4C(=O)C=C([7*])C4=O)cc3C([8*])=O)c3ccc(=[NH2+])c(S(=O)(=O)O)c-3oc2c1S(=O)(=O)[O-]",
         "observed_leaving": {
-          "10": "[H]",
           "4": "[H]",
           "5": "[H]",
           "6": "[H]",
           "7": "[H]",
-          "8": "[OH]",
-          "9": "[H]"
+          "8": "[OH]"
         },
-        "observed_template": "[4*]N([5*])c1ccc2c(-c3ccc(C(=O)N([6*])CCCCCN4C(=O)C=C([7*])C4=O)cc3C([8*])=O)c3ccc(=[N+]([9*])[10*])c(S(=O)(=O)O)c-3oc2c1S(=O)(=O)[O-]",
+        "observed_template": "[4*]N([5*])c1ccc2c(-c3ccc(C(=O)N([6*])CCCCCN4C(=O)C=C([7*])C4=O)cc3C([8*])=O)c3ccc(=[NH2+])c(S(=O)(=O)O)c-3oc2c1S(=O)(=O)[O-]",
         "preserves_standalone": true,
         "status": "match"
       },
-      "definition_hash": "2d8e3d95efa226ce80a1662f47cbdf5b54247a2207b99b289b232cb63b3a75f9",
+      "definition_hash": "557829942a7788a02e3aa38addbfad8027104c4b413d722a686e8675f21ced02",
       "issues": []
     },
     "AZDye550": {
@@ -4824,21 +4820,19 @@
         "expected_leaving": {
           "1": "[H]",
           "2": "[OH]",
-          "3": "[H]",
-          "4": "[H]"
+          "3": "[H]"
         },
-        "expected_template": "[1*]N([3*])[C@H](CCCCN([4*])C(c1ccccc1)(c1ccccc1)c1ccc(C)cc1)C([2*])=O",
+        "expected_template": "[1*]N([3*])[C@H](CCCCNC(c1ccccc1)(c1ccccc1)c1ccc(C)cc1)C([2*])=O",
         "observed_leaving": {
           "1": "[H]",
           "2": "[OH]",
-          "3": "[H]",
-          "4": "[H]"
+          "3": "[H]"
         },
-        "observed_template": "[1*]N([3*])[C@H](CCCCN([4*])C(c1ccccc1)(c1ccccc1)c1ccc(C)cc1)C([2*])=O",
+        "observed_template": "[1*]N([3*])[C@H](CCCCNC(c1ccccc1)(c1ccccc1)c1ccc(C)cc1)C([2*])=O",
         "preserves_standalone": true,
         "status": "match"
       },
-      "definition_hash": "904c76699ce7afdc9212bd6194348a4a442d7639dbd31530210063658bbc7b7a",
+      "definition_hash": "fae2a4d261c66ddaa2aff6ef8aef5bf966aee94bfb9f8000cefb14b2ce599b8b",
       "issues": []
     },
     "D_Met_S_O": {
@@ -12010,22 +12004,22 @@
           "1": "[H]",
           "2": "[OH]",
           "3": "[H]",
-          "4": "[H]",
+          "4": "[OH]",
           "5": "[OH]"
         },
-        "expected_template": "[1*]N([3*])[C@@H](CC(C([2*])=O)C([5*])=O)C([4*])=O",
+        "expected_template": "[1*]N([3*])[C@@H](CC(C([4*])=O)C([5*])=O)C([2*])=O",
         "observed_leaving": {
           "1": "[H]",
           "2": "[OH]",
           "3": "[H]",
-          "4": "[H]",
+          "4": "[OH]",
           "5": "[OH]"
         },
-        "observed_template": "[1*]N([3*])[C@@H](CC(C([2*])=O)C([5*])=O)C([4*])=O",
+        "observed_template": "[1*]N([3*])[C@@H](CC(C([4*])=O)C([5*])=O)C([2*])=O",
         "preserves_standalone": true,
         "status": "match"
       },
-      "definition_hash": "36747758f3d0982ab12a20e5c937e310fb66f96b16f38161a50ec3cda23a0377",
+      "definition_hash": "009c83d4aabc3c6bc8cfa26a47a48e0f27d611c0da4e898b8b74c83d468fd6e0",
       "issues": []
     },
     "Gla_a": {
@@ -13802,21 +13796,19 @@
         "expected_leaving": {
           "1": "[H]",
           "2": "[OH]",
-          "3": "[H]",
-          "4": "[H]"
+          "3": "[H]"
         },
-        "expected_template": "[1*]N([3*])[C@@H](CCCCN([4*])C(c1ccccc1)(c1ccccc1)c1ccc(C)cc1)C([2*])=O",
+        "expected_template": "[1*]N([3*])[C@@H](CCCCNC(c1ccccc1)(c1ccccc1)c1ccc(C)cc1)C([2*])=O",
         "observed_leaving": {
           "1": "[H]",
           "2": "[OH]",
-          "3": "[H]",
-          "4": "[H]"
+          "3": "[H]"
         },
-        "observed_template": "[1*]N([3*])[C@@H](CCCCN([4*])C(c1ccccc1)(c1ccccc1)c1ccc(C)cc1)C([2*])=O",
+        "observed_template": "[1*]N([3*])[C@@H](CCCCNC(c1ccccc1)(c1ccccc1)c1ccc(C)cc1)C([2*])=O",
         "preserves_standalone": true,
         "status": "match"
       },
-      "definition_hash": "e4e5e084f9b05456a6a8bd8eb90369faa12102897689057652833489c82d76ad",
+      "definition_hash": "c36849face66e9b33f1698aae7f7f46bceb9c67a2464dd4a375ba466d7846b74",
       "issues": []
     },
     "Lys_al": {
@@ -14653,20 +14645,18 @@
         "differences": [],
         "expected_leaving": {
           "1": "[H]",
-          "2": "[OH]",
-          "4": "[H]"
+          "2": "[OH]"
         },
-        "expected_template": "[1*]N(CC([2*])=O)[C@]([4*])(C)c1ccccc1",
+        "expected_template": "[1*]N(CC([2*])=O)[C@H](C)c1ccccc1",
         "observed_leaving": {
           "1": "[H]",
-          "2": "[OH]",
-          "4": "[H]"
+          "2": "[OH]"
         },
-        "observed_template": "[1*]N(CC([2*])=O)[C@]([4*])(C)c1ccccc1",
+        "observed_template": "[1*]N(CC([2*])=O)[C@H](C)c1ccccc1",
         "preserves_standalone": true,
         "status": "match"
       },
-      "definition_hash": "4859d49820bfb51808a218b8fbfe6de036234e5cc17c2d348f5a19a987de2fe4",
+      "definition_hash": "8f968bef7b7405258eba1fe48c09a8849debba1ba61ca0d230a612396048ea81",
       "issues": []
     },
     "Nspe": {
@@ -14675,20 +14665,18 @@
         "differences": [],
         "expected_leaving": {
           "1": "[H]",
-          "2": "[OH]",
-          "4": "[H]"
+          "2": "[OH]"
         },
-        "expected_template": "[1*]N(CC([2*])=O)[C@@]([4*])(C)c1ccccc1",
+        "expected_template": "[1*]N(CC([2*])=O)[C@@H](C)c1ccccc1",
         "observed_leaving": {
           "1": "[H]",
-          "2": "[OH]",
-          "4": "[H]"
+          "2": "[OH]"
         },
-        "observed_template": "[1*]N(CC([2*])=O)[C@@]([4*])(C)c1ccccc1",
+        "observed_template": "[1*]N(CC([2*])=O)[C@@H](C)c1ccccc1",
         "preserves_standalone": true,
         "status": "match"
       },
-      "definition_hash": "22b6cb424065d353f1590f7fe13544f32a862936773ba5a63acb3de1467313fa",
+      "definition_hash": "448fb702e5f69e845947dc1508cd7d0acf2b1507ae012169cf9c029a0adf5c5e",
       "issues": []
     },
     "Nva": {
@@ -25602,34 +25590,23 @@
           "3": "[H]",
           "4": "[H]",
           "5": "[H]",
-          "6": "[H]",
-          "7": "[H]",
-          "8": "[H]"
+          "6": "[H]"
         },
-        "expected_template": "[1*]N([3*])CCN(CC([2*])=O)C(=O)CN1CN([7*])C2C(=O)N([6*])C(N([4*])[5*])N([8*])C21",
+        "expected_template": "[1*]N([3*])CCN(CC([2*])=O)C(=O)Cn1cnc2c(=O)n([6*])c(N([4*])[5*])nc21",
         "observed_leaving": {
           "1": "[H]",
           "2": "[OH]",
           "3": "[H]",
           "4": "[H]",
           "5": "[H]",
-          "6": "[H]",
-          "7": "[H]",
-          "8": "[H]"
+          "6": "[H]"
         },
-        "observed_template": "[1*]N([3*])CCN(CC([2*])=O)C(=O)CN1CN([7*])C2C(=O)N([6*])C(N([4*])[5*])N([8*])C21",
+        "observed_template": "[1*]N([3*])CCN(CC([2*])=O)C(=O)Cn1cnc2c(=O)n([6*])c(N([4*])[5*])nc21",
         "preserves_standalone": true,
         "status": "match"
       },
-      "definition_hash": "90834a46aa371e15a921903a58789248fe098c675bc889501250cf9760cd7c4b",
-      "issues": [
-        {
-          "code": "unspecified_tetrahedral_stereo",
-          "count": 3,
-          "message": "The stored standalone structure leaves tetrahedral stereo unspecified.",
-          "severity": "warning"
-        }
-      ]
+      "definition_hash": "16d3ca8319d4e9bcf8844ef57602090744eec2a7d05ba81e437e83ede48a15d3",
+      "issues": []
     },
     "pnT": {
       "activation": {
@@ -25641,26 +25618,19 @@
           "3": "[H]",
           "4": "[H]"
         },
-        "expected_template": "[1*]N([3*])CCN(CC([2*])=O)C(=O)CN1CC(C)C(=O)N([4*])C1=O",
+        "expected_template": "[1*]N([3*])CCN(CC([2*])=O)C(=O)Cn1cc(C)c(=O)n([4*])c1=O",
         "observed_leaving": {
           "1": "[H]",
           "2": "[OH]",
           "3": "[H]",
           "4": "[H]"
         },
-        "observed_template": "[1*]N([3*])CCN(CC([2*])=O)C(=O)CN1CC(C)C(=O)N([4*])C1=O",
+        "observed_template": "[1*]N([3*])CCN(CC([2*])=O)C(=O)Cn1cc(C)c(=O)n([4*])c1=O",
         "preserves_standalone": true,
         "status": "match"
       },
-      "definition_hash": "99271ba3b54f004063cced727bd76f996e6de7e3741add0b0993cb7d2a5f668d",
-      "issues": [
-        {
-          "code": "unspecified_tetrahedral_stereo",
-          "count": 1,
-          "message": "The stored standalone structure leaves tetrahedral stereo unspecified.",
-          "severity": "warning"
-        }
-      ]
+      "definition_hash": "69900244647ff9f18dfac09d8e94a0645e45eda7fb8e97327433300d6bf0da1f",
+      "issues": []
     },
     "redG2": {
       "activation": {
@@ -25865,7 +25835,7 @@
     "issues": {
       "authored_attachment_sites": 7,
       "identity_review": 8,
-      "unspecified_tetrahedral_stereo": 47
+      "unspecified_tetrahedral_stereo": 45
     },
     "records": 1128
   }

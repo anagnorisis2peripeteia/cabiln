@@ -157,6 +157,9 @@ The `canonical-sites-v1` policy separates four decisions:
 2. Match supported sidechain handles. Explicit chemical precedence resolves
    overlapping patterns; declaration or execution order cannot number sites.
    Two competing rules with the same precedence fail rather than silently win.
+   Trityl-protected nitrogens and unclassified nitrogen functionality do not
+   become automatic ports. Ordinary benzylic C-H sidechain sites require
+   explicit author intent; an available hydrogen alone is insufficient.
 3. Assign backbone R1/R2, reserve R3 for the second backbone N hydrogen, and
    assign R4+ by canonical atom traversal. Two replaceable hydrogens on one
    sidechain nitrogen have the same functionality. Atom maps do not determine

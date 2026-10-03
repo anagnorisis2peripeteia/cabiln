@@ -7,6 +7,8 @@ from typing import NamedTuple
 from pyPept.interfaces.reaction_library import REACTION_INDEX
 from pyPept.site_chemistry import Perception
 
+_SUPPORTED_TYPES = frozenset(kind for pair in REACTION_INDEX for kind in pair)
+
 
 def _attachment_idx(mol, slot):
     """Return attachment atom index for R-group slot (1-based), or None.
@@ -73,11 +75,13 @@ def _describe_site(perception, atom, leaving_groups, declared):
     leaving = leaving.strip() if isinstance(leaving, str) else leaving
     if leaving in ("", "None", "none"):
         leaving = None
+    chemistry = perception.classify(
+        atom.GetNeighbors()[0].GetIdx(), slot, leaving, declared.get(slot)
+    ).reaction_type
     return {
         "slot": slot,
-        "chem_type": perception.classify(
-            atom.GetNeighbors()[0].GetIdx(), slot, leaving, declared.get(slot)
-        ).reaction_type,
+        "chem_type": chemistry,
+        "supported": chemistry in _SUPPORTED_TYPES,
         "leaving": leaving or "",
         "declared_chem_type": declared.get(slot, ""),
     }

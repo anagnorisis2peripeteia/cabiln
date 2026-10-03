@@ -17,6 +17,16 @@ from _chemistry_fuzz import reordered
 from _fuzzing import fuzz_settings, record
 
 
+def test_explicit_trityl_protected_nitrogen_cannot_bypass_eligibility():
+    from pyPept.attachments import attachment_site, reaction_for_types
+
+    molecule = Chem.MolFromSmiles("CCN([4*])C(c1ccccc1)(c1ccccc1)c1ccccc1")
+    site = attachment_site(molecule, 4)
+    assert site["chem_type"] == "protected_amine"
+    assert site["supported"] is False
+    assert reaction_for_types(site["chem_type"], "nhs_ester") is None
+
+
 def test_reaction_registry_rejects_collisions_and_resolves_aliases():
     import yaml
     from pyPept.interfaces.reaction_library import _YAML_PATH, compile_reactions

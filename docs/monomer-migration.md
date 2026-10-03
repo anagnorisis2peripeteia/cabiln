@@ -2,8 +2,19 @@
 
 The bundled library uses `canonical-sites-v1` throughout. All 1,128 definitions
 were reprocessed, including caps, scaffolds and noncanonical residues. Existing
-site numbers changed on 124 definitions. Their standalone structures and the
-reaction chemistry of every existing attachment were preserved.
+site numbers changed on 124 definitions. That numbering migration preserved
+their standalone structures and the reaction chemistry of existing attachments.
+
+Subsequent identity corrections changed `Gla`, `pnG` and `pnT`; these are not
+structure-preserving renumberings. `Gla` now uses the alpha carboxyl as R2 and
+retains both sidechain carboxyl groups. `pnG` and `pnT` have the unsaturated
+nucleobases their names specify. Erroneous automatically added sites were
+removed from `Lys_Mtt`, `D_Lys_Mtt`, `Nspe`, `Nrpe` and `AZDye488`. Other site
+numbers remain unchanged. See [the corrected definitions](library-quality.md).
+
+An old project using a corrected definition needs review against its original
+library. The migrator refuses to describe a changed product as an equivalent
+conversion. Saved project context also includes the chemistry-rule fingerprint.
 
 Reprocessing restores each monomer, applies the current detector, combines its
 findings with mandatory authored sites, and assigns canonical numbers. Stored

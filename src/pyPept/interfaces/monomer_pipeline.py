@@ -228,8 +228,10 @@ def _backbone_pairs(mol):
 
 
 def _backbone_n_indices(mol):
+    perception = Perception(mol)
     return sorted({match[0] for pattern in (_BB_N_PAT, _BB_LACTAM_N_PAT)
-                   for match in mol.GetSubstructMatches(pattern)})
+                   for match in mol.GetSubstructMatches(pattern)
+                   if perception.nitrogen(match[0]) != 'protected_amine'})
 
 
 def find_backbone_slots(mol):

@@ -36,7 +36,7 @@ bare SMILES supplies the same intent: ambiguous backbone or cap choices still
 need selection during registration. See [library migration](monomer-migration.md)
 for the numbering changes and how to migrate existing notation.
 
-There are 54 definitions with warnings. Counts overlap: 47 have unspecified
+There are 52 definitions with warnings. Counts overlap: 45 have unspecified
 tetrahedral stereo and eight have recorded identity concerns. Missing leaving
 metadata, orphaned sites and contradictory declarations have been resolved
 against the existing structures and effective chemistry. No configuration is
@@ -104,6 +104,28 @@ identity of every imported record. Source attribution and scientific curation
 of individual exceptions remain separate work.
 
 ## Recorded data concerns
+
+Three named definitions have been corrected with independent structure checks:
+
+- `Gla` has three carboxyl groups and an alpha backbone, matching
+  [gamma-carboxyglutamic acid](https://pubchem.ncbi.nlm.nih.gov/compound/gamma-Carboxyglutamic-acid).
+  Its former alpha aldehyde and gamma R2 assignment were inconsistent with that
+  default. `Gla_a` remains available as an equivalent explicit alpha variant.
+- `pnG` retains the conjugated [guanine](https://www.ebi.ac.uk/chebi/CHEBI:16235)
+  base, and `pnT` retains the conjugated
+  [thymine](https://www.ebi.ac.uk/chebi/CHEBI:17821) base. A historical batch
+  rewrite had replaced their ring bond orders with single bonds.
+
+Exact standalone and peptide-product expectations live separately from the
+generated compatibility baseline. Atom counts and self-consistent round trips
+cannot detect these identity errors.
+
+Automatic detection excludes trityl-protected nitrogen and iminium groups
+misidentified as primary amines. Benzylic C-H sidechain connections require
+explicitly authored sites. This removed erroneous new ports from `Lys_Mtt`,
+`D_Lys_Mtt`, `Nspe`, `Nrpe` and `AZDye488` without changing their standalone
+structures. Build marks sites with no registered reaction as unavailable;
+an attachment label alone does not establish a supported connection.
 
 The following entries retain explicit review warnings rather than guessed
 structural corrections:

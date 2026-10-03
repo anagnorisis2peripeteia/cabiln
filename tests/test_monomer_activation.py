@@ -123,6 +123,23 @@ class TestMonomerPreActivate:
     right leaving group and chem_type.
     """
 
+    @pytest.mark.parametrize("source,slots", [
+        ("N[C@@H](CCCCNC(c1ccccc1)(c1ccccc1)c1ccccc1)C(=O)O", {1, 2, 3}),
+        ("N[C@@H](CCC=[NH2+])C(=O)O", {1, 2, 3}),
+        ("O=C(O)CN[C@@H](C)c1ccccc1", {1, 2}),
+    ], ids=["trityl_protected_nitrogen", "iminium_not_amine", "benzylic_ch_requires_intent"])
+    def test_automatic_sites_require_supported_unprotected_handles(self, source, slots):
+        from pyPept.interfaces.monomer_pipeline import pre_activate
+
+        result = pre_activate(source)
+        assert set(result.leaving) == slots
+
+    def test_unprotected_secondary_amine_is_still_detected(self):
+        from pyPept.interfaces.monomer_pipeline import pre_activate
+
+        result = pre_activate("N[C@@H](CCCCNC)C(=O)O")
+        assert result.chem_types[4] == "amine_secondary"
+
     def test_library_inputs_keep_sites_when_atoms_and_rules_are_reordered(self, monkeypatch):
         from pyPept import site_chemistry
         from pyPept.interfaces import monomer_pipeline as pipeline

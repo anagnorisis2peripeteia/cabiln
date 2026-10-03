@@ -429,7 +429,7 @@ function createBuildPanel({ library, residueView, getDocument, commitDocument, i
       btn.className = swapping ? 'site-tag' : 'rgroup-btn';
       if (rg.used) btn.classList.add('used');
       if (!swapping) {
-        btn.disabled = !!rg.used;
+        btn.disabled = !!rg.used || rg.supported === false;
         btn.setAttribute('aria-pressed', String(state.selectedSlot === rg.slot));
       }
       if (state.selectedSlot === rg.slot) btn.classList.add('selected');
@@ -437,9 +437,9 @@ function createBuildPanel({ library, residueView, getDocument, commitDocument, i
       btn.classList.toggle('mapped', !!mapped);
       btn.textContent = swapping
         ? `R${rg.slot} · ${mapped ? (side === 'left' ? 'linked' : 'mapped') : 'free'}`
-        : `R${rg.slot} ${(rg.chem_type || '').replaceAll('_', ' ')}${rg.used ? ' · used' : ''}`;
-      btn.title = `R${rg.slot}: ${rg.chem_type || 'unknown'} · Free-site group: ${rg.leaving || '[H] (implicit)'}${rg.used ? ' — already connected' : ''}`;
-      if (!isSwapMode() && !rg.used) {
+        : `R${rg.slot} ${(rg.chem_type || '').replaceAll('_', ' ')}${rg.used ? ' · used' : rg.supported === false ? ' · unavailable' : ''}`;
+      btn.title = `R${rg.slot}: ${rg.chem_type || 'unknown'} · Free-site group: ${rg.leaving || '[H] (implicit)'}${rg.used ? ' — already connected' : rg.supported === false ? ' — no supported connection for this site' : ''}`;
+      if (!isSwapMode() && !btn.disabled) {
         btn.addEventListener('click', () => selectRgroup(side, rg.slot));
       }
       container.appendChild(btn);
@@ -466,6 +466,9 @@ function createBuildPanel({ library, residueView, getDocument, commitDocument, i
   }
 
   function selectRgroup(side, slot) {
+    const state = side === 'left' ? buildLeft : buildRight;
+    const site = state?.rgroups.find(group => group.slot === slot);
+    if (!site || site.used || site.supported === false) return;
     requests.cancel('sequence-edit');
     if (side === 'left' && buildLeft) {
       buildLeft.selectedSlot = buildLeft.selectedSlot === slot ? null : slot;

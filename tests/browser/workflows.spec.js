@@ -1,5 +1,28 @@
 const { test, expect, render, tile, site, selectChip, connect, capture, isCompletedResponse, interceptOnce } = require('./fixtures');
 
+test('Build omits false attachment sites and disables unsupported chemistry', async ({ page }) => {
+  const leftSite = slot => page.locator('#build-left-rgroups button')
+    .filter({ hasText: new RegExp(`^R${slot} `) });
+  await render(page, 'HArg');
+  await page.locator('#btn-build').click();
+  await selectChip(page, 0, 'left', 'HArg');
+  await expect(leftSite(4)).toBeDisabled();
+  await expect(leftSite(4)).toContainText('unavailable');
+  await expect(leftSite(2)).toBeEnabled();
+  for (const symbol of ['Lys_Mtt', 'D_Lys_Mtt', 'Nspe', 'Nrpe']) {
+    await render(page, symbol);
+    await selectChip(page, 0, 'left', symbol);
+    await expect(page.locator('#build-left-abbr')).toHaveText(symbol);
+    await expect(leftSite(2)).toBeEnabled();
+    await expect(leftSite(4)).toHaveCount(0);
+  }
+  await render(page, 'AZDye488');
+  await selectChip(page, 0, 'left', 'AZDye488');
+  await expect(leftSite(7)).toBeEnabled();
+  await expect(leftSite(9)).toHaveCount(0);
+  await expect(leftSite(10)).toHaveCount(0);
+});
+
 for (const width of [1440, 390]) test(`registration requires an explicit attachment choice at ${width}px`, async ({ page, app }, testInfo) => {
   await page.setViewportSize({ width, height: 900 });
   await page.goto(`${app.url}/register`);
