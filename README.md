@@ -68,6 +68,11 @@ selected residue's current structure: after N-alkylation, a primary amine's
 remaining slot becomes a secondary amine; after N-acylation, it becomes an amide
 nitrogen. A free slot is unavailable if another connection consumed its reactive
 group. Undo restores the earlier structure and its available chemistry.
+Sulfonamide, urea and carbamate nitrogens have separate labels and reaction
+rules. Used sulfur sites describe the resulting thioether, thioester or
+disulfide. Each authored phosphate port remains available until connected.
+These checks describe supported structural transformations, not reaction
+conditions or expected yield.
 
 **Filter** in Library opens Build when needed. Select a residue in the drawing or
 its tile to match its free attachment sites, then choose a numbered site to narrow

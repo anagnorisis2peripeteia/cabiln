@@ -145,6 +145,35 @@ test('successive substitutions update chemistry without renumbering and Undo res
   await expect(left(5)).toBeEnabled();
 });
 
+test('sulfonamide controls reject amine coupling and retain alkylation', async ({ page }) => {
+  await render(page, 'K.pbf(4,2)');
+  await page.locator('#btn-build').click();
+  const left = slot => page.locator('#build-left-rgroups button').filter({ hasText: new RegExp(`^R${slot} `) });
+  await selectChip(page, 0, 'left', 'K');
+  await expect(left(5)).toHaveText('R5 sulfonamide N');
+  await site(page, 'left', 5);
+  await tile(page, 'ac', 'right');
+  await site(page, 'right', 2);
+  await expect(page.locator('#build-status')).toContainText('No reaction');
+  await expect(page.locator('#build-connect')).toBeDisabled();
+  await tile(page, 'TBMB', 'right');
+  await site(page, 'right', 4);
+  await expect(page.locator('#build-connect')).toBeEnabled();
+  await connect(page);
+  await selectChip(page, 0, 'left', 'K');
+  await expect(left(5)).toHaveText('R5 sulfonamide N · used');
+  await expect(left(5)).toBeDisabled();
+  await page.locator('#btn-undo').click();
+  await expect(page.locator('#cabiln-input')).toHaveClass('ok');
+  await selectChip(page, 0, 'left', 'K');
+  await expect(left(5)).toHaveText('R5 sulfonamide N');
+  await expect(left(5)).toBeEnabled();
+  await render(page, 'C._Me(4,2)');
+  await selectChip(page, 0, 'left', 'C');
+  await expect(left(4)).toHaveText('R4 thioether · used');
+  await expect(left(4)).toBeDisabled();
+});
+
 async function clickSvgOccurrence(page, rendered, occurrence) {
   // Find a visible point whose topmost painted SVG element belongs to the
   // requested occurrence. This exercises the browser's SVG hit testing.

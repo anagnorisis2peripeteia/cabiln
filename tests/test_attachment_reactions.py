@@ -270,6 +270,18 @@ class TestActivatedSiteInference:
             pytest.param('c1ccc2n([4*])ccc2c1', 'aromatic_nh', id='indole-n'),
             pytest.param('CC(=O)N([4*])[5*]', 'amide_nh', id='primary-amide-two-sites'),
             pytest.param('CC(=O)N([4*])C', 'amide_nh', id='secondary-amide'),
+            pytest.param('CS(=O)(=O)N([4*])C', 'sulfonamide_nh', id='sulfonamide'),
+            pytest.param('COC(=O)N([4*])C', 'carbamate_nh', id='carbamate'),
+            pytest.param('CNC(=O)N([4*])C', 'urea_nh', id='urea'),
+            pytest.param('COP(=O)(O)N([4*])C', 'phosphoramide_nh', id='phosphoramide'),
+            pytest.param('CC(=N)N([4*])C', 'amidine_nh', id='amidine-amino-n'),
+            pytest.param('[4*]N=C(N)C', 'amidine_imine', id='amidine-imine-n'),
+            pytest.param('CS(=O)(=O)[4*]', 'sulfonyl_s', id='sulfonyl-donor'),
+            pytest.param('CON([4*])C', 'substituted_aminooxy', id='n-methyl-aminooxy'),
+            pytest.param('CO[N+]([4*])(C)C', 'element_7', id='charged-aminooxy'),
+            pytest.param('C[NH2+][4*]', 'element_7', id='ammonium-not-neutral-amine'),
+            pytest.param('[4*][NH+]([5*])C', 'element_7', id='two-slot-ammonium'),
+            pytest.param('O=P([4*])([5*])[6*]', 'phosphate_p', id='three-phosphate-ports'),
             pytest.param('NC(=N)N([4*])C', 'guanidinium', id='guanidine-chain-n'),
             pytest.param('N=C(N([4*])[5*])NC', 'guanidinium', id='guanidine-terminal-n'),
             pytest.param('COP([4*])(=O)O', 'phosphate_p', id='activated-phosphate'),
@@ -287,6 +299,21 @@ class TestActivatedSiteInference:
                      if atom.GetAtomicNum() == 0 and atom.GetIsotope() == 4)
         attachment = dummy.GetNeighbors()[0].GetIdx()
         assert infer_chem_type(molecule, attachment, slot=3) == expected
+
+    @pytest.mark.parametrize('smiles,expected', [
+        ('CN([4*])C(=O)N(C)[5*]', 'urea_nh'),
+        ('CN([4*])C(=N)N(C)[5*]', 'guanidinium'),
+    ])
+    def test_symmetric_functional_groups_classify_every_anchor(self, smiles, expected):
+        from pyPept.site_chemistry import Perception
+
+        molecule = Chem.MolFromSmiles(smiles)
+        full = Perception(molecule)
+        targeted = Perception(Chem.Mol(molecule), targeted=True)
+        for dummy in molecule.GetAtoms():
+            if dummy.GetAtomicNum() == 0:
+                index = dummy.GetNeighbors()[0].GetIdx()
+                assert full.nitrogen(index) == targeted.nitrogen(index) == expected
 
     @pytest.mark.parametrize(
         'template,slot,declaration,leaving,expected',

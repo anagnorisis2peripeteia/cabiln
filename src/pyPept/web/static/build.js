@@ -437,7 +437,12 @@ function createBuildPanel({ library, residueView, getDocument, commitDocument, i
       btn.classList.toggle('mapped', !!mapped);
       const chemistry = rg.functionality || rg.chem_type || 'unknown';
       const label = ({ amine_primary: 'primary amine', amine_secondary: 'secondary amine',
-        amide_nh: 'amide N' })[chemistry] || chemistry.replaceAll('_', ' ');
+        amide_nh: 'amide N', sulfonamide_nh: 'sulfonamide N', urea_nh: 'urea N',
+        carbamate_nh: 'carbamate N', phosphoramide_nh: 'phosphoramide N',
+        amidine_nh: 'amidine amino N', amidine_imine: 'amidine imine N',
+        phosphate_p: 'phosphate', sulfonyl_s: 'sulfonyl S',
+        phosphate_ester_o: 'phosphate ester O', ester_o: 'ester O'
+      })[chemistry] || chemistry.replaceAll('_', ' ');
       btn.textContent = swapping
         ? `R${rg.slot} · ${mapped ? (side === 'left' ? 'linked' : 'mapped') : 'free'}`
         : `R${rg.slot} ${label}${rg.used ? ' · used' : rg.supported === false ? ' · unavailable' : ''}`;

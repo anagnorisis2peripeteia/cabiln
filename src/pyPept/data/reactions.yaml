@@ -81,10 +81,11 @@
     - "[1*][O:1].[1*][N:2] >> [O:1][N:2]"
 
 - id: sulfonamide
-  description: N-S sulfonamide protecting group bond (e.g. pbf on Arg) — unusual chemistry
+  description: Sulfonamide formation at amine or guanidine nitrogen (e.g. Pbf protection)
   reactant_pairs:
-    - [amine_primary, element_16]
-    - [guanidinium, element_16]
+    - [amine_primary, sulfonyl_s]
+    - [amine_secondary, sulfonyl_s]
+    - [guanidinium, sulfonyl_s]
   slot_a: 4
   slot_b: 2
   steps:
@@ -247,15 +248,15 @@
   description: O-phosphorylation; Ser/Thr/Tyr hydroxyl + phosphate → phosphate ester
   reactant_pairs:
     - [hydroxyl, phosphate_p]
+    - [aryl_phenol_o, phosphate_p]
   slot_a: 4
   slot_b: 4
   notes: >
-    Requires the hydroxyl-bearing residue to expose R4 on the hydroxyl O.
-    Standard Ser/Thr/Tyr monomers do not have R4; use pSer/pThr/pTyr pre-formed
-    monomers for the common case, or a custom R4-hydroxyl monomer for this
-    reaction YAML.
+    Each authored phosphate port replaces one OH. Other phosphate oxygens
+    retain their substituents and charge; the final esterification needs no
+    additional free OH. Ser, Thr and Tyr expose hydroxyl attachment sites.
   steps:
-    - "[4*][O:2].[4*][P:3](=[O:4])[OH:5] >> [O:2][P:3](=[O:4])[OH:5]"
+    - "[4*][O:2].[4*][P:3](=[O:4]) >> [O:2][P:3](=[O:4])"
 
 # ── STAPLING / CROSSLINKING ───────────────────────────────────────────────────
 
@@ -276,25 +277,28 @@
 
 - id: imide_n_acylation
   description: >
-    N-acylation of a backbone amide N (R3 slot) by a sidechain carboxyl
-    (R4 slot) to form a cyclic imide. Intramolecular closure gives
-    succinimide (Asp, 5-membered) or glutarimide (Glu, 6-membered)
-    embedded in the assembled peptide — the classic Asp deamidation
-    intermediate and a constrained pharmacophore.
+    N-acylation of amide, urea or carbamate nitrogen. Intramolecular
+    backbone amide closure with Asp or Glu forms a cyclic imide.
   reactant_pairs:
     - [backbone_n_mod, carboxyl]
     - [amide_nh, backbone_c]
     - [amide_nh, carboxyl]
+    - [urea_nh, backbone_c]
+    - [urea_nh, carboxyl]
+    - [carbamate_nh, backbone_c]
+    - [carbamate_nh, carboxyl]
   slot_a: 3
   slot_b: 4
   steps:
     - "[3*][N:1].[4*][C:2](=[O:3]) >> [N:1][C:2](=[O:3])"
 
 - id: guanidine_n_acylation
-  description: N-acylguanidine from a guanidine amino nitrogen and an acyl donor
+  description: N-acylation of guanidine or amidine amino nitrogen
   reactant_pairs:
     - [guanidinium, backbone_c]
     - [guanidinium, carboxyl]
+    - [amidine_nh, backbone_c]
+    - [amidine_nh, carboxyl]
   slot_a: 4
   slot_b: 2
   steps:
@@ -309,6 +313,8 @@
   reactant_pairs:
     - [backbone_n_mod, carbon]
     - [amide_nh, carbon]
+    - [urea_nh, carbon]
+    - [carbamate_nh, carbon]
   slot_a: 3
   slot_b: 1
   steps:
@@ -330,13 +336,16 @@
     - "[4*][O:2].[2*][C:4](=[O:5]) >> [O:2][C:4](=[O:5])"
 
 - id: n_alkylation_halide_backbone
-  description: N-alkylation of an amine or amide nitrogen by alkyl halide (halide departs)
+  description: N-alkylation of amine, amide, sulfonamide, urea or carbamate nitrogen by alkyl halide
   reactant_pairs:
     - [alkyl_halide_c, backbone_n]
     - [alkyl_halide_c, backbone_n_mod]
     - [alkyl_halide_c, amine_primary]
     - [alkyl_halide_c, amine_secondary]
     - [alkyl_halide_c, amide_nh]
+    - [alkyl_halide_c, sulfonamide_nh]
+    - [alkyl_halide_c, urea_nh]
+    - [alkyl_halide_c, carbamate_nh]
   slot_a: 4
   slot_b: 1
   steps:

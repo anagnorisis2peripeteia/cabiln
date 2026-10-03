@@ -232,6 +232,16 @@ def substitution_library(tmp_path, monkeypatch):
             ("NHS", "C([4*])C(=O)ON1C(=O)CCC1=O", "None,None,None,[H]"),
             ("Alkyne", "C([4*])([5*])C#C", "None,None,None,[H],[H]"),
             ("Azide", "C([4*])N=[N+]=[N-]", "None,None,None,[H]"),
+            ("Sulfonyl", "CS(=O)(=O)[4*]", "None,None,None,[OH]"),
+            ("Urea", "CN([6*])C(=O)N([4*])[5*]", "None,None,None,[H],[H],[H]"),
+            ("Carbamate", "COC(=O)N([4*])[5*]", "None,None,None,[H],[H]"),
+            ("Hydrazide", "CN([5*])CC(=O)N([4*])N", "None,None,None,[H],[H]"),
+            ("Aminooxy", "CN([5*])CCON[4*]", "None,None,None,[H],[H]"),
+            ("Aldehyde", "CC(=O)[4*]", "None,None,None,[H]"),
+            ("Phosphate", "O=P([4*])([5*])[6*]", "None,None,None,[OH],[OH],[OH]"),
+            ("ChargedPhosphate", "O=P([4*])([5*])[O-]", "None,None,None,[OH],[OH]"),
+            ("Alcohol", "CCO[4*]", "None,None,None,[H]"),
+            ("Guanidine", "N=C(N([4*])[5*])N(C)[6*]", "None,None,None,[H],[H],[H]"),
         ):
             molecule = Chem.MolFromSmiles(smiles)
             for key, value in {"symbol": symbol, "m_abbr": symbol,
@@ -241,7 +251,7 @@ def substitution_library(tmp_path, monkeypatch):
                                    "Methyl": "4:alkyl_halide_c", "Acyl": "4:carboxyl",
                                    "NHS": "4:nhs_ester", "Alkyne": "4:alkyne_c,5:alkyne_c",
                                    "Azide": "4:azide_alpha_c",
-                               }[symbol]}.items():
+                               }.get(symbol, "")}.items():
                 molecule.SetProp(key, value)
             writer.write(molecule)
     monkeypatch.setenv("CABILN_MONOMER_LIBRARY", str(path))
@@ -269,13 +279,18 @@ def test_current_chemistry_keeps_numbered_slots_after_substitution(
     assert anchors[Endpoint(0, 4)] == anchors[Endpoint(0, 5)]
 
 
-def test_builder_checks_current_structure_instead_of_submitted_type_labels(substitution_library):
+@pytest.mark.parametrize('source,kind', [
+    ('Amine.Acyl(4,4)', 'amide_nh'),
+    ('Amine.Sulfonyl(4,4)', 'sulfonamide_nh'),
+])
+def test_builder_checks_current_structure_instead_of_submitted_type_labels(
+    substitution_library, source, kind
+):
     with TestClient(create_app()) as client:
-        source = "Amine.Acyl(4,4)"
         sites = client.get("/monomer_rgroups", params={
             "abbr": "Amine", "residue_idx": 0, "cabiln": source,
         }).json()["rgroups"]
-        assert sites[1]["chem_type"] == "amide_nh"
+        assert sites[1]["chem_type"] == kind
         result = client.post("/validate_bond", json={
             "cabiln": source, "residue_idx_a": 0, "slot_a": 4,
             "abbr_b": "Methyl", "slot_b": 4,
@@ -293,7 +308,7 @@ def test_builder_checks_current_structure_instead_of_submitted_type_labels(subst
             'new_abbr': 'NHS', 'r_new': 4,
         })
         assert inserted.status_code == 400
-        assert 'amide_nh' in inserted.json()['error']
+        assert kind in inserted.json()['error']
         request['cabiln'] = 'Amine.Methyl(4,4)'
         assert client.post('/validate_bond', json=request).json()['valid'] is True
 
@@ -337,3 +352,98 @@ def test_large_graph_checks_preserve_full_context_beyond_a_thousand_matches():
         expected = 'amide_nh' if position < 1100 else 'amine_secondary' if position == 1100 else 'amine_primary'
         assert full.nitrogen(nitrogens[position]) == expected
         assert targeted.nitrogen(nitrogens[position]) == expected
+
+
+@pytest.mark.parametrize('source,kind,expected', [
+    ('Amine.Sulfonyl(4,4)', 'sulfonamide_nh', 'CNS(C)(=O)=O'),
+    ('Urea', 'urea_nh', 'CNC(N)=O'),
+    ('Carbamate', 'carbamate_nh', 'COC(N)=O'),
+])
+def test_special_nitrogens_keep_alkylation_without_free_amine_coupling(
+    substitution_library, source, kind, expected
+):
+    from pyPept.editor import PeptideDocument
+
+    document = PeptideDocument(source)
+    selection = document.select(0)
+    site = document.current_site(selection, 5)
+    assert site['functionality'] == site['chem_type'] == kind
+    assert not site['used']
+    assert Chem.MolToSmiles(document.assembly.mol) == Chem.MolToSmiles(Chem.MolFromSmiles(expected))
+    with pytest.raises(ValueError, match=kind):
+        document.attach(selection, 5, 'NHS', 4)
+    attached = PeptideDocument(document.attach(selection, 5, 'Methyl', 4))
+    expected_product = {
+        'sulfonamide_nh': 'CN(C)S(C)(=O)=O',
+        'urea_nh': 'CNC(=O)NC',
+        'carbamate_nh': 'COC(=O)NC',
+    }[kind]
+    assert Chem.MolToSmiles(attached.assembly.mol) == Chem.MolToSmiles(Chem.MolFromSmiles(expected_product))
+    assert attached.current_site(attached.select(0), 5)['used']
+
+
+@pytest.mark.parametrize('source,kind,expected', [
+    ('C._Me(4,2)', 'thioether', 'CSC[C@H](N)C(=O)O'),
+    ('C.ac(4,2)', 'thioester', 'CC(=O)SC[C@H](N)C(=O)O'),
+    ('C.C(4,4)', 'disulfide', 'N[C@@H](CSSC[C@H](N)C(=O)O)C(=O)O'),
+    ('Sec.Sec(4,4)', 'diselenide', 'N[C@@H](C[Se][Se]C[C@H](N)C(=O)O)C(=O)O'),
+])
+def test_used_sulfur_and_selenium_report_product_functionality(source, kind, expected):
+    assembly = Molecule(Sequence(source), depiction=None)
+    site = next(site for site in assembly.current_sites(0) if site['slot'] == 4)
+    assert site['used']
+    assert site['functionality'] == kind
+    assert Chem.MolToSmiles(assembly.mol) == Chem.MolToSmiles(Chem.MolFromSmiles(expected))
+
+
+@pytest.mark.parametrize('symbol,expected', [
+    ('Hydrazide', 'CNCC(=O)NN=CC'),
+    ('Aminooxy', 'CNCCON=CC'),
+])
+def test_condensation_consumes_its_handle_and_preserves_a_separate_amine(
+    substitution_library, symbol, expected
+):
+    from pyPept.editor import PeptideDocument
+
+    before = PeptideDocument(symbol)
+    after = PeptideDocument(before.attach(before.select(0), 4, 'Aldehyde', 4))
+    assert Chem.MolToSmiles(after.assembly.mol) == Chem.MolToSmiles(Chem.MolFromSmiles(expected))
+    assert after.current_site(after.select(0), 4)['used']
+    assert after.current_site(after.select(0), 5)['chem_type'] == 'amine_secondary'
+    with pytest.raises(ValueError, match='already bonded'):
+        after.attach(after.select(0), 4, 'Aldehyde', 4)
+    assert after.check_connection(after.select(0), 5, 'NHS', 4)['id'] == 'nhs_ester_amide'
+
+
+@pytest.mark.parametrize('symbol,slots,expected', [
+    ('Phosphate', (4, 5, 6), 'CCOP(=O)(OCC)OCC'),
+    ('ChargedPhosphate', (4, 5), 'CCOP(=O)([O-])OCC'),
+])
+def test_each_phosphate_port_is_independent_and_preserves_charge(
+    substitution_library, symbol, slots, expected
+):
+    from pyPept.editor import PeptideDocument
+
+    document = PeptideDocument(symbol)
+    for index, slot in enumerate(slots):
+        sites = document.assembly.current_sites(0)
+        assert [site['slot'] for site in sites] == list(slots)
+        assert [site['used'] for site in sites] == [position < index for position in range(len(slots))]
+        assert all(site['chem_type'] == 'phosphate_p' and site['supported']
+                   for site in sites if not site['used'])
+        document = PeptideDocument(document.attach(document.select(0), slot, 'Alcohol', 4))
+    assert Chem.MolToSmiles(document.assembly.mol) == Chem.MolToSmiles(Chem.MolFromSmiles(expected))
+    assert all(site['used'] for site in document.assembly.current_sites(0))
+
+
+def test_guanidine_acylation_reclassifies_shared_nitrogen_only(substitution_library):
+    from pyPept.editor import PeptideDocument
+
+    before = PeptideDocument('Guanidine')
+    after = PeptideDocument(before.attach(before.select(0), 4, 'Acyl', 4))
+    assert after.current_site(after.select(0), 5)['chem_type'] == 'amide_nh'
+    assert after.current_site(after.select(0), 6)['chem_type'] == 'guanidinium'
+    with pytest.raises(ValueError, match='amide_nh'):
+        after.check_connection(after.select(0), 5, 'NHS', 4)
+    assert after.check_connection(after.select(0), 6, 'Acyl', 4)['id'] == 'guanidine_n_acylation'
+    assert Chem.MolToSmiles(after.assembly.mol) == Chem.MolToSmiles(Chem.MolFromSmiles('CNC(=N)NC(C)=O'))

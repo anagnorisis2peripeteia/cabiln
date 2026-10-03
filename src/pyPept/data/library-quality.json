@@ -1,7 +1,7 @@
 {
   "audit_version": "cabiln-library-quality-v4",
   "generated_with_rdkit": "2026.03.6",
-  "library_sha256": "262409a40c5c3967b716ad325f0bb1adf3a61b755e56157411cc8c9d741ad941",
+  "library_sha256": "59b1848c177b3380638a9aa2a91cb11700f06bbfd773f8c43d445da080dedc28",
   "records": {
     "10Adec": {
       "activation": {
@@ -1725,7 +1725,7 @@
         "preserves_standalone": true,
         "status": "match"
       },
-      "definition_hash": "ae8b978b9da7e994fcf92d5aa3f2f34b9e21312e511a4ae58769e95ca5f4c5c6",
+      "definition_hash": "b3e60780ce902303a21126640f551924a06e814a89eb6d01f5b165719d3b605a",
       "issues": [
         {
           "code": "unspecified_tetrahedral_stereo",
@@ -2358,7 +2358,7 @@
         "preserves_standalone": true,
         "status": "match"
       },
-      "definition_hash": "cdb14e9236d4ce9e0675b5c3d14deae99cfcdb67e84dd06c06a8d17b6b35cf30",
+      "definition_hash": "75a79d820877416f398f59cd030f34d98ef7ae952b4516ebd7cbc75b8e14d190",
       "issues": []
     },
     "ClAc": {
@@ -3849,7 +3849,7 @@
         "preserves_standalone": true,
         "status": "match"
       },
-      "definition_hash": "6e080795ee190060570c5b8bac83c90bb5ba5ab728981ffdf3586b78c72102f7",
+      "definition_hash": "cffdb869e9289ce0c3e72b4aed25a7f3d0d395a82072e19b5a695020e4be56d9",
       "issues": [
         {
           "code": "unspecified_tetrahedral_stereo",
@@ -4000,7 +4000,7 @@
         "preserves_standalone": true,
         "status": "match"
       },
-      "definition_hash": "5a6e1acebae7c0d87d45608014a771cae1bb2bd150574e189ff1923c404dd2fa",
+      "definition_hash": "6d03ef8fa7bdf47f9a431e2cf02a66f700314fc23874c154ca5eb731dc634a3e",
       "issues": []
     },
     "D_CyanoAla": {
@@ -4144,7 +4144,7 @@
         "preserves_standalone": true,
         "status": "match"
       },
-      "definition_hash": "d0646ba4b2e30d0ab3b8d612475d248fe02a4ab144f7c7a82d26d74f50e1c7c9",
+      "definition_hash": "7ca7bded2a7dba4039b438be749519132f31e11ee489ef21adf83e766ff6a407",
       "issues": []
     },
     "D_Dao": {
@@ -4222,7 +4222,7 @@
         "preserves_standalone": true,
         "status": "match"
       },
-      "definition_hash": "319302f90b8c0d470418de144be2418992e69d411841fbb0a1d4383ac6413a10",
+      "definition_hash": "831f882503cdbe48f4b8afcd2e07c9e67372654eddb4c59578291d96b7d70e82",
       "issues": []
     },
     "D_DhPro34": {
@@ -4786,7 +4786,7 @@
         "preserves_standalone": true,
         "status": "match"
       },
-      "definition_hash": "2100d9cf57aab5ea1e64a9e254b493f5459b35758cc24cbb0af9f2302db3ac85",
+      "definition_hash": "754c9beb71c5c9e7b930d7bd46083341e122219c720559cc40a81e6979b3bcb6",
       "issues": []
     },
     "D_Lys_Cbz": {
@@ -4810,7 +4810,7 @@
         "preserves_standalone": true,
         "status": "match"
       },
-      "definition_hash": "a88157d60cc71101ee564d0efd186a930c2f6b92cd5daa0cf54be6eb5f019d86",
+      "definition_hash": "5ea132d9fa85fe3230fb9d9232908284cdd58df90283e16819da9445a290eeac",
       "issues": []
     },
     "D_Lys_Mtt": {
@@ -5066,7 +5066,7 @@
         "preserves_standalone": true,
         "status": "match"
       },
-      "definition_hash": "4efbbcadbb126f60e238a902d8dd8ac01ca52e882e82fd35caa517290d0516d5",
+      "definition_hash": "0c99ee0f4803cdee0c7b2d94679deb60a2b09a0f504af7b83058f130d286b7d7",
       "issues": []
     },
     "D_Orn_Cbz": {
@@ -5090,7 +5090,7 @@
         "preserves_standalone": true,
         "status": "match"
       },
-      "definition_hash": "a20ad7cc7d49d0fbd04be1b452d42edcab3ad28da4d7c37b55c53414175e70ca",
+      "definition_hash": "06b6b230e8b44dfa8fee6fc6b1ff7841746c0181da6f21f26f4e4fdb0edefa2b",
       "issues": []
     },
     "D_Pen": {
@@ -5828,7 +5828,7 @@
         "preserves_standalone": true,
         "status": "match"
       },
-      "definition_hash": "856ac8197af41994bf34b24f17463e7bb823bb6b2330fe3c71f3c4927b9b6027",
+      "definition_hash": "cc98b8b57f7c2934cec30bbdaa2e9e57e766ae880a0603566d38074210798354",
       "issues": []
     },
     "D_Phe_F5": {
@@ -9389,7 +9389,7 @@
         "preserves_standalone": true,
         "status": "match"
       },
-      "definition_hash": "37b2a397a40118352938af54a73d7f54328160fe5a1958795661dbc408d7c49a",
+      "definition_hash": "4b3b8b8dc5805794aaef17549a1df84961353ca6600419ebfc89e3f930a1e91b",
       "issues": []
     },
     "D_hCys": {
@@ -11321,7 +11321,7 @@
         "preserves_standalone": true,
         "status": "match"
       },
-      "definition_hash": "b29bd0dd31956cadfaf264f20c38199fbe5cf26fdb5db37424a9133867a5e8a9",
+      "definition_hash": "36538cd57e2d6ccd010db329b008e6c75ac3c055cce5eb09226c762c1fc6f945",
       "issues": []
     },
     "Dao": {
@@ -11399,7 +11399,7 @@
         "preserves_standalone": true,
         "status": "match"
       },
-      "definition_hash": "c385d079a84d969562724e56da796b94c2f5609a42109a413715f58aad553f54",
+      "definition_hash": "f77a3e78915dcc5622f772713c714a3b652e11d1994afcd0b3c972b5d6e7243f",
       "issues": []
     },
     "DecCap": {
@@ -11617,19 +11617,21 @@
         "expected_leaving": {
           "1": "[H]",
           "2": "[OH]",
-          "3": "[H]"
+          "3": "[H]",
+          "4": "[H]"
         },
-        "expected_template": "[1*]N([3*])[C@@H](CCCCNS(=O)(=O)c1cccc2c(N(C)C)cccc12)C([2*])=O",
+        "expected_template": "[1*]N([3*])[C@@H](CCCCN([4*])S(=O)(=O)c1cccc2c(N(C)C)cccc12)C([2*])=O",
         "observed_leaving": {
           "1": "[H]",
           "2": "[OH]",
-          "3": "[H]"
+          "3": "[H]",
+          "4": "[H]"
         },
-        "observed_template": "[1*]N([3*])[C@@H](CCCCNS(=O)(=O)c1cccc2c(N(C)C)cccc12)C([2*])=O",
+        "observed_template": "[1*]N([3*])[C@@H](CCCCN([4*])S(=O)(=O)c1cccc2c(N(C)C)cccc12)C([2*])=O",
         "preserves_standalone": true,
         "status": "match"
       },
-      "definition_hash": "87b70449678df1a772450c99d53be41d9c41d07e7a7e753a47616a5e51693431",
+      "definition_hash": "e20c47c9c7f37d1fb59878f12fe157a1580470f59059c9b5d30f63e52f13cd04",
       "issues": []
     },
     "Dod_dAcid": {
@@ -13690,7 +13692,7 @@
         "preserves_standalone": true,
         "status": "match"
       },
-      "definition_hash": "4bb9f2bd48e75ff2e6f83a1c8d1c11050a6f9615f58578127e544f8b3846fa80",
+      "definition_hash": "08ac241f6564d77760deeaf35396a659e10324b7470fc7ef128f93fc453188aa",
       "issues": []
     },
     "Lys_Boc": {
@@ -13714,7 +13716,7 @@
         "preserves_standalone": true,
         "status": "match"
       },
-      "definition_hash": "c3ab08e8b68af80f4d9ca6c2ee09a7ea6fe1d5046c9594dfe650f89a3bf0ba08",
+      "definition_hash": "90eaaf1abf5db3413f3565a837461cf5da1d64141db54acc7c2fc9549e35dce0",
       "issues": []
     },
     "Lys_Cbz": {
@@ -13738,7 +13740,7 @@
         "preserves_standalone": true,
         "status": "match"
       },
-      "definition_hash": "79cbb97e8aec1a696c6bbb8b0dcc2b220493b0875ef5cb25b5a60afd0c66a2e2",
+      "definition_hash": "05483185892bf53bc6621f26e795a93b4c20d2b628fbb0c0ba4ee1a40452dc4f",
       "issues": []
     },
     "Lys_For": {
@@ -14214,7 +14216,7 @@
         "preserves_standalone": true,
         "status": "match"
       },
-      "definition_hash": "c5ed98efb9a559d0b357994bfc3c2b656d4ae524dde59f25076de90f01d43565",
+      "definition_hash": "b765126953db11b875dd7fb17b7ceadb0b8da7f67ef0fd698ab48fa6faad7d27",
       "issues": []
     },
     "Myr": {
@@ -15132,7 +15134,7 @@
         "preserves_standalone": true,
         "status": "match"
       },
-      "definition_hash": "a0f6548580aec3811f8ab8b78151c733749130ba9551ff1d4277ab1648e06a03",
+      "definition_hash": "e1ad721a0eb2105f923fc7ca8a2c2cbd1251ea48e462a127076c8afe8cf043b9",
       "issues": []
     },
     "Orn_Cbz": {
@@ -15156,7 +15158,7 @@
         "preserves_standalone": true,
         "status": "match"
       },
-      "definition_hash": "8a31bc6ae412d722a98e0f72d5d132d849b81de5d481344c99476c5dd7e6905a",
+      "definition_hash": "2d53a36307f921740582721b54775118f22e3cdcb97b6097b96751c2bfd26bd9",
       "issues": []
     },
     "OtBu": {
@@ -16195,7 +16197,7 @@
         "preserves_standalone": true,
         "status": "match"
       },
-      "definition_hash": "c26b6bc31ba3259a6594c6bd563962ddaeddbfa07322bc72d57157d016c1f63e",
+      "definition_hash": "06e5feb6a262c32e4c59d888750c830711372f06ca470dc092d7057e0500d353",
       "issues": []
     },
     "Phe_4iPr": {
@@ -18298,7 +18300,7 @@
         "preserves_standalone": true,
         "status": "match"
       },
-      "definition_hash": "8357dd058c7bf931b4dc42c8da41447c667f03d7232f8719b200aa608998fbd9",
+      "definition_hash": "fa3ef1d404471a30c01a9636cfc8a98b93df03c48dc8a79e88b8727eb85c7c86",
       "issues": []
     },
     "TriazAla": {
@@ -23340,7 +23342,7 @@
         "preserves_standalone": true,
         "status": "match"
       },
-      "definition_hash": "51223f7e2c3efee0639f4703004b212d4dff4408b97488688611fdbea59d603a",
+      "definition_hash": "68d2ca829a8d9aa10db06fc44b0f254afc59647e088d29fc54ba8c1a84cfc600",
       "issues": []
     },
     "hCys": {
@@ -25525,7 +25527,7 @@
         "preserves_standalone": true,
         "status": "match"
       },
-      "definition_hash": "2e61caf0d7b0fcaf74235ec276a0471fce8da6c02bcc30376f0c5e019af74d25",
+      "definition_hash": "04e9bf85d8e5ffe028095d3ef48b797f8c98c61c258500bfa14a448f2c9997fb",
       "issues": []
     },
     "pnA": {

@@ -97,12 +97,22 @@ of the product before leaving-group restoration retains each unused numbered
 port. `CurrentSites` inspects selected anchors in that graph, caching shared
 anchor chemistry. SMARTS queries constrain the anchor while retaining the full
 molecular context. Global matching has no implicit 1,000-match truncation.
+It retains distinct anchor mappings within symmetric groups, including both
+nitrogens of a urea. Targeted and global perception use the same patterns.
 
 R numbers and occupancy remain properties of the peptide graph. Functionality
 changes with the assembled structure: primary amine to secondary amine after
 alkylation, or amide nitrogen after acylation. A second port on a consumed click
 handle becomes unavailable. Build labels, filtering and selected-site validation
 use this current chemistry; edit handlers recheck it from the submitted source.
+Sulfonamide, urea, carbamate and amidine nitrogens have explicit reaction types.
+They do not inherit ordinary amine coupling through a neighbour-count fallback.
+Used sulfur and oxygen sites describe their product functionality. Hydrazide
+and aminooxy handles lose availability when their condensation group is consumed;
+separate sites on the same monomer remain available. Phosphate ports represent
+independent OH substitutions, including the final esterification. Unreacted
+oxygen charges are preserved. The classifier does not neutralize salts or model
+pH; an unclassified charged nitrogen receives no neutral-amine fallback.
 Library tiles still describe isolated definitions. Swap evaluates the sites
 needed to preserve existing connections and validates the complete replacement
 product; an occupied amide is not treated as a free amine reactant.

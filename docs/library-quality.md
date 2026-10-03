@@ -31,6 +31,11 @@ Seven definitions also carry explicitly authored handles outside automatic
 perception: `TATA`, `XlQuat`, `ImzScaffold`, `MeHyp_3`, `bOH_Lys`, `bOH_Val`, and
 `XylBridge`. These handles are validated and retained, with an informational note.
 
+Functional-group classification distinguishes urea and carbamate nitrogen from
+other amides, and sulfonyl donors from generic sulfur. This refines 37 site
+labels across 24 definitions. `DnLys` also exposes its sulfonamide nitrogen as
+R4. These changes preserve every existing R number and standalone structure.
+
 This measures reprocessing of an authored definition. It does not claim that a
 bare SMILES supplies the same intent: ambiguous backbone or cap choices still
 need selection during registration. See [library migration](monomer-migration.md)

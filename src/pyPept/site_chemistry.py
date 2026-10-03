@@ -31,25 +31,43 @@ class SiteRule:
 # Explicit precedence is independent of declaration and execution order.
 SITE_RULES = (
     SiteRule('protected_amine', 0, None, None, '[#7:1]-[CX4]([c])([c])[c]', infer=False),
-    SiteRule('thiol', 10, '[SX2H1:1]', '[H]', '[SX2;H0,H1:1]'),
-    SiteRule('selenol', 20, '[SeX2H1:1]', '[H]', '[SeX2;H0,H1:1]'),
+    SiteRule('thiol', 10, '[SX2H1:1]', '[H]', '[SX2;H1,$(S-[#0]):1]'),
+    SiteRule('disulfide', 11, None, None, '[SX2:1]-[SX2]'),
+    SiteRule('thioester', 12, None, None, '[SX2:1]-[CX3](=[OX1])'),
+    SiteRule('thioether', 13, None, None, '[SX2:1]([#6])[#6]'),
+    SiteRule('sulfonyl_s', 14, None, None, '[SX4:1](=O)(=O)[#0]'),
+    SiteRule('selenol', 20, '[SeX2H1:1]', '[H]', '[SeX2;H1,$([Se]-[#0]):1]'),
+    SiteRule('diselenide', 21, None, None, '[SeX2:1]-[SeX2]'),
+    SiteRule('selenoester', 22, None, None, '[SeX2:1]-[CX3](=[OX1])'),
+    SiteRule('selenoether', 23, None, None, '[SeX2:1]([#6])[#6]'),
     SiteRule('alkyl_halide_c', 30, '[CX4;!H0:1][Cl,Br,I]', None, None),
-    SiteRule('aminooxy', 40, '[NH2:1][OX2H0]', '[H]', '[NX3;H0,H1,H2:1][OX2H0]'),
+    SiteRule('aminooxy', 40, '[NH2:1][OX2H0]', '[H]', '[NX3;+0;!$(N-[#6,#7,#15,#16]):1][OX2H0]'),
+    SiteRule('substituted_aminooxy', 41, None, None, '[NX3;+0:1]([#6])[OX2H0]', infer=False),
     SiteRule('hydrazide', 50, '[NX3H1:1][NX3H2]', '[H]', '[NX3;H0,H1:1]([NX3H2])C(=O)'),
     SiteRule('amine_primary', 60, '[NX3;+0;H2:1]', '[H]', '[NX3;+0;H2:1]'),
-    SiteRule('guanidinium', 70, '[NX3;H1:1][CX3](=N)', '[H]', '[NX3:1][CX3](=[#7])', protect_context=False, infer=False),
-    SiteRule('guanidinium_imine', 80, '[NX2H1:1]=[CX3]([NX3])[NX3]', '[H]', '[NX2;H0,H1:1]=[CX3]([NX3])[NX3]'),
+    SiteRule('guanidinium', 70, '[NX3;H1:1][CX3](=N)', '[H]', '[NX3:1][CX3](=[#7])[#7]', protect_context=False, infer=False),
+    SiteRule('guanidinium_imine', 80, '[NX2H1:1]=[CX3]([NX3])[NX3]', '[H]', '[#7:1]=[CX3]([NX3])[NX3]'),
+    SiteRule('amidine_nh', 81, None, None, '[NX3:1][CX3]=[#7]', infer=False),
+    SiteRule('amidine_imine', 82, None, None, '[#7:1]=[CX3][NX3]', infer=False),
     SiteRule('aryl_amide_c', 90, '[CX3:1](=O)([OX2H1])[c]', '[OH]', '[CX3:1](=O)[c]'),
     SiteRule('carboxyl', 100, '[CX3:1](=O)[OX2H1]', '[OH]', None),
-    SiteRule('aryl_phenol_o', 120, '[OX2H1:1][c]', '[H]', '[OX2;H0,H1:1][c]', protect_context=False),
-    SiteRule('hydroxyl', 130, '[OX2H1:1][CX4]', '[H]', '[OX2H1:1][CX4]'),
+    SiteRule('aryl_phenol_o', 120, '[OX2H1:1][c]', '[H]', '[OX2;H1,$(O-[#0]):1][c]', protect_context=False),
+    SiteRule('hydroxyl', 130, '[OX2H1:1][CX4]', '[H]', '[OX2;H1,$(O-[#0]):1][CX4]'),
+    SiteRule('phosphate_ester_o', 131, None, None, '[OX2:1]([#6])[PX4](=O)'),
+    SiteRule('ester_o', 132, None, None, '[OX2:1]([#6])[CX3](=[OX1])'),
+    SiteRule('ether', 133, None, None, '[OX2:1]([#6])[#6]'),
     SiteRule('quat_c_anchor', 140, None, '[H]', '[CX4;H0,H1:1]([C])([C])([C])'),
     SiteRule('aryl_c_anchor', 150, None, '[H]', '[cX3;H0:1]'),
     SiteRule('sp3_c_anchor', 160, None, '[H]', '[CX4;H0,H1:1]([NX3])[c]'),
     SiteRule('backbone_c_red', 170, None, '[H]', '[CX4;H1,H2,H3:1][NX3;!$(N-C=O)]'),
     SiteRule('aromatic_nh', 180, '[nH:1]', '[H]', '[n:1]', protect_context=False, infer=False),
+    SiteRule('sulfonamide_nh', 181, '[NX3;H1:1]S(=O)(=O)', '[H]', '[NX3:1]S(=O)(=O)', protect_context=False, infer=False),
+    SiteRule('phosphoramide_nh', 182, None, None, '[NX3:1]P(=O)', infer=False),
+    SiteRule('urea_nh', 183, None, None, '[NX3:1][CX3](=O)[NX3]', infer=False),
+    SiteRule('carbamate_nh', 184, None, None, '[NX3:1][CX3](=O)[OX2]', infer=False),
     SiteRule('amide_nh', 190, '[NX3;H1:1][CX3]=O', '[H]', '[NX3:1][CX3]=[O,S]', protect_context=False, infer=False),
-    SiteRule('phosphate_p', 200, '[P:1](=O)([OH])[OH]', '[OH]', '[PX4:1](=[OX1])([O])([O])[#0]'),
+    SiteRule('phosphate_p', 200, '[P:1](=O)([OH])[OH]', '[OH]', '[PX4;+0:1](=[OX1])([O,#0])([O,#0])[#0]'),
+    SiteRule('phosphate', 201, None, None, '[PX4:1](=[OX1])([O])([O])[O]'),
     SiteRule('cyclooctyne_c', 210, '[CX4;!H0:1][C;r]#[C;r]', '[H]', '[CX4;!H0:1][C;r]#[C;r]'),
     SiteRule('alkyne_c', 220, '[CX4;!H0:1]C#[CH]', '[H]', '[CX4;!H0:1]C#[CH]'),
     SiteRule('azide_alpha_c', 230, '[CX4;!H0:1][N]=[N+]=[N-]', '[H]', '[CX4;!H0:1][N]=[N+]=[N-]'),
@@ -98,7 +116,7 @@ def compile_rules(rules):
 
 COMPILED_RULES = compile_rules(SITE_RULES)
 # Bump the convention when classification semantics outside these rules change.
-CHEMISTRY_CONVENTION = 'cabiln-site-chemistry-v3'
+CHEMISTRY_CONVENTION = 'cabiln-site-chemistry-v4'
 CHEMISTRY_FINGERPRINT = sha256(json.dumps(
     [CHEMISTRY_CONVENTION, [asdict(rule) for rule in sorted(SITE_RULES, key=lambda rule: rule.name)]],
     sort_keys=True, separators=(',', ':'),
@@ -170,7 +188,11 @@ class Perception:
             pattern = compiled.raw if raw else compiled.site
             element = compiled.raw_element if raw else compiled.site_element
             possible = pattern is not None and (element == 0 or element in self.elements)
-            self._matches[key] = self.mol.GetSubstructMatches(pattern, maxMatches=0) if possible else ()
+            # A symmetric group can have several attachment atoms in the same
+            # atom set. Preserve each mapping so every anchor is classified.
+            self._matches[key] = self.mol.GetSubstructMatches(
+                pattern, uniquify=False, maxMatches=0
+            ) if possible else ()
         return self._matches[key]
 
     def matches_at(self, name, index):
@@ -205,11 +227,12 @@ class Perception:
         if atom.GetAtomicNum() != 7:
             raise ValueError('Nitrogen chemistry requires a nitrogen atom')
         # Conjugation and aromaticity take precedence over substitution count.
-        for kind in ('protected_amine', 'aromatic_nh', 'aminooxy', 'hydrazide', 'amide_nh',
-                     'guanidinium_imine', 'guanidinium'):
+        for kind in ('protected_amine', 'aromatic_nh', 'sulfonamide_nh', 'phosphoramide_nh',
+                     'urea_nh', 'carbamate_nh', 'hydrazide', 'amide_nh', 'aminooxy', 'substituted_aminooxy',
+                     'guanidinium_imine', 'guanidinium', 'amidine_imine', 'amidine_nh'):
             if self.matches_at(kind, index):
                 return kind
-        if any(bond.GetBondTypeAsDouble() != 1.0 for bond in atom.GetBonds()):
+        if atom.GetFormalCharge() or any(bond.GetBondTypeAsDouble() != 1.0 for bond in atom.GetBonds()):
             return 'element_7'
         neighbors = sum(nb.GetAtomicNum() not in (0, 1) for nb in atom.GetNeighbors())
         return 'amine_primary' if neighbors <= 1 else 'amine_secondary' if neighbors == 2 else 'element_7'
@@ -300,7 +323,9 @@ class Perception:
                 kind = ('aldehyde' if leaving == '[H]' or
                         (leaving is None and atom.GetTotalNumHs()) else 'carboxyl') if has_carbonyl else 'carbon'
             else:
-                kind = 'hydroxyl' if number == 8 else f'element_{number}'
+                kind = 'hydroxyl' if number == 8 and (
+                    atom.GetTotalNumHs() or any(nb.GetAtomicNum() == 0 for nb in atom.GetNeighbors())
+                ) else f'element_{number}'
 
         role = 'sidechain'
         if number == 7:

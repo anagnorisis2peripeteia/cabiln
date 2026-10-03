@@ -14,6 +14,7 @@ _CONSUMABLE_GROUPS = frozenset({
     'alkyne_c', 'cyclooctyne_c', 'azide_alpha_c', 'tetrazine_c', 'tco_c',
     'nhs_ester', 'maleimide_c', 'terminal_alkene', 'thia_michael_c',
     'aldehyde', 'formamide_c',
+    'aminooxy', 'hydrazide',
 })
 _ROLES = frozenset({'backbone_n', 'backbone_n_mod', 'backbone_c', 'backbone_o'})
 
