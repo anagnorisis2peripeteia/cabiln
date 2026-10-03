@@ -70,7 +70,8 @@ nitrogen. A free slot is unavailable if another connection consumed its reactive
 group. Undo restores the earlier structure and its available chemistry.
 Sulfonamide, urea and carbamate nitrogens have separate labels and reaction
 rules. Used sulfur sites describe the resulting thioether, thioester or
-disulfide. Each authored phosphate port remains available until connected.
+disulfide. Phosphates expose one port per remaining OH; each stays available
+until connected.
 These checks describe supported structural transformations, not reaction
 conditions or expected yield.
 

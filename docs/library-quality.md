@@ -35,6 +35,8 @@ Functional-group classification distinguishes urea and carbamate nitrogen from
 other amides, and sulfonyl donors from generic sulfur. This refines 37 site
 labels across 24 definitions. `DnLys` also exposes its sulfonamide nitrogen as
 R4. These changes preserve every existing R number and standalone structure.
+The six phosphoserine, phosphothreonine and phosphotyrosine definitions expose
+their second phosphate OH as R5; their existing phosphate site remains R4.
 
 This measures reprocessing of an authored definition. It does not claim that a
 bare SMILES supplies the same intent: ambiguous backbone or cap choices still

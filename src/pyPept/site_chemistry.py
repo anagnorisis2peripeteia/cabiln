@@ -66,7 +66,7 @@ SITE_RULES = (
     SiteRule('urea_nh', 183, None, None, '[NX3:1][CX3](=O)[NX3]', infer=False),
     SiteRule('carbamate_nh', 184, None, None, '[NX3:1][CX3](=O)[OX2]', infer=False),
     SiteRule('amide_nh', 190, '[NX3;H1:1][CX3]=O', '[H]', '[NX3:1][CX3]=[O,S]', protect_context=False, infer=False),
-    SiteRule('phosphate_p', 200, '[P:1](=O)([OH])[OH]', '[OH]', '[PX4;+0:1](=[OX1])([O,#0])([O,#0])[#0]'),
+    SiteRule('phosphate_p', 200, '[PX4;+0:1](=[OX1])([O])([O])[OX2H1]', '[OH]', '[PX4;+0:1](=[OX1])([O,#0])([O,#0])[#0]'),
     SiteRule('phosphate', 201, None, None, '[PX4:1](=[OX1])([O])([O])[O]'),
     SiteRule('cyclooctyne_c', 210, '[CX4;!H0:1][C;r]#[C;r]', '[H]', '[CX4;!H0:1][C;r]#[C;r]'),
     SiteRule('alkyne_c', 220, '[CX4;!H0:1]C#[CH]', '[H]', '[CX4;!H0:1]C#[CH]'),
@@ -272,6 +272,12 @@ class Perception:
                 # Multiple replaceable H atoms share chemistry, not a fake
                 # primary/secondary distinction between otherwise equal ports.
                 capacity = 2 if rule.name == 'amine_primary' else 1
+                if kind == 'phosphate_p':
+                    capacity = sum(
+                        neighbor.GetAtomicNum() == 8
+                        and neighbor.GetTotalNumHs(includeNeighbors=True) == 1
+                        for neighbor in atom.GetNeighbors()
+                    )
                 sites.append(DetectedSite(index, rule.leaving, kind, capacity))
                 consumed.add(index)
                 if rule.protect_context:

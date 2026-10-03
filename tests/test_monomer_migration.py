@@ -22,6 +22,12 @@ from pyPept.monomer_store import _load_sdf, monomer_record
     "template,groups,slots,standalone",
     [
         (
+            "[1*]N([3*])[C@@H](COP([4*])(=O)O)C([2*])=O",
+            {1: "[H]", 2: "[OH]", 3: "[H]", 4: "[OH]"},
+            {1: 1, 2: 2, 3: 3, 4: 4},
+            "N[C@@H](COP(=O)(O)O)C(=O)O",
+        ),
+        (
             "[1*]N(C)[C@@H](CS[3*])C([2*])=O",
             {1: "[H]", 2: "[OH]", 3: "[H]"},
             {1: 1, 2: 2, 3: 4},

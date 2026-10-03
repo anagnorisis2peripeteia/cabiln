@@ -1,7 +1,7 @@
 {
   "audit_version": "cabiln-library-quality-v4",
   "generated_with_rdkit": "2026.03.6",
-  "library_sha256": "59b1848c177b3380638a9aa2a91cb11700f06bbfd773f8c43d445da080dedc28",
+  "library_sha256": "af3cbf687b458ba0c92dd24ff6701fa94327aa240b6374f38cff6552a087cb83",
   "records": {
     "10Adec": {
       "activation": {
@@ -17598,20 +17598,22 @@
           "1": "[H]",
           "2": "[OH]",
           "3": "[H]",
-          "4": "[OH]"
+          "4": "[OH]",
+          "5": "[OH]"
         },
-        "expected_template": "[1*]N([3*])[C@@H](COP([4*])(=O)O)C([2*])=O",
+        "expected_template": "[1*]N([3*])[C@@H](COP([4*])([5*])=O)C([2*])=O",
         "observed_leaving": {
           "1": "[H]",
           "2": "[OH]",
           "3": "[H]",
-          "4": "[OH]"
+          "4": "[OH]",
+          "5": "[OH]"
         },
-        "observed_template": "[1*]N([3*])[C@@H](COP([4*])(=O)O)C([2*])=O",
+        "observed_template": "[1*]N([3*])[C@@H](COP([4*])([5*])=O)C([2*])=O",
         "preserves_standalone": true,
         "status": "match"
       },
-      "definition_hash": "969064e0bb08f73737b1c4ed65d7598a69402d2667465c524cfdf1396373d5be",
+      "definition_hash": "aecffe6ac1a846277c659be8da15e83eb19e90962dcce4a91dd2ab7186ce597a",
       "issues": []
     },
     "Ser_tBu": {
@@ -18183,20 +18185,22 @@
           "1": "[H]",
           "2": "[OH]",
           "3": "[H]",
-          "4": "[OH]"
+          "4": "[OH]",
+          "5": "[OH]"
         },
-        "expected_template": "[1*]N([3*])[C@H](C([2*])=O)[C@@H](C)OP([4*])(=O)O",
+        "expected_template": "[1*]N([3*])[C@H](C([2*])=O)[C@@H](C)OP([4*])([5*])=O",
         "observed_leaving": {
           "1": "[H]",
           "2": "[OH]",
           "3": "[H]",
-          "4": "[OH]"
+          "4": "[OH]",
+          "5": "[OH]"
         },
-        "observed_template": "[1*]N([3*])[C@H](C([2*])=O)[C@@H](C)OP([4*])(=O)O",
+        "observed_template": "[1*]N([3*])[C@H](C([2*])=O)[C@@H](C)OP([4*])([5*])=O",
         "preserves_standalone": true,
         "status": "match"
       },
-      "definition_hash": "43a4a0a6bf9e2b1764f2f234423d3cf4de9a231a8716af1877687e1e0f5edcad",
+      "definition_hash": "406fa43f56f5e8068a1161573f99de7ff699e261517c2d07f82bbf37fc4542c8",
       "issues": []
     },
     "Thr_ol": {
@@ -19337,20 +19341,22 @@
           "1": "[H]",
           "2": "[OH]",
           "3": "[H]",
-          "4": "[OH]"
+          "4": "[OH]",
+          "5": "[OH]"
         },
-        "expected_template": "[1*]N([3*])[C@@H](Cc1ccc(OP([4*])(=O)O)cc1)C([2*])=O",
+        "expected_template": "[1*]N([3*])[C@@H](Cc1ccc(OP([4*])([5*])=O)cc1)C([2*])=O",
         "observed_leaving": {
           "1": "[H]",
           "2": "[OH]",
           "3": "[H]",
-          "4": "[OH]"
+          "4": "[OH]",
+          "5": "[OH]"
         },
-        "observed_template": "[1*]N([3*])[C@@H](Cc1ccc(OP([4*])(=O)O)cc1)C([2*])=O",
+        "observed_template": "[1*]N([3*])[C@@H](Cc1ccc(OP([4*])([5*])=O)cc1)C([2*])=O",
         "preserves_standalone": true,
         "status": "match"
       },
-      "definition_hash": "b78c51d1385d5a58fbb8473d342fd92f03654da35955f491ab2c4da664b85fae",
+      "definition_hash": "d3412dd34d58952fff0c5a3626ee14c545d1ba4376a2b8428f6ddff1790f0240",
       "issues": []
     },
     "Tyr_Ph4OH": {
@@ -25428,20 +25434,22 @@
           "1": "[H]",
           "2": "[OH]",
           "3": "[H]",
-          "4": "[OH]"
+          "4": "[OH]",
+          "5": "[OH]"
         },
-        "expected_template": "[1*]N([3*])[C@@H](COP([4*])(=O)O)C([2*])=O",
+        "expected_template": "[1*]N([3*])[C@@H](COP([4*])([5*])=O)C([2*])=O",
         "observed_leaving": {
           "1": "[H]",
           "2": "[OH]",
           "3": "[H]",
-          "4": "[OH]"
+          "4": "[OH]",
+          "5": "[OH]"
         },
-        "observed_template": "[1*]N([3*])[C@@H](COP([4*])(=O)O)C([2*])=O",
+        "observed_template": "[1*]N([3*])[C@@H](COP([4*])([5*])=O)C([2*])=O",
         "preserves_standalone": true,
         "status": "match"
       },
-      "definition_hash": "d877e6979fc90709d4296cae083bd09530f51d74f62712648201d3e109cb5760",
+      "definition_hash": "853cce188ea1d49257fca5b3c164448c005f625b7559e2a133d524fba4636d31",
       "issues": []
     },
     "pThr": {
@@ -25452,20 +25460,22 @@
           "1": "[H]",
           "2": "[OH]",
           "3": "[H]",
-          "4": "[OH]"
+          "4": "[OH]",
+          "5": "[OH]"
         },
-        "expected_template": "[1*]N([3*])[C@H](C([2*])=O)[C@H](C)OP([4*])(=O)O",
+        "expected_template": "[1*]N([3*])[C@H](C([2*])=O)[C@H](C)OP([4*])([5*])=O",
         "observed_leaving": {
           "1": "[H]",
           "2": "[OH]",
           "3": "[H]",
-          "4": "[OH]"
+          "4": "[OH]",
+          "5": "[OH]"
         },
-        "observed_template": "[1*]N([3*])[C@H](C([2*])=O)[C@H](C)OP([4*])(=O)O",
+        "observed_template": "[1*]N([3*])[C@H](C([2*])=O)[C@H](C)OP([4*])([5*])=O",
         "preserves_standalone": true,
         "status": "match"
       },
-      "definition_hash": "89be0cef629a6b148c2a86146dbe9a2e8b46c73c2029707ebffec5b5da7dea05",
+      "definition_hash": "b10ea8984255239a1893f1526736d6b293c42a6219f988561a91e09d4f4b36c4",
       "issues": []
     },
     "pTyr": {
@@ -25476,20 +25486,22 @@
           "1": "[H]",
           "2": "[OH]",
           "3": "[H]",
-          "4": "[OH]"
+          "4": "[OH]",
+          "5": "[OH]"
         },
-        "expected_template": "[1*]N([3*])[C@@H](Cc1ccc(OP([4*])(=O)O)cc1)C([2*])=O",
+        "expected_template": "[1*]N([3*])[C@@H](Cc1ccc(OP([4*])([5*])=O)cc1)C([2*])=O",
         "observed_leaving": {
           "1": "[H]",
           "2": "[OH]",
           "3": "[H]",
-          "4": "[OH]"
+          "4": "[OH]",
+          "5": "[OH]"
         },
-        "observed_template": "[1*]N([3*])[C@@H](Cc1ccc(OP([4*])(=O)O)cc1)C([2*])=O",
+        "observed_template": "[1*]N([3*])[C@@H](Cc1ccc(OP([4*])([5*])=O)cc1)C([2*])=O",
         "preserves_standalone": true,
         "status": "match"
       },
-      "definition_hash": "c155da567c56aef633855d584e9029bb5d307a15fef9122daf9f0731c0614eb7",
+      "definition_hash": "1a2dba8d6ba6d4ffbeb3e3dfdb32eb08ff5bb98a14ff69df9a9db4b67a495547",
       "issues": []
     },
     "pXyl": {

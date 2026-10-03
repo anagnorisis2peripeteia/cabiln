@@ -114,8 +114,10 @@ def reprocess_monomer(molecule):
         else:
             authored.append(old)
     combined = remaining + [(None, port) for port in detected]
+    # Additional capacity on one anchor follows its existing equivalent ports.
     combined.sort(
-        key=lambda item: (order[item[1][0]], item[1][1], item[1][2], item[0] or 0)
+        key=lambda item: (order[item[1][0]], item[1][1], item[1][2],
+                          item[0] is None, item[0] or 0)
     )
     for slot, (old, port) in enumerate(combined, start=4):
         assigned[slot] = port

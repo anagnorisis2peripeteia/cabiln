@@ -777,6 +777,18 @@ class TestMonomerPreActivate:
         r = self._check('N[C@H](COP(=O)(O)O)C(=O)O')
         assert 'phosphate_p' in r.chem_types.values()
 
+    @pytest.mark.parametrize('phosphate,slots', [
+        ('P(=O)(O)O', [4, 5]),
+        ('P(=O)(OC)O', [4]),
+        ('P(=O)([O-])O', [4]),
+        ('P(=O)(OC)OC', []),
+    ])
+    def test_phosphate_capacity_counts_only_remaining_hydroxyls(self, phosphate, slots):
+        activated = self._check(f'N[C@@H](CO{phosphate})C(=O)O')
+        actual = [slot for slot, kind in activated.chem_types.items() if kind == 'phosphate_p']
+        assert actual == slots
+        assert all(activated.leaving[slot] == '[OH]' for slot in slots)
+
     def test_alkyne_dummy_on_carbon(self):
         """Alkyne: dummy lands on sp3 C (element 6)."""
         r = self._check('N[C@@H](CC#C)C(=O)O', expect_ct={4: 'alkyne_c'})

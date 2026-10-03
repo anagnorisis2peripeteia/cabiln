@@ -110,7 +110,9 @@ They do not inherit ordinary amine coupling through a neighbour-count fallback.
 Used sulfur and oxygen sites describe their product functionality. Hydrazide
 and aminooxy handles lose availability when their condensation group is consumed;
 separate sites on the same monomer remain available. Phosphate ports represent
-independent OH substitutions, including the final esterification. Unreacted
+independent OH substitutions, including the final esterification. Ingestion
+creates one phosphate port per remaining OH, excluding ester and anionic
+oxygens. Existing library site numbers remain fixed. Unreacted
 oxygen charges are preserved. The classifier does not neutralize salts or model
 pH; an unclassified charged nitrogen receives no neutral-amine fallback.
 Library tiles still describe isolated definitions. Swap evaluates the sites
