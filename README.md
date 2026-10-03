@@ -194,8 +194,10 @@ requires a new preview. Equivalent SMILES produce the same automatic R numbering
 Empty input and failed previews explain how to continue without losing entries.
 The server validates the
 slots and metadata, rejects duplicate symbols, and replaces the SDF atomically
-under a file lock. Stored templates keep their existing R numbers, including
-older conventions; loading a library does not run detection again. See the
+under a file lock. Loading a library does not run detection or change its numbers.
+All 1,128 bundled definitions have been reprocessed under the current policy;
+older libraries and notation can be updated with the [migration tool](docs/monomer-migration.md).
+See the
 [attachment contract](docs/architecture.md#attachment-detection-and-registration)
 for numbering, explicit overrides and bulk re-imports.
 

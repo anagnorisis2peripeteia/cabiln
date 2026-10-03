@@ -9,6 +9,7 @@ The chemistry suites are organized by responsibility:
 | --- | --- |
 | `test_bond_validation_and_assembly.py` | Bond validation, assembly products, and errors |
 | `test_monomer_activation.py` | Raw input, activation, and CSV ingestion |
+| `test_monomer_migration.py` | Authored-site reprocessing, numbering migration, and preserved products |
 | `test_attachment_reactions.py` | Attachment inference and reaction-family products |
 | `test_leaving_group_restoration.py` | Restoring leaving groups on activated monomers |
 | `test_sequence_parsing.py` | Legacy CABILN lowering and Sequence validation |

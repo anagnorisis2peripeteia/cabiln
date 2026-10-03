@@ -23,11 +23,11 @@ def product(source):
 
 
 def test_quality_lookup_is_bound_to_definition_and_returns_detached_facts():
-    original = definition("meC")
+    original = definition("ImzScaffold")
     actual = quality_for_monomer(original)
     assert actual["status"] == "no_known_exception"
-    assert actual["activation_status"] == "legacy_slot_match"
-    assert "legacy_r3_sidechain" in {issue["code"] for issue in actual["issues"]}
+    assert actual["activation_status"] == "match"
+    assert "authored_attachment_sites" in {issue["code"] for issue in actual["issues"]}
     assert all(issue["severity"] == "info" for issue in actual["issues"])
     actual["issues"].clear()
     assert quality_for_monomer(original)["issues"]
@@ -87,29 +87,29 @@ def test_manifest_is_detached_and_has_an_explicit_baseline_for_every_record():
     assert quality_manifest()["records"]
 
 
-def test_legacy_r3_has_its_original_thiol_product_and_connection():
+def test_migrated_thiol_has_its_original_product_and_connection():
     expected = Chem.MolFromSmiles("CN[C@@H](CS)C(=O)O")
     assert product("meC") == Chem.MolToSmiles(expected)
     disulfide = Chem.MolFromSmiles("CN[C@@H](CSSC[C@H](N)C(=O)O)C(=O)O")
-    assert product("meC.[C(3,4)]") == Chem.MolToSmiles(disulfide)
+    assert product("meC.[C(4,4)]") == Chem.MolToSmiles(disulfide)
     record = audit_monomer(definition("meC"))
-    assert record["activation"]["status"] == "legacy_slot_match"
+    assert record["activation"]["status"] == "match"
     slots = {
         atom.GetIsotope()
         for atom in definition("meC").GetAtoms()
         if atom.GetAtomicNum() == 0
     }
-    assert slots == {1, 2, 3}
+    assert slots == {1, 2, 4}
 
 
 def test_completed_terminal_metadata_preserves_restoration_and_connection():
     result = quality_for_monomer(definition("Mpa"))
     assert not any(issue["code"] == "missing_leaving_metadata" for issue in result["issues"])
-    assert definition("Mpa").GetProp("m_Rgroups").split(",")[2].strip() == "[H]"
+    assert definition("Mpa").GetProp("m_Rgroups").split(",")[3].strip() == "[H]"
     expected = Chem.MolFromSmiles("OC(=O)[C@H](C)S")
     assert product("Mpa") == Chem.MolToSmiles(expected)
     disulfide = Chem.MolFromSmiles("OC(=O)[C@H](C)SSC[C@H](N)C(=O)O")
-    assert product("Mpa.[C(3,4)]") == Chem.MolToSmiles(disulfide)
+    assert product("Mpa.[C(4,4)]") == Chem.MolToSmiles(disulfide)
 
 
 def test_unspecified_stereo_is_disclosed_without_inventing_a_configuration():
@@ -150,12 +150,12 @@ def test_metadata_cannot_claim_a_site_missing_from_the_structure():
         ("TATA", "CCC(=O)N1CN(C(=O)CC)CN(C(=O)CC)C1"),
     ],
 )
-def test_activation_failures_keep_the_existing_standalone_product(
+def test_authored_orientation_keeps_the_existing_standalone_product(
     symbol, expected_smiles
 ):
     result = quality_for_monomer(definition(symbol))
-    assert result["activation_status"] == "activation_failed"
-    assert any(issue["code"] == "activation_exception" for issue in result["issues"])
+    assert result["activation_status"] == "match"
+    assert not any(issue["code"] == "activation_exception" for issue in result["issues"])
     assert product(symbol) == Chem.MolToSmiles(Chem.MolFromSmiles(expected_smiles))
 
 

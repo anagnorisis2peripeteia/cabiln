@@ -18,6 +18,7 @@ def restore_leaving_groups(
     leaving_by_isotope: Mapping[int, str | None],
     *,
     sanitize: bool = True,
+    slots=None,
 ) -> Chem.Mol:
     """Return a copy with each dummy replaced by its single-atom leaving group.
 
@@ -26,6 +27,7 @@ def restore_leaving_groups(
     the existing assembly path, missing leaving metadata means implicit H.
     Multi-atom leaving groups are unsupported and fail instead of truncating.
     Assembly may defer sanitization to its existing contextual error handler.
+    ``slots`` optionally restores only selected dummies, retaining the others.
     """
     editable = Chem.RWMol(mol)
     try:
@@ -38,6 +40,8 @@ def restore_leaving_groups(
     to_remove = []
     for atom in editable.GetAtoms():
         if atom.GetAtomicNum() != 0:
+            continue
+        if slots is not None and atom.GetIsotope() not in slots:
             continue
         leaving = leaving_by_isotope.get(atom.GetIsotope())
         if isinstance(leaving, str):

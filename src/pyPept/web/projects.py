@@ -233,15 +233,17 @@ def _compatible(saved, current, signatures, name=None, *, preparing=False):
     ):
         raise ProjectError(
             "Project chemistry rules differ from this installation. Use its original "
-            "library/release or open and verify the source as a new document.",
+            "library/release. If attachment numbers changed, migrate its notation "
+            "with pyPept.monomer_migration before opening it here.",
             "project_binding_mismatch",
         )
     for key, signature in selected.items():
         if signature["resolved"] is None or saved_signatures.get(key) != signature:
             raise ProjectError(
                 "Project library definitions differ or a draft cannot be resolved. "
-                "Use the original library, or render and verify the source before "
-                "saving a new project. No current document was replaced.",
+                "Use the original library, or migrate its notation with "
+                "pyPept.monomer_migration before saving a new project. "
+                "No current document was replaced.",
                 "project_binding_mismatch",
             )
 

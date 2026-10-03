@@ -6,6 +6,7 @@
 | [Notation](notation.md) | Monomers, slots, branches, crosslinks and format conversion |
 | [Canonical notation](canonical-notation.md) | Recursive scopes, graph equality, ordering and versioning |
 | [Recognition](decomposition.md) | Structure-to-monomer search, ownership, ambiguity and limits |
+| [Library migration](monomer-migration.md) | Reprocess existing definitions and migrate numbered connections |
 | [Library quality](library-quality.md) | Per-definition audit, warning meanings and data concerns |
 | [Architecture](architecture.md) | Current modules and state ownership |
 | [Runtime](runtime-execution.md) | Chemistry workers, deadlines, cancellation, readiness and logs |

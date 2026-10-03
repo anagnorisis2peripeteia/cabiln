@@ -293,7 +293,7 @@ class TestCapMonomers:
     @pytest.mark.parametrize('source,expected_bond', [
         ('fmoc-C.trt(4,2)-am', '[S][C](c1ccccc1)(c1ccccc1)c1ccccc1'),
         ('fmoc-C.acm(4,2)-am', '[S]CNC(C)=O'),
-        ('fmoc-R.pbf(4,2)-am', '[N]S(=O)=O'),
+        ('fmoc-R.pbf(5,2)-am', '[N]S(=O)=O'),
         ('G.OBn_(1,1)-am', 'c1ccccc1CONCC(N)=O'),
         ('G.OMe_(1,1)-am', 'CONCC(N)=O'),
     ])
@@ -657,7 +657,7 @@ class TestAdditionalChemistryEdgeCases:
         import warnings
         with warnings.catch_warnings():
             warnings.simplefilter('ignore')
-            mol = Molecule(Sequence('ac-C.!1(4,4)-am%5FM.!1')).get_molecule(fmt='ROMol')
+            mol = Molecule(Sequence('ac-C.!1(4,6)-am%5FM.!1(6,4)')).get_molecule(fmt='ROMol')
         assert mol is not None, "Thiol-maleimide assembly returned None"
         smi = Chem.MolToSmiles(mol)
         thioether_succ = Chem.MolFromSmarts('SC1CC(=O)NC1=O')

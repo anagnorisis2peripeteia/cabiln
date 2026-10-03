@@ -16,35 +16,31 @@ library selected in the environment. For every record it stores:
   and atom traversal are excluded. The complete SDF also has a file hash.
 - Expected and observed activation templates and leaving groups. Restoration
   uses the same shared leaving-group implementation as molecule assembly; the
-  restored standalone molecule is then passed to automatic activation.
+  restored standalone molecule is reprocessed with its authored backbone and
+  mandatory attachment sites, using the same detector as new registration.
 - Issues with an explicit `info` or `warning` severity for legacy numbering,
   absent or orphaned metadata, unresolved site chemistry, unspecified
   tetrahedral stereochemistry, activation exceptions, and reviewed identity
   conflicts. Each warning states the affected fact.
 
-Legacy R3 sidechain records are compared after shifting their sidechain slot
-numbers by one in a temporary copy. Their original slots and structures remain
-unchanged. This comparison accommodates the historical numbering convention;
-it does not migrate a library or user document.
+All 1,128 bundled definitions were reprocessed under `canonical-sites-v1`.
+All now reproduce their numbered templates and leaving groups exactly. The
+migration changed existing attachment numbers on 124 definitions and retained
+every standalone structure and existing attachment's reaction chemistry.
+Seven definitions also carry explicitly authored handles outside automatic
+perception: `TATA`, `XlQuat`, `ImzScaffold`, `MeHyp_3`, `bOH_Lys`, `bOH_Val`, and
+`XylBridge`. These handles are validated and retained, with an informational note.
 
-The current activation baseline is 951 exact matches, 64 matches under that
-legacy comparison, 101 mismatches, ten definitions requiring an orientation
-choice, and two activation failures (`Hsl`, `TATA`).
-The audit records every expected and observed template. It also checks whether
-reactivation preserves the complete standalone isomeric structure. Preserved
-structures with different selected sites or numbering produce informational
-notes. Legacy numbering alone also produces a note.
-An orientation choice is informational: the stored definition already states
-its intended sites. Its audit record lists the possible reactivation templates.
-Canonical R4+ numbering and detection of secondary-amine sites can differ from
-older stored assignments without changing their standalone structures. No
-bundled template or shipped example is renumbered by this policy change.
+This measures reprocessing of an authored definition. It does not claim that a
+bare SMILES supplies the same intent: ambiguous backbone or cap choices still
+need selection during registration. See [library migration](monomer-migration.md)
+for the numbering changes and how to migrate existing notation.
 
-There are 55 definitions with warnings. Counts overlap: 47 have unspecified
-tetrahedral stereo, eight have reviewed identity concerns, two lack some leaving
-metadata, two retain chemistry declaration conflicts (`Hpic`, `Pca`), and one
-has metadata referring to a missing site (`Hpic`). The two activation failures
-also remain warnings. No configuration is invented for an unspecified center.
+There are 54 definitions with warnings. Counts overlap: 47 have unspecified
+tetrahedral stereo and eight have recorded identity concerns. Missing leaving
+metadata, orphaned sites and contradictory declarations have been resolved
+against the existing structures and effective chemistry. No configuration is
+invented for an unspecified center.
 
 `library-curation.json` retains explicit review findings bound to an exact
 definition hash. Changing a structure, its name, slots or chemistry metadata
@@ -71,9 +67,10 @@ read as evidence that its chemistry has been reviewed. A changed fingerprint can
 status of another record with the same label. Unsupported enhanced stereo also
 cannot inherit a fingerprint produced by plain-SMILES normalization.
 
-`audit_version` names the fingerprint/audit convention. Version 3 retains the full
-name, severity, standalone preservation and curated findings, and records
-explicit reactivation orientation choices under `canonical-sites-v1`.
+`audit_version` names the fingerprint/audit convention. Version 4 checks
+authored-definition reprocessing under `canonical-sites-v1`, records handles
+outside automatic perception, and retains standalone preservation and curated
+identity findings.
 The manifest records its
 generating RDKit version for provenance. CI compares the per-record baseline on
 the supported Python 3.9, 3.11 and 3.13 environments with their installed RDKit

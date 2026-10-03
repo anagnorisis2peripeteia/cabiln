@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Literal
+from typing import Annotated, Literal, Optional
 
 from pydantic import BaseModel, Field, StringConstraints
 
@@ -58,7 +58,7 @@ class _RegisterReq(BaseModel):
     ]
     type: Literal["aa", "cap", "linker"] = "aa"
     subtype: Label = "modified"
-    activation_policy: Literal["canonical-sites-v1"] | None = None
+    activation_policy: Optional[Literal["canonical-sites-v1"]] = None
 
 
 class _ConvertReq(BaseModel):

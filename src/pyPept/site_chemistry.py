@@ -108,19 +108,20 @@ CHEMISTRY_TYPES = frozenset(rule.name for rule in SITE_RULES) | {
 }
 
 
-def canonical_atom_order(mol):
+def canonical_atom_order(mol, roles=None):
     """Canonical traversal positions, retaining the caller's atom indices.
 
     Atom maps are authoring metadata, not a chemical numbering convention.
+    Selected backbone roles distinguish otherwise symmetric molecular arms.
     Removing ordinary explicit H keeps numbering identical to implicit-H input.
     """
-    if not any(atom.GetAtomicNum() == 1 or atom.GetAtomMapNum() for atom in mol.GetAtoms()):
+    if not roles and not any(atom.GetAtomicNum() == 1 or atom.GetAtomMapNum() for atom in mol.GetAtoms()):
         Chem.MolToSmiles(mol)
         return {index: position for position, index in enumerate(json.loads(mol.GetProp('_smilesAtomOutputOrder')))}
     view = Chem.Mol(mol)
     for atom in view.GetAtoms():
         atom.SetIntProp('_site_source', atom.GetIdx())
-        atom.SetAtomMapNum(0)
+        atom.SetAtomMapNum((roles or {}).get(atom.GetIdx(), 0))
     view = Chem.RemoveHs(view)
     Chem.MolToSmiles(view)
     return {

@@ -131,9 +131,13 @@ causes a retry. Alias-only changes do not require structural pattern compilation
 Registration and bulk import share record construction. Registration requires
 complete slot metadata and atomically appends under a lock. Bulk import retains
 older sparse leaving groups and declarations; an absent leaving group means
-implicit hydrogen. Explicit `rebuild=True` reactivates amino acids and discards
-their leaving-group overrides. A rebuild can report an ambiguous orientation
-instead of choosing one from input atom order; review its returned errors.
+implicit hydrogen. Explicit `rebuild=True` reprocesses every existing template,
+including caps and scaffolds. Stored R1/R2 anchors supply orientation; existing
+handles remain mandatory while the detector adds newly supported sites. The
+shared template constructor validates leaving groups, effective chemistry and
+exact standalone restoration. Raw inputs without templates still require an
+orientation choice when ambiguous. Review the returned errors before replacing
+a library.
 
 The recognizer compiles states from actual library sites, leaving groups and
 effective chemistry. It searches ownership across the whole molecule and
@@ -172,9 +176,14 @@ author-defined sites that automatic detection does not cover.
 The resulting template, leaving groups and chemistry become a stored definition.
 New CLI, web and CSV activations record `m_activation_policy` in the SDF
 (`activation_policy` in CSV). Existing stored records are never renumbered on
-read. Bulk import preserves explicit templates by default. Rebuilding from raw
-input can discover additional sites or change R4+ numbering; compare numbered
-structures before replacing a definition referenced by existing sequences.
+read. Bulk import preserves explicit templates by default. The bundled library
+has been explicitly migrated in full. `monomer_migration` reprocesses authored
+records, matches symmetry-equivalent handles before combining capacities, and
+emits an old-to-new site mapping. The original template retains configurations
+that would disappear on restoration of a prochiral carbon attachment to H.
+Removing newly discovered sites must reproduce that exact authored template.
+CABILN migration rewrites the resolved graph and checks its assembled structure
+against both libraries. See [library migration](monomer-migration.md).
 
 `Perception` shares compiled SMARTS and caches matches within one immutable
 graph. Runtime attachment inspection separates functionality, backbone role and

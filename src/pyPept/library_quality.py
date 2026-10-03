@@ -22,7 +22,7 @@ from rdkit import Chem, rdBase
 from pyPept.leaving_groups import restore_leaving_groups
 from pyPept.structure import require_supported_stereo
 
-AUDIT_VERSION = "cabiln-library-quality-v3"
+AUDIT_VERSION = "cabiln-library-quality-v4"
 
 
 def _property(molecule, name):
@@ -124,7 +124,7 @@ def _issue(code, message, *, severity="warning", **facts):
 def audit_monomer(molecule):
     """Measure one definition without altering its stored structure or slots."""
     from pyPept.attachments import attachment_sites, declaration_is_compatible
-    from pyPept.interfaces.monomer_pipeline import BackboneAmbiguity, pre_activate
+    from pyPept.monomer_migration import reprocess_monomer
 
     mol = Chem.Mol(molecule)
     leaving = _leaving(mol)
@@ -233,15 +233,19 @@ def audit_monomer(molecule):
                 )
             )
         activation["status"] = "activation_failed"
-        activated = pre_activate(Chem.MolToSmiles(restored, isomericSmiles=True))
-        actual = Chem.MolFromSmiles(activated.chuckles)
+        reprocessed = reprocess_monomer(mol)
+        actual = reprocessed.molecule
+        actual_leaving = _leaving(actual)
         actual_template = Chem.MolToSmiles(actual, isomericSmiles=True)
         changes = []
         if actual_template != expected_template:
             changes.append("template")
-        if activated.leaving != expected_leaving:
+        if actual_leaving != expected_leaving:
             changes.append("leaving_groups")
-        if activated.chem_types.get(3) not in (None, "backbone_n_mod"):
+        anchors = {atom.GetIsotope(): atom.GetNeighbors()[0].GetIdx()
+                   for atom in actual.GetAtoms() if atom.GetAtomicNum() == 0}
+        if 3 in anchors and (anchors.get(1) != anchors[3]
+                             or actual.GetAtomWithIdx(anchors[3]).GetAtomicNum() != 7):
             changes.append("reserved_r3_chemistry")
         activation.update(
             status=(
@@ -249,25 +253,21 @@ def audit_monomer(molecule):
             ),
             differences=changes,
             observed_template=actual_template,
-            observed_leaving={str(k): v for k, v in sorted(activated.leaving.items())},
+            observed_leaving={str(k): v for k, v in sorted(actual_leaving.items())},
             preserves_standalone=(
                 Chem.MolToSmiles(
-                    restore_leaving_groups(actual, activated.leaving),
+                    restore_leaving_groups(actual, actual_leaving),
                     isomericSmiles=True,
                 ) == Chem.MolToSmiles(restored, isomericSmiles=True)
             ),
         )
-    except BackboneAmbiguity as error:
-        activation.update(
-            status='orientation_required',
-            choices=[pre_activate(Chem.MolToSmiles(restored), backbone_indices=choice).chuckles
-                     for choice in error.choices],
-        )
-        issues.append(_issue(
-            'activation_orientation',
-            'Stored attachment sites are explicit. Automatic re-ingestion needs a backbone or cap orientation choice.',
-            severity='info',
-        ))
+        activation["authored_sites"] = list(reprocessed.authored_sites)
+        if reprocessed.authored_sites:
+            issues.append(_issue(
+                "authored_attachment_sites",
+                "Some attachment handles are explicitly authored; their sites and chemistry are preserved during reprocessing.",
+                severity="info", slots=list(reprocessed.authored_sites),
+            ))
     except (ValueError, RuntimeError) as error:
         # The exact error text is useful to review but not a portable API contract.
         activation["error_type"] = type(error).__name__
@@ -277,10 +277,10 @@ def audit_monomer(molecule):
             _issue(
                 "activation_exception",
                 (
-                    "The stored attachment sites are preserved; automatic detection "
+                    "The stored attachment sites are preserved; reprocessing "
                     "chooses different sites or numbers."
                     if preserved
-                    else "Automatic activation cannot recreate this stored definition; "
+                    else "Reprocessing cannot recreate this stored definition; "
                     "review its attachment sites before re-registering it."
                 ),
                 severity="info" if preserved else "warning",

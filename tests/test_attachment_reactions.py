@@ -303,14 +303,14 @@ class TestActivatedSiteInference:
         'notation,expected',
         [
             ('N.Ac(4,2)', 'CC(=O)NC(=O)C[C@H](N)C(=O)O'),
-            ('R.Ac(5,2)', 'CC(=O)N(CCC[C@H](N)C(=O)O)C(=N)N'),
+            ('R.Ac(7,2)', 'CC(=O)N(CCC[C@H](N)C(=O)O)C(=N)N'),
             ('N.D(4,4)', 'N[C@@H](CC(=O)NC(=O)C[C@H](N)C(=O)O)C(=O)O'),
-            ('R.D(5,4)', 'N=C(N)N(CCC[C@H](N)C(=O)O)C(=O)C[C@H](N)C(=O)O'),
+            ('R.D(7,4)', 'N=C(N)N(CCC[C@H](N)C(=O)O)C(=O)C[C@H](N)C(=O)O'),
             ('ac-Pyr-am', 'CC(=O)N1C(=O)CC[C@H]1C(N)=O'),
             ('K.Ac(5,2)', 'CC(=O)NCCCC[C@H](N)C(=O)O'),
             ('pXyl.A(1,1)', 'Cc1ccc(CN[C@@H](C)C(=O)O)cc1'),
             ('pXyl.A(2,1)', 'Cc1ccc(CN[C@@H](C)C(=O)O)cc1'),
-            ('ValAryl.ImzScaffold(2,4)', 'N[C@@H](c1ncn(C)c1)C(C)C'),
+            ('ValAryl.ImzScaffold(2,5)', 'N[C@@H](c1ncn(C)c1)C(C)C'),
             ('Ser_PO3H2.S(4,4)', 'N[C@@H](COP(=O)(O)OC[C@H](N)C(=O)O)C(=O)O'),
         ],
     )

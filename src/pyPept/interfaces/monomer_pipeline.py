@@ -12,6 +12,7 @@ __license__ = "MIT"
 import csv
 import re
 import warnings
+from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -478,7 +479,6 @@ def pre_activate(smiles, slot_overrides=None, leaving_overrides=None,
     if any(atom.GetAtomicNum() == 0 for atom in mol.GetAtoms()):
         raise ActivationError('Pre-activation requires a full monomer without numbered dummies')
     atom_order = canonical_atom_order(mol)
-    source_identity = Chem.MolToSmiles(mol)
     mol = Chem.AddHs(mol)
 
     _sidechain_only = False
@@ -558,22 +558,8 @@ def pre_activate(smiles, slot_overrides=None, leaving_overrides=None,
             backbone[slot] = backbone[1]
             backbone_chem_types[slot] = 'backbone_n_mod'
 
-    # Exclude backbone atoms AND all atoms on the backbone path from the
-    # sidechain scan.  Without path exclusion, patterns like backbone_c_red
-    # fire on the alpha-C (Gly) or ring-CH2 (Pro) which sit between the
-    # backbone endpoints.
-    _bb_excluded = set(backbone.values())
-    if 1 in backbone and 2 in backbone:
-        _bb_path = Chem.GetShortestPath(mol, backbone[1], backbone[2])
-        if _bb_path:
-            _bb_excluded.update(_bb_path)
-    if 2 in backbone:
-        _c = mol.GetAtomWithIdx(backbone[2])
-        for _nb in _c.GetNeighbors():
-            if _nb.GetAtomicNum() == 8:
-                _bond = mol.GetBondBetweenAtoms(backbone[2], _nb.GetIdx())
-                if _bond.GetBondTypeAsDouble() == 1.0:
-                    _bb_excluded.add(_nb.GetIdx())
+    _bb_excluded = backbone_exclusions(mol, backbone)
+    atom_order = canonical_atom_order(mol, {index: slot for slot, index in backbone.items() if slot in (1, 2)})
 
     if _sidechain_only:
         sidechain = {}
@@ -627,13 +613,57 @@ def pre_activate(smiles, slot_overrides=None, leaving_overrides=None,
                 )
         leaving[slot] = lg
 
+    return activate_sites(mol, slots, leaving, chem_types,
+                          exact_leaving=set(leaving_overrides or {}))
+
+
+def backbone_exclusions(mol, backbone):
+    """Exclude all equally short backbone paths, never one atom-order tie."""
+    excluded = set(backbone.values())
+    if 1 in backbone and 2 in backbone:
+        def distances(start):
+            found, pending = {start: 0}, deque([start])
+            while pending:
+                current = pending.popleft()
+                for atom in mol.GetAtomWithIdx(current).GetNeighbors():
+                    index = atom.GetIdx()
+                    if index not in found:
+                        found[index] = found[current] + 1
+                        pending.append(index)
+            return found
+
+        first, second = distances(backbone[1]), distances(backbone[2])
+        length = first.get(backbone[2])
+        excluded.update(index for index in first.keys() & second.keys()
+                        if first[index] + second[index] == length)
+    if 2 in backbone:
+        for bond in mol.GetAtomWithIdx(backbone[2]).GetBonds():
+            other = bond.GetOtherAtomIdx(backbone[2])
+            if mol.GetAtomWithIdx(other).GetAtomicNum() == 8 and bond.GetBondTypeAsDouble() == 1:
+                excluded.add(other)
+    return excluded
+
+
+def activate_sites(mol, slots, leaving, chem_types, *, exact_leaving=()):
+    """Build a template from resolved sites and prove exact source restoration.
+
+    The input has explicit H. Slots and leaving groups are resolved before any
+    bond changes. This same assembly boundary serves raw and authored inputs.
+    """
+    from pyPept.leaving_groups import restore_leaving_groups
+
+    source_identity = Chem.MolToSmiles(Chem.RemoveHs(restore_leaving_groups(mol, leaving)))
+    leaving = dict(leaving)
+    existing = {atom.GetIsotope() for atom in mol.GetAtoms() if atom.GetAtomicNum() == 0}
     # Process slots in order so a shared attachment atom uses a different H
     # for each slot, including backbone N with both R1 and a modification site.
     emol = Chem.RWMol(mol)
     atoms_to_remove = []
     _already_claimed = set()
     for slot, attach_idx in sorted(slots.items()):
-        explicit = leaving_overrides and slot in leaving_overrides
+        if slot in existing:
+            continue
+        explicit = slot in exact_leaving
         indices = _find_leaving_atoms(emol, attach_idx, leaving[slot],
                                       exclude=_already_claimed, allow_isotopes=not explicit)
         if not indices:
@@ -647,6 +677,8 @@ def pre_activate(smiles, slot_overrides=None, leaving_overrides=None,
 
     # Add dummies at high indices (before removal to avoid index shifts)
     for slot, attach_idx in sorted(slots.items()):
+        if slot in existing:
+            continue
         dummy = Chem.Atom(0)
         dummy.SetIsotope(slot)
         new_idx = emol.AddAtom(dummy)
@@ -660,16 +692,15 @@ def pre_activate(smiles, slot_overrides=None, leaving_overrides=None,
     except (ValueError, RuntimeError) as e:
         raise ActivationError(f"Sanitization failed: {e}") from e
 
-    if slot_overrides:
-        perception = Perception(mol_final)
-        for atom in mol_final.GetAtoms():
-            slot = atom.GetIsotope()
-            if atom.GetAtomicNum() == 0 and slot in slot_overrides:
-                chem_types[slot] = perception.classify(
-                    atom.GetNeighbors()[0].GetIdx(), slot, leaving[slot]
-                ).reaction_type
+    perception = Perception(mol_final)
+    chem_types = {
+        atom.GetIsotope(): perception.classify(
+            atom.GetNeighbors()[0].GetIdx(), atom.GetIsotope(),
+            leaving[atom.GetIsotope()], chem_types.get(atom.GetIsotope())
+        ).reaction_type
+        for atom in mol_final.GetAtoms() if atom.GetAtomicNum() == 0
+    }
 
-    from pyPept.leaving_groups import restore_leaving_groups
     restored = restore_leaving_groups(mol_final, leaving)
     if Chem.MolToSmiles(restored) != source_identity:
         raise ActivationError('Attachment detection changed the source structure; supply explicit sites and leaving groups')
@@ -738,8 +769,25 @@ def derive_monomers(csv_path, rebuild=False):
         row_type = row.get("type", "").strip()
         try:
             existing = parse_template_smiles(existing_chuckles) if existing_chuckles else None
-            if existing is not None and not (rebuild and row_type == "aa"):
+            if existing is not None:
                 chem_types = _row_chemistry(row, existing)
+                if rebuild:
+                    from pyPept.monomer_migration import reprocess_monomer
+
+                    authored = monomer_record(
+                        existing, token, _row_leaving(row), chem_types,
+                        name=row.get("name", token), m_type=row_type or "aa",
+                        m_subtype=row.get("subtype") or ("natural" if row_type == "aa" else "cap"),
+                        strict_metadata=False,
+                    )
+                    processed = reprocess_monomer(authored).molecule
+                    row["chuckles"] = Chem.MolToSmiles(processed)
+                    row["activation_policy"] = processed.GetProp("m_activation_policy")
+                    groups = processed.GetProp("m_Rgroups").split(",")
+                    for slot in set(_row_leaving(row)) | set(range(1, len(groups) + 1)):
+                        group = groups[slot - 1] if slot <= len(groups) else "None"
+                        row[f"r{slot}_leaving"] = "" if group == "None" else group
+                    chem_types = parse_chem_types(processed.GetProp("m_chem_types"))
             else:
                 normalized, is_chuckles, norm_err = normalize_input(
                     row.get("input", "").strip()
@@ -750,11 +798,7 @@ def derive_monomers(csv_path, rebuild=False):
                     row["chuckles"] = normalized
                     chem_types = _row_chemistry(row, parse_template_smiles(normalized))
                 else:
-                    overrides = (
-                        None
-                        if (rebuild and row_type == "aa")
-                        else (_row_leaving(row) or None)
-                    )
+                    overrides = _row_leaving(row) or None
                     result = pre_activate(normalized, leaving_overrides=overrides)
                     row["chuckles"] = result.chuckles
                     row["activation_policy"] = result.policy
@@ -796,7 +840,7 @@ def write_sdf(rows, output_sdf):
                     chem_types,
                     name=row.get("name", token),
                     m_type=row.get("type", "aa"),
-                    m_subtype="natural" if row.get("type", "") == "aa" else "cap",
+                    m_subtype=row.get("subtype") or ("natural" if row.get("type", "") == "aa" else "cap"),
                     strict_metadata=False,
                     activation_policy=row.get("activation_policy"),
                 )

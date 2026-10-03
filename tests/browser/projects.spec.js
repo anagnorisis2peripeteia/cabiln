@@ -122,8 +122,8 @@ test('synthetic regions stay editable and library notes are distinct from chemis
   await selectChip(page, 1, 'left', data.residues[1].abbr);
   await expect(page.locator('#build-left-rgroups button').filter({ hasText: /^R2 / })).toBeEnabled();
   await expect(page.locator('#lib-panel')).toHaveClass('open');
-  await page.locator('#lib-search').fill('meC');
-  const row = page.locator('.lib-row[data-abbr="meC"]');
+  await page.locator('#lib-search').fill('ImzScaffold');
+  const row = page.locator('.lib-row[data-abbr="ImzScaffold"]');
   await expect(row.locator('.lib-quality')).toHaveCount(0);
   await row.hover();
   await expect(page.locator('#lib-preview')).toContainText('Library notes:');

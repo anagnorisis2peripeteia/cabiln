@@ -584,7 +584,7 @@ class TestSmilesToCabiln:
 
     def test_tbab_assembly_three_cys(self):
         """TBAB scaffold: assembly of three Cys thioether crosslinks succeeds."""
-        cabiln = "ac-C.!1(4,4)-A-A-C.!2(4,5)-A-A-C.!3(4,6)-am%TBAB.!1.!2.!3"
+        cabiln = "ac-C.!1(4,4)-A-A-C.!2(4,7)-A-A-C.!3(4,9)-am%TBAB.!1(4,4).!2(7,4).!3(9,4)"
         seq = Sequence(cabiln)
         mol = Molecule(seq)
         romol = mol.get_molecule(fmt='ROMol')
@@ -595,7 +595,7 @@ class TestSmilesToCabiln:
 
     def test_tbab_smiles_to_cabiln_roundtrip(self):
         """TBAB SMILES→CABILN round-trip."""
-        cabiln = "ac-C.!1(4,4)-G-A-K-C.!2(4,5)-E-L-F-C.!3(4,6)-am%TBAB.!1.!2.!3"
+        cabiln = "ac-C.!1(4,4)-G-A-K-C.!2(4,7)-E-L-F-C.!3(4,9)-am%TBAB.!1(4,4).!2(7,4).!3(9,4)"
         result, _ = self._r(cabiln)
 
     # ── Gap 1: TATA 2-arm partial roundtrip ───────────────────────────────────
@@ -609,7 +609,7 @@ class TestSmilesToCabiln:
 
     def test_tbab_partial_two_arm_roundtrip(self):
         """A TBAB scaffold with two reacted arms retains its product and monomer boundaries."""
-        cabiln = "ac-C.!1(4,4)-A-A-C.!2(4,5)-am%TBAB.!1.!2"
+        cabiln = "ac-C.!1(4,4)-A-A-C.!2(4,7)-am%TBAB.!1(4,4).!2(7,4)"
         result, _ = self._r(cabiln)
 
     # ── Gap 3: Bracket notation (→ []) assembles same SMILES ──────────────────
@@ -767,7 +767,7 @@ class TestSmilesToCabiln:
     @pytest.mark.parametrize("pct_cabiln", [
         pytest.param("ac-C.!1(4,4)-A-A-C.!2(4,5)-am%TATA.!1.!2", id="tata_2arm"),
         pytest.param("ac-C.!1(4,4)-A-A-C.!2(4,5)-am%TBMB.!1.!2", id="tbmb_2arm"),
-        pytest.param("ac-C.!1(4,4)-A-A-C.!2(4,5)-am%TBAB.!1.!2", id="tbab_2arm"),
+        pytest.param("ac-C.!1(4,4)-A-A-C.!2(4,7)-am%TBAB.!1(4,4).!2(7,4)", id="tbab_2arm"),
     ])
     def test_partial_scaffold_no_dummy_atoms(self, pct_cabiln):
         """2-of-3 scaffold arms reacted: assembled SMILES has no unresolved dummy (*) and is connected."""
