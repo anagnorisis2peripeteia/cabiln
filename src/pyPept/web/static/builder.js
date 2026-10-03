@@ -530,6 +530,14 @@ loadCapabilities();
 const registrationDialog = document.getElementById('registration-dialog');
 const registrationFrame = document.getElementById('registration-frame');
 const registrationLink = document.getElementById('register-link');
+registrationFrame.addEventListener('load', () => {
+  if (!registrationDialog.open) return;
+  const input = registrationFrame.contentDocument?.getElementById('smiles-in');
+  if (!input) return;
+  // Firefox needs the frame focused before its field inside a modal dialog.
+  registrationFrame.contentWindow.focus();
+  input.focus();
+});
 registrationLink.addEventListener('click', event => {
   event.preventDefault();
   library.hidePreview();

@@ -254,7 +254,9 @@ for (const width of [1440, 390]) test(`public monomer onboarding stays private a
   const form = page.frameLocator('#registration-frame');
   await expect(form.locator('#registration-destination')).toBeHidden();
   await expect(form.locator('#registration-scope')).toContainText('this tab');
-  await form.locator('#smiles-in').fill('N[C@@H](CCCS)C(=O)O');
+  await expect(form.locator('#smiles-in')).toBeFocused();
+  await form.locator('#smiles-in').pressSequentially('N[C@@H](CCCS)C(=O)O');
+  await expect(form.locator('#smiles-in')).toHaveValue('N[C@@H](CCCS)C(=O)O');
   await form.locator('#btn-preview').click();
   await expect(form.locator('#detected-display')).toContainText('thiol');
   const symbol = `TabThiol${width}`;
