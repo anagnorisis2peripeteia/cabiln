@@ -130,7 +130,7 @@ for (const width of [1440, 390]) test(`Retatrutide Swap lesson preserves its bra
   await practice.setViewportSize({ width, height: 900 });
   await expect(practice.locator('#tutorial-lesson')).toHaveValue('swap');
   await expect(practice.locator('#draft-status')).toContainText('Practice tab');
-  const rendered = practice.waitForResponse(response => response.url().endsWith('/render'));
+  const rendered = practice.waitForResponse(response => isCompletedResponse(response) && response.url().endsWith('/render'));
   await practice.getByRole('button', { name: 'Load Retatrutide', exact: true }).click();
   const original = await (await rendered).json();
   const source = await practice.locator('#cabiln-input').inputValue();
@@ -233,7 +233,7 @@ for (const width of [1440, 390]) test(`Retatrutide Swap lesson preserves its bra
   await expect(practice.locator('#build-preview-reaction')).toHaveText('R1 → R1 · R2 → R2 · R4 → R4');
   await capture(practice, testInfo, 'retatrutide-swap-preview');
   await next.click();
-  const product = practice.waitForResponse(response => response.url().endsWith('/render'));
+  const product = practice.waitForResponse(response => isCompletedResponse(response) && response.url().endsWith('/render'));
   await practice.locator('#build-connect').click();
   const replaced = await (await product).json();
   expect(replaced.layout.groups).toEqual(original.layout.groups);
@@ -438,10 +438,16 @@ test('empty-canvas entry, failed drawing, dismissal and restart work without bro
 for (const width of [1440, 390]) test(`tutorial recovers closed panels and follows a browsed monomer and changed selection at ${width}px`, async ({ page }) => {
   await page.setViewportSize({ width, height: 900 });
   await page.goto(`${page.url()}?tutorial=1`);
+  if (width === 390) await interceptOnce(page, '**/render', route => route.fulfill({
+    status: 503, headers: { 'Retry-After': '1' }, contentType: 'application/json',
+    body: JSON.stringify({ error: 'Renderer busy; retry shortly' }),
+  }));
   const next = page.locator('#tutorial-next');
-  const rendered = page.waitForResponse(response => response.url().endsWith('/render') && response.request().postDataJSON()?.cabiln === 'A-G');
+  const rendered = page.waitForResponse(response => isCompletedResponse(response) &&
+    response.url().endsWith('/render') && response.request().postDataJSON()?.cabiln === 'A-G');
   await page.locator('#tutorial-load').click();
   const data = await (await rendered).json();
+  expect(data.residues).toHaveLength(2);
   await next.click();
   await page.locator('#tutorial-show').click();
   await next.click();
