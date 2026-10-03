@@ -9,7 +9,6 @@ from pyPept.attachments import attachment_sites, reaction_for_types
 from pyPept.editor import PeptideDocument
 from pyPept.molecule import Molecule
 from pyPept.monomer_store import _load_sdf
-from pyPept.peptide import Peptide
 from pyPept.sequence import Sequence
 
 from .drawing import _draw_mol
@@ -154,9 +153,19 @@ def replace_monomer(req: _ReplaceMonomerReq):
 
 @router.post("/validate_bond")
 def validate_bond(req: _ValidateBondReq):
-    """Check if a bond between two R-group chemistry types is valid."""
+    """Assess selected instances; type-only requests retain the catalog prefilter."""
     try:
-        entry = reaction_for_types(req.chem_type_a, req.chem_type_b)
+        if req.cabiln:
+            document = PeptideDocument(req.cabiln)
+            try:
+                target = document.select(req.residue_idx_b) if req.residue_idx_b >= 0 else req.abbr_b
+                entry = document.check_connection(
+                    document.select(req.residue_idx_a), req.slot_a, target, req.slot_b
+                )
+            except ValueError as error:
+                return {'valid': False, 'reason': str(error)}
+        else:
+            entry = reaction_for_types(req.chem_type_a, req.chem_type_b)
         if entry:
             return {
                 "valid": True,
@@ -194,21 +203,14 @@ def monomer_rgroups(
     try:
         from rdkit import Chem
 
-        used_slots = set()
-        leaving_groups = None
         if cabiln.strip():
             sequence = Sequence(cabiln)
             if not 0 <= residue_idx < len(sequence.s_monomers):
                 raise ValueError(f"Residue {residue_idx} does not exist")
             monomer = sequence.s_monomers[residue_idx]
             target_mol = Chem.Mol(monomer["m_romol"])
-            leaving_groups = monomer["m_Rgroups"]
             abbr = monomer["m_abbr"]
-            used_slots = {
-                endpoint.slot
-                for endpoint in Peptide.occupied_sites_from_sequence(sequence)
-                if endpoint.occurrence_id == residue_idx
-            }
+            sites = Molecule(sequence, depiction=None).current_sites(residue_idx)
         else:
             if residue_idx >= 0:
                 raise ValueError("A selected residue requires its sequence")
@@ -219,16 +221,17 @@ def monomer_rgroups(
                     {"error": f"Monomer '{abbr}' not found"}, status_code=404
                 )
             target_mol = Chem.Mol(target_mol)
+            sites = attachment_sites(target_mol)
 
-        sites = attachment_sites(target_mol, leaving_groups)
         site_atoms = {
             atom.GetIsotope(): atom.GetIdx()
             for atom in target_mol.GetAtoms()
             if atom.GetAtomicNum() == 0
         }
         for site in sites:
-            site["used"] = site["slot"] in used_slots
+            site.setdefault('used', False)
             site["atom_idx"] = site_atoms[site["slot"]]
+        used_slots = {site['slot'] for site in sites if site['used']}
         svg = _draw_mol(target_mol, 180, 140, used_slots or None)
         return {"svg": svg, "rgroups": sites, "abbr": abbr}
     except Exception as exc:

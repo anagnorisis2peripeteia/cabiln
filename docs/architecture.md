@@ -55,6 +55,9 @@ flowchart LR
 | `pyPept.molecule` | Assemble monomers using reaction definitions |
 | `pyPept.attachments` | Resolve selected or all attachment sites and supported reaction pairs using effective chemistry |
 | `pyPept.site_chemistry` | Compile attachment rules, perceive chemical functionality once per graph and separate it from site roles and numbering |
+| `pyPept.site_state` | Assess stable numbered sites in the current assembled structure |
+| `pyPept.bond_plan` | Batch simple bond replacements verified against the reaction templates |
+| `pyPept.assembly_cache` | Reuse detached assembly results within a byte and entry limit |
 | `pyPept.leaving_groups` | Restore the same standalone structures for assembly and previews |
 | `pyPept.structure` | Distinguish exact graph equality from incomplete stereo compatibility |
 | `pyPept.recognition` | Compile library states and search for compatible atom ownership with explicit budgets |
@@ -87,6 +90,35 @@ flowchart LR
 used by `Molecule`. Assembly labels each attachment endpoint explicitly; those
 labels also identify unused sites during leaving-group restoration. Labels do
 not encode occurrence or slot numbers.
+
+Assembly retains each surviving atom's occurrence and template atom index.
+Those origins locate attachment anchors after reaction atom reordering. A copy
+of the product before leaving-group restoration retains each unused numbered
+port. `CurrentSites` inspects selected anchors in that graph, caching shared
+anchor chemistry. SMARTS queries constrain the anchor while retaining the full
+molecular context. Global matching has no implicit 1,000-match truncation.
+
+R numbers and occupancy remain properties of the peptide graph. Functionality
+changes with the assembled structure: primary amine to secondary amine after
+alkylation, or amide nitrogen after acylation. A second port on a consumed click
+handle becomes unavailable. Build labels, filtering and selected-site validation
+use this current chemistry; edit handlers recheck it from the submitted source.
+Library tiles still describe isolated definitions. Swap evaluates the sites
+needed to preserve existing connections and validates the complete replacement
+product; an occupied amide is not treated as a free amine reactant.
+
+`bond_plan` accepts a reaction only when its templates retain every non-dummy
+atom and bond and add one single bond between the two port anchors. It rejects
+context-sensitive queries and stereochemical edits, and falls back to SMIRKS
+execution if any connection is ineligible. Eligible joins and port removals are
+batched, then the complete product is sanitized. The shared reaction definitions
+remain the source of the transformation.
+
+The assembly cache binds ordered occurrence identities, full templates,
+attachment metadata, connections and rule fingerprints. It stores serialized
+products, unused-port graphs and endpoint labels under a 32-MiB / 64-entry LRU
+limit. Each read returns detached molecules. Preview, Apply and drawing reuse
+the validated assembly without sharing mutable coordinates or atom properties.
 
 `notation` parses complete recursive scopes and validates crosslink declarations
 before lowering. `notation_lowering` retains original source ownership while

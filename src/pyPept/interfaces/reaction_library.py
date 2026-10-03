@@ -18,6 +18,8 @@ The globally-unique isotope labels ensure only the intended atom pair reacts.
 
 import yaml
 from functools import lru_cache
+from hashlib import sha256
+import json
 from pathlib import Path
 
 from rdkit import Chem
@@ -84,6 +86,9 @@ def compile_reactions(entries):
 
 with _YAML_PATH.open(encoding='utf-8') as _source:
     REACTIONS, REACTION_INDEX = compile_reactions(yaml.safe_load(_source))
+REACTION_FINGERPRINT = sha256(json.dumps(
+    REACTIONS, sort_keys=True, separators=(',', ':')
+).encode()).digest()
 
 
 def _group_smirks_for_intramol(smirks: str) -> str:
@@ -122,22 +127,38 @@ def _inherit_residue_ownership(product, reactants, connection_id=None):
     refer to this step's inputs, not necessarily the original monomer pair.
     Restore ownership before those inputs are replaced by the next product.
     """
-    mapped = set()
+    previous_bonds = [
+        (side, bond.GetBeginAtomIdx(), bond.GetEndAtomIdx(), bond.GetIntProp('_connection_idx'))
+        for side, molecule in enumerate(reactants) for bond in molecule.GetBonds()
+        if bond.HasProp('_connection_idx')
+    ]
+    endpoints = {(side, index) for side, left, right, _ in previous_bonds for index in (left, right)}
+    locations, mapped = {}, set()
     for atom in product.GetAtoms():
+        if endpoints and atom.HasProp('react_idx') and atom.HasProp('react_atom_idx'):
+            origin = atom.GetIntProp('react_idx'), atom.GetIntProp('react_atom_idx')
+            if origin in endpoints:
+                locations[origin] = atom.GetIdx()
         # Unmapped atoms already retain their original owner. Only mapped
         # junction atoms lose it; avoid reassigning the entire growing chain.
-        if atom.HasProp('_residue_idx'):
+        if atom.HasProp('_residue_idx') and atom.HasProp('_template_atom'):
             continue
-        if connection_id is not None and atom.HasProp("old_mapno"):
+        if connection_id is not None and atom.HasProp("old_mapno") and not atom.HasProp('_residue_idx'):
             mapped.add(atom.GetIdx())
         if atom.HasProp('react_idx') and atom.HasProp('react_atom_idx'):
             source = reactants[atom.GetIntProp('react_idx')].GetAtomWithIdx(
                 atom.GetIntProp('react_atom_idx'))
-            if source.HasProp('_residue_idx'):
-                atom.SetIntProp('_residue_idx', source.GetIntProp('_residue_idx'))
+            for key in ('_residue_idx', '_template_atom'):
+                if not atom.HasProp(key) and source.HasProp(key):
+                    atom.SetIntProp(key, source.GetIntProp(key))
 
-    # RDKit copies spectator bonds but rebuilds bonds between mapped atoms.
-    # Restore earlier connection labels there, and label this step's new bonds.
+    # Ring closures can rebuild spectator bonds too. Restore every surviving
+    # tagged bond through this step's atom correspondence, then tag new bonds.
+    for side, left, right, label in previous_bonds:
+        if (side, left) in locations and (side, right) in locations:
+            bond = product.GetBondBetweenAtoms(locations[side, left], locations[side, right])
+            if bond is not None:
+                bond.SetIntProp('_connection_idx', label)
     for index in mapped:
         for bond in product.GetAtomWithIdx(index).GetBonds():
             other = bond.GetOtherAtomIdx(index)

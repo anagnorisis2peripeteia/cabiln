@@ -435,10 +435,13 @@ function createBuildPanel({ library, residueView, getDocument, commitDocument, i
       if (state.selectedSlot === rg.slot) btn.classList.add('selected');
       const mapped = swapping && (rg.used || (side === 'right' && Object.values(swapState?.mapping || {}).includes(rg.slot)));
       btn.classList.toggle('mapped', !!mapped);
+      const chemistry = rg.functionality || rg.chem_type || 'unknown';
+      const label = ({ amine_primary: 'primary amine', amine_secondary: 'secondary amine',
+        amide_nh: 'amide N' })[chemistry] || chemistry.replaceAll('_', ' ');
       btn.textContent = swapping
         ? `R${rg.slot} · ${mapped ? (side === 'left' ? 'linked' : 'mapped') : 'free'}`
-        : `R${rg.slot} ${(rg.chem_type || '').replaceAll('_', ' ')}${rg.used ? ' · used' : rg.supported === false ? ' · unavailable' : ''}`;
-      btn.title = `R${rg.slot}: ${rg.chem_type || 'unknown'} · Free-site group: ${rg.leaving || '[H] (implicit)'}${rg.used ? ' — already connected' : rg.supported === false ? ' — no supported connection for this site' : ''}`;
+        : `R${rg.slot} ${label}${rg.used ? ' · used' : rg.supported === false ? ' · unavailable' : ''}`;
+      btn.title = `R${rg.slot}: ${label} · Free-site group: ${rg.leaving || '[H] (implicit)'}${rg.reason ? ' — ' + rg.reason : rg.used ? ' — already connected' : rg.supported === false ? ' — no supported connection for this site' : ''}`;
       if (!isSwapMode() && !btn.disabled) {
         btn.addEventListener('click', () => selectRgroup(side, rg.slot));
       }
@@ -534,6 +537,9 @@ function createBuildPanel({ library, residueView, getDocument, commitDocument, i
 
     try {
       const res = await postCalculation('/validate_bond', {
+        cabiln: getDocument().text.trim(),
+        residue_idx_a: buildLeftRIdx,
+        residue_idx_b: buildRightRIdx ?? -1,
         chem_type_a: leftRg.chem_type,
         chem_type_b: rightRg.chem_type,
         abbr_a: buildLeft.abbr,

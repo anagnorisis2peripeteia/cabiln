@@ -84,6 +84,7 @@ class Molecule:
             }
             for atom in molecule.GetAtoms():
                 atom.SetIntProp('_residue_idx', node.id)
+                atom.SetIntProp('_template_atom', atom.GetIdx())
                 if atom.GetAtomicNum() != 0:
                     continue
                 endpoint = Endpoint(node.id, atom.GetIsotope())
@@ -97,19 +98,9 @@ class Molecule:
                     )
             pool[node.id] = molecule
 
-        parent = {identity: identity for identity in pool}
-
-        def find_root(identity):
-            while parent[identity] != identity:
-                parent[identity] = parent[parent[identity]]
-                identity = parent[identity]
-            return identity
-
-        self._connections = peptide.connections
-        for connection_id, edge in enumerate(peptide.connections):
+        reactions = []
+        for edge in peptide.connections:
             left, right = edge.endpoints
-            root1 = find_root(left.occurrence_id)
-            root2 = find_root(right.occurrence_id)
             type1, type2 = chemistry[left], chemistry[right]
             reaction = reaction_for_types(type1, type2)
             if reaction is None:
@@ -120,6 +111,28 @@ class Molecule:
                     "This attachment chemistry is not supported by the "
                     "current reaction library."
                 )
+            reactions.append(reaction)
+
+        from pyPept.bond_plan import batch_join
+
+        combined = batch_join(pool, peptide.connections, labels, reactions)
+        if combined is not None:
+            self._port_mol, self._port_labels = combined, labels
+            return restore_leaving_groups(combined, leaving_groups, sanitize=False)
+
+        parent = {identity: identity for identity in pool}
+
+        def find_root(identity):
+            while parent[identity] != identity:
+                parent[identity] = parent[parent[identity]]
+                identity = parent[identity]
+            return identity
+
+        for connection_id, (edge, reaction) in enumerate(zip(peptide.connections, reactions)):
+            left, right = edge.endpoints
+            root1 = find_root(left.occurrence_id)
+            root2 = find_root(right.occurrence_id)
+            type1, type2 = chemistry[left], chemistry[right]
             intramolecular = root1 == root2
             try:
                 product = run_bond_smirks(
@@ -146,7 +159,31 @@ class Molecule:
         combined = next(fragments)
         for fragment in fragments:
             combined = Chem.CombineMols(combined, fragment)
+        self._port_mol = combined
+        self._port_labels = labels
         return restore_leaving_groups(combined, leaving_groups, sanitize=False)
+
+    def current_sites(self, occurrence_id):
+        """Describe fixed R slots using their chemistry in this assembled revision."""
+        if not hasattr(self, '_site_state'):
+            from pyPept.site_state import CurrentSites
+
+            self._site_state = CurrentSites(self._peptide, self._port_mol, self._port_labels)
+        return self._site_state.for_occurrence(occurrence_id)
+
+    def get_attachment_atom_map(self):
+        """Locate surviving attachment anchors after reaction atom reordering."""
+        origins = {
+            (atom.GetIntProp('_residue_idx'), atom.GetIntProp('_template_atom')): atom.GetIdx()
+            for atom in self.mol.GetAtoms()
+            if atom.HasProp('_residue_idx') and atom.HasProp('_template_atom')
+        }
+        return {
+            Endpoint(node.id, site.slot): origins[node.id, site.anchor]
+            for node in self._peptide.occurrences
+            for site in node.sites
+            if (node.id, site.anchor) in origins
+        }
 
     def __fixDihedrals(self):
         """
@@ -260,11 +297,22 @@ class Molecule:
             self.monomers = sequence.s_monomers
             self.bondlist = sequence.s_bonds
             peptide = Peptide.from_sequence(sequence)
-        self.mol = self.__assemble(peptide)
+        self._peptide = peptide
+        self._connections = peptide.connections
+        from pyPept.assembly_cache import assembly_key, get_assembly, put_assembly
+
+        key = assembly_key(peptide)
+        cached = get_assembly(key)
+        if cached is not None:
+            self.mol, self._port_mol, self._port_labels = cached
+        else:
+            self.mol = self.__assemble(peptide)
 
         # Sanitize the completed product before generating coordinates.
         try:
-            Chem.SanitizeMol(self.mol)
+            if cached is None:
+                Chem.SanitizeMol(self._port_mol)
+                Chem.SanitizeMol(self.mol)
         except Exception as exc:
             raise ValueError(
                 "Molecule sanitization failed after assembly — the assembled "
@@ -272,6 +320,9 @@ class Molecule:
                 "R-group attachment points were joined. Check R-group assignments "
                 f"in the BILN sequence. RDKit detail: {exc}"
             ) from exc
+
+        if cached is None:
+            put_assembly(key, self.mol, self._port_mol, self._port_labels)
 
         if self.depiction == 'rdkit':
             rdDepictor.SetPreferCoordGen(True)

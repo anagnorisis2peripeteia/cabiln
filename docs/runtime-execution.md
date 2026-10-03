@@ -58,6 +58,12 @@ native chemistry allocations remain outside that number. Oversized entries are
 returned to the client without being cached. Worker recycling and the Linux
 process limit bound allocations outside the render cache.
 
+Each worker also retains up to 32 MiB / 64 entries of serialized assemblies.
+This includes the product, unused-port graph and endpoint labels. Reads create
+detached RDKit molecules; native working copies and Python cache bookkeeping
+remain outside that byte count and within the process limit. Library definition
+content and reaction/perception fingerprints bind every entry.
+
 ## Health, readiness and logs
 
 `GET /health` returns exactly `{"status":"ok"}` from the event loop and makes

@@ -42,15 +42,17 @@
   reactant_pairs:
     - [backbone_n, backbone_c]
     - [amine_primary, backbone_c]
+    - [amine_secondary, backbone_c]
   slot_a: 1
   slot_b: 2
   steps:
     - "[1*][N:2].[2*][C:4](=[O:5]) >> [N:2][C:4](=[O:5])"
 
 - id: sidechain_amide
-  description: Amide bond from primary amine + sidechain carboxyl (C-attachment)
+  description: Amide bond from primary or secondary amine + sidechain carboxyl (C-attachment)
   reactant_pairs:
     - [amine_primary, carboxyl]
+    - [amine_secondary, carboxyl]
   slot_a: 1
   slot_b: 4
   steps:
@@ -167,6 +169,8 @@
   reactant_pairs:
     - [amine_primary, nhs_ester]
     - [amine_secondary, nhs_ester]
+    - [backbone_n, nhs_ester]
+    - [backbone_n_mod, nhs_ester]
   slot_a: 4
   slot_b: 4
   take_largest: true
@@ -304,6 +308,7 @@
     to a proline-type nitrogen.
   reactant_pairs:
     - [backbone_n_mod, carbon]
+    - [amide_nh, carbon]
   slot_a: 3
   slot_b: 1
   steps:
@@ -325,9 +330,13 @@
     - "[4*][O:2].[2*][C:4](=[O:5]) >> [O:2][C:4](=[O:5])"
 
 - id: n_alkylation_halide_backbone
-  description: N-alkylation of backbone N by alkyl halide (SN2; halide departs)
+  description: N-alkylation of an amine or amide nitrogen by alkyl halide (halide departs)
   reactant_pairs:
     - [alkyl_halide_c, backbone_n]
+    - [alkyl_halide_c, backbone_n_mod]
+    - [alkyl_halide_c, amine_primary]
+    - [alkyl_halide_c, amine_secondary]
+    - [alkyl_halide_c, amide_nh]
   slot_a: 4
   slot_b: 1
   steps:
@@ -371,6 +380,8 @@
     each arm's terminal -C(=O)- forms an amide with the next residue's NH.
   reactant_pairs:
     - [aryl_amide_c, backbone_n]
+    - [aryl_amide_c, amine_primary]
+    - [aryl_amide_c, amine_secondary]
   slot_a: 4
   slot_b: 1
   steps:

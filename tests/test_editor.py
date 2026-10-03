@@ -203,32 +203,36 @@ def test_newly_registered_definition_can_replace_with_renumbered_sites(tmp_path,
         monomer_store._invalidate_sdf()
 
 
-def test_selected_occupancy_discovers_only_the_selected_definition(monkeypatch):
-    import pyPept.peptide as model
-    import pyPept.web.builder as builder
+def test_selected_chemistry_reuses_assembly_and_inspects_only_selected_anchors(monkeypatch):
+    from pyPept.site_chemistry import Perception
 
-    def unnecessary_projection(*args, **kwargs):
-        raise AssertionError("A selected residue must not enrich every occurrence")
+    source = '-'.join(['G'] * 20)
+    Molecule(Sequence(source), depiction=None)
 
-    discover = builder.attachment_sites
+    def unnecessary_assembly(*args, **kwargs):
+        raise AssertionError('Selecting a residue must reuse its assembled revision')
+
+    classify = Perception.classify
     calls = []
 
-    def counted(molecule, leaving_groups):
-        calls.append(molecule)
-        return discover(molecule, leaving_groups)
+    def counted(perception, index, *args):
+        if perception.targeted:
+            calls.append(perception.mol.GetAtomWithIdx(index).GetIntProp('_residue_idx'))
+        return classify(perception, index, *args)
 
-    monkeypatch.setattr(model, "attachment_sites", unnecessary_projection)
-    monkeypatch.setattr(builder, "attachment_sites", counted)
+    monkeypatch.setattr(Molecule, '_Molecule__assemble', unnecessary_assembly)
+    monkeypatch.setattr(Perception, 'classify', counted)
     response = TestClient(app).get(
         "/monomer_rgroups",
-        params={"abbr": "G", "residue_idx": 10, "cabiln": "-".join(["G"] * 20)},
+        params={"abbr": "G", "residue_idx": 10, "cabiln": source},
     )
     assert response.status_code == 200, response.text
-    assert len(calls) == 1
+    assert calls == [10, 10, 10]
     assert {site["slot"] for site in response.json()["rgroups"] if site["used"]} == {
         1,
         2,
     }
+    assert response.json()['rgroups'][2]['chem_type'] == 'amide_nh'
 
 
 TRACES = [

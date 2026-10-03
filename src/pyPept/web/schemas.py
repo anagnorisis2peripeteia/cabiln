@@ -105,8 +105,11 @@ class _ToCabilnReq(BaseModel):
 
 
 class _ValidateBondReq(BaseModel):
-    chem_type_a: Label
-    chem_type_b: Label
+    chem_type_a: str = Field(default='', max_length=100)
+    chem_type_b: str = Field(default='', max_length=100)
+    cabiln: str = Field(default='', max_length=20000)
+    residue_idx_a: int = Field(default=-1, ge=-1)
+    residue_idx_b: int = Field(default=-1, ge=-1)
     abbr_a: str = Field(default="", max_length=100)
     slot_a: int = Field(default=0, ge=0)
     abbr_b: str = Field(default="", max_length=100)

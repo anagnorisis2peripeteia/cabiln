@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from hashlib import sha256
+from functools import cached_property
 
 from pyPept.molecule import Molecule
 from pyPept.attachments import reaction_for_types
@@ -62,6 +63,29 @@ class PeptideDocument:
         if not 0 <= index < len(self.sequence.s_monomers):
             raise ValueError(f"Residue {index} does not exist")
         return Selection(self.revision, index)
+
+    @cached_property
+    def assembly(self):
+        return Molecule(self.peptide, depiction=None)
+
+    def current_site(self, selection: Selection, slot: int):
+        index = self._index(selection)
+        self.peptide.site(Endpoint(index, slot))
+        return next(site for site in self.assembly.current_sites(index) if site['slot'] == slot)
+
+    def check_connection(self, host: Selection, host_slot: int, target, target_slot: int):
+        """Use current instance chemistry for existing sites, including shared anchors."""
+        from pyPept.site_state import connection_reaction
+
+        left = self.current_site(host, host_slot)
+        if isinstance(target, Selection):
+            right = self.current_site(target, target_slot)
+        else:
+            other = PeptideDocument(target)
+            if len(other.peptide.occurrences) != 1:
+                raise EditError('Choose a single monomer to connect')
+            right = other.current_site(other.select(0), target_slot)
+        return connection_reaction(left, right)
 
     def _index(self, selection: Selection) -> int:
         if selection.revision != self.revision:
@@ -369,6 +393,7 @@ class PeptideDocument:
             raise ValueError("Choose two different residues for a crosslink")
         self._free_slot(a, host_slot)
         self._free_slot(b, target_slot)
+        self.check_connection(host, host_slot, target, target_slot)
         tag = self._tag()
         edits = self._append_to_occurrence(
             a, f".{tag}({host_slot},{target_slot})"
@@ -399,6 +424,7 @@ class PeptideDocument:
             )
         self._free_slot(index, host_slot)
         definition = self._new_definition(symbol, new_slot)
+        self.check_connection(host, host_slot, symbol, new_slot)
         occurrence = self.sequence.s_sources[index]
         chain = self.sequence.s_chains["s_monomerIDs"][
             self.sequence.s_monomers[index]["m_chainID"]
@@ -591,7 +617,7 @@ class PeptideDocument:
             raise EditError(
                 "Edit would change connections beyond the selected attachment"
             )
-        Molecule(updated_peptide)
+        Molecule(updated, depiction=None)
         connections = sorted(
             expected_edges - set(self.peptide.connections),
             key=lambda edge: tuple(

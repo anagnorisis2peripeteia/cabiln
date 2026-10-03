@@ -8,6 +8,7 @@ from rdkit import Chem
 
 from pyPept import attachments, monomer_store
 from pyPept.molecule import Molecule
+from pyPept.peptide import Endpoint
 from pyPept.sequence import Sequence, _check_bond_chemistry
 from pyPept.web.app import create_app
 
@@ -218,3 +219,121 @@ def test_legacy_parseable_graph_does_not_claim_reaction_support(tag):
     assert response.json()["valid"] is False
     with pytest.raises(ValueError, match="No reaction defined.*backbone_n_mod.*slot 3.*not supported"):
         Molecule(sequence)
+
+
+@pytest.fixture
+def substitution_library(tmp_path, monkeypatch):
+    path = tmp_path / "substitution.sdf"
+    with Chem.SDWriter(str(path)) as writer:
+        for symbol, smiles, groups in (
+            ("Amine", "CN([4*])[5*]", "None,None,None,[H],[H]"),
+            ("Methyl", "C[4*]", "None,None,None,[Br]"),
+            ("Acyl", "CC(=O)[4*]", "None,None,None,[OH]"),
+            ("NHS", "C([4*])C(=O)ON1C(=O)CCC1=O", "None,None,None,[H]"),
+            ("Alkyne", "C([4*])([5*])C#C", "None,None,None,[H],[H]"),
+            ("Azide", "C([4*])N=[N+]=[N-]", "None,None,None,[H]"),
+        ):
+            molecule = Chem.MolFromSmiles(smiles)
+            for key, value in {"symbol": symbol, "m_abbr": symbol,
+                               "m_type": "chem", "m_subtype": "undefined",
+                               "m_Rgroups": groups, "m_chem_types": {
+                                   "Amine": "4:amine_primary,5:amine_primary",
+                                   "Methyl": "4:alkyl_halide_c", "Acyl": "4:carboxyl",
+                                   "NHS": "4:nhs_ester", "Alkyne": "4:alkyne_c,5:alkyne_c",
+                                   "Azide": "4:azide_alpha_c",
+                               }[symbol]}.items():
+                molecule.SetProp(key, value)
+            writer.write(molecule)
+    monkeypatch.setenv("CABILN_MONOMER_LIBRARY", str(path))
+    monomer_store._invalidate_sdf()
+    yield
+    monomer_store._invalidate_sdf()
+
+
+@pytest.mark.parametrize("source,kind,used,expected", [
+    ("Amine", "amine_primary", [False, False], "CN"),
+    ("Amine.Methyl(4,4)", "amine_secondary", [True, False], "CNC"),
+    ("Amine.Acyl(4,4)", "amide_nh", [True, False], "CNC(C)=O"),
+    ("Amine.Methyl(4,4).Methyl(5,4)", "element_7", [True, True], "CN(C)C"),
+])
+def test_current_chemistry_keeps_numbered_slots_after_substitution(
+    substitution_library, source, kind, used, expected
+):
+    assembly = Molecule(Sequence(source), depiction=None)
+    sites = assembly.current_sites(0)
+    assert [site["slot"] for site in sites] == [4, 5]
+    assert [site["used"] for site in sites] == used
+    assert [site["functionality"] for site in sites] == [kind, kind]
+    assert Chem.MolToSmiles(assembly.mol) == Chem.MolToSmiles(Chem.MolFromSmiles(expected))
+    anchors = assembly.get_attachment_atom_map()
+    assert anchors[Endpoint(0, 4)] == anchors[Endpoint(0, 5)]
+
+
+def test_builder_checks_current_structure_instead_of_submitted_type_labels(substitution_library):
+    with TestClient(create_app()) as client:
+        source = "Amine.Acyl(4,4)"
+        sites = client.get("/monomer_rgroups", params={
+            "abbr": "Amine", "residue_idx": 0, "cabiln": source,
+        }).json()["rgroups"]
+        assert sites[1]["chem_type"] == "amide_nh"
+        result = client.post("/validate_bond", json={
+            "cabiln": source, "residue_idx_a": 0, "slot_a": 4,
+            "abbr_b": "Methyl", "slot_b": 4,
+            "chem_type_a": "amine_primary", "chem_type_b": "alkyl_halide_c",
+        })
+        assert result.status_code == 200
+        assert result.json()["valid"] is False
+        assert "already" in result.json()["reason"]
+        request = {"cabiln": source, "residue_idx_a": 0, "slot_a": 5,
+                   "abbr_b": "NHS", "slot_b": 4,
+                   "chem_type_a": "amine_primary", "chem_type_b": "nhs_ester"}
+        assert client.post('/validate_bond', json=request).json()['valid'] is False
+        inserted = client.post('/insert_bond', json={
+            'cabiln': source, 'host_residue_idx': 0, 'r_host': 5,
+            'new_abbr': 'NHS', 'r_new': 4,
+        })
+        assert inserted.status_code == 400
+        assert 'amide_nh' in inserted.json()['error']
+        request['cabiln'] = 'Amine.Methyl(4,4)'
+        assert client.post('/validate_bond', json=request).json()['valid'] is True
+
+
+def test_builder_can_use_the_second_amine_slot_after_alkylation(substitution_library):
+    from pyPept.editor import PeptideDocument
+
+    first = PeptideDocument("Amine")
+    source = first.attach(first.select(0), 4, "Methyl", 4)
+    second = PeptideDocument(source)
+    source = second.attach(second.select(0), 5, "Methyl", 4)
+    assert Chem.MolToSmiles(Molecule(Sequence(source), depiction=None).mol) == "CN(C)C"
+
+
+def test_shared_reactive_handle_is_consumed_even_when_another_slot_remains(substitution_library):
+    from pyPept.editor import PeptideDocument
+
+    before = PeptideDocument('Alkyne')
+    assert before.current_site(before.select(0), 5)['supported']
+    source = before.attach(before.select(0), 4, 'Azide', 4)
+    after = PeptideDocument(source)
+    remaining = after.current_site(after.select(0), 5)
+    assert remaining['used'] is False
+    assert remaining['supported'] is False
+    assert 'consumed' in remaining['reason']
+    assert len(after.assembly.mol.GetSubstructMatches(Chem.MolFromSmarts('n1nncc1'))) == 1
+    with pytest.raises(ValueError, match='consumed'):
+        after.attach(after.select(0), 5, 'Azide', 4)
+
+
+def test_large_graph_checks_preserve_full_context_beyond_a_thousand_matches():
+    from pyPept.site_chemistry import Perception
+
+    molecule = Chem.MolFromSmiles('.'.join(['CNC(C)=O'] * 1100 + ['CNC', 'CN']))
+    full = Perception(molecule)
+    targeted = Perception(Chem.Mol(molecule), targeted=True)
+    assert len(full.matches('amide_nh')) == 1100
+    nitrogens = [atom.GetIdx() for atom in molecule.GetAtoms() if atom.GetAtomicNum() == 7]
+    # The final amides used to fall past RDKit's default match limit.
+    for position in (0, 999, 1000, 1099, 1100, 1101):
+        expected = 'amide_nh' if position < 1100 else 'amine_secondary' if position == 1100 else 'amine_primary'
+        assert full.nitrogen(nitrogens[position]) == expected
+        assert targeted.nitrogen(nitrogens[position]) == expected

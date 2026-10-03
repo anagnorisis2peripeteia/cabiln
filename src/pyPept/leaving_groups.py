@@ -84,8 +84,10 @@ def restore_leaving_groups(
             replacement.SetMonomerInfo(atom.GetPDBResidueInfo())
         editable.ReplaceAtom(atom.GetIdx(), replacement, preserveProps=True)
 
+    editable.BeginBatchEdit()
     for index in reversed(to_remove):
         editable.RemoveAtom(index)
+    editable.CommitBatchEdit()
     restored = editable.GetMol()
     if sanitize:
         try:

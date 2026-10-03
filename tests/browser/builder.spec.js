@@ -40,8 +40,8 @@ test('right-click tiles and detected sites build backbone, branch and cap', asyn
   await expect(page.locator('#cabiln-input')).toHaveClass('ok');
   await selectChip(page, 0, 'left', 'K');
   await expect(page.locator('#build-left-rgroups button')).toHaveText([
-    'R1 backbone n', 'R2 backbone c', 'R3 backbone n mod',
-    'R4 amine primary', 'R5 amine primary',
+    'R1 primary amine', 'R2 carboxyl', 'R3 primary amine',
+    'R4 primary amine', 'R5 primary amine',
   ]);
   await tile(page, 'G', 'right');
   await expect(page.locator('#build-right-abbr')).toHaveText('G');
@@ -101,6 +101,48 @@ test('repeat occurrences, clear controls and insertion keep the selected positio
     await expect(page.locator('#build-connect')).toBeDisabled();
     await selectChip(page, 2, 'left', 'A');
   }
+});
+
+test('successive substitutions update chemistry without renumbering and Undo restores it', async ({ page }) => {
+  await render(page, 'K');
+  await page.locator('#btn-build').click();
+  const left = slot => page.locator('#build-left-rgroups button').filter({ hasText: new RegExp(`^R${slot} `) });
+  await selectChip(page, 0, 'left', 'K');
+  await expect(left(5)).toHaveText('R5 primary amine');
+  for (const slot of [4, 5]) {
+    if (slot === 5) {
+      await selectChip(page, 0, 'left', 'K');
+      await expect(left(4)).toBeDisabled();
+      await expect(left(5)).toHaveText('R5 secondary amine');
+      await expect(left(5)).toBeEnabled();
+    }
+    await site(page, 'left', slot);
+    if (slot === 4) await page.locator('#btn-rxn-filter').click();
+    await tile(page, 'TBMB', 'right');
+    const checked = page.waitForResponse(response => isCompletedResponse(response) && new URL(response.url()).pathname === '/validate_bond');
+    await site(page, 'right', 4);
+    const response = await checked;
+    expect(response.request().postDataJSON()).toMatchObject({
+      cabiln: await page.locator('#cabiln-input').inputValue(), residue_idx_a: 0,
+      residue_idx_b: -1, slot_a: slot, slot_b: 4,
+    });
+    expect((await response.json()).valid).toBe(true);
+    await page.locator('#build-preview-button').click();
+    await expect(page.locator('#build-preview-inner svg')).toBeVisible();
+    await connect(page);
+  }
+  await selectChip(page, 0, 'left', 'K');
+  await expect(left(4)).toBeDisabled();
+  await expect(left(5)).toBeDisabled();
+  await page.locator('#btn-undo').click();
+  await expect(page.locator('#cabiln-input')).toHaveClass('ok');
+  await selectChip(page, 0, 'left', 'K');
+  await expect(left(5)).toHaveText('R5 secondary amine');
+  await expect(left(5)).toBeEnabled();
+  await render(page, 'K.ac(4,2)');
+  await selectChip(page, 0, 'left', 'K');
+  await expect(left(5)).toHaveText('R5 amide N');
+  await expect(left(5)).toBeEnabled();
 });
 
 async function clickSvgOccurrence(page, rendered, occurrence) {

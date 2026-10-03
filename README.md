@@ -63,6 +63,12 @@ orange. Open **Reaction and notation** for the reaction details and proposed
 source. When only one compatible site pair remains, **Use … R… → … R…** offers
 to select it; you still review and apply the connection yourself.
 
+Site numbers stay fixed as you build. The labels and connection checks use the
+selected residue's current structure: after N-alkylation, a primary amine's
+remaining slot becomes a secondary amine; after N-acylation, it becomes an amide
+nitrogen. A free slot is unavailable if another connection consumed its reactive
+group. Undo restores the earlier structure and its available chemistry.
+
 **Filter** in Library opens Build when needed. Select a residue in the drawing or
 its tile to match its free attachment sites, then choose a numbered site to narrow
 the results. The library states which residue and site it is matching. Turn

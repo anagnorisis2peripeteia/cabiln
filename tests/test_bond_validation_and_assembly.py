@@ -255,6 +255,9 @@ class TestAssembly:
 
     def test_sanitize_error_wrapped_as_valueerror(self, monkeypatch):
         """A sanitization failure carries attachment context and its RDKit cause."""
+        from pyPept.assembly_cache import clear_assembly_cache
+
+        clear_assembly_cache()
         sequence = Sequence('A')
 
         def invalid_valence(_molecule):

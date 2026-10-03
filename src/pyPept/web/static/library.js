@@ -218,8 +218,8 @@ class MonomerLibrary {
   }
 
   compatiblePairs(left, right) {
-    return left.filter(site => !site.used).flatMap(a => right.filter(b =>
-      !b.used && this.compatibleTypes(a.chem_type, b.chem_type)).map(b => [a.slot, b.slot]));
+    return left.filter(site => !site.used && site.supported !== false).flatMap(a => right.filter(b =>
+      !b.used && b.supported !== false && this.compatibleTypes(a.chem_type, b.chem_type)).map(b => [a.slot, b.slot]));
   }
 
   attachmentTypes(cts) {
@@ -255,9 +255,9 @@ class MonomerLibrary {
       let lcts;
       if (buildLeft.selectedSlot !== null) {
         const selRg = buildLeft.rgroups.find(r => r.slot === buildLeft.selectedSlot);
-        lcts = selRg && !selRg.used ? [selRg.chem_type] : [];
+        lcts = selRg && !selRg.used && selRg.supported !== false ? [selRg.chem_type] : [];
       } else {
-        lcts = buildLeft.rgroups.filter(r => !r.used).map(r => r.chem_type);
+        lcts = buildLeft.rgroups.filter(r => !r.used && r.supported !== false).map(r => r.chem_type);
       }
       filtered = filtered.filter(m => {
         const mcts = m.attachmentTypes;

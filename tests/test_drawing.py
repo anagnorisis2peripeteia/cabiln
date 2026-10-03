@@ -264,8 +264,12 @@ def test_coincident_atom_joins_do_not_claim_an_arbitrary_owner():
 def test_drawing_hydrogen_uses_parent_ownership_without_changing_source(explicit_hydrogen):
     source = "ac-C.!1(4,4)-A-A-C.!2(4,5)-A-A-C.!3(4,6)-am%TBMB.!1.!2.!3"
     molecule = read_input(source).assemble(depiction=None)
+    # The central cysteine's chiral carbon needs a drawn H at the ring junction.
+    (parent,) = [atom.GetIdx() for atom in molecule.GetAtoms()
+                 if atom.GetIntProp('_residue_idx') == 4
+                 and atom.GetChiralTag() != Chem.ChiralType.CHI_UNSPECIFIED]
     if explicit_hydrogen:
-        molecule = Chem.AddHs(molecule, onlyOnAtoms=[19])
+        molecule = Chem.AddHs(molecule, onlyOnAtoms=[parent])
     source_atoms = molecule.GetNumAtoms()
     source_bonds = molecule.GetNumBonds()
     expected_smiles = Chem.MolToSmiles(Chem.Mol(molecule))
@@ -281,9 +285,9 @@ def test_drawing_hydrogen_uses_parent_ownership_without_changing_source(explicit
     prepared = rdMolDraw2D.PrepareMolForDrawing(molecule)
     hydrogen = prepared.GetAtomWithIdx(51)
     assert hydrogen.GetAtomicNum() == 1
-    assert [atom.GetIdx() for atom in hydrogen.GetNeighbors()] == [19]
+    assert [atom.GetIdx() for atom in hydrogen.GetNeighbors()] == [parent]
     assert prepared.GetNumAtoms() == 52
-    expected_owner = 51 if explicit_hydrogen else 19
+    expected_owner = 51 if explicit_hydrogen else parent
 
     # Native automatic preparation supplies an independent geometry/class oracle.
     drawer = rdMolDraw2D.MolDraw2DSVG(960, 680)
@@ -306,7 +310,7 @@ def test_drawing_hydrogen_uses_parent_ownership_without_changing_source(explicit
                   if value.startswith("atom-")}
         if any(value.startswith("bond-") for value in classes):
             bonds += 1
-            assert owners == {19, expected_owner}
+            assert owners == {parent, expected_owner}
         else:
             labels += 1
             assert owners == {expected_owner}

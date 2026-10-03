@@ -14,6 +14,12 @@ regression above 20% before release; compare cold and warm work separately.
 Do not infer production percentiles or chemistry throughput from first feedback.
 
 Web rendering assembles the molecule without calculating a preliminary layout.
+Simple joins use a batch plan verified against the reaction templates; complex
+transformations use the general executor. A bounded assembly cache shares the
+validated result between site inspection, edit validation, Preview and drawing.
+Selected-site checks query only the requested anchors in their complete molecular
+context. See [assembly and cache boundaries](architecture.md#parsing-editing-and-assembly).
+
 The default drawing uses Indigo through a detached, atom-mapped isomeric SMILES.
 The returned structure must preserve the mapped graph and stereochemistry, and
 provide a complete atom correspondence and valid two-dimensional coordinates.

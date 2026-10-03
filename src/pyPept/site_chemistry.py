@@ -14,6 +14,7 @@ import json
 from types import MappingProxyType
 
 from rdkit import Chem
+from rdkit.Chem import rdqueries
 
 
 @dataclass(frozen=True)
@@ -97,7 +98,7 @@ def compile_rules(rules):
 
 COMPILED_RULES = compile_rules(SITE_RULES)
 # Bump the convention when classification semantics outside these rules change.
-CHEMISTRY_CONVENTION = 'cabiln-site-chemistry-v2'
+CHEMISTRY_CONVENTION = 'cabiln-site-chemistry-v3'
 CHEMISTRY_FINGERPRINT = sha256(json.dumps(
     [CHEMISTRY_CONVENTION, [asdict(rule) for rule in sorted(SITE_RULES, key=lambda rule: rule.name)]],
     sort_keys=True, separators=(',', ':'),
@@ -147,13 +148,20 @@ class SiteChemistry:
 
 
 class Perception:
-    """Inspect one immutable molecular graph; each SMARTS runs at most once."""
+    """Cache perception for one graph, either globally or at selected anchors."""
 
-    def __init__(self, mol):
+    def __init__(self, mol, *, targeted=False):
         self.mol = mol
         self.rules = COMPILED_RULES
         self._matches = {}
+        self._anchors = {}
+        self._at_matches = {}
+        self._nitrogens = {}
+        self.targeted = targeted
         self.elements = {atom.GetAtomicNum() for atom in mol.GetAtoms()}
+        if targeted:
+            for atom in mol.GetAtoms():
+                atom.SetIntProp('_site_query_index', atom.GetIdx())
 
     def matches(self, name, *, raw=False):
         key = name, raw
@@ -162,17 +170,44 @@ class Perception:
             pattern = compiled.raw if raw else compiled.site
             element = compiled.raw_element if raw else compiled.site_element
             possible = pattern is not None and (element == 0 or element in self.elements)
-            self._matches[key] = self.mol.GetSubstructMatches(pattern) if possible else ()
+            self._matches[key] = self.mol.GetSubstructMatches(pattern, maxMatches=0) if possible else ()
         return self._matches[key]
 
+    def matches_at(self, name, index):
+        """Test a known anchor in its full context, without enumerating other sites."""
+        if not self.targeted:
+            if name not in self._anchors:
+                self._anchors[name] = {match[0] for match in self.matches(name)}
+            return index in self._anchors[name]
+        key = name, index
+        if key not in self._at_matches:
+            compiled = self.rules[name]
+            pattern = compiled.site
+            possible = pattern is not None and compiled.site_element in (
+                0, self.mol.GetAtomWithIdx(index).GetAtomicNum()
+            )
+            if possible:
+                query = Chem.Mol(pattern)
+                query.GetAtomWithIdx(0).ExpandQuery(
+                    rdqueries.HasIntPropWithValueQueryAtom('_site_query_index', index)
+                )
+                possible = self.mol.HasSubstructMatch(query)
+            self._at_matches[key] = possible
+        return self._at_matches[key]
+
     def nitrogen(self, index):
+        if index not in self._nitrogens:
+            self._nitrogens[index] = self._nitrogen(index)
+        return self._nitrogens[index]
+
+    def _nitrogen(self, index):
         atom = self.mol.GetAtomWithIdx(index)
         if atom.GetAtomicNum() != 7:
             raise ValueError('Nitrogen chemistry requires a nitrogen atom')
         # Conjugation and aromaticity take precedence over substitution count.
         for kind in ('protected_amine', 'aromatic_nh', 'aminooxy', 'hydrazide', 'amide_nh',
                      'guanidinium_imine', 'guanidinium'):
-            if any(match[0] == index for match in self.matches(kind)):
+            if self.matches_at(kind, index):
                 return kind
         if any(bond.GetBondTypeAsDouble() != 1.0 for bond in atom.GetBonds()):
             return 'element_7'
@@ -255,7 +290,7 @@ class Perception:
                 if (rule.infer and item.site is not None
                         and item.site_element in (0, number)
                         and not (rule.name == 'aryl_amide_c' and leaving == '[H]')
-                        and any(match[0] == index for match in self.matches(rule.name))):
+                        and self.matches_at(rule.name, index)):
                     if selected is not None:
                         raise ValueError('Overlapping attachment types need explicit precedence')
                     selected = rule
