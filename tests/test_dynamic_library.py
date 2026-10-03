@@ -1,6 +1,7 @@
 """An unseen monomer must flow from detection through palette to assembly."""
 
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 import pytest
 from hypothesis import given, strategies as st
 from fastapi.testclient import TestClient
@@ -135,6 +136,61 @@ def test_temporary_definitions_travel_with_projects_without_installing(library_a
     assert post(client, '/validate_project', {'project': project})['valid']
     project['monomers'][0]['name'] = 'Changed definition'
     assert client.post('/validate_project', json={'project': project}).status_code == 409
+    assert path.read_bytes() == original
+
+
+def test_full_temporary_library_builds_all_64_monomers_and_rejects_overflow(library_app):
+    from rdkit.Chem.rdMolDescriptors import CalcMolFormula
+
+    path, client = library_app
+    original = path.read_bytes()
+    preview = post(client, '/preview_monomer', {'smiles': 'NCC(=O)O'})
+    entry = {key: preview[key] for key in ('chuckles', 'chem_types', 'leaving')}
+    entries = [{**entry, 'abbr': f'TabGly{idx}', 'name': f'Tab glycine {idx}'}
+               for idx in range(64)]
+    snapshot = post(client, '/session_library', {'monomers': entries})
+    client.headers['X-Cabiln-Library'] = snapshot['token']
+    source = '-'.join(item['abbr'] for item in entries)
+    rendered = post(client, '/render', {'cabiln': source})
+    assert [item['abbr'] for item in rendered['residues']] == [item['abbr'] for item in entries]
+    molecule = Chem.MolFromMolBlock(rendered['mol_block'])
+    assert CalcMolFormula(molecule) == 'C128H194N64O65'
+    project = post(client, '/prepare_project', {'project': {
+        'format': 'cabiln-project', 'version': 1,
+        'document': {'text': source, 'notation': 'cabiln'},
+        'monomers': snapshot['monomers'],
+    }})['project']
+    assert len(project['monomers']) == 64
+    rejected = client.post('/session_library', json={'monomers': [
+        *entries, {**entry, 'abbr': 'Overflow', 'name': 'One too many'},
+    ]})
+    assert rejected.status_code == 422
+    assert post(client, '/validate_project', {'project': project})['valid']
+    assert path.read_bytes() == original
+
+
+def test_snapshot_eviction_stays_bounded_and_definitions_can_be_restored(library_app):
+    path, client = library_app
+    original = path.read_bytes()
+    libraries = client.app.state.session_libraries
+    libraries.maximum = 3
+    preview = post(client, '/preview_monomer', {'smiles': 'N[C@@H](CCCS)C(=O)O'})
+    entry = {key: preview[key] for key in ('chuckles', 'chem_types', 'leaving')}
+    snapshots = []
+    for index in range(12):
+        snapshots.append(post(client, '/session_library', {'monomers': [
+            {**entry, 'abbr': f'Visitor{index}', 'name': f'Visitor {index}'},
+        ]}))
+        assert len(libraries.entries) <= 3
+        assert len(list(Path(libraries.directory.name).iterdir())) == len(libraries.entries)
+    expired = client.get('/monomers', headers={'X-Cabiln-Library': snapshots[0]['token']})
+    assert expired.status_code == 409
+    assert expired.headers['X-Cabiln-Library-Expired'] == '1'
+    restored = post(client, '/session_library', {'monomers': snapshots[0]['monomers']})
+    client.headers['X-Cabiln-Library'] = restored['token']
+    assert smiles_of_render(client, 'Visitor0') == Chem.MolToSmiles(
+        Chem.MolFromSmiles('N[C@@H](CCCS)C(=O)O'))
+    assert len(libraries.entries) == 3
     assert path.read_bytes() == original
 
 

@@ -34,6 +34,10 @@ keyboard submission. Draft clearing checks recovery before a new edit.
 Public onboarding also checks desktop/mobile dialogs, a temporary monomer's
 detected sites and Build use, tab isolation, expired-token recovery after reload,
 and project transfer into a fresh tab without changing the shared library.
+Onboarding stress journeys close and reopen forms during pending previews and
+additions, retry failed additions, reject conflicting project definitions, and
+restore several custom monomers through repeated token expiry. They also check
+that project downloads retain definitions when tab storage is unavailable.
 Project saves check recovery through Retry after prolonged capacity pressure.
 The accessibility journey runs axe-core on empty, library, selected residue,
 Swap, Help, Examples, preview, Verify, light drawing, tutorial, narrow layout and
