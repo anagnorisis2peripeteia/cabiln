@@ -502,7 +502,8 @@
     align-items: center;
     gap: 8px;
   }
-  #lib-header .panel-title { grid-column: 1; grid-row: 1; }
+  .lib-heading { grid-column: 1; grid-row: 1; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  #register-link { white-space: nowrap; text-decoration: none; }
   #lib-close { grid-column: 2; grid-row: 1; justify-self: end; }
   #btn-rxn-filter { grid-column: 2; grid-row: 2; }
   #lib-search {
@@ -1064,3 +1065,18 @@
 
   body { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); }
   #tutorial-panel { padding-bottom: max(12px, env(safe-area-inset-bottom)); }
+  #registration-dialog {
+    width: min(1140px, calc(100vw - 24px));
+    height: min(860px, calc(100dvh - 24px));
+    max-width: none;
+    max-height: none;
+    margin: auto;
+    padding: 12px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-panel);
+    background: var(--surface-base);
+    color: var(--text);
+  }
+  #registration-dialog::backdrop { background: #0009; }
+  #registration-close { display: block; margin: 0 0 8px auto; }
+  #registration-frame { width: 100%; height: calc(100% - 44px); border: 0; }

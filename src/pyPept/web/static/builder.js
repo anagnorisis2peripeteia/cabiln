@@ -93,6 +93,7 @@ const library = new MonomerLibrary({
 
 // Document data belongs to the editor; these timers belong to browser storage.
 const DRAFT_KEY = 'cabiln.draft.v1';
+const draftStorage = () => CabilnLibrary.temporary ? window.sessionStorage : window.localStorage;
 const editor = new CabilnDocument();
 let tutorial = null;
 const build = createBuildPanel({ library, residueView,
@@ -131,11 +132,13 @@ function saveDraft() {
   if (practiceMode) return;
   if (savedDraft || draftCleared) return; // Recovery and explicit clearing stay intact.
   try {
-    window.localStorage.setItem(DRAFT_KEY, JSON.stringify({ version: 1,
+    draftStorage().setItem(DRAFT_KEY, JSON.stringify({ version: 1,
       document: editor.present, drafts: editor.drafts, reference: smilesInput.value,
       reference_original: referenceOriginal, reference_context: referenceContext,
-      context: projectContext || editor.present.context }));
-    draftStatus.textContent = 'Draft saved in this browser';
+      context: projectContext || editor.present.context, monomers: CabilnLibrary.monomers }));
+    draftStatus.textContent = CabilnLibrary.temporary
+      ? 'Draft kept in this tab · Save project to keep custom monomers'
+      : 'Draft saved in this browser';
   } catch (error) {
     draftStatus.textContent = 'Draft storage is unavailable. Use Save project to keep your work; this session still supports Undo.';
   }
@@ -217,6 +220,7 @@ btnRestoreDraft.addEventListener('click', async () => {
   project.drafts = saved.drafts;
   project.reference = saved.reference;
   project.context = saved.context;
+  project.monomers = saved.monomers;
   if (project.context) {
     // Autosaved drafts can include edits since their last server signature.
     // Preparation checks their stored binding before stamping the current text.
@@ -241,7 +245,7 @@ function offerSavedDraft() {
     return;
   }
   try {
-    const saved = JSON.parse(window.localStorage.getItem(DRAFT_KEY));
+    const saved = JSON.parse(draftStorage().getItem(DRAFT_KEY));
     if (!saved || saved.version !== 1 || !saved.document ||
         typeof saved.document.text !== 'string' ||
         !Object.hasOwn(NOTATION_PLACEHOLDER, saved.document.notation)) return;
@@ -251,7 +255,7 @@ function offerSavedDraft() {
     if (!saved.document.text && !Object.values(drafts).some(draft => draft.text) &&
         !reference.text && !reference.original) return;
     savedDraft = { document: CabilnProject.document(saved.document), drafts, reference,
-      context: saved.context || null };
+      context: saved.context || null, monomers: saved.monomers || [] };
     draftStatus.textContent = 'A saved draft is available in this browser';
     draftNotice.hidden = btnRestoreDraft.hidden = btnDismissDraft.hidden = false;
   } catch (error) { /* Storage can be disabled, full, or contain an older format. */ }
@@ -341,6 +345,7 @@ function projectSnapshot() {
     reference: { text: smilesInput.value, original: CabilnProject.clone(referenceOriginal),
       context: CabilnProject.clone(referenceContext) },
     context: CabilnProject.clone(projectContext || editor.present.context),
+    monomers: CabilnLibrary.monomers,
     saved_at: new Date().toISOString() };
 }
 
@@ -357,13 +362,16 @@ async function restoreBoundDraft(project) {
   const request = requests.start('project-open');
   setProjectStatus('Checking the saved draft library binding and definitions…');
   try {
-    const response = await postCalculation('/prepare_project', { project }, request.signal);
+    const candidate = await CabilnLibrary.stage(project.monomers, request.signal);
+    const response = await postCalculation('/prepare_project', { project }, request.signal, candidate);
     const data = await readResponse(response);
     if (!request.current() || revision !== projectRevision) return;
     if (data.error) throw new Error(data.error);
     const prepared = CabilnProject.read(data.project);
+    CabilnLibrary.commit(candidate, false);
     request.finish();
     applyProject(prepared);
+    if (library.isOpen) library.load();
     setProjectStatus('Saved draft restored with its source, reference and import details.');
   } catch (error) {
     if (request.current()) setProjectStatus((error.message || 'Could not restore the saved draft.') +
@@ -404,10 +412,12 @@ async function validateAndOpenProject(project, successMessage = 'Project opened'
   const request = requests.start('project-open');
   setProjectStatus('Checking the project library binding and definitions…');
   try {
-    const response = await postCalculation('/validate_project', { project }, request.signal);
+    const candidate = await CabilnLibrary.stage(project.monomers, request.signal);
+    const response = await postCalculation('/validate_project', { project }, request.signal, candidate);
     const data = await readResponse(response);
     if (!request.current() || revision !== projectRevision) return;
     if (data.error || data.valid !== true) throw new Error(data.error || 'The project could not be validated.');
+    CabilnLibrary.commit(candidate, false);
     request.finish();
     // Validation proves every saved document against these exact definitions.
     const context = data.context || project.context;
@@ -415,6 +425,7 @@ async function validateAndOpenProject(project, successMessage = 'Project opened'
       document: { ...project.document, context },
       drafts: Object.fromEntries(Object.entries(project.drafts).map(([mode, state]) =>
         [mode, { ...state, context }])) });
+    if (library.isOpen) library.load();
     setProjectStatus(successMessage + '. Source and reference are preserved; use Undo to return to the previous sequence.');
   } catch (error) {
     if (request.current()) setProjectStatus((error.message || 'Could not open the project.') + ' Your current work is unchanged.', true);
@@ -479,9 +490,10 @@ document.getElementById('btn-clear-draft').addEventListener('click', () => {
   requests.cancel('project-open');
   clearTimeout(saveDraftTimer);
   try {
-    const raw = window.localStorage.getItem(DRAFT_KEY);
-    window.localStorage.removeItem(DRAFT_KEY);
-    clearedDraft = raw ? { raw, recovery: savedDraft } : null;
+    const storage = draftStorage();
+    const raw = storage.getItem(DRAFT_KEY);
+    storage.removeItem(DRAFT_KEY);
+    clearedDraft = raw ? { raw, storage, recovery: savedDraft } : null;
     finishDraftRecovery();
     draftCleared = true;
     btnUndoClearDraft.hidden = !clearedDraft;
@@ -492,7 +504,7 @@ document.getElementById('btn-clear-draft').addEventListener('click', () => {
 btnUndoClearDraft.addEventListener('click', () => {
   if (!clearedDraft) return;
   try {
-    window.localStorage.setItem(DRAFT_KEY, clearedDraft.raw);
+    clearedDraft.storage.setItem(DRAFT_KEY, clearedDraft.raw);
     savedDraft = clearedDraft.recovery;
     draftCleared = false;
     clearedDraft = null;
@@ -508,12 +520,50 @@ async function loadCapabilities() {
   try {
     const response = await fetchCalculation('/capabilities');
     const capabilities = await response.json();
-    link.hidden = !response.ok || capabilities.registration !== true;
+    link.hidden = !response.ok || !(capabilities.session_registration || capabilities.registration);
   } catch (error) {
     link.hidden = true;
   }
 }
 loadCapabilities();
+
+const registrationDialog = document.getElementById('registration-dialog');
+const registrationFrame = document.getElementById('registration-frame');
+const registrationLink = document.getElementById('register-link');
+registrationLink.addEventListener('click', event => {
+  event.preventDefault();
+  library.hidePreview();
+  registrationFrame.src = '/register';
+  registrationDialog.showModal();
+});
+document.getElementById('registration-close').addEventListener('click', () => registrationDialog.close());
+registrationDialog.addEventListener('close', () => {
+  registrationFrame.removeAttribute('src');
+  registrationLink.focus();
+});
+window.addEventListener('message', event => {
+  if (event.origin !== window.location.origin || event.source !== registrationFrame.contentWindow) return;
+  if (event.data?.type === 'cabiln-monomer-added') {
+    monomerLibraryChanged();
+  }
+  if (event.data?.type === 'cabiln-registration-close') {
+    registrationDialog.close();
+    if (event.data.abbr) {
+      library.search.value = event.data.abbr;
+      library.category.value = library.collection.value = '';
+      library.resetFilter();
+      library.open();
+      library.render();
+    }
+  }
+});
+function monomerLibraryChanged() {
+  projectChanged();
+  saveDraft();
+  library.load();
+  if (editor.present.text) renderDocument(true);
+}
+window.addEventListener('cabiln-library-changed', monomerLibraryChanged);
 
 // dark mode
 btnDark.addEventListener('click', () => {

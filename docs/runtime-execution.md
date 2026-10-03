@@ -24,12 +24,21 @@ search bounds. A request-body limit does not replace chemical validation.
 
 Only the explicit read/edit routes in `web/execution.py:CHEMISTRY_ROUTES` enter
 the pool. They include rendering, recognition, notation conversion, monomer
-previews/lookups, bond editing, and project preparation/validation. Workers run
+previews/lookups, temporary library creation, bond editing, and project preparation/validation. Workers run
 the existing ASGI application, so endpoint validation and response behavior stay
-shared with local use. Registration writes stay in the authenticated parent;
+shared with local use. Permanent registration writes stay in the authenticated parent;
 they authenticate before any body is read, then use the same streaming body cap
 and upload deadline before model parsing. They are never cancelled halfway
 through a persistence operation.
+
+Temporary library requests have the same body, time and memory limits as other
+chemistry jobs. A request can supply up to 64 definitions with at most 4,096
+template atoms in total. The parent holds at most 32 private snapshots, expires
+idle ones after an hour, and removes them on shutdown. An active request pins its
+snapshot until its worker finishes or is stopped. Browser tab storage supplies
+definitions again after expiry; the shared library is never used as a fallback
+for an invalid token. One parent and its child workers share this store. Multiple
+web replicas would need request affinity or a shared snapshot store.
 
 An occupied pool returns `503` with `Retry-After: 1`. Oversized transport data
 returns `413`. A job deadline returns `504` after its process has been killed

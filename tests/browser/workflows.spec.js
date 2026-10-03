@@ -1,4 +1,5 @@
 const { test, expect, render, tile, site, selectChip, connect, capture, isCompletedResponse, interceptOnce } = require('./fixtures');
+const fs = require('node:fs/promises');
 
 test('Build omits false attachment sites and disables unsupported chemistry', async ({ page }) => {
   const leftSite = slot => page.locator('#build-left-rgroups button')
@@ -55,7 +56,7 @@ for (const width of [1440, 390]) test(`registration requires an explicit attachm
   const payload = (await submitted).postDataJSON();
   expect(payload.chuckles).toBe(selected);
   expect(payload.activation_policy).toBe('canonical-sites-v1');
-  await expect(page.locator('#status-msg')).toContainText('registered successfully');
+  await expect(page.locator('#status-msg')).toContainText('installed');
 });
 
 const tabCases = [
@@ -206,7 +207,7 @@ test('registration refreshes the open library and supplies detected sites to bui
   await registration.locator('#name-in').fill('Browser acceptance thiol');
   await expect(registration.locator('#btn-register')).toBeEnabled();
   await registration.locator('#btn-register').click();
-  await expect(registration.locator('#status-msg')).toContainText('registered successfully');
+  await expect(registration.locator('#status-msg')).toContainText('installed');
   await expect(registration.locator('#status-msg')).toBeVisible();
   await expect(registration.locator('#btn-register')).toBeDisabled();
   await registration.screenshot({ path: testInfo.outputPath('registered-monomer.png'), animations: 'disabled' });
@@ -243,14 +244,70 @@ test('registration refreshes the open library and supplies detected sites to bui
   await capture(page, testInfo, 'registered-built-reimported');
 });
 
-test('a read-only instance exposes rendering while registration stays unavailable', async ({ page, readonlyApp }) => {
+for (const width of [1440, 390]) test(`public monomer onboarding stays private and travels with projects at ${width}px`, async ({ page, context, readonlyApp }, testInfo) => {
+  test.setTimeout(90_000);
+  await page.setViewportSize({ width, height: 1000 });
   await page.goto(readonlyApp.url);
-  await expect(page.locator('#register-link')).toBeHidden();
   await render(page, 'A-G');
-  const response = await page.goto(`${readonlyApp.url}/register`);
-  expect(response.status()).toBe(403);
-  expect(await response.json()).toEqual({ detail: 'This monomer library is read-only.' });
-  await expect(page.locator('body')).toContainText('This monomer library is read-only.');
+  await page.locator('#btn-lib').click();
+  await page.locator('#register-link').click();
+  const form = page.frameLocator('#registration-frame');
+  await expect(form.locator('#registration-destination')).toBeHidden();
+  await expect(form.locator('#registration-scope')).toContainText('this tab');
+  await form.locator('#smiles-in').fill('N[C@@H](CCCS)C(=O)O');
+  await form.locator('#btn-preview').click();
+  await expect(form.locator('#detected-display')).toContainText('thiol');
+  const symbol = `TabThiol${width}`;
+  await form.locator('#abbr-in').fill(symbol);
+  await form.locator('#name-in').fill('Temporary thiol');
+  await expect(form.locator('#btn-register')).toHaveText('Add to this tab');
+  await form.locator('#btn-register').click();
+  await expect(form.locator('#status-msg.ok')).toContainText(`${symbol} added to this tab`);
+  await page.screenshot({ path: testInfo.outputPath('temporary-monomer-added.png'), animations: 'disabled' });
+  await expect(form.locator('#registration-done')).toBeInViewport();
+  await form.locator('#registration-done').click();
+  await expect(page.locator('#registration-dialog')).not.toBeVisible();
+  await expect(page.locator('#cabiln-input')).toHaveValue('A-G');
+  await expect(page.locator(`.lib-row[data-abbr="${symbol}"]`)).toBeVisible();
+  await render(page, symbol);
+  await page.locator('#btn-build').click();
+  await selectChip(page, 0, 'left', symbol);
+  await site(page, 'left', 4);
+  await tile(page, 'C', 'right');
+  await site(page, 'right', 4);
+  await connect(page);
+  const source = await page.locator('#cabiln-input').inputValue();
+  const download = page.waitForEvent('download');
+  await page.locator('#btn-project-save').click();
+  const project = JSON.parse(await fs.readFile(await (await download).path(), 'utf8'));
+  expect(project.monomers.map(item => item.abbr)).toEqual([symbol]);
+  expect(await page.evaluate(() => localStorage.getItem('cabiln.draft.v1'))).not.toContain(symbol);
+  await page.evaluate(() => {
+    const saved = JSON.parse(sessionStorage.getItem('cabiln.monomers.v1'));
+    saved.token = 'expired-server-token';
+    sessionStorage.setItem('cabiln.monomers.v1', JSON.stringify(saved));
+  });
+  await page.reload();
+  await page.locator('#btn-restore-draft').click();
+  await expect(page.locator('#cabiln-input')).toHaveValue(source);
+  await expect(page.locator('#cabiln-input')).toHaveClass('ok');
+
+  const other = await context.newPage();
+  await other.goto(readonlyApp.url);
+  await other.locator('#btn-lib').click();
+  await other.locator('#lib-search').fill(symbol);
+  await expect(other.locator('#lib-list')).toHaveText('No matches');
+  await other.locator('#project-upload').setInputFiles({
+    name: 'custom.cabiln.json', mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(project)),
+  });
+  await expect(other.locator('#project-status')).toContainText('Project opened');
+  await expect(other.locator('#cabiln-input')).toHaveValue(source);
+  await expect(other.locator('#cabiln-input')).toHaveClass('ok');
+  await expect(other.locator(`.lib-row[data-abbr="${symbol}"]`)).toBeVisible();
+  const shared = await page.request.get(`${readonlyApp.url}/monomers`);
+  expect((await shared.json()).some(item => item.abbr === symbol)).toBe(false);
+  await other.close();
 });
 
 test('registration explains empty input, failed previews and duplicate names with keyboard recovery', async ({ page, app }) => {
@@ -277,7 +334,7 @@ test('registration explains empty input, failed previews and duplicate names wit
   await expect(page.locator('#preview-canvas svg')).toBeVisible();
   await page.locator('#abbr-in').fill('KeyboardGly');
   await page.locator('#abbr-in').press('Enter');
-  await expect(page.locator('#status-msg.ok')).toContainText('KeyboardGly registered');
+  await expect(page.locator('#status-msg.ok')).toContainText('KeyboardGly installed');
   await expect(page.locator('#btn-register')).toBeDisabled();
 });
 

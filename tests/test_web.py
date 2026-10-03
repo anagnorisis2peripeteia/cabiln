@@ -634,10 +634,12 @@ def registration_payload(client):
 
 
 def test_public_app_cannot_modify_library(client):
-    assert client.get("/capabilities").json() == {"registration": False}
+    assert client.get("/capabilities").json() == {
+        "registration": False, "session_registration": True,
+    }
     response = client.post("/register_monomer", json=registration_payload(client))
     assert response.status_code == 403
-    assert client.get("/register").status_code == 403
+    assert client.get("/register").status_code == 200
 
 
 def test_registration_is_atomic_and_duplicate_safe(writable_library):

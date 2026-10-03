@@ -155,6 +155,10 @@ class MonomerLibrary {
       if (!request.current()) return;
       if (!Array.isArray(data)) throw new Error(data.error || 'Invalid monomer library');
       const version = res.headers?.get('X-Library-Version') || null;
+      const note = document.getElementById('lib-session-note');
+      const count = CabilnLibrary.monomers.length;
+      note.hidden = !count;
+      note.textContent = `${count} custom monomer${count === 1 ? '' : 's'} in this tab · Save project to keep them`;
       this.status.hidden = true;
       if (this.loaded && version && version === this.version) return;
       if (this.loaded) this.onChanged();

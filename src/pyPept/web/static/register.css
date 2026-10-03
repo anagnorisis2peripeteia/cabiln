@@ -137,6 +137,7 @@ summary { min-height: 32px; padding: 8px 0; cursor: pointer; color: var(--muted)
 }
 #status-msg.ok { display: block; background: var(--success-surface); border: 1px solid var(--success); color: var(--success); }
 #status-msg.err { display: block; background: var(--error-surface); border: 1px solid var(--error); color: var(--error); }
+#registration-done { margin-top: 12px; }
 
 @media (max-width: 520px) {
   header { padding: 12px; }

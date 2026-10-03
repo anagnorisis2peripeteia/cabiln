@@ -511,6 +511,7 @@ test('layout errors retain the document without persisting as scientific warning
   assert.equal(ui.run('projectSnapshot().document.warning'), '');
   const restored = page('builder.js', { storedDraft: saved });
   const restoring = restored.element('btn-restore-draft').click();
+  await flush();
   const validation = latestRequest(restored, '/prepare_project');
   validation.resolve({ project: JSON.parse(validation.options.body).project });
   await restoring;
@@ -1288,24 +1289,71 @@ test('registration uses preview chemistry and permits a second record after succ
   ui.requests[1].resolve({ total: 1000 });
   await pending;
   assert.equal(ui.element('btn-register').disabled, true);
-  assert.equal(ui.element('btn-register').textContent, '✓ Registered');
+  assert.equal(ui.element('btn-register').textContent, '✓ Added');
   await ui.input('smiles-in', 'CC(=O)O');
   await ui.input('abbr-in', 'TestAc');
   pending = ui.element('preview-form').dispatchEvent({ type: 'submit' });
   ui.requests[2].resolve({ ...preview, chuckles: 'CC([2*])=O' });
   await pending;
   assert.equal(ui.element('btn-register').disabled, false);
-  assert.equal(ui.element('btn-register').textContent, 'Register monomer');
+  assert.equal(ui.element('btn-register').textContent, 'Install monomer');
 });
 
-test('Register is shown only when the server explicitly enables registration', async () => {
+test('Add monomer is available with a temporary library on a read-only server', async () => {
   for (const registration of [false, true]) {
     const ui = page('builder.js', { registration });
     await new Promise(setImmediate);
-    assert.equal(ui.element('register-link').hidden, !registration);
+    assert.equal(ui.element('register-link').hidden, false);
   }
   const html = fs.readFileSync(path.join(__dirname, '../src/pyPept/web/static/index.html'), 'utf8');
   assert.match(html, /<a\b[^>]*id="register-link"[^>]*\bhidden\b/);
+});
+
+test('temporary definitions stay in tab storage and concurrent expired requests share recovery', async () => {
+  const ui = page('builder.js');
+  const monomer = { abbr: 'TabBlock', name: 'Private block', chuckles: '[1*]NCC(=O)[2*]',
+    chem_types: { 1: 'backbone_n', 2: 'backbone_c' }, leaving: { 1: '[H]', 2: '[OH]' } };
+  const staging = ui.run(`CabilnLibrary.stage([${JSON.stringify(monomer)}])`);
+  latestRequest(ui, '/session_library').resolve({ token: 'first', monomers: [monomer] });
+  const candidate = await staging;
+  assert.equal(ui.sessionStorage.has('cabiln.monomers.v1'), false, 'Staging does not change the tab');
+  ui.run(`CabilnLibrary.commit(${JSON.stringify(candidate)}, false); recordDocument({text: 'TabBlock'}); saveDraft()`);
+  assert.equal(ui.storage.has('cabiln.monomers.v1'), false);
+  assert.equal(ui.storage.has('cabiln.draft.v1'), false);
+  assert.equal(JSON.parse(ui.sessionStorage.get('cabiln.draft.v1')).monomers[0].abbr, 'TabBlock');
+  const pending = ui.run("Promise.all([fetchCalculation('/monomers'), fetchCalculation('/monomer_svg?abbr=TabBlock')])");
+  for (const route of ['/monomers', '/monomer_svg?abbr=TabBlock']) {
+    const request = latestRequest(ui, route);
+    assert.equal(request.options.headers['X-Cabiln-Library'], 'first');
+    request.resolve({ error: 'Expired' }, false, 409, { 'X-Cabiln-Library-Expired': '1' });
+  }
+  await flush();
+  assert.equal(ui.requests.filter(item => item.url === '/session_library').length, 2);
+  latestRequest(ui, '/session_library').resolve({ token: 'restored', monomers: [monomer] });
+  await flush();
+  for (const route of ['/monomers', '/monomer_svg?abbr=TabBlock']) {
+    const request = latestRequest(ui, route);
+    assert.equal(request.options.headers['X-Cabiln-Library'], 'restored');
+    request.resolve({});
+  }
+  await pending;
+  assert.equal(JSON.parse(ui.sessionStorage.get('cabiln.monomers.v1')).token, 'restored');
+});
+
+test('rejected project validation does not commit its staged custom monomers', async () => {
+  const ui = page('builder.js');
+  const project = portableProject();
+  project.monomers = [{ abbr: 'ProjectBlock', name: 'Project block' }];
+  const opening = ui.run(`validateAndOpenProject(${JSON.stringify(project)})`);
+  latestRequest(ui, '/session_library').resolve({ token: 'candidate', monomers: project.monomers });
+  await flush();
+  const validation = latestRequest(ui, '/validate_project');
+  assert.equal(validation.options.headers['X-Cabiln-Library'], 'candidate');
+  validation.resolve({ error: 'Project rules differ' }, false, 409);
+  await opening;
+  assert.equal(ui.run('CabilnLibrary.temporary'), false);
+  assert.equal(ui.sessionStorage.has('cabiln.monomers.v1'), false);
+  assert.match(ui.element('project-status').textContent, /current work is unchanged/);
 });
 
 const binding = {
@@ -1644,6 +1692,7 @@ test('clearing browser storage preserves work and Undo, cancels recovery, and st
     reference_original: project.reference.original, context: project.context } });
   assert.equal(ui.element('btn-restore-draft').hidden, false);
   const restoring = ui.element('btn-restore-draft').click();
+  await flush();
   const validation = latestRequest(ui, '/prepare_project');
   await ui.element('btn-clear-draft').click();
   validation.resolve({ project });
@@ -1793,6 +1842,7 @@ test('ordinary browser drafts are prepared against their saved binding before re
       drafts: project.drafts, reference: project.reference.text,
       reference_original: project.reference.original, context: binding } });
     const restoring = ui.element('btn-restore-draft').click();
+    await flush();
     assert.equal(latestRequest(ui, '/validate_project'), undefined);
     const prepare = latestRequest(ui, '/prepare_project');
     if (mismatch) prepare.resolve({ error: 'Library definitions changed. Use the original library.' }, false);

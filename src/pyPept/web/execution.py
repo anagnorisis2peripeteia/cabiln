@@ -1,6 +1,6 @@
 """Bounded production chemistry jobs and request diagnostics.
 
-Only an explicit set of read/edit HTTP operations crosses this process seam.
+Only an explicit set of chemistry HTTP operations crosses this process seam.
 Workers execute the existing ASGI application, preserving its validation. There
 is no waiting job queue: admission, IPC sizes, deadlines and worker replacement
 belong to the parent. Static assets, health and administrator writes stay local.
@@ -33,7 +33,7 @@ CHEMISTRY_ROUTES = frozenset({
         "/verify", "/convert_notation", "/smiles_to_cabiln", "/to_cabiln",
         "/preview_monomer", "/insert_bond", "/insert_backbone", "/validate_bond",
         "/replacement_options", "/replace_monomer",
-        "/prepare_project", "/validate_project",
+        "/prepare_project", "/validate_project", "/session_library",
     )
 } | {("GET", path) for path in (
     "/monomers", "/monomer_svg", "/monomer_rgroups", "/reactions",
@@ -228,6 +228,8 @@ async def _serve_worker_request(app, message, config):
         ],
         "client": ("127.0.0.1", 0), "server": ("worker", 0),
     }
+    if message.get("session_destination"):
+        scope["cabiln.session_destination"] = message["session_destination"]
     sent = False
     output = bytearray()
     status, headers = 500, []
@@ -255,7 +257,10 @@ async def _serve_worker_request(app, message, config):
     diagnostic_token = _diagnostics.set(diagnostics)
     try:
         try:
-            await app(scope, receive, send)
+            from pyPept.monomer_store import use_library
+
+            with use_library(message.get("library_path")):
+                await app(scope, receive, send)
         except ExecutionFailure as exc:
             response = JSONResponse({"error": str(exc)}, status_code=exc.status)
             status, headers = response.status_code, response.raw_headers
@@ -288,7 +293,7 @@ def _worker_main(sock, config):
         from .readiness import check_readiness
 
         app = create_app(allow_registration=False, execution_mode="local",
-                         observability=False)
+                         observability=False, session_libraries=False)
         if config.memory_mb:
             if not sys.platform.startswith("linux"):
                 raise RuntimeError("Worker memory enforcement requires Linux")
@@ -471,7 +476,7 @@ class ChemistryExecutor:
 
     async def execute(
         self, *, method, path, query=b"", body=b"", request_id=None,
-        content_type="application/json",
+        content_type="application/json", library_path=None, session_destination=None,
     ):
         if (method, path) not in CHEMISTRY_ROUTES:
             raise ExecutionFailure("Operation is not a chemistry job", 400)
@@ -495,6 +500,8 @@ class ChemistryExecutor:
             "body": base64.b64encode(body).decode("ascii"),
             "request_id": request_id or uuid.uuid4().hex,
             "content_type": content_type,
+            "library_path": library_path,
+            "session_destination": session_destination,
         }
 
         async def exchange():
@@ -623,6 +630,8 @@ class ExecutionMiddleware:
                 query=scope.get("query_string", b""), body=bytes(body),
                 request_id=_request_id.get(),
                 content_type=content_type,
+                library_path=scope.get("cabiln.library_path"),
+                session_destination=scope.get("cabiln.session_destination"),
             ))
             gone = asyncio.create_task(disconnected())
             try:

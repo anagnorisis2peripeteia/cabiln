@@ -76,6 +76,11 @@ def require_registration(request: Request):
             )
     elif not _is_loopback(request):
         raise HTTPException(403, "Unauthenticated registration is local-only.")
+    require_same_origin(request)
+
+
+def require_same_origin(request):
+    """Reject browser writes originating from another site."""
     if request.method not in {"GET", "HEAD"}:
         origin = request.headers.get("origin")
         if origin:

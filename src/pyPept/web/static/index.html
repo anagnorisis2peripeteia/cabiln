@@ -26,8 +26,7 @@
         <input type="file" id="project-upload" class="sr-only" accept=".cabiln.json,.json,application/json" aria-label="Open a CABILN project">
       </label>
     </div>
-    <div class="toolbar-group" role="group" aria-label="Help and registration">
-      <a id="register-link" class="hbtn" href="/register" target="_blank" rel="noopener" title="Register a new monomer in a new tab" hidden><svg class="ui-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M8 3v10M3 8h10"/></svg>Register</a>
+    <div class="toolbar-group" role="group" aria-label="Help">
       <button type="button" id="btn-help" class="hbtn" aria-controls="help-panel" aria-expanded="false">Help</button>
       <a id="tutorial-launch" class="hbtn tutorial-start" href="/?tutorial=1" target="_blank" rel="noopener" title="Open guided practice in a separate tab">Tutorial ↗</a>
       <button type="button" id="btn-tutorial" class="hbtn" aria-controls="tutorial-panel" aria-expanded="false" hidden>Tutorial</button>
@@ -41,7 +40,11 @@
   <details><summary>Start a peptide and add a monomer</summary>
     <p>A monomer is one building block; a residue is that block inside your peptide. Type a sequence, choose an Example, or open Build to start.</p>
     <p>In Build, select a residue in the drawing or its tile, then choose Use in the library. Choose a free numbered site on each side. These R-sites are attachment points. Used sites cannot connect again. Preview shows the proposed molecule; Connect applies it. Undo and Redo restore sequence edits.</p>
-    <p>Search the library by abbreviation, name or type. Filter narrows it to compatible attachment sites; Site details shows their chemistry. Stars keep favourites in this browser. Register adds a new monomer when this server allows it.</p>
+    <p>Search the library by abbreviation, name or type. Filter narrows it to compatible attachment sites; Site details shows their chemistry. Stars keep favourites in this browser.</p>
+  </details>
+  <details><summary>Add a custom monomer</summary>
+    <p>In Library, choose Add monomer. Paste its full SMILES, preview the structure and review the numbered attachment sites. If several orientations are offered, choose the intended one. Detection covers supported functional groups; check the structure and stereochemistry before adding it.</p>
+    <p>Give the block a unique abbreviation and name, then choose Add to this tab. Show in Library returns to the builder. Temporary additions stay in this tab; Save project keeps their definitions for later. An enabled local installer also offers Installed library for permanent additions.</p>
   </details>
   <details><summary>Swap a monomer without losing its connections</summary>
     <p>Choose Swap monomer in Build, then select the residue to replace. The library checks every existing connection. Select a replacement, review which numbered sites match, and preview the full product. Apply swap commits it; Undo restores the original. Site numbers can differ, and the preview shows any reformatted notation.</p>
@@ -52,8 +55,8 @@
     <p>Verify compares the peptide with a reference. Paste its SMILES, BILN or HELM, or upload a MOL/SDF file. The result reports whether the molecular structures match.</p>
   </details>
   <details><summary>Save, restore and export your work</summary>
-    <p>Save project downloads your source, notation drafts, original reference and conversion details. Open project checks definitions and reaction rules before loading. PNG exports the drawing; MOL exports the molecular structure.</p>
-    <p>Browser drafts are saved locally as you edit. On return, Restore saved draft loads that work. Practice tabs do not save automatically. Clearing a draft removes the browser copy only; Undo clear restores it until your next edit.</p>
+    <p>Save project downloads your source, notation drafts, original reference, conversion details and temporary monomer definitions. Open project checks definitions and reaction rules before loading. PNG exports the drawing; MOL exports the molecular structure.</p>
+    <p>Browser drafts are saved as you edit. Drafts with temporary monomers stay in this tab; save a project before closing it. After reloading, Restore saved draft loads that work. Practice tabs do not save automatically. Clearing a draft removes the browser copy only; Undo clear restores it until your next edit.</p>
     <div class="help-actions"><button type="button" id="btn-clear-draft" class="hbtn">Clear saved browser draft</button></div>
   </details>
   <details><summary>Drawing, touch and keyboard controls</summary>
@@ -61,7 +64,7 @@
     <p>Tab moves between controls. Enter or Space activates a focused button, including residue and branch tiles. Escape dismisses a monomer preview first, then closes the active panel and returns focus to its button. Dark changes the drawing background; Highlight turns residue highlighting on or off.</p>
   </details>
   <details><summary>Privacy and reporting a problem</summary>
-    <p>Your inputs and uploaded structures go to the server hosting this page for chemistry processing. Browser drafts stay in this browser's local storage; project files download to your device. Avoid putting private structures in public feedback.</p>
+    <p>Your inputs and uploaded structures go to the server hosting this page for chemistry processing. Temporary monomer libraries use private server copies that expire after inactivity. Drafts stay in browser storage; temporary definitions and their drafts use tab storage. Project files download to your device. Avoid putting private structures in public feedback.</p>
     <a class="hbtn" href="https://github.com/anagnorisis2peripeteia/pyPept/issues" target="_blank" rel="noopener noreferrer">Report a problem</a>
   </details>
 </section>
@@ -202,7 +205,10 @@
   <!-- library sidebar (persistent until dismissed) -->
   <aside id="lib-panel" aria-labelledby="lib-title">
     <div id="lib-header">
-      <h2 class="panel-title" id="lib-title">Monomer Library</h2>
+      <div class="lib-heading">
+        <h2 class="panel-title" id="lib-title">Monomer Library</h2>
+        <a id="register-link" class="hbtn" href="/register" aria-haspopup="dialog" hidden>Add monomer</a>
+      </div>
       <input id="lib-search" name="monomer-search" type="search" placeholder="Search abbr / name / type…" autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off" aria-label="Search monomer library" aria-describedby="lib-count">
       <button type="button" id="btn-rxn-filter" class="hbtn" title="Filter by compatible attachment sites" aria-describedby="lib-filter-status" aria-pressed="false"><svg class="ui-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M2 3h12L9 9v4l-2 1V9z"/></svg>Filter</button>
       <button type="button" id="lib-close" class="panel-close" title="Close Library" aria-label="Close monomer library">✕</button>
@@ -217,6 +223,7 @@
       <button type="button" id="lib-reset" class="hbtn" aria-label="Reset library filters" hidden>Reset</button>
     </div>
     <div id="lib-preferences-note" class="lib-note" role="status" hidden></div>
+    <div id="lib-session-note" class="lib-note" role="status" hidden></div>
     <div class="lib-summary">
       <div id="lib-count" role="status" aria-live="polite"></div>
       <label class="lib-details-toggle"><input type="checkbox" id="lib-details"> Site details</label>
@@ -329,6 +336,11 @@
   <div id="tutorial-cue-pointer"><span id="tutorial-cue-label"></span><svg width="24" height="32" viewBox="0 0 24 32"><path /></svg></div>
 </div>
 
+<dialog id="registration-dialog" aria-label="Add a monomer">
+  <button type="button" id="registration-close" class="hbtn" aria-label="Close monomer onboarding">Close</button>
+  <iframe id="registration-frame" title="Monomer onboarding"></iframe>
+</dialog>
+<script src="/static/session-library.js" defer></script>
 <script src="/static/requests.js" defer></script>
 <script src="/static/project.js" defer></script>
 <script src="/static/document.js" defer></script>

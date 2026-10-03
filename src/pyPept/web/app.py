@@ -23,13 +23,15 @@ from .execution import (
     deployment_version,
 )
 from .readiness import check_readiness
-from .security import configure_registration, require_registration
+from .security import configure_registration
+from .session_library import SessionLibraries, SessionLibraryMiddleware
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 SERVER_ID = deployment_version()
 
 
-def create_app(*, allow_registration=None, execution_mode=None, observability=True):
+def create_app(*, allow_registration=None, execution_mode=None, observability=True,
+               session_libraries=True):
     config = ExecutionConfig.from_env(execution_mode)
     if (
         os.environ.get("CABILN_ENV") == "production"
@@ -61,12 +63,15 @@ def create_app(*, allow_registration=None, execution_mode=None, observability=Tr
         finally:
             if app.state.executor is not None:
                 await app.state.executor.close()
+            if app.state.session_libraries is not None:
+                app.state.session_libraries.close()
 
     app = FastAPI(title="CABILN peptide builder", lifespan=lifespan)
     app.state.readiness = {"ready": False}
     app.state.executor = None
     app.state.execution_config = config
     app.state.release = version
+    app.state.session_libraries = SessionLibraries() if session_libraries else None
     app.state.allow_registration = (
         os.environ.get("CABILN_ENABLE_REGISTRATION") == "1"
         if allow_registration is None
@@ -75,6 +80,9 @@ def create_app(*, allow_registration=None, execution_mode=None, observability=Tr
     configure_registration(app, explicit_trusted_local=(allow_registration is True))
     if config.mode == "process":
         app.add_middleware(ExecutionMiddleware, state=app.state, config=config)
+    if session_libraries:
+        app.add_middleware(SessionLibraryMiddleware,
+                           libraries=app.state.session_libraries)
     app.add_middleware(GZipMiddleware, minimum_size=1000, compresslevel=4)
     if observability:
         configure_logging()
@@ -104,13 +112,13 @@ def create_app(*, allow_registration=None, execution_mode=None, observability=Tr
         return FileResponse(STATIC_DIR / "index.html")
 
     @app.get("/register", include_in_schema=False)
-    def register_page(request: Request):
-        require_registration(request)
+    def register_page():
         return FileResponse(STATIC_DIR / "register.html")
 
     @app.get("/capabilities")
     def capabilities():
-        return {"registration": app.state.allow_registration}
+        return {"registration": app.state.allow_registration,
+                "session_registration": app.state.session_libraries is not None}
 
     @app.get("/server_id", response_class=PlainTextResponse)
     def server_id():

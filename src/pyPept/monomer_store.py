@@ -5,6 +5,8 @@ from __future__ import annotations
 import os
 import threading
 from collections import OrderedDict
+from contextlib import contextmanager
+from contextvars import ContextVar
 from copy import deepcopy
 from hashlib import sha256
 from pathlib import Path
@@ -14,10 +16,24 @@ _sdf_cache = {"mols": None, "by_abbr": None, "version": None}
 _sdf_lock = threading.RLock()
 _table_cache = OrderedDict()
 _binding_cache = OrderedDict()
+_selected_library = ContextVar("cabiln_selected_library", default=None)
+
+
+@contextmanager
+def use_library(path):
+    """Select one immutable library for this task and its chemistry calls."""
+    token = _selected_library.set(Path(path) if path is not None else None)
+    try:
+        yield
+    finally:
+        _selected_library.reset(token)
 
 
 def library_path():
     """Return the selected default SDF, optionally outside the installed package."""
+    selected = _selected_library.get()
+    if selected is not None:
+        return selected
     override = os.environ.get("CABILN_MONOMER_LIBRARY")
     if override:
         path = Path(override).expanduser().resolve()

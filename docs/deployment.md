@@ -102,7 +102,12 @@ for limits, worker replacement, readiness and logging.
 
 ## Administrative ingestion and backups
 
-Keep public registration disabled. For an administrative instance, copy the
+Keep writes to the shared public library disabled. Visitors can add temporary
+monomers through Library without enabling administrative registration. Those
+definitions belong to the browser tab and its saved projects; server copies
+are bounded and expire. They require no persistent disk or administrative token.
+
+For an administrative instance, copy the
 bundled `monomers.sdf` and companion `monomers.csv` to a persistent data directory.
 Set these before startup:
 
@@ -114,9 +119,10 @@ CABILN_REGISTRATION_USER=admin
 CABILN_REGISTRATION_TOKEN=<secret of at least 32 characters>
 ```
 
-Supply the secret through the host's secret settings and use HTTPS. Both the
-page and each write authenticate; opening the page does not authorize a later
-unauthenticated write. Cross-origin writes are rejected. Without a token, the
+Supply the secret through the host's secret settings and use HTTPS. Each permanent
+write authenticates before taking a backup and changing the library. The onboarding page itself is public
+for temporary additions; visiting it grants no permission to change the shared
+library. Cross-origin writes are rejected. Without a token, the
 local CLI only enables registration for loopback clients and refuses a public
 bind. Production requires the external library, backup location and token.
 

@@ -73,6 +73,7 @@ flowchart LR
 | `pyPept.web.readiness` | Validate installed data/assets at startup and cache the result |
 | `pyPept.web.projects` | Bind saved source and chemistry evidence to library definitions and canonical conventions |
 | `pyPept.web.security` | Enforce read-only, local, or authenticated administrative registration |
+| `pyPept.web.session_library` | Allocate bounded private library snapshots, isolate requests, and expire unused copies |
 | `pyPept.web.schemas` | Validate request sizes, dimensions, slots, and notation choices |
 | `pyPept.web.builder` | Expose editing and attachment inspection through HTTP |
 | `pyPept.web.conversion` | Expose format conversion through HTTP |
@@ -258,6 +259,7 @@ graph transformations; they do not predict experimental reaction feasibility.
 | `library.js` | Discovery, library revisions, filters, favourites, recent choices and hover previews |
 | `requests.js` | Cancellation, current-request checks, waits, calculation retries and response errors |
 | `project.js` | Saved-project format and document/context validation helpers |
+| `session-library.js` | Tab definitions, temporary server tokens, expiry recovery and staged project imports |
 | `ui.js` | Viewport controls, panels, loading/retry presentation and status details |
 | `tutorial.js` | Practice lessons, action cues, live prerequisites and completed-edit review |
 
@@ -321,6 +323,28 @@ read nor write it. Connection suggestions reuse the library's reaction index;
 only an explicit selection starts validation, and Apply still assembles the edit.
 
 ## HTTP and execution
+
+Temporary monomers use immutable copies of the selected SDF and its aliases.
+`monomer_store.use_library` selects a snapshot through a context variable;
+parsing, rendering, recognition and Build keep using the same library interface.
+Existing version keys separate their caches. Requests carry an opaque library
+token; only the parent resolves it to a path passed through the private worker
+transport. Submitted headers and bodies cannot select a filesystem path.
+
+`POST /session_library` validates a complete set of tab definitions in the
+chemistry worker before publishing its snapshot. The shared library is never
+written. Names cannot shadow existing definitions or aliases; identical installed
+definitions permit project reuse. Each app keeps at most 32 snapshots and expires
+idle copies after an hour. Active requests retain their copies. A tab recreates
+an expired copy from session storage, including after a deployment. Normal
+calculations send only the token. Definitions travel once per library revision.
+
+Saved projects embed the tab definitions. Opening first stages a merged library,
+then validates the project against that snapshot. The browser commits both only
+after validation, preserving the current document and library on failure.
+Temporary drafts and definitions use session storage; an explicit project
+download makes them durable. The local installer remains a separate guarded
+operation that writes the selected SDF atomically.
 
 HTTP chemistry handlers are synchronous functions. Local mode uses FastAPI's
 thread pool. Production sends allowed operations to bounded child processes,

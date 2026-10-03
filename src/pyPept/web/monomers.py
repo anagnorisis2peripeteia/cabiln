@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from hashlib import sha256
 
-from fastapi import APIRouter, Query, Request, Response
+from fastapi import APIRouter, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
 
 from pyPept.attachments import attachment_sites
 from pyPept.monomer_store import (
@@ -23,6 +24,10 @@ from .schemas import _PreviewReq, _RegisterReq
 from .security import require_registration
 
 router = APIRouter()
+
+
+class SessionLibraryRequest(BaseModel):
+    monomers: list[_RegisterReq] = Field(min_length=1, max_length=64)
 
 
 @router.get("/monomers")
@@ -253,32 +258,40 @@ def preview_monomer(req: _PreviewReq):
 def register_monomer(req: _RegisterReq, request: Request):
     require_registration(request)
     try:
-        from rdkit.Chem import rdDepictor
+        return {"ok": True, "total": register_molecule(registration_record(req))}
 
-        # The preview payload describes every detected site. Bulk import also
-        # accepts standalone records and sparse declarations from older SDFs.
-        if not req.leaving:
-            raise ValueError(
-                "Each attachment needs a unique numbered dummy with one neighbour"
-            )
-        if set(req.chem_types) != set(req.leaving):
-            raise ValueError(
-                "Attachment slots, chemistry types, and leaving groups must match"
-            )
-        rdDepictor.SetPreferCoordGen(True)
-        mol = monomer_record(
-            req.chuckles,
-            req.abbr,
-            req.leaving,
-            req.chem_types,
-            name=req.name,
-            m_type=req.type,
-            m_subtype=req.subtype,
-            minimum_slots=6,
-            activation_policy=req.activation_policy,
-        )
+    except Exception as exc:
+        return error_response(exc)
 
-        return {"ok": True, "total": register_molecule(mol)}
 
+def registration_record(req):
+    from rdkit.Chem import rdDepictor
+
+    if not req.leaving:
+        raise ValueError("Each attachment needs a unique numbered dummy with one neighbour")
+    if set(req.chem_types) != set(req.leaving):
+        raise ValueError("Attachment slots, chemistry types, and leaving groups must match")
+    if max(req.leaving) > 64:
+        raise ValueError("Web registration supports attachment numbers R1 to R64")
+    rdDepictor.SetPreferCoordGen(True)
+    return monomer_record(
+        req.chuckles, req.abbr, req.leaving, req.chem_types,
+        name=req.name, m_type=req.type, m_subtype=req.subtype,
+        minimum_slots=6, activation_policy=req.activation_policy,
+    )
+
+
+@router.post("/session_library")
+def session_library(req: SessionLibraryRequest, request: Request):
+    from .session_library import write_overlay
+
+    destination = request.scope.get("cabiln.session_destination")
+    if destination is None:
+        raise HTTPException(403, "No temporary library was allocated for this request")
+    try:
+        token, path = destination
+        total = write_overlay(path, [registration_record(item) for item in req.monomers])
+        return {"token": token, "total": total,
+                "monomers": [item.model_dump(mode="json") for item in req.monomers]}
     except Exception as exc:
         return error_response(exc)

@@ -1,4 +1,4 @@
-"""Administrative access must be checked on both page and write requests."""
+"""Public onboarding does not grant permission to change the installed library."""
 
 import base64
 
@@ -22,9 +22,15 @@ def protected(monkeypatch):
         yield client
 
 
-def test_authenticated_administration_page(protected):
+def test_public_onboarding_keeps_installed_writes_authenticated(protected):
     for headers in ({}, authorization("wrong"), {"authorization": "Basic @@@"}):
-        response = protected.get("/register", headers=headers)
+        page = protected.get("/register", headers=headers)
+        assert page.status_code == 200
+        assert TOKEN not in page.text
+        response = protected.post("/register_monomer", headers=headers, json={
+            "abbr": "TestAuth", "name": "test", "chuckles": "invalid",
+            "chem_types": {}, "leaving": {},
+        })
         assert response.status_code == 401
         assert "Basic" in response.headers["www-authenticate"]
         assert TOKEN not in response.text
@@ -36,7 +42,11 @@ def test_remote_address_cannot_use_local_registration(monkeypatch):
     with TestClient(
         create_app(allow_registration=True), client=("198.51.100.42", 1234)
     ) as client:
-        assert client.get("/register").status_code == 403
+        assert client.get("/register").status_code == 200
+        assert client.post("/register_monomer", json={
+            "abbr": "TestAuth", "name": "test", "chuckles": "invalid",
+            "chem_types": {}, "leaving": {},
+        }).status_code == 403
     with TestClient(
         create_app(allow_registration=True), client=("127.0.0.1", 1234)
     ) as client:

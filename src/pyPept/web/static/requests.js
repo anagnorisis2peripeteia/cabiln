@@ -1,4 +1,4 @@
-// Only use this for calculations that do not write library definitions.
+// Retry calculations and temporary snapshots, never installed-library writes.
 // Allow routine worker renewal as well as overlapping previews and renders.
 async function fetchCalculation(url, { timeoutMs, ...options } = {}) {
   if (timeoutMs !== undefined) {
@@ -7,7 +7,7 @@ async function fetchCalculation(url, { timeoutMs, ...options } = {}) {
   }
   for (let attempt = 0; ; attempt++) {
     if (options.signal?.aborted) throw options.signal.reason || new Error('Request cancelled');
-    const response = await fetch(url, options);
+    const response = await CabilnLibrary.request(url, options);
     const retryAfter = Number(response.headers?.get('Retry-After'));
     if (response.status !== 503 || attempt >= 4 || !Number.isFinite(retryAfter) ||
         retryAfter <= 0 || retryAfter > 2) return response;
@@ -29,12 +29,13 @@ async function fetchCalculation(url, { timeoutMs, ...options } = {}) {
   }
 }
 
-function postCalculation(url, body, signal) {
+function postCalculation(url, body, signal, library) {
   return fetchCalculation(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
     signal,
+    library,
   });
 }
 

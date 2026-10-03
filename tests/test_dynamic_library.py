@@ -1,5 +1,6 @@
 """An unseen monomer must flow from detection through palette to assembly."""
 
+from concurrent.futures import ThreadPoolExecutor
 import pytest
 from hypothesis import given, strategies as st
 from fastapi.testclient import TestClient
@@ -36,6 +37,105 @@ def post(client, route, payload):
 def smiles_of_render(client, notation):
     data = post(client, "/render", {"cabiln": notation})
     return Chem.MolToSmiles(Chem.MolFromMolBlock(data["mol_block"]))
+
+
+@pytest.mark.parametrize('mode', ['local', 'process'])
+def test_temporary_libraries_isolate_definitions_and_cover_builder_consumers(library_app, mode):
+    path, _ = library_app
+    original = path.read_bytes()
+    with TestClient(create_app(allow_registration=False, execution_mode=mode,
+                               observability=False)) as client:
+        libraries = []
+        for source in ('N[C@@H](CCCS)C(=O)O', 'N[C@@H](CCCO)C(=O)O'):
+            preview = post(client, '/preview_monomer', {'smiles': source})
+            entry = {key: preview[key] for key in ('chuckles', 'chem_types', 'leaving', 'activation_policy')}
+            snapshot = post(client, '/session_library', {'monomers': [
+                {**entry, 'abbr': 'MyBlock', 'name': 'Private block'},
+            ]})
+            libraries.append((snapshot, source))
+        assert libraries[0][0]['token'] != libraries[1][0]['token']
+        for snapshot, source in [*libraries, libraries[0]]:
+            client.headers['X-Cabiln-Library'] = snapshot['token']
+            assert smiles_of_render(client, 'MyBlock') == Chem.MolToSmiles(Chem.MolFromSmiles(source))
+            palette = client.get('/monomers')
+            assert palette.headers['cache-control'] == 'no-store'
+            assert 'MyBlock' in {row['abbr'] for row in palette.json()}
+            assert client.get('/monomer_svg', params={'abbr': 'MyBlock'}).status_code == 200
+            slots = client.get('/monomer_rgroups', params={'abbr': 'MyBlock'}).json()['rgroups']
+            assert {site['slot'] for site in slots} == {1, 2, 3, 4}
+            built = post(client, '/insert_backbone', {
+                'cabiln': 'ac-G-am', 'after_idx': 1, 'new_abbr': 'MyBlock',
+            })['result']
+            rendered = post(client, '/render', {'cabiln': built})
+            assert any(residue['abbr'] == 'MyBlock' for residue in rendered['residues'])
+            recognized = post(client, '/smiles_to_cabiln', {'smiles': source})
+            assert 'MyBlock' in recognized['cabiln']
+            converted = post(client, '/convert_notation', {'cabiln': built, 'target': 'bracket'})
+            assert smiles_of_render(client, converted['result']) == smiles_of_render(client, built)
+        del client.headers['X-Cabiln-Library']
+        if mode == 'local':
+            def concurrent_render(item):
+                snapshot, source = item
+                response = client.post('/render', json={'cabiln': 'MyBlock'},
+                                       headers={'X-Cabiln-Library': snapshot['token']})
+                assert response.status_code == 200, response.text
+                actual = Chem.MolFromMolBlock(response.json()['mol_block'])
+                assert Chem.MolToSmiles(actual) == Chem.MolToSmiles(Chem.MolFromSmiles(source))
+            with ThreadPoolExecutor(max_workers=4) as pool:
+                list(pool.map(concurrent_render, libraries * 3))
+        assert client.post('/render', json={'cabiln': 'MyBlock'}).status_code == 400
+        assert 'MyBlock' not in {row['abbr'] for row in client.get('/monomers').json()}
+        assert client.post('/register_monomer', json=libraries[0][0]['monomers'][0]).status_code == 403
+    assert path.read_bytes() == original
+
+
+def test_temporary_library_expiry_recovery_and_rejected_uploads(library_app):
+    path, client = library_app
+    original = path.read_bytes()
+    preview = post(client, '/preview_monomer', {'smiles': 'NCC(=O)O'})
+    entry = {key: preview[key] for key in ('chuckles', 'chem_types', 'leaving')}
+    entry.update(abbr='MyGly', name='Private glycine')
+    snapshot = post(client, '/session_library', {'monomers': [entry]})
+    libraries = client.app.state.session_libraries
+    libraries.entries[snapshot['token']].touched = -libraries.lifetime
+    expired = client.get('/monomers', headers={'X-Cabiln-Library': snapshot['token']})
+    assert expired.status_code == 409
+    assert expired.headers['X-Cabiln-Library-Expired'] == '1'
+    restored = post(client, '/session_library', {'monomers': snapshot['monomers']})
+    assert restored['token'] != snapshot['token']
+    for entries in ([{**entry, 'abbr': 'G'}], [entry, entry],
+                    [{**entry, 'leaving': {}}], [entry] * 65):
+        response = client.post('/session_library', json={'monomers': entries})
+        assert response.status_code in {400, 422}, response.text
+    rejected = client.post('/session_library', json={'monomers': [entry]},
+                           headers={'Origin': 'https://another.example'})
+    assert rejected.status_code == 403
+    assert len(libraries.entries) == 1
+    assert path.read_bytes() == original
+
+
+def test_temporary_definitions_travel_with_projects_without_installing(library_app):
+    path, client = library_app
+    original = path.read_bytes()
+    preview = post(client, '/preview_monomer', {'smiles': 'N[C@@H](CCCS)C(=O)O'})
+    entry = {key: preview[key] for key in ('chuckles', 'chem_types', 'leaving')}
+    entry.update(abbr='TravelBlock', name='Travelling monomer')
+    snapshot = post(client, '/session_library', {'monomers': [entry]})
+    client.headers['X-Cabiln-Library'] = snapshot['token']
+    project = post(client, '/prepare_project', {'project': {
+        'format': 'cabiln-project', 'version': 1,
+        'document': {'text': 'ac-TravelBlock-am', 'notation': 'cabiln'},
+        'monomers': snapshot['monomers'],
+    }})['project']
+    client.app.state.session_libraries.close()
+    del client.headers['X-Cabiln-Library']
+    assert client.post('/validate_project', json={'project': project}).status_code == 409
+    restored = post(client, '/session_library', {'monomers': project['monomers']})
+    client.headers['X-Cabiln-Library'] = restored['token']
+    assert post(client, '/validate_project', {'project': project})['valid']
+    project['monomers'][0]['name'] = 'Changed definition'
+    assert client.post('/validate_project', json={'project': project}).status_code == 409
+    assert path.read_bytes() == original
 
 
 def test_equivalent_dopa_imports_build_the_same_numbered_product(library_app):

@@ -250,6 +250,7 @@ def _compatible(saved, current, signatures, name=None, *, preparing=False):
 
 def validate_project(project, *, preparing=False):
     project, documents, reference = _shape(project)
+    _check_embedded_monomers(project)
     current = project_context()
     signatures = {name: _resolution(doc) for name, doc in documents.items()}
     signatures["reference"] = _reference_resolution(reference)
@@ -314,6 +315,34 @@ def validate_project(project, *, preparing=False):
     if len(json.dumps(project, allow_nan=False).encode("utf-8")) > MAX_PROJECT_BYTES:
         raise ProjectError("Prepared project exceeds the 2 MiB limit")
     return project
+
+
+def _check_embedded_monomers(project):
+    """Saved definitions must describe the library used for this validation."""
+    from pydantic import ValidationError
+    from pyPept.library_quality import definition_hash
+    from pyPept.monomer_store import _load_sdf
+    from .monomers import SessionLibraryRequest, registration_record
+
+    records = project.get("monomers", [])
+    if not isinstance(records, list):
+        raise ProjectError("Project monomers must be a list")
+    if not records:
+        return
+    try:
+        entries = SessionLibraryRequest(monomers=records).monomers
+        _, library = _load_sdf()
+        names = set()
+        for entry in entries:
+            if entry.abbr in names:
+                raise ProjectError(f"Duplicate project monomer '{entry.abbr}'")
+            names.add(entry.abbr)
+            mol = registration_record(entry)
+            if entry.abbr not in library or definition_hash(mol) != definition_hash(library[entry.abbr]):
+                raise ProjectError(f"Restore the project's definition of '{entry.abbr}' before opening it")
+        project["monomers"] = [entry.model_dump(mode="json") for entry in entries]
+    except ValidationError as exc:
+        raise ProjectError("Project contains an invalid monomer definition") from exc
 
 
 def _project_error(exc):

@@ -31,6 +31,9 @@ expandable details. Chromium additionally exercises real multi-finger pan/pinch
 through CDP; that input API is unavailable in the other engines.
 Registration checks empty input, failed previews, duplicate abbreviations and
 keyboard submission. Draft clearing checks recovery before a new edit.
+Public onboarding also checks desktop/mobile dialogs, a temporary monomer's
+detected sites and Build use, tab isolation, expired-token recovery after reload,
+and project transfer into a fresh tab without changing the shared library.
 Project saves check recovery through Retry after prolonged capacity pressure.
 The accessibility journey runs axe-core on empty, library, selected residue,
 Swap, Help, Examples, preview, Verify, light drawing, tutorial, narrow layout and

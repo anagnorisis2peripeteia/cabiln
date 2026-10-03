@@ -57,7 +57,7 @@ class Element {
   scrollIntoView() {}
 }
 
-function page(script, { registration = false, storedDraft = null, now = Date.now } = {}) {
+function page(script, { registration = script === 'register.js', storedDraft = null, now = Date.now } = {}) {
   const elements = new Map();
   const element = id => {
     if (!elements.has(id)) {
@@ -85,6 +85,12 @@ function page(script, { registration = false, storedDraft = null, now = Date.now
     setItem: (key, value) => storage.set(key, value),
     removeItem: key => storage.delete(key),
   };
+  const sessionStorage = new Map();
+  window.sessionStorage = {
+    getItem: key => sessionStorage.get(key) || null,
+    setItem: (key, value) => sessionStorage.set(key, value),
+    removeItem: key => sessionStorage.delete(key),
+  };
   const context = vm.createContext({
     console, AbortController, AbortSignal, Blob, URLSearchParams,
     Date: class extends Date { static now() { return now(); } },
@@ -102,7 +108,7 @@ function page(script, { registration = false, storedDraft = null, now = Date.now
     setInterval() {},
     fetch(url, options = {}) {
       if (url === '/capabilities') {
-        return Promise.resolve({ ok: true, json: async () => ({ registration }) });
+        return Promise.resolve({ ok: true, json: async () => ({ registration, session_registration: true }) });
       }
       return new Promise((resolve, reject) => {
         requests.push({
@@ -121,7 +127,7 @@ function page(script, { registration = false, storedDraft = null, now = Date.now
     vm.runInContext(fs.readFileSync(dependency, 'utf8'), context, { filename: dependency });
   }
   return {
-    element, requests, downloads, storage,
+    element, requests, downloads, storage, sessionStorage,
     run: source => vm.runInContext(source, context),
     async input(id, value) {
       element(id).value = value;

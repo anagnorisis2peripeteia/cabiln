@@ -4,17 +4,18 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#18191c">
-<title>Register monomer — CABILN</title>
+<title>Add monomer — CABILN</title>
 <link rel="stylesheet" href="/static/theme.css">
 <link rel="stylesheet" href="/static/register.css">
 </head>
 <body>
 <header>
-  <h1 class="title">Register monomer <span>CABILN · pyPept</span></h1>
-  <a href="/"><svg class="ui-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M7 3L2 8l5 5M2 8h12"/></svg>Back to renderer</a>
+  <h1 class="title">Add monomer <span>CABILN · pyPept</span></h1>
+  <a id="registration-return" href="/"><svg class="ui-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M7 3L2 8l5 5M2 8h12"/></svg>Back to Library</a>
 </header>
 
 <main class="page">
+  <p id="registration-scope" class="field-help">Custom monomers stay in this tab. Save a project to keep them after closing it.</p>
   <form id="preview-form" class="card" aria-labelledby="smiles-step" novalidate>
     <h2 id="smiles-step">1. Enter SMILES</h2>
     <div class="field">
@@ -29,7 +30,7 @@
   <div id="preview-section" hidden>
     <section class="card" aria-labelledby="preview-step">
       <h2 id="preview-step">2. Review attachment sites</h2>
-      <p class="field-help">The numbered markers match the R-sites listed below. These are where the block can connect; check that they match your intended monomer.</p>
+      <p class="field-help">The numbered markers match the R-sites listed below. Check their positions and stereochemistry. Detection covers supported functional groups; it cannot identify every possible reaction site.</p>
       <fieldset id="attachment-choices" hidden>
         <legend>Choose the intended attachments</legend>
         <p class="field-help" id="attachment-choice-help"></p>
@@ -46,7 +47,7 @@
     </section>
 
     <form id="registration-form" class="card" aria-labelledby="metadata-step">
-      <h2 id="metadata-step">3. Name and register</h2>
+      <h2 id="metadata-step">3. Name and add</h2>
       <div class="field-row">
         <div class="field">
           <label for="abbr-in">Abbreviation (required)</label>
@@ -57,6 +58,13 @@
           <label for="name-in">Full name (required)</label>
           <input id="name-in" name="monomer-name" type="text" placeholder="e.g. Maleimidoglycine" autocomplete="off" required>
         </div>
+      </div>
+      <div id="registration-destination" class="field" hidden>
+        <label for="destination-in">Save to</label>
+        <select id="destination-in">
+          <option value="session">This tab only</option>
+          <option value="installed">Installed library</option>
+        </select>
       </div>
       <div class="field-row">
         <div class="field">
@@ -71,7 +79,7 @@
           <label for="subtype-in">Subtype</label>
           <select id="subtype-in" name="subtype">
             <option value="natural">Natural</option>
-            <option value="modified">Modified</option>
+            <option value="modified" selected>Modified</option>
             <option value="cap">Cap</option>
             <option value="protecting">Protecting group</option>
             <option value="label">Label</option>
@@ -80,12 +88,14 @@
         </div>
       </div>
       <p id="registration-guide" class="field-help">Preview the molecule, then enter an abbreviation and full name.</p>
-      <button type="submit" class="btn btn-success" id="btn-register" disabled aria-describedby="registration-guide">Register monomer</button>
+      <button type="submit" class="btn btn-success" id="btn-register" disabled aria-describedby="registration-guide">Add to this tab</button>
       <div id="status-msg" role="status" aria-live="polite" aria-atomic="true"></div>
+      <button type="button" class="btn btn-primary" id="registration-done" hidden>Show in Library</button>
     </form>
   </div>
 </main>
 
+<script src="/static/session-library.js" defer></script>
 <script src="/static/requests.js" defer></script>
 <script src="/static/ui.js" defer></script>
 <script src="/static/register.js" defer></script>

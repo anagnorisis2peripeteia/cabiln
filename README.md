@@ -119,7 +119,9 @@ selections so you can retry.
 Browser drafts retain the sequence, format drafts and reference. After reloading,
 choose **Restore saved draft** to recover them. **Save project** downloads a
 portable file; **Open project** checks its saved definitions and chemistry before
-replacing current work. Help groups instructions by task, including storage and
+replacing current work. Projects include custom monomers added in this tab.
+Drafts that use a temporary library stay in the tab's session storage; save a
+project before closing the tab to retain them. Help groups instructions by task, including storage and
 **Clear saved browser draft**. **Undo clear** recovers that copy until the next edit.
 Undo remains available when browser storage is unavailable; use **Save project**
 to keep the session outside the browser.
@@ -189,14 +191,29 @@ Library monomers can supply stereochemistry omitted by the input; the result
 and web app report this. Verify distinguishes an exact match from compatibility
 with incomplete input stereochemistry. Different tautomers are not exact matches.
 
-## Register monomers
+## Add monomers
 
-The public app's library is read-only. Enable registration on a trusted local
-instance with:
+Open **Library → Add monomer**, enter the full SMILES, review the detected sites,
+and give the block a unique abbreviation and name. **Show in Library** returns
+to the builder with the new block selected in the search results. New monomers
+work in rendering, highlighting, Build, reaction filters and recognition.
+
+On the public app, additions belong to the current browser tab. Other tabs and
+users keep their own libraries. Reloading retains the definitions when tab
+storage is available. **Save project** includes them in the downloaded file;
+opening that file restores them without installing anything on the server.
+Conflicting names are rejected before the current document or library changes.
+Each tab supports up to 64 custom monomers, totalling at most 4,096 template atoms.
+The shared hosted library remains read-only.
+
+To install monomers permanently on a trusted local instance, start it with:
 
 ```bash
 cabiln --enable-registration
 ```
+
+The form then offers **Installed library** as well as **This tab only**.
+Installation persists across restarts and uses the same library as the CLI.
 
 Preview detects attachment sites before registration. Review its numbered markers
 beside the naming form; **Generated notation** contains the detected CHUCKLES.
@@ -226,8 +243,10 @@ The SDF must already exist. Put a companion `monomers.csv` beside it to retain
 custom synonyms. CLI ingestion and web registration use the same selected
 library. Reopen the palette or return to its browser window to discover new
 records without restarting the server. Reaction filters and attachment buttons
-use the same chemistry detection as assembly. Supporting a new reaction can
-require additional reaction definitions and detection rules.
+use the same chemistry detection as assembly. Detection is not exhaustive:
+unknown functional groups and unsupported reactions need additional detection
+rules and reaction definitions. Review the structure and numbered sites before
+adding a new monomer; a valid connection is not a prediction of synthesis yield.
 
 A configured backup directory receives a snapshot before each registration;
 a failed backup prevents the write. Remote administration requires authentication

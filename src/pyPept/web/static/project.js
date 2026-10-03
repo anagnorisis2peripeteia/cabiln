@@ -102,9 +102,13 @@ const CabilnProject = (() => {
     if (requireContext && !object(value.context)) {
       throw new Error('This project has no library binding. Open its JSON to recover the source text, then save a new project.');
     }
+    if (value.monomers != null && (!Array.isArray(value.monomers) || value.monomers.length > 64)) {
+      throw new Error('A project can contain up to 64 custom monomers.');
+    }
     return { format: FORMAT, version: VERSION,
       document: document(value.document), drafts: drafts(value.drafts),
       reference: reference(value.reference, value.context), context: clone(value.context),
+      monomers: clone(value.monomers || []),
       saved_at: typeof value.saved_at === 'string' ? value.saved_at : '' };
   }
 
