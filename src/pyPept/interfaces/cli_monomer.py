@@ -98,6 +98,7 @@ def register_monomer(smiles, symbol, name=None, m_type='aa', m_subtype='modified
     mol = monomer_record(
         result.chuckles, symbol, result.leaving, result.chem_types,
         name=name, m_type=m_type, m_subtype=m_subtype,
+        activation_policy=result.policy,
     )
 
     register_molecule(mol, sdf_path=sdf_path)
@@ -141,6 +142,9 @@ examples:
         '--sdf', default=None, metavar='PATH',
         help="Path to the library SDF to append to.  "
              "Defaults to CABILN_MONOMER_LIBRARY or the installed monomers.sdf.")
+    parser.add_argument(
+        '--backbone', nargs=2, type=int, metavar=('R1_ATOM', 'R2_ATOM'),
+        help='Select a backbone using zero-based atom indices in the input SMILES.')
 
     args = parser.parse_args()
 
@@ -164,6 +168,7 @@ examples:
             m_type=args.m_type,
             m_subtype=args.m_subtype,
             sdf_path=sdf_path,
+            backbone_indices=dict(zip((1, 2), args.backbone)) if args.backbone else None,
         )
     except ActivationError as exc:
         print(f"ERROR: Pre-activation failed: {exc}", file=sys.stderr)

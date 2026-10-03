@@ -27,12 +27,18 @@ numbers by one in a temporary copy. Their original slots and structures remain
 unchanged. This comparison accommodates the historical numbering convention;
 it does not migrate a library or user document.
 
-The current activation baseline is 994 exact matches, 66 matches under that
-legacy comparison, 66 mismatches, and two activation failures (`Hsl`, `TATA`).
+The current activation baseline is 951 exact matches, 64 matches under that
+legacy comparison, 101 mismatches, ten definitions requiring an orientation
+choice, and two activation failures (`Hsl`, `TATA`).
 The audit records every expected and observed template. It also checks whether
 reactivation preserves the complete standalone isomeric structure. Preserved
 structures with different selected sites or numbering produce informational
 notes. Legacy numbering alone also produces a note.
+An orientation choice is informational: the stored definition already states
+its intended sites. Its audit record lists the possible reactivation templates.
+Canonical R4+ numbering and detection of secondary-amine sites can differ from
+older stored assignments without changing their standalone structures. No
+bundled template or shipped example is renumbered by this policy change.
 
 There are 55 definitions with warnings. Counts overlap: 47 have unspecified
 tetrahedral stereo, eight have reviewed identity concerns, two lack some leaving
@@ -65,12 +71,13 @@ read as evidence that its chemistry has been reviewed. A changed fingerprint can
 status of another record with the same label. Unsupported enhanced stereo also
 cannot inherit a fingerprint produced by plain-SMILES normalization.
 
-`audit_version` names the fingerprint/audit convention. Version 2 binds the full
-name and records severity, standalone preservation and curated findings.
+`audit_version` names the fingerprint/audit convention. Version 3 retains the full
+name, severity, standalone preservation and curated findings, and records
+explicit reactivation orientation choices under `canonical-sites-v1`.
 The manifest records its
-generating RDKit version for provenance; its definition hashes and all per-record
-facts have also been compared on the supported Python 3.9 and 3.13 environments
-with their installed RDKit versions. A future canonical-SMILES change that alters
+generating RDKit version for provenance. CI compares the per-record baseline on
+the supported Python 3.9, 3.11 and 3.13 environments with their installed RDKit
+versions. A future canonical-SMILES change that alters
 a hash fails the audit regression and makes that runtime definition unreviewed
 until checked. No cross-version scientific identity guarantee is implied.
 

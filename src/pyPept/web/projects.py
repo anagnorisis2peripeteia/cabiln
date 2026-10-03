@@ -229,10 +229,10 @@ def _compatible(saved, current, signatures, name=None, *, preparing=False):
         return
     if not isinstance(binding, dict) or any(
         binding.get(key) != current["library_binding"][key]
-        for key in ("reactions", "caps")
+        for key in ("reactions", "caps", "site_chemistry")
     ):
         raise ProjectError(
-            "Project reaction rules differ from this installation. Use its original "
+            "Project chemistry rules differ from this installation. Use its original "
             "library/release or open and verify the source as a new document.",
             "project_binding_mismatch",
         )

@@ -1,5 +1,5 @@
 {
-  "audit_version": "cabiln-library-quality-v2",
+  "audit_version": "cabiln-library-quality-v3",
   "generated_with_rdkit": "2026.03.6",
   "library_sha256": "b74f799bfcf03cfcb54ebb65cdf2ed81077e95cb50621773c0d0c0a6a2b286a5",
   "records": {
@@ -236,35 +236,26 @@
     },
     "5FM": {
       "activation": {
-        "differences": [
-          "template",
-          "leaving_groups"
+        "choices": [
+          "[1*]c1c(O[4*])ccc2c1Oc1cc(O[5*])ccc1C21OC(=O)c2cc(N3C(=O)C=C([6*])C3=O)ccc21",
+          "[1*]c1cc2c(cc1O[4*])Oc1cc(O[5*])ccc1C21OC(=O)c2cc(N3C(=O)C=C([6*])C3=O)ccc21",
+          "[1*]c1cc(O[4*])cc2c1C1(OC(=O)c3cc(N4C(=O)C=C([6*])C4=O)ccc31)c1ccc(O[5*])cc1O2",
+          "[1*]c1cc(N2C(=O)C=C([6*])C2=O)cc2c1C1(OC2=O)c2ccc(O[4*])cc2Oc2cc(O[5*])ccc21",
+          "[1*]c1cc2c(cc1N1C(=O)C=C([6*])C1=O)C(=O)OC21c2ccc(O[4*])cc2Oc2cc(O[5*])ccc21",
+          "[1*]c1c(N2C(=O)C=C([6*])C2=O)ccc2c1C(=O)OC21c2ccc(O[4*])cc2Oc2cc(O[5*])ccc21"
         ],
         "expected_leaving": {
           "4": "[H]"
         },
         "expected_template": "[4*]C1=CC(=O)N(c2ccc3c(c2)C(=O)OC32c3ccc(O)cc3Oc3cc(O)ccc32)C1=O",
-        "observed_leaving": {
-          "1": "[H]",
-          "4": "[H]",
-          "5": "[H]",
-          "6": "[H]"
-        },
-        "observed_template": "[1*]c1cc(O[4*])cc2c1C1(OC(=O)c3cc(N4C(=O)C=C([6*])C4=O)ccc31)c1ccc(O[5*])cc1O2",
-        "preserves_standalone": true,
-        "status": "mismatch"
+        "status": "orientation_required"
       },
       "definition_hash": "e2467f350413211b1ae7cf305693dc9b86e9f54fdc9dd0adb86d7086cbf550e8",
       "issues": [
         {
-          "code": "activation_exception",
-          "differences": [
-            "template",
-            "leaving_groups"
-          ],
-          "message": "The stored attachment sites are preserved; automatic detection chooses different sites or numbers.",
-          "severity": "info",
-          "status": "mismatch"
+          "code": "activation_orientation",
+          "message": "Stored attachment sites are explicit. Automatic re-ingestion needs a backbone or cap orientation choice.",
+          "severity": "info"
         }
       ]
     },
@@ -438,7 +429,9 @@
     },
     "ADMA": {
       "activation": {
-        "differences": [],
+        "differences": [
+          "template"
+        ],
         "expected_leaving": {
           "1": "[H]",
           "2": "[OH]",
@@ -454,12 +447,22 @@
           "4": "[H]",
           "5": "[H]"
         },
-        "observed_template": "[1*]N([3*])[C@H](CCCN([4*])C(=N[5*])N(C)C)C([2*])=O",
+        "observed_template": "[1*]N([3*])[C@H](CCCN([5*])C(=N[4*])N(C)C)C([2*])=O",
         "preserves_standalone": true,
-        "status": "match"
+        "status": "mismatch"
       },
       "definition_hash": "5cd60986ae2c359a5323265db516119f9280290ab4d5770f5309523084c5096b",
-      "issues": []
+      "issues": [
+        {
+          "code": "activation_exception",
+          "differences": [
+            "template"
+          ],
+          "message": "The stored attachment sites are preserved; automatic detection chooses different sites or numbers.",
+          "severity": "info",
+          "status": "mismatch"
+        }
+      ]
     },
     "AEEA": {
       "activation": {
@@ -484,7 +487,9 @@
     },
     "AMCALys": {
       "activation": {
-        "differences": [],
+        "differences": [
+          "template"
+        ],
         "expected_leaving": {
           "1": "[H]",
           "2": "[OH]",
@@ -502,101 +507,83 @@
           "5": "[H]",
           "6": "[H]"
         },
-        "observed_template": "[1*]N([3*])[C@@H](CCCCN([5*])C(=O)Cc1c(C)c2ccc(N([4*])[6*])cc2oc1=O)C([2*])=O",
+        "observed_template": "[1*]N([3*])[C@@H](CCCCN([4*])C(=O)Cc1c(C)c2ccc(N([5*])[6*])cc2oc1=O)C([2*])=O",
         "preserves_standalone": true,
-        "status": "match"
+        "status": "mismatch"
       },
       "definition_hash": "45f22d5d1d036db56b8f7d9a866ff79d27ad9f4558c8ce45e289664ff91e52eb",
-      "issues": []
+      "issues": [
+        {
+          "code": "activation_exception",
+          "differences": [
+            "template"
+          ],
+          "message": "The stored attachment sites are preserved; automatic detection chooses different sites or numbers.",
+          "severity": "info",
+          "status": "mismatch"
+        }
+      ]
     },
     "AZDye488": {
       "activation": {
-        "differences": [
-          "template",
-          "leaving_groups"
+        "choices": [
+          "[1*][N+]([3*])=c1ccc2c(-c3ccc(C(=O)N([6*])CCCCCN4C(=O)C=C([7*])C4=O)cc3C([2*])=O)c3ccc(N([4*])[5*])c(S(=O)(=O)[O-])c3oc-2c1S(=O)(=O)O",
+          "[1*]N([3*])c1ccc2c(-c3ccc(C(=O)N([4*])CCCCCN4C(=O)C=C([5*])C4=O)cc3C([2*])=O)c3ccc(=[N+]([6*])[7*])c(S(=O)(=O)O)c-3oc2c1S(=O)(=O)[O-]"
         ],
         "expected_leaving": {
           "4": "[H]"
         },
         "expected_template": "[4*]C1=CC(=O)N(CCCCCNC(=O)c2ccc(-c3c4ccc(=[NH2+])c(S(=O)(=O)O)c-4oc4c(S(=O)(=O)[O-])c(N)ccc34)c(C(=O)O)c2)C1=O",
-        "observed_leaving": {
-          "1": "[H]",
-          "2": "[OH]",
-          "3": "[H]",
-          "4": "[H]",
-          "5": "[H]",
-          "6": "[H]",
-          "7": "[H]"
-        },
-        "observed_template": "[1*]N([3*])c1ccc2c(-c3ccc(C(=O)N([5*])CCCCCN4C(=O)C=C([6*])C4=O)cc3C([2*])=O)c3ccc(=[N+]([4*])[7*])c(S(=O)(=O)O)c-3oc2c1S(=O)(=O)[O-]",
-        "preserves_standalone": true,
-        "status": "mismatch"
+        "status": "orientation_required"
       },
       "definition_hash": "3b9e7027101c7a5fe68902ea78bd4859e3e8dbb4da7b0ce70452ec61d2fb7a47",
       "issues": [
         {
-          "code": "activation_exception",
-          "differences": [
-            "template",
-            "leaving_groups"
-          ],
-          "message": "The stored attachment sites are preserved; automatic detection chooses different sites or numbers.",
-          "severity": "info",
-          "status": "mismatch"
+          "code": "activation_orientation",
+          "message": "Stored attachment sites are explicit. Automatic re-ingestion needs a backbone or cap orientation choice.",
+          "severity": "info"
         }
       ]
     },
     "AZDye550": {
       "activation": {
-        "differences": [
-          "template",
-          "leaving_groups"
+        "choices": [
+          "[1*]c1cccc2c1N(CCCCCC(=O)N([4*])CCN1C(=O)C=C([5*])C1=O)C(=CC=CC1=[N+](C)c3ccccc3C1(C)C)C2(C)C",
+          "[1*]c1ccc2c(c1)N(CCCCCC(=O)N([4*])CCN1C(=O)C=C([5*])C1=O)C(=CC=CC1=[N+](C)c3ccccc3C1(C)C)C2(C)C",
+          "[1*]c1ccc2c(c1)C(C)(C)C(=CC=CC1=[N+](C)c3ccccc3C1(C)C)N2CCCCCC(=O)N([4*])CCN1C(=O)C=C([5*])C1=O",
+          "[1*]c1cccc2c1C(C)(C)C(=CC=CC1=[N+](C)c3ccccc3C1(C)C)N2CCCCCC(=O)N([4*])CCN1C(=O)C=C([5*])C1=O",
+          "[1*]c1cccc2c1C(C)(C)C(C=CC=C1N(CCCCCC(=O)N([4*])CCN3C(=O)C=C([5*])C3=O)c3ccccc3C1(C)C)=[N+]2C",
+          "[1*]c1ccc2c(c1)C(C)(C)C(C=CC=C1N(CCCCCC(=O)N([4*])CCN3C(=O)C=C([5*])C3=O)c3ccccc3C1(C)C)=[N+]2C",
+          "[1*]c1ccc2c(c1)[N+](C)=C(C=CC=C1N(CCCCCC(=O)N([4*])CCN3C(=O)C=C([5*])C3=O)c3ccccc3C1(C)C)C2(C)C",
+          "[1*]c1cccc2c1[N+](C)=C(C=CC=C1N(CCCCCC(=O)N([4*])CCN3C(=O)C=C([5*])C3=O)c3ccccc3C1(C)C)C2(C)C"
         ],
         "expected_leaving": {
           "4": "[H]"
         },
         "expected_template": "[4*]C1=CC(=O)N(CCNC(=O)CCCCCN2C(=CC=CC3=[N+](C)c4ccccc4C3(C)C)C(C)(C)c3ccccc32)C1=O",
-        "observed_leaving": {
-          "1": "[H]",
-          "4": "[H]",
-          "5": "[H]"
-        },
-        "observed_template": "[1*]c1cccc2c1N(CCCCCC(=O)N([4*])CCN1C(=O)C=C([5*])C1=O)C(=CC=CC1=[N+](C)c3ccccc3C1(C)C)C2(C)C",
-        "preserves_standalone": true,
-        "status": "mismatch"
+        "status": "orientation_required"
       },
       "definition_hash": "745b4fe536bb1d62d709009a87e4af52e462f0ba605b00d289d2f1307a3a6428",
       "issues": [
         {
-          "code": "activation_exception",
-          "differences": [
-            "template",
-            "leaving_groups"
-          ],
-          "message": "The stored attachment sites are preserved; automatic detection chooses different sites or numbers.",
-          "severity": "info",
-          "status": "mismatch"
+          "code": "activation_orientation",
+          "message": "Stored attachment sites are explicit. Automatic re-ingestion needs a backbone or cap orientation choice.",
+          "severity": "info"
         }
       ]
     },
     "AZDye647": {
       "activation": {
-        "differences": [
-          "template",
-          "leaving_groups"
+        "choices": [
+          "[2*]S(=O)(=O)c1ccc2c(c1)C(C)(C)C(C=CC=CC=C1N(CCCS(=O)(=O)[O-])c3ccc(S(=O)(=O)O)cc3C1(C)CCCCC(=O)N([4*])CCN1C(=O)C=C([5*])C1=O)=[N+]2CCCS(=O)(=O)O",
+          "[2*]S(=O)(=O)CCC[N+]1=C(C=CC=CC=C2N(CCCS(=O)(=O)[O-])c3ccc(S(=O)(=O)O)cc3C2(C)CCCCC(=O)N([4*])CCN2C(=O)C=C([5*])C2=O)C(C)(C)c2cc(S(=O)(=O)O)ccc21",
+          "[2*]S(=O)(=O)c1ccc2c(c1)C(C)(CCCCC(=O)N([4*])CCN1C(=O)C=C([5*])C1=O)C(=CC=CC=CC1=[N+](CCCS(=O)(=O)O)c3ccc(S(=O)(=O)O)cc3C1(C)C)N2CCCS(=O)(=O)[O-]"
         ],
         "expected_leaving": {
           "4": "[H]"
         },
         "expected_template": "[4*]C1=CC(=O)N(CCNC(=O)CCCCC2(C)C(=CC=CC=CC3=[N+](CCCS(=O)(=O)O)c4ccc(S(=O)(=O)O)cc4C3(C)C)N(CCCS(=O)(=O)[O-])c3ccc(S(=O)(=O)O)cc32)C1=O",
-        "observed_leaving": {
-          "2": "[OH]",
-          "4": "[H]",
-          "5": "[H]"
-        },
-        "observed_template": "[2*]S(=O)(=O)c1ccc2c(c1)C(C)(CCCCC(=O)N([4*])CCN1C(=O)C=C([5*])C1=O)C(=CC=CC=CC1=[N+](CCCS(=O)(=O)O)c3ccc(S(=O)(=O)O)cc3C1(C)C)N2CCCS(=O)(=O)[O-]",
-        "preserves_standalone": true,
-        "status": "mismatch"
+        "status": "orientation_required"
       },
       "definition_hash": "1c95d56a8bb7f40a44b4e33e8ddc282ed19337f748ecaa1741904a2b600ba8e2",
       "issues": [
@@ -607,14 +594,9 @@
           "severity": "warning"
         },
         {
-          "code": "activation_exception",
-          "differences": [
-            "template",
-            "leaving_groups"
-          ],
-          "message": "The stored attachment sites are preserved; automatic detection chooses different sites or numbers.",
-          "severity": "info",
-          "status": "mismatch"
+          "code": "activation_orientation",
+          "message": "Stored attachment sites are explicit. Automatic re-ingestion needs a backbone or cap orientation choice.",
+          "severity": "info"
         }
       ]
     },
@@ -1207,7 +1189,9 @@
     },
     "ArgNO2": {
       "activation": {
-        "differences": [],
+        "differences": [
+          "template"
+        ],
         "expected_leaving": {
           "1": "[H]",
           "2": "[OH]",
@@ -1225,16 +1209,28 @@
           "5": "[H]",
           "6": "[H]"
         },
-        "observed_template": "[1*]N([3*])[C@H](CCCN([4*])C(=N[6*])N([5*])[N+](=O)[O-])C([2*])=O",
+        "observed_template": "[1*]N([3*])[C@H](CCCN([5*])C(=N[4*])N([6*])[N+](=O)[O-])C([2*])=O",
         "preserves_standalone": true,
-        "status": "match"
+        "status": "mismatch"
       },
       "definition_hash": "77e471481a1427a1873f4641d2968b95e1c8480ac7c97e004fcf4d31f24cfc01",
-      "issues": []
+      "issues": [
+        {
+          "code": "activation_exception",
+          "differences": [
+            "template"
+          ],
+          "message": "The stored attachment sites are preserved; automatic detection chooses different sites or numbers.",
+          "severity": "info",
+          "status": "mismatch"
+        }
+      ]
     },
     "Arg_al": {
       "activation": {
-        "differences": [],
+        "differences": [
+          "template"
+        ],
         "expected_leaving": {
           "1": "[H]",
           "2": "[H]",
@@ -1254,12 +1250,22 @@
           "6": "[H]",
           "7": "[H]"
         },
-        "observed_template": "[1*]N([3*])[C@@H](CCCN([5*])C(=N[6*])N([4*])[7*])C([2*])=O",
+        "observed_template": "[1*]N([3*])[C@@H](CCCN([7*])C(=N[4*])N([5*])[6*])C([2*])=O",
         "preserves_standalone": true,
-        "status": "match"
+        "status": "mismatch"
       },
       "definition_hash": "eeb2c27868282bd3a9da7c530f1f72f9a6c9cce06c6e38f7f4b21823d90e27d9",
-      "issues": []
+      "issues": [
+        {
+          "code": "activation_exception",
+          "differences": [
+            "template"
+          ],
+          "message": "The stored attachment sites are preserved; automatic detection chooses different sites or numbers.",
+          "severity": "info",
+          "status": "mismatch"
+        }
+      ]
     },
     "Asp_OAll": {
       "activation": {
@@ -2283,7 +2289,9 @@
     },
     "Cit": {
       "activation": {
-        "differences": [],
+        "differences": [
+          "template"
+        ],
         "expected_leaving": {
           "1": "[H]",
           "2": "[OH]",
@@ -2301,12 +2309,22 @@
           "5": "[H]",
           "6": "[H]"
         },
-        "observed_template": "[1*]N([3*])[C@@H](CCCN([5*])C(=O)N([4*])[6*])C([2*])=O",
+        "observed_template": "[1*]N([3*])[C@@H](CCCN([6*])C(=O)N([4*])[5*])C([2*])=O",
         "preserves_standalone": true,
-        "status": "match"
+        "status": "mismatch"
       },
       "definition_hash": "801cfe1be31ff2e269dedd4fa87ecce3bb7d83c6e5308e21f6eb75067a46a70f",
-      "issues": []
+      "issues": [
+        {
+          "code": "activation_exception",
+          "differences": [
+            "template"
+          ],
+          "message": "The stored attachment sites are preserved; automatic detection chooses different sites or numbers.",
+          "severity": "info",
+          "status": "mismatch"
+        }
+      ]
     },
     "ClAc": {
       "activation": {
@@ -2375,34 +2393,28 @@
     },
     "Cy5Mal": {
       "activation": {
-        "differences": [
-          "template",
-          "leaving_groups"
+        "choices": [
+          "[1*]c1cccc2c1N(CCCCCC(=O)N([4*])CCN1C(=O)C=C([5*])C1=O)C(=CC=CC=CC1=[N+](C)c3ccccc3C1(C)C)C2(C)C",
+          "[1*]c1ccc2c(c1)N(CCCCCC(=O)N([4*])CCN1C(=O)C=C([5*])C1=O)C(=CC=CC=CC1=[N+](C)c3ccccc3C1(C)C)C2(C)C",
+          "[1*]c1ccc2c(c1)C(C)(C)C(=CC=CC=CC1=[N+](C)c3ccccc3C1(C)C)N2CCCCCC(=O)N([4*])CCN1C(=O)C=C([5*])C1=O",
+          "[1*]c1cccc2c1C(C)(C)C(=CC=CC=CC1=[N+](C)c3ccccc3C1(C)C)N2CCCCCC(=O)N([4*])CCN1C(=O)C=C([5*])C1=O",
+          "[1*]c1cccc2c1C(C)(C)C(C=CC=CC=C1N(CCCCCC(=O)N([4*])CCN3C(=O)C=C([5*])C3=O)c3ccccc3C1(C)C)=[N+]2C",
+          "[1*]c1ccc2c(c1)C(C)(C)C(C=CC=CC=C1N(CCCCCC(=O)N([4*])CCN3C(=O)C=C([5*])C3=O)c3ccccc3C1(C)C)=[N+]2C",
+          "[1*]c1ccc2c(c1)[N+](C)=C(C=CC=CC=C1N(CCCCCC(=O)N([4*])CCN3C(=O)C=C([5*])C3=O)c3ccccc3C1(C)C)C2(C)C",
+          "[1*]c1cccc2c1[N+](C)=C(C=CC=CC=C1N(CCCCCC(=O)N([4*])CCN3C(=O)C=C([5*])C3=O)c3ccccc3C1(C)C)C2(C)C"
         ],
         "expected_leaving": {
           "4": "[H]"
         },
         "expected_template": "[4*]C1=CC(=O)N(CCNC(=O)CCCCCN2C(=CC=CC=CC3=[N+](C)c4ccccc4C3(C)C)C(C)(C)c3ccccc32)C1=O",
-        "observed_leaving": {
-          "1": "[H]",
-          "4": "[H]",
-          "5": "[H]"
-        },
-        "observed_template": "[1*]c1cccc2c1N(CCCCCC(=O)N([4*])CCN1C(=O)C=C([5*])C1=O)C(=CC=CC=CC1=[N+](C)c3ccccc3C1(C)C)C2(C)C",
-        "preserves_standalone": true,
-        "status": "mismatch"
+        "status": "orientation_required"
       },
       "definition_hash": "86745185d11a269db5ee9a4ae14d8cef33612d75f5bc6adfc6ed7202ed15c30b",
       "issues": [
         {
-          "code": "activation_exception",
-          "differences": [
-            "template",
-            "leaving_groups"
-          ],
-          "message": "The stored attachment sites are preserved; automatic detection chooses different sites or numbers.",
-          "severity": "info",
-          "status": "mismatch"
+          "code": "activation_orientation",
+          "message": "Stored attachment sites are explicit. Automatic re-ingestion needs a backbone or cap orientation choice.",
+          "severity": "info"
         }
       ]
     },
@@ -2845,7 +2857,9 @@
     },
     "DArg": {
       "activation": {
-        "differences": [],
+        "differences": [
+          "template"
+        ],
         "expected_leaving": {
           "1": "[H]",
           "2": "[OH]",
@@ -2865,12 +2879,22 @@
           "6": "[H]",
           "7": "[H]"
         },
-        "observed_template": "[1*]N([3*])[C@H](CCCN([5*])C(=N[6*])N([4*])[7*])C([2*])=O",
+        "observed_template": "[1*]N([3*])[C@H](CCCN([7*])C(=N[4*])N([5*])[6*])C([2*])=O",
         "preserves_standalone": true,
-        "status": "match"
+        "status": "mismatch"
       },
       "definition_hash": "c15f8eb597b09cc6f8c5a43e6a8050117e52c1448781fdcc16906ed2e46ae95d",
-      "issues": []
+      "issues": [
+        {
+          "code": "activation_exception",
+          "differences": [
+            "template"
+          ],
+          "message": "The stored attachment sites are preserved; automatic detection chooses different sites or numbers.",
+          "severity": "info",
+          "status": "mismatch"
+        }
+      ]
     },
     "DAsn": {
       "activation": {
@@ -3392,7 +3416,9 @@
     },
     "D_ADMA": {
       "activation": {
-        "differences": [],
+        "differences": [
+          "template"
+        ],
         "expected_leaving": {
           "1": "[H]",
           "2": "[OH]",
@@ -3408,12 +3434,22 @@
           "4": "[H]",
           "5": "[H]"
         },
-        "observed_template": "[1*]N([3*])[C@@H](CCCN([4*])C(=N[5*])N(C)C)C([2*])=O",
+        "observed_template": "[1*]N([3*])[C@@H](CCCN([5*])C(=N[4*])N(C)C)C([2*])=O",
         "preserves_standalone": true,
-        "status": "match"
+        "status": "mismatch"
       },
       "definition_hash": "8ae0373957432b2c5734974d2eaa284eaf6578a3749d2a10e107117597156ac6",
-      "issues": []
+      "issues": [
+        {
+          "code": "activation_exception",
+          "differences": [
+            "template"
+          ],
+          "message": "The stored attachment sites are preserved; automatic detection chooses different sites or numbers.",
+          "severity": "info",
+          "status": "mismatch"
+        }
+      ]
     },
     "D_Abu": {
       "activation": {
@@ -3551,7 +3587,9 @@
     },
     "D_ArgNO2": {
       "activation": {
-        "differences": [],
+        "differences": [
+          "template"
+        ],
         "expected_leaving": {
           "1": "[H]",
           "2": "[OH]",
@@ -3569,12 +3607,22 @@
           "5": "[H]",
           "6": "[H]"
         },
-        "observed_template": "[1*]N([3*])[C@@H](CCCN([4*])C(=N[6*])N([5*])[N+](=O)[O-])C([2*])=O",
+        "observed_template": "[1*]N([3*])[C@@H](CCCN([5*])C(=N[4*])N([6*])[N+](=O)[O-])C([2*])=O",
         "preserves_standalone": true,
-        "status": "match"
+        "status": "mismatch"
       },
       "definition_hash": "a5e3cdae2fd9fbac820d0143ff13aa750d205f77697efd7d42bfd9130b8a797f",
-      "issues": []
+      "issues": [
+        {
+          "code": "activation_exception",
+          "differences": [
+            "template"
+          ],
+          "message": "The stored attachment sites are preserved; automatic detection chooses different sites or numbers.",
+          "severity": "info",
+          "status": "mismatch"
+        }
+      ]
     },
     "D_Asp_OAll": {
       "activation": {
@@ -3941,7 +3989,9 @@
     },
     "D_Cit": {
       "activation": {
-        "differences": [],
+        "differences": [
+          "template"
+        ],
         "expected_leaving": {
           "1": "[H]",
           "2": "[OH]",
@@ -3959,12 +4009,22 @@
           "5": "[H]",
           "6": "[H]"
         },
-        "observed_template": "[1*]N([3*])[C@H](CCCN([5*])C(=O)N([4*])[6*])C([2*])=O",
+        "observed_template": "[1*]N([3*])[C@H](CCCN([6*])C(=O)N([4*])[5*])C([2*])=O",
         "preserves_standalone": true,
-        "status": "match"
+        "status": "mismatch"
       },
       "definition_hash": "7bedfa5e8f24fd3fa5e17750f95c7ca98b4da2325831d270872ac1ebb30817d7",
-      "issues": []
+      "issues": [
+        {
+          "code": "activation_exception",
+          "differences": [
+            "template"
+          ],
+          "message": "The stored attachment sites are preserved; automatic detection chooses different sites or numbers.",
+          "severity": "info",
+          "status": "mismatch"
+        }
+      ]
     },
     "D_CyanoAla": {
       "activation": {
@@ -4081,7 +4141,9 @@
     },
     "D_Dab_Alloc": {
       "activation": {
-        "differences": [],
+        "differences": [
+          "template"
+        ],
         "expected_leaving": {
           "1": "[H]",
           "2": "[OH]",
@@ -4097,12 +4159,22 @@
           "4": "[H]",
           "5": "[H]"
         },
-        "observed_template": "[1*]N([3*])[C@H](CCN([4*])C(=O)OCC([5*])=C)C([2*])=O",
+        "observed_template": "[1*]N([3*])[C@H](CCN([5*])C(=O)OCC([4*])=C)C([2*])=O",
         "preserves_standalone": true,
-        "status": "match"
+        "status": "mismatch"
       },
       "definition_hash": "d154d5f20cec09d7fbe3bf51219f7d598a8ecb1293c38b94873bb608e290e658",
-      "issues": []
+      "issues": [
+        {
+          "code": "activation_exception",
+          "differences": [
+            "template"
+          ],
+          "message": "The stored attachment sites are preserved; automatic detection chooses different sites or numbers.",
+          "severity": "info",
+          "status": "mismatch"
+        }
+      ]
     },
     "D_Dao": {
       "activation": {
@@ -4156,7 +4228,9 @@
     },
     "D_Dap_Alloc": {
       "activation": {
-        "differences": [],
+        "differences": [
+          "template"
+        ],
         "expected_leaving": {
           "1": "[H]",
           "2": "[OH]",
@@ -4172,12 +4246,22 @@
           "4": "[H]",
           "5": "[H]"
         },
-        "observed_template": "[1*]N([3*])[C@H](CN([4*])C(=O)OCC([5*])=C)C([2*])=O",
+        "observed_template": "[1*]N([3*])[C@H](CN([5*])C(=O)OCC([4*])=C)C([2*])=O",
         "preserves_standalone": true,
-        "status": "match"
+        "status": "mismatch"
       },
       "definition_hash": "71a181c23159fab6292b2803da48df2f68a6b8bc78400eddc92df5ffbc5b6045",
-      "issues": []
+      "issues": [
+        {
+          "code": "activation_exception",
+          "differences": [
+            "template"
+          ],
+          "message": "The stored attachment sites are preserved; automatic detection chooses different sites or numbers.",
+          "severity": "info",
+          "status": "mismatch"
+        }
+      ]
     },
     "D_DhPro34": {
       "activation": {
@@ -4660,7 +4744,10 @@
     },
     "D_Lys_5Me": {
       "activation": {
-        "differences": [],
+        "differences": [
+          "template",
+          "leaving_groups"
+        ],
         "expected_leaving": {
           "1": "[H]",
           "2": "[OH]",
@@ -4670,14 +4757,26 @@
         "observed_leaving": {
           "1": "[H]",
           "2": "[OH]",
-          "3": "[H]"
+          "3": "[H]",
+          "4": "[H]"
         },
-        "observed_template": "[1*]N([3*])[C@H](CCCCNC)C([2*])=O",
+        "observed_template": "[1*]N([3*])[C@H](CCCCN([4*])C)C([2*])=O",
         "preserves_standalone": true,
-        "status": "match"
+        "status": "mismatch"
       },
       "definition_hash": "be7c8df0a6f949fb6842cd86fc04b80544532668a79d806e9f2842391a1ea84d",
-      "issues": []
+      "issues": [
+        {
+          "code": "activation_exception",
+          "differences": [
+            "template",
+            "leaving_groups"
+          ],
+          "message": "The stored attachment sites are preserved; automatic detection chooses different sites or numbers.",
+          "severity": "info",
+          "status": "mismatch"
+        }
+      ]
     },
     "D_Lys_5diMe": {
       "activation": {
@@ -4702,7 +4801,9 @@
     },
     "D_Lys_Alloc": {
       "activation": {
-        "differences": [],
+        "differences": [
+          "template"
+        ],
         "expected_leaving": {
           "1": "[H]",
           "2": "[OH]",
@@ -4718,12 +4819,22 @@
           "4": "[H]",
           "5": "[H]"
         },
-        "observed_template": "[1*]N([3*])[C@H](CCCCN([4*])C(=O)OCC([5*])=C)C([2*])=O",
+        "observed_template": "[1*]N([3*])[C@H](CCCCN([5*])C(=O)OCC([4*])=C)C([2*])=O",
         "preserves_standalone": true,
-        "status": "match"
+        "status": "mismatch"
       },
       "definition_hash": "8a618f02293500e3e5007df42bc3746c2e9a4d02852d310d0193ca3428e4bb4f",
-      "issues": []
+      "issues": [
+        {
+          "code": "activation_exception",
+          "differences": [
+            "template"
+          ],
+          "message": "The stored attachment sites are preserved; automatic detection chooses different sites or numbers.",
+          "severity": "info",
+          "status": "mismatch"
+        }
+      ]
     },
     "D_Lys_Cbz": {
       "activation": {
@@ -4750,7 +4861,10 @@
     },
     "D_Lys_Mtt": {
       "activation": {
-        "differences": [],
+        "differences": [
+          "template",
+          "leaving_groups"
+        ],
         "expected_leaving": {
           "1": "[H]",
           "2": "[OH]",
@@ -4760,14 +4874,26 @@
         "observed_leaving": {
           "1": "[H]",
           "2": "[OH]",
-          "3": "[H]"
+          "3": "[H]",
+          "4": "[H]"
         },
-        "observed_template": "[1*]N([3*])[C@H](CCCCNC(c1ccccc1)(c1ccccc1)c1ccc(C)cc1)C([2*])=O",
+        "observed_template": "[1*]N([3*])[C@H](CCCCN([4*])C(c1ccccc1)(c1ccccc1)c1ccc(C)cc1)C([2*])=O",
         "preserves_standalone": true,
-        "status": "match"
+        "status": "mismatch"
       },
       "definition_hash": "fae2a4d261c66ddaa2aff6ef8aef5bf966aee94bfb9f8000cefb14b2ce599b8b",
-      "issues": []
+      "issues": [
+        {
+          "code": "activation_exception",
+          "differences": [
+            "template",
+            "leaving_groups"
+          ],
+          "message": "The stored attachment sites are preserved; automatic detection chooses different sites or numbers.",
+          "severity": "info",
+          "status": "mismatch"
+        }
+      ]
     },
     "D_Met_S_O": {
       "activation": {
@@ -4836,7 +4962,9 @@
     },
     "D_Nrg": {
       "activation": {
-        "differences": [],
+        "differences": [
+          "template"
+        ],
         "expected_leaving": {
           "1": "[H]",
           "2": "[OH]",
@@ -4856,12 +4984,22 @@
           "6": "[H]",
           "7": "[H]"
         },
-        "observed_template": "[1*]N([3*])[C@H](CCCN([5*])C(=N[6*])N([4*])[7*])C([2*])=O",
+        "observed_template": "[1*]N([3*])[C@H](CCCN([7*])C(=N[4*])N([5*])[6*])C([2*])=O",
         "preserves_standalone": true,
-        "status": "match"
+        "status": "mismatch"
       },
       "definition_hash": "64aaa51912845948223f9e00a21efe8e8dc05df5bb05a4c6ae341af431a0fac2",
-      "issues": []
+      "issues": [
+        {
+          "code": "activation_exception",
+          "differences": [
+            "template"
+          ],
+          "message": "The stored attachment sites are preserved; automatic detection chooses different sites or numbers.",
+          "severity": "info",
+          "status": "mismatch"
+        }
+      ]
     },
     "D_Nva": {
       "activation": {
@@ -4998,7 +5136,9 @@
     },
     "D_Orn_Alloc": {
       "activation": {
-        "differences": [],
+        "differences": [
+          "template"
+        ],
         "expected_leaving": {
           "1": "[H]",
           "2": "[OH]",
@@ -5014,12 +5154,22 @@
           "4": "[H]",
           "5": "[H]"
         },
-        "observed_template": "[1*]N([3*])[C@H](CCCN([4*])C(=O)OCC([5*])=C)C([2*])=O",
+        "observed_template": "[1*]N([3*])[C@H](CCCN([5*])C(=O)OCC([4*])=C)C([2*])=O",
         "preserves_standalone": true,
-        "status": "match"
+        "status": "mismatch"
       },
       "definition_hash": "e33ab8229c028a97d73b43d19ef5232a84a848a3082403d8afee105e571aaf33",
-      "issues": []
+      "issues": [
+        {
+          "code": "activation_exception",
+          "differences": [
+            "template"
+          ],
+          "message": "The stored attachment sites are preserved; automatic detection chooses different sites or numbers.",
+          "severity": "info",
+          "status": "mismatch"
+        }
+      ]
     },
     "D_Orn_Cbz": {
       "activation": {
@@ -5724,7 +5874,9 @@
     },
     "D_Phe_4ureido": {
       "activation": {
-        "differences": [],
+        "differences": [
+          "template"
+        ],
         "expected_leaving": {
           "1": "[H]",
           "2": "[OH]",
@@ -5742,12 +5894,22 @@
           "5": "[H]",
           "6": "[H]"
         },
-        "observed_template": "[1*]N([3*])[C@H](Cc1ccc(N([5*])C(=O)N([4*])[6*])cc1)C([2*])=O",
+        "observed_template": "[1*]N([3*])[C@H](Cc1ccc(N([6*])C(=O)N([4*])[5*])cc1)C([2*])=O",
         "preserves_standalone": true,
-        "status": "match"
+        "status": "mismatch"
       },
       "definition_hash": "abd05e4359b791c0db2549ee1ae35cbb3e050b48d8bb5deb097605e512caf890",
-      "issues": []
+      "issues": [
+        {
+          "code": "activation_exception",
+          "differences": [
+            "template"
+          ],
+          "message": "The stored attachment sites are preserved; automatic detection chooses different sites or numbers.",
+          "severity": "info",
+          "status": "mismatch"
+        }
+      ]
     },
     "D_Phe_F5": {
       "activation": {
@@ -6414,8 +6576,9 @@
     },
     "D_Thr_ol": {
       "activation": {
-        "differences": [
-          "template"
+        "choices": [
+          "[1*]N([3*])[C@H](CO[2*])[C@@H](C)O[4*]",
+          "[1*]N([3*])[C@H](CO[4*])[C@@H](C)O[2*]"
         ],
         "expected_leaving": {
           "1": "[H]",
@@ -6424,26 +6587,14 @@
           "4": "[H]"
         },
         "expected_template": "[1*]N([3*])[C@H](CO[2*])[C@@H](C)O[4*]",
-        "observed_leaving": {
-          "1": "[H]",
-          "2": "[H]",
-          "3": "[H]",
-          "4": "[H]"
-        },
-        "observed_template": "[1*]N([3*])[C@H](CO[4*])[C@@H](C)O[2*]",
-        "preserves_standalone": true,
-        "status": "mismatch"
+        "status": "orientation_required"
       },
       "definition_hash": "3a27abdec65a5826de55b2a5aab564bada01b8218621a699e79c5888ff102f5a",
       "issues": [
         {
-          "code": "activation_exception",
-          "differences": [
-            "template"
-          ],
-          "message": "The stored attachment sites are preserved; automatic detection chooses different sites or numbers.",
-          "severity": "info",
-          "status": "mismatch"
+          "code": "activation_orientation",
+          "message": "Stored attachment sites are explicit. Automatic re-ingestion needs a backbone or cap orientation choice.",
+          "severity": "info"
         }
       ]
     },
@@ -7191,7 +7342,9 @@
     },
     "D_aMeArg": {
       "activation": {
-        "differences": [],
+        "differences": [
+          "template"
+        ],
         "expected_leaving": {
           "1": "[H]",
           "2": "[OH]",
@@ -7211,12 +7364,22 @@
           "6": "[H]",
           "7": "[H]"
         },
-        "observed_template": "[1*]N([3*])[C@](C)(CCCN([5*])C(=N[6*])N([4*])[7*])C([2*])=O",
+        "observed_template": "[1*]N([3*])[C@](C)(CCCN([4*])C(=N[5*])N([6*])[7*])C([2*])=O",
         "preserves_standalone": true,
-        "status": "match"
+        "status": "mismatch"
       },
       "definition_hash": "006d049e2b9da2689e2287f305ee38934404296ea798408b43c16647388769f4",
-      "issues": []
+      "issues": [
+        {
+          "code": "activation_exception",
+          "differences": [
+            "template"
+          ],
+          "message": "The stored attachment sites are preserved; automatic detection chooses different sites or numbers.",
+          "severity": "info",
+          "status": "mismatch"
+        }
+      ]
     },
     "D_aMeAsn": {
       "activation": {
@@ -8275,7 +8438,9 @@
     },
     "D_b3hArg": {
       "activation": {
-        "differences": [],
+        "differences": [
+          "template"
+        ],
         "expected_leaving": {
           "1": "[H]",
           "2": "[OH]",
@@ -8295,12 +8460,22 @@
           "6": "[H]",
           "7": "[H]"
         },
-        "observed_template": "[1*]N([3*])[C@H](CCCN([5*])C(=N[6*])N([4*])[7*])CC([2*])=O",
+        "observed_template": "[1*]N([3*])[C@H](CCCN([7*])C(=N[4*])N([5*])[6*])CC([2*])=O",
         "preserves_standalone": true,
-        "status": "match"
+        "status": "mismatch"
       },
       "definition_hash": "187abbd208e5f8473985a4935b309a010c7dd5425f6a3b3643eba65033a729c9",
-      "issues": []
+      "issues": [
+        {
+          "code": "activation_exception",
+          "differences": [
+            "template"
+          ],
+          "message": "The stored attachment sites are preserved; automatic detection chooses different sites or numbers.",
+          "severity": "info",
+          "status": "mismatch"
+        }
+      ]
     },
     "D_b3hAsn": {
       "activation": {
@@ -8949,7 +9124,10 @@
     },
     "D_b3hTrp": {
       "activation": {
-        "differences": [],
+        "differences": [
+          "template",
+          "leaving_groups"
+        ],
         "expected_leaving": {
           "1": "[H]",
           "2": "[OH]",
@@ -8959,11 +9137,12 @@
         "observed_leaving": {
           "1": "[H]",
           "2": "[OH]",
-          "3": "[H]"
+          "3": "[H]",
+          "4": "[H]"
         },
-        "observed_template": "[1*]N([3*])[C@@H](CC([2*])=O)CC1CNC2CCCCC12",
+        "observed_template": "[1*]N([3*])[C@@H](CC([2*])=O)CC1CN([4*])C2CCCCC12",
         "preserves_standalone": true,
-        "status": "match"
+        "status": "mismatch"
       },
       "definition_hash": "aefa7b7287fe81d1f52c5f11def587b0cb1101b93435f76ad5b9a6c70ed35348",
       "issues": [
@@ -8972,6 +9151,16 @@
           "count": 3,
           "message": "The stored standalone structure leaves tetrahedral stereo unspecified.",
           "severity": "warning"
+        },
+        {
+          "code": "activation_exception",
+          "differences": [
+            "template",
+            "leaving_groups"
+          ],
+          "message": "The stored attachment sites are preserved; automatic detection chooses different sites or numbers.",
+          "severity": "info",
+          "status": "mismatch"
         },
         {
           "code": "identity_review",
@@ -9134,7 +9323,9 @@
     },
     "D_hArg": {
       "activation": {
-        "differences": [],
+        "differences": [
+          "template"
+        ],
         "expected_leaving": {
           "1": "[H]",
           "2": "[OH]",
@@ -9154,12 +9345,22 @@
           "6": "[H]",
           "7": "[H]"
         },
-        "observed_template": "[1*]N([3*])[C@H](CCCCN([5*])C(=N[6*])N([4*])[7*])C([2*])=O",
+        "observed_template": "[1*]N([3*])[C@H](CCCCN([7*])C(=N[4*])N([5*])[6*])C([2*])=O",
         "preserves_standalone": true,
-        "status": "match"
+        "status": "mismatch"
       },
       "definition_hash": "e3d25edb05fdd80b02ec3d4a5de7434546743c542488f8058b606fa09ec3fc7a",
-      "issues": []
+      "issues": [
+        {
+          "code": "activation_exception",
+          "differences": [
+            "template"
+          ],
+          "message": "The stored attachment sites are preserved; automatic detection chooses different sites or numbers.",
+          "severity": "info",
+          "status": "mismatch"
+        }
+      ]
     },
     "D_hArg_Et2": {
       "activation": {
@@ -9221,7 +9422,9 @@
     },
     "D_hCit": {
       "activation": {
-        "differences": [],
+        "differences": [
+          "template"
+        ],
         "expected_leaving": {
           "1": "[H]",
           "2": "[OH]",
@@ -9239,12 +9442,22 @@
           "5": "[H]",
           "6": "[H]"
         },
-        "observed_template": "[1*]N([3*])[C@H](CCCCN([5*])C(=O)N([4*])[6*])C([2*])=O",
+        "observed_template": "[1*]N([3*])[C@H](CCCCN([6*])C(=O)N([4*])[5*])C([2*])=O",
         "preserves_standalone": true,
-        "status": "match"
+        "status": "mismatch"
       },
       "definition_hash": "2b4178a132ceb214c8d35b33bf25a7f49643d2df3c63fc15f5001d807f83f533",
-      "issues": []
+      "issues": [
+        {
+          "code": "activation_exception",
+          "differences": [
+            "template"
+          ],
+          "message": "The stored attachment sites are preserved; automatic detection chooses different sites or numbers.",
+          "severity": "info",
+          "status": "mismatch"
+        }
+      ]
     },
     "D_hCys": {
       "activation": {
@@ -10822,7 +11035,9 @@
     },
     "D_meR": {
       "activation": {
-        "differences": [],
+        "differences": [
+          "template"
+        ],
         "expected_leaving": {
           "1": "[H]",
           "2": "[OH]",
@@ -10840,9 +11055,9 @@
           "6": "[H]",
           "7": "[H]"
         },
-        "observed_template": "[1*]N(C)[C@H](CCCN([5*])C(=N[6*])N([4*])[7*])C([2*])=O",
+        "observed_template": "[1*]N(C)[C@H](CCCN([4*])C(=N[5*])N([6*])[7*])C([2*])=O",
         "preserves_standalone": true,
-        "status": "legacy_slot_match"
+        "status": "mismatch"
       },
       "definition_hash": "e76898dec179ad56cda5981e15104d3915dd17499fe5eef8483934db5d4fac1f",
       "issues": [
@@ -10856,6 +11071,15 @@
             5,
             6
           ]
+        },
+        {
+          "code": "activation_exception",
+          "differences": [
+            "template"
+          ],
+          "message": "The stored attachment sites are preserved; automatic detection chooses different sites or numbers.",
+          "severity": "info",
+          "status": "mismatch"
         }
       ]
     },
@@ -11305,7 +11529,9 @@
     },
     "Dab_Alloc": {
       "activation": {
-        "differences": [],
+        "differences": [
+          "template"
+        ],
         "expected_leaving": {
           "1": "[H]",
           "2": "[OH]",
@@ -11321,12 +11547,22 @@
           "4": "[H]",
           "5": "[H]"
         },
-        "observed_template": "[1*]N([3*])[C@@H](CCN([4*])C(=O)OCC([5*])=C)C([2*])=O",
+        "observed_template": "[1*]N([3*])[C@@H](CCN([5*])C(=O)OCC([4*])=C)C([2*])=O",
         "preserves_standalone": true,
-        "status": "match"
+        "status": "mismatch"
       },
       "definition_hash": "ec69bb0496cf7fe8e5895a67a689889d0402326ddbfaae3661534718d1cf819b",
-      "issues": []
+      "issues": [
+        {
+          "code": "activation_exception",
+          "differences": [
+            "template"
+          ],
+          "message": "The stored attachment sites are preserved; automatic detection chooses different sites or numbers.",
+          "severity": "info",
+          "status": "mismatch"
+        }
+      ]
     },
     "Dao": {
       "activation": {
@@ -11380,7 +11616,9 @@
     },
     "Dap_Alloc": {
       "activation": {
-        "differences": [],
+        "differences": [
+          "template"
+        ],
         "expected_leaving": {
           "1": "[H]",
           "2": "[OH]",
@@ -11396,12 +11634,22 @@
           "4": "[H]",
           "5": "[H]"
         },
-        "observed_template": "[1*]N([3*])[C@@H](CN([4*])C(=O)OCC([5*])=C)C([2*])=O",
+        "observed_template": "[1*]N([3*])[C@@H](CN([5*])C(=O)OCC([4*])=C)C([2*])=O",
         "preserves_standalone": true,
-        "status": "match"
+        "status": "mismatch"
       },
       "definition_hash": "65cb77abdb64fb8d677c057792332c2d51645eb72f160619f828bae760e66ce0",
-      "issues": []
+      "issues": [
+        {
+          "code": "activation_exception",
+          "differences": [
+            "template"
+          ],
+          "message": "The stored attachment sites are preserved; automatic detection chooses different sites or numbers.",
+          "severity": "info",
+          "status": "mismatch"
+        }
+      ]
     },
     "DecCap": {
       "activation": {
@@ -11668,7 +11916,10 @@
     },
     "Dpm": {
       "activation": {
-        "differences": [],
+        "differences": [
+          "template",
+          "leaving_groups"
+        ],
         "expected_leaving": {
           "1": "[H]",
           "2": "[OH]",
@@ -11683,19 +11934,33 @@
           "2": "[OH]",
           "3": "[H]",
           "4": "[H]",
-          "5": "[OH]",
-          "6": "[H]"
+          "5": "[H]",
+          "6": "[OH]"
         },
-        "observed_template": "[1*]N([3*])C(CCCCC([5*])=O)(C([2*])=O)N([4*])[6*]",
+        "observed_template": "[1*]N([3*])C(CCCCC([6*])=O)(C([2*])=O)N([4*])[5*]",
         "preserves_standalone": true,
-        "status": "match"
+        "status": "mismatch"
       },
       "definition_hash": "22b9fa97f4b2a30ec17ef812b39c211af502105c78c6ef5baba670d3e5723004",
-      "issues": []
+      "issues": [
+        {
+          "code": "activation_exception",
+          "differences": [
+            "template",
+            "leaving_groups"
+          ],
+          "message": "The stored attachment sites are preserved; automatic detection chooses different sites or numbers.",
+          "severity": "info",
+          "status": "mismatch"
+        }
+      ]
     },
     "Dsu": {
       "activation": {
-        "differences": [],
+        "choices": [
+          "[1*]N([3*])[C@@H](CCCCC(C([6*])=O)N([4*])[5*])C([2*])=O",
+          "[1*]N([3*])C(CCCC[C@@H](C([6*])=O)N([4*])[5*])C([2*])=O"
+        ],
         "expected_leaving": {
           "1": "[H]",
           "2": "[OH]",
@@ -11705,17 +11970,7 @@
           "6": "[H]"
         },
         "expected_template": "[1*]N([3*])C(CCCC[C@@H](C([5*])=O)N([4*])[6*])C([2*])=O",
-        "observed_leaving": {
-          "1": "[H]",
-          "2": "[OH]",
-          "3": "[H]",
-          "4": "[H]",
-          "5": "[OH]",
-          "6": "[H]"
-        },
-        "observed_template": "[1*]N([3*])C(CCCC[C@@H](C([5*])=O)N([4*])[6*])C([2*])=O",
-        "preserves_standalone": true,
-        "status": "match"
+        "status": "orientation_required"
       },
       "definition_hash": "e1c5e2bf0fcd471e500517dedf5ff3a613a279afb1636191c2c976ba173ab2aa",
       "issues": [
@@ -11724,6 +11979,11 @@
           "count": 1,
           "message": "The stored standalone structure leaves tetrahedral stereo unspecified.",
           "severity": "warning"
+        },
+        {
+          "code": "activation_orientation",
+          "message": "Stored attachment sites are explicit. Automatic re-ingestion needs a backbone or cap orientation choice.",
+          "severity": "info"
         }
       ]
     },
@@ -11997,7 +12257,10 @@
     },
     "Gla": {
       "activation": {
-        "differences": [],
+        "differences": [
+          "template",
+          "leaving_groups"
+        ],
         "expected_leaving": {
           "1": "[H]",
           "2": "[OH]",
@@ -12010,15 +12273,26 @@
           "1": "[H]",
           "2": "[OH]",
           "3": "[H]",
-          "4": "[OH]",
-          "5": "[H]"
+          "4": "[H]",
+          "5": "[OH]"
         },
-        "observed_template": "[1*]N([3*])[C@@H](CC(C([2*])=O)C([4*])=O)C([5*])=O",
+        "observed_template": "[1*]N([3*])[C@@H](CC(C([2*])=O)C([5*])=O)C([4*])=O",
         "preserves_standalone": true,
-        "status": "match"
+        "status": "mismatch"
       },
       "definition_hash": "099d1fb8dd75fcee8bd9ba76d2b1b1819b99396bf37a45cf049965c317e56f6a",
-      "issues": []
+      "issues": [
+        {
+          "code": "activation_exception",
+          "differences": [
+            "template",
+            "leaving_groups"
+          ],
+          "message": "The stored attachment sites are preserved; automatic detection chooses different sites or numbers.",
+          "severity": "info",
+          "status": "mismatch"
+        }
+      ]
     },
     "Gla_a": {
       "activation": {
@@ -12370,7 +12644,7 @@
           "6": "[H]",
           "7": "[H]"
         },
-        "observed_template": "[1*]O[C@H](CCCN([5*])C(=N[6*])N([4*])[7*])C([2*])=O",
+        "observed_template": "[1*]O[C@H](CCCN([7*])C(=N[4*])N([5*])[6*])C([2*])=O",
         "preserves_standalone": true,
         "status": "mismatch"
       },
@@ -12960,22 +13234,18 @@
     },
     "Hpic": {
       "activation": {
-        "differences": [
-          "template",
-          "leaving_groups"
+        "choices": [
+          "[1*]c1ccnc(O[4*])c1",
+          "[1*]c1ccc(O[4*])nc1",
+          "[1*]c1cccc(O[4*])n1",
+          "[1*]c1cccnc1O[4*]"
         ],
         "expected_leaving": {
           "1": "[H]",
           "2": "[OH]"
         },
         "expected_template": "[1*]c1cccc(O)n1",
-        "observed_leaving": {
-          "1": "[H]",
-          "4": "[H]"
-        },
-        "observed_template": "[1*]c1cccnc1O[4*]",
-        "preserves_standalone": true,
-        "status": "mismatch"
+        "status": "orientation_required"
       },
       "definition_hash": "aebea6eaad7b556673bced7608c901905069ae192be6ab0de5c02d618a088b56",
       "issues": [
@@ -13000,14 +13270,9 @@
           ]
         },
         {
-          "code": "activation_exception",
-          "differences": [
-            "template",
-            "leaving_groups"
-          ],
-          "message": "The stored attachment sites are preserved; automatic detection chooses different sites or numbers.",
-          "severity": "info",
-          "status": "mismatch"
+          "code": "activation_orientation",
+          "message": "Stored attachment sites are explicit. Automatic re-ingestion needs a backbone or cap orientation choice.",
+          "severity": "info"
         },
         {
           "code": "identity_review",
@@ -13122,7 +13387,9 @@
     },
     "Hyl_5xi": {
       "activation": {
-        "differences": [],
+        "differences": [
+          "template"
+        ],
         "expected_leaving": {
           "1": "[H]",
           "2": "[OH]",
@@ -13140,9 +13407,9 @@
           "5": "[H]",
           "6": "[H]"
         },
-        "observed_template": "[1*]N([3*])[C@@H](CCC(CN([4*])[6*])O[5*])C([2*])=O",
+        "observed_template": "[1*]N([3*])[C@@H](CCC(CN([4*])[5*])O[6*])C([2*])=O",
         "preserves_standalone": true,
-        "status": "match"
+        "status": "mismatch"
       },
       "definition_hash": "a335823a9599d4e5c862da691f651f78d3b8cdfe12d0ad23a9e1d13d643f9480",
       "issues": [
@@ -13151,6 +13418,15 @@
           "count": 1,
           "message": "The stored standalone structure leaves tetrahedral stereo unspecified.",
           "severity": "warning"
+        },
+        {
+          "code": "activation_exception",
+          "differences": [
+            "template"
+          ],
+          "message": "The stored attachment sites are preserved; automatic detection chooses different sites or numbers.",
+          "severity": "info",
+          "status": "mismatch"
         }
       ]
     },
@@ -13364,9 +13640,10 @@
     },
     "ImzScaffold": {
       "activation": {
-        "differences": [
-          "template",
-          "leaving_groups"
+        "choices": [
+          "[1*]c1nccn1C",
+          "[1*]c1cn(C)cn1",
+          "[1*]c1cncn1C"
         ],
         "expected_leaving": {
           "4": "[H]",
@@ -13374,24 +13651,14 @@
           "6": "[H]"
         },
         "expected_template": "[4*]c1nc([5*])n(C)c1[6*]",
-        "observed_leaving": {
-          "1": "[H]"
-        },
-        "observed_template": "[1*]c1cncn1C",
-        "preserves_standalone": true,
-        "status": "mismatch"
+        "status": "orientation_required"
       },
       "definition_hash": "0c465050ab2ce9bd37a0446729258cd454b18176fb09e8a9c423e361a15d2229",
       "issues": [
         {
-          "code": "activation_exception",
-          "differences": [
-            "template",
-            "leaving_groups"
-          ],
-          "message": "The stored attachment sites are preserved; automatic detection chooses different sites or numbers.",
-          "severity": "info",
-          "status": "mismatch"
+          "code": "activation_orientation",
+          "message": "Stored attachment sites are explicit. Automatic re-ingestion needs a backbone or cap orientation choice.",
+          "severity": "info"
         }
       ]
     },
@@ -13775,7 +14042,10 @@
     },
     "Lys_5Me": {
       "activation": {
-        "differences": [],
+        "differences": [
+          "template",
+          "leaving_groups"
+        ],
         "expected_leaving": {
           "1": "[H]",
           "2": "[OH]",
@@ -13785,14 +14055,26 @@
         "observed_leaving": {
           "1": "[H]",
           "2": "[OH]",
-          "3": "[H]"
+          "3": "[H]",
+          "4": "[H]"
         },
-        "observed_template": "[1*]N([3*])[C@@H](CCCCNC)C([2*])=O",
+        "observed_template": "[1*]N([3*])[C@@H](CCCCN([4*])C)C([2*])=O",
         "preserves_standalone": true,
-        "status": "match"
+        "status": "mismatch"
       },
       "definition_hash": "03c3175c71d5402ac09113e7d788c9f201fe69392a14ebe394459128abc00bec",
-      "issues": []
+      "issues": [
+        {
+          "code": "activation_exception",
+          "differences": [
+            "template",
+            "leaving_groups"
+          ],
+          "message": "The stored attachment sites are preserved; automatic detection chooses different sites or numbers.",
+          "severity": "info",
+          "status": "mismatch"
+        }
+      ]
     },
     "Lys_5diMe": {
       "activation": {
@@ -13840,7 +14122,9 @@
     },
     "Lys_Alloc": {
       "activation": {
-        "differences": [],
+        "differences": [
+          "template"
+        ],
         "expected_leaving": {
           "1": "[H]",
           "2": "[OH]",
@@ -13856,12 +14140,22 @@
           "4": "[H]",
           "5": "[H]"
         },
-        "observed_template": "[1*]N([3*])[C@@H](CCCCN([4*])C(=O)OCC([5*])=C)C([2*])=O",
+        "observed_template": "[1*]N([3*])[C@@H](CCCCN([5*])C(=O)OCC([4*])=C)C([2*])=O",
         "preserves_standalone": true,
-        "status": "match"
+        "status": "mismatch"
       },
       "definition_hash": "21ee9b5e2cb3c143911b4b2dd9065b7e018a5155912f89cb44c45ee6689abb7f",
-      "issues": []
+      "issues": [
+        {
+          "code": "activation_exception",
+          "differences": [
+            "template"
+          ],
+          "message": "The stored attachment sites are preserved; automatic detection chooses different sites or numbers.",
+          "severity": "info",
+          "status": "mismatch"
+        }
+      ]
     },
     "Lys_Boc": {
       "activation": {
@@ -13957,7 +14251,10 @@
     },
     "Lys_Mtt": {
       "activation": {
-        "differences": [],
+        "differences": [
+          "template",
+          "leaving_groups"
+        ],
         "expected_leaving": {
           "1": "[H]",
           "2": "[OH]",
@@ -13967,14 +14264,26 @@
         "observed_leaving": {
           "1": "[H]",
           "2": "[OH]",
-          "3": "[H]"
+          "3": "[H]",
+          "4": "[H]"
         },
-        "observed_template": "[1*]N([3*])[C@@H](CCCCNC(c1ccccc1)(c1ccccc1)c1ccc(C)cc1)C([2*])=O",
+        "observed_template": "[1*]N([3*])[C@@H](CCCCN([4*])C(c1ccccc1)(c1ccccc1)c1ccc(C)cc1)C([2*])=O",
         "preserves_standalone": true,
-        "status": "match"
+        "status": "mismatch"
       },
       "definition_hash": "c36849face66e9b33f1698aae7f7f46bceb9c67a2464dd4a375ba466d7846b74",
-      "issues": []
+      "issues": [
+        {
+          "code": "activation_exception",
+          "differences": [
+            "template",
+            "leaving_groups"
+          ],
+          "message": "The stored attachment sites are preserved; automatic detection chooses different sites or numbers.",
+          "severity": "info",
+          "status": "mismatch"
+        }
+      ]
     },
     "Lys_al": {
       "activation": {
@@ -14003,7 +14312,10 @@
     },
     "Lys_iPr": {
       "activation": {
-        "differences": [],
+        "differences": [
+          "template",
+          "leaving_groups"
+        ],
         "expected_leaving": {
           "1": "[H]",
           "2": "[OH]",
@@ -14013,14 +14325,26 @@
         "observed_leaving": {
           "1": "[H]",
           "2": "[OH]",
-          "3": "[H]"
+          "3": "[H]",
+          "4": "[H]"
         },
-        "observed_template": "[1*]N([3*])[C@@H](CCCCNC(C)C)C([2*])=O",
+        "observed_template": "[1*]N([3*])[C@@H](CCCCN([4*])C(C)C)C([2*])=O",
         "preserves_standalone": true,
-        "status": "match"
+        "status": "mismatch"
       },
       "definition_hash": "1c64c5606c8554c3f50e89908ab1513ecfe1a9c4fee826c8ade229d9f7ab05d7",
-      "issues": []
+      "issues": [
+        {
+          "code": "activation_exception",
+          "differences": [
+            "template",
+            "leaving_groups"
+          ],
+          "message": "The stored attachment sites are preserved; automatic detection chooses different sites or numbers.",
+          "severity": "info",
+          "status": "mismatch"
+        }
+      ]
     },
     "Lys_ol": {
       "activation": {
@@ -14226,7 +14550,7 @@
           "5": "[H]",
           "6": "[H]"
         },
-        "observed_template": "[1*]N(C)[C@H](C([2*])=O)[C@@H](O[6*])c1ccc(O[4*])c(O[5*])c1",
+        "observed_template": "[1*]N(C)[C@H](C([2*])=O)[C@@H](O[4*])c1ccc(O[5*])c(O[6*])c1",
         "preserves_standalone": true,
         "status": "mismatch"
       },
@@ -14471,7 +14795,10 @@
     },
     "NBDLys": {
       "activation": {
-        "differences": [],
+        "differences": [
+          "template",
+          "leaving_groups"
+        ],
         "expected_leaving": {
           "1": "[H]",
           "2": "[OH]",
@@ -14481,14 +14808,26 @@
         "observed_leaving": {
           "1": "[H]",
           "2": "[OH]",
-          "3": "[H]"
+          "3": "[H]",
+          "4": "[H]"
         },
-        "observed_template": "[1*]N([3*])[C@@H](CCCCNc1cc([N+](=O)[O-])c2nonc2c1)C([2*])=O",
+        "observed_template": "[1*]N([3*])[C@@H](CCCCN([4*])c1cc([N+](=O)[O-])c2nonc2c1)C([2*])=O",
         "preserves_standalone": true,
-        "status": "match"
+        "status": "mismatch"
       },
       "definition_hash": "b94807692a7559362f272ea25ba71f1a1c07d817ff30b23ce7501648d5f84f54",
-      "issues": []
+      "issues": [
+        {
+          "code": "activation_exception",
+          "differences": [
+            "template",
+            "leaving_groups"
+          ],
+          "message": "The stored attachment sites are preserved; automatic detection chooses different sites or numbers.",
+          "severity": "info",
+          "status": "mismatch"
+        }
+      ]
     },
     "NHBn_": {
       "activation": {
@@ -14783,7 +15122,9 @@
     },
     "Nrg": {
       "activation": {
-        "differences": [],
+        "differences": [
+          "template"
+        ],
         "expected_leaving": {
           "1": "[H]",
           "2": "[OH]",
@@ -14803,12 +15144,22 @@
           "6": "[H]",
           "7": "[H]"
         },
-        "observed_template": "[1*]N([3*])[C@@H](CCCN([5*])C(=N[6*])N([4*])[7*])C([2*])=O",
+        "observed_template": "[1*]N([3*])[C@@H](CCCN([7*])C(=N[4*])N([5*])[6*])C([2*])=O",
         "preserves_standalone": true,
-        "status": "match"
+        "status": "mismatch"
       },
       "definition_hash": "55585c06214a933cc6776e56d6c35f11d6e46847d6fd3c2608b7e454f0fdc844",
-      "issues": []
+      "issues": [
+        {
+          "code": "activation_exception",
+          "differences": [
+            "template"
+          ],
+          "message": "The stored attachment sites are preserved; automatic detection chooses different sites or numbers.",
+          "severity": "info",
+          "status": "mismatch"
+        }
+      ]
     },
     "Nrpe": {
       "activation": {
@@ -15312,7 +15663,9 @@
     },
     "Orn_Alloc": {
       "activation": {
-        "differences": [],
+        "differences": [
+          "template"
+        ],
         "expected_leaving": {
           "1": "[H]",
           "2": "[OH]",
@@ -15328,12 +15681,22 @@
           "4": "[H]",
           "5": "[H]"
         },
-        "observed_template": "[1*]N([3*])[C@@H](CCCN([4*])C(=O)OCC([5*])=C)C([2*])=O",
+        "observed_template": "[1*]N([3*])[C@@H](CCCN([5*])C(=O)OCC([4*])=C)C([2*])=O",
         "preserves_standalone": true,
-        "status": "match"
+        "status": "mismatch"
       },
       "definition_hash": "a107d191f8788d884cff4167d2d9be5617c8fa1cb0b070e1e09437aac3e227e9",
-      "issues": []
+      "issues": [
+        {
+          "code": "activation_exception",
+          "differences": [
+            "template"
+          ],
+          "message": "The stored attachment sites are preserved; automatic detection chooses different sites or numbers.",
+          "severity": "info",
+          "status": "mismatch"
+        }
+      ]
     },
     "Orn_Cbz": {
       "activation": {
@@ -17278,7 +17641,9 @@
     },
     "R": {
       "activation": {
-        "differences": [],
+        "differences": [
+          "template"
+        ],
         "expected_leaving": {
           "1": "[H]",
           "2": "[OH]",
@@ -17298,12 +17663,22 @@
           "6": "[H]",
           "7": "[H]"
         },
-        "observed_template": "[1*]N([3*])[C@@H](CCCN([5*])C(=N[6*])N([4*])[7*])C([2*])=O",
+        "observed_template": "[1*]N([3*])[C@@H](CCCN([7*])C(=N[4*])N([5*])[6*])C([2*])=O",
         "preserves_standalone": true,
-        "status": "match"
+        "status": "mismatch"
       },
       "definition_hash": "d788531a6ec502171bd09897462641f05545efe1972206f1fe73dd0c0801273d",
-      "issues": []
+      "issues": [
+        {
+          "code": "activation_exception",
+          "differences": [
+            "template"
+          ],
+          "message": "The stored attachment sites are preserved; automatic detection chooses different sites or numbers.",
+          "severity": "info",
+          "status": "mismatch"
+        }
+      ]
     },
     "R3": {
       "activation": {
@@ -18055,13 +18430,13 @@
         "expected_template": "[4*]CC(=O)Nc1cc(NC(=O)C[5*])cc(NC(=O)C[6*])c1",
         "observed_leaving": {
           "4": "[Br]",
-          "5": "[Br]",
-          "6": "[Br]",
-          "7": "[H]",
+          "5": "[H]",
+          "6": "[H]",
+          "7": "[Br]",
           "8": "[H]",
-          "9": "[H]"
+          "9": "[Br]"
         },
-        "observed_template": "[4*]CC(=O)N([7*])c1cc(N([8*])C(=O)C[5*])cc(N([9*])C(=O)C[6*])c1",
+        "observed_template": "[4*]CC(=O)N([5*])c1cc(N([6*])C(=O)C[7*])cc(N([8*])C(=O)C[9*])c1",
         "preserves_standalone": true,
         "status": "mismatch"
       },
@@ -18390,8 +18765,9 @@
     },
     "Thr_ol": {
       "activation": {
-        "differences": [
-          "template"
+        "choices": [
+          "[1*]N([3*])[C@@H](CO[4*])[C@H](C)O[2*]",
+          "[1*]N([3*])[C@@H](CO[2*])[C@H](C)O[4*]"
         ],
         "expected_leaving": {
           "1": "[H]",
@@ -18400,26 +18776,14 @@
           "4": "[H]"
         },
         "expected_template": "[1*]N([3*])[C@@H](CO[2*])[C@H](C)O[4*]",
-        "observed_leaving": {
-          "1": "[H]",
-          "2": "[H]",
-          "3": "[H]",
-          "4": "[H]"
-        },
-        "observed_template": "[1*]N([3*])[C@@H](CO[4*])[C@H](C)O[2*]",
-        "preserves_standalone": true,
-        "status": "mismatch"
+        "status": "orientation_required"
       },
       "definition_hash": "04b9f2a867b88ed9a2aaf4edaa656ef1f417d94bc7f849e9e913308b0066e4ae",
       "issues": [
         {
-          "code": "activation_exception",
-          "differences": [
-            "template"
-          ],
-          "message": "The stored attachment sites are preserved; automatic detection chooses different sites or numbers.",
-          "severity": "info",
-          "status": "mismatch"
+          "code": "activation_orientation",
+          "message": "Stored attachment sites are explicit. Automatic re-ingestion needs a backbone or cap orientation choice.",
+          "severity": "info"
         }
       ]
     },
@@ -18819,7 +19183,9 @@
     },
     "Trp_5NH2": {
       "activation": {
-        "differences": [],
+        "differences": [
+          "template"
+        ],
         "expected_leaving": {
           "1": "[H]",
           "2": "[OH]",
@@ -18837,12 +19203,22 @@
           "5": "[H]",
           "6": "[H]"
         },
-        "observed_template": "[1*]N([3*])[C@@H](Cc1cn([5*])c2cc(N([4*])[6*])ccc12)C([2*])=O",
+        "observed_template": "[1*]N([3*])[C@@H](Cc1cn([6*])c2cc(N([4*])[5*])ccc12)C([2*])=O",
         "preserves_standalone": true,
-        "status": "match"
+        "status": "mismatch"
       },
       "definition_hash": "12bfa7ed29a25112a8f3c2d92083d2c5cad3e9d85abd052f9467d7c537cba678",
-      "issues": []
+      "issues": [
+        {
+          "code": "activation_exception",
+          "differences": [
+            "template"
+          ],
+          "message": "The stored attachment sites are preserved; automatic detection chooses different sites or numbers.",
+          "severity": "info",
+          "status": "mismatch"
+        }
+      ]
     },
     "Trp_5NO2": {
       "activation": {
@@ -18869,7 +19245,9 @@
     },
     "Trp_5OH": {
       "activation": {
-        "differences": [],
+        "differences": [
+          "template"
+        ],
         "expected_leaving": {
           "1": "[H]",
           "2": "[OH]",
@@ -18885,12 +19263,22 @@
           "4": "[H]",
           "5": "[H]"
         },
-        "observed_template": "[1*]N([3*])[C@@H](Cc1cn([5*])c2ccc(O[4*])cc12)C([2*])=O",
+        "observed_template": "[1*]N([3*])[C@@H](Cc1cn([4*])c2ccc(O[5*])cc12)C([2*])=O",
         "preserves_standalone": true,
-        "status": "match"
+        "status": "mismatch"
       },
       "definition_hash": "61f1611379275ba84e96a22604b6c8a942002fd9df2de9ce30bc7c8ec16fa0f6",
-      "issues": []
+      "issues": [
+        {
+          "code": "activation_exception",
+          "differences": [
+            "template"
+          ],
+          "message": "The stored attachment sites are preserved; automatic detection chooses different sites or numbers.",
+          "severity": "info",
+          "status": "mismatch"
+        }
+      ]
     },
     "Trp_5OMe": {
       "activation": {
@@ -20037,9 +20425,10 @@
         },
         "expected_template": "[1*]N(C[2*])Cc1ccc(CN([4*])C[5*])cc1",
         "observed_leaving": {
-          "1": "[H]"
+          "1": "[H]",
+          "4": "[H]"
         },
-        "observed_template": "[1*]N(C)Cc1ccc(CNC)cc1",
+        "observed_template": "[1*]N(C)Cc1ccc(CN([4*])C)cc1",
         "preserves_standalone": true,
         "status": "mismatch"
       },
@@ -20333,7 +20722,9 @@
     },
     "aMeArg": {
       "activation": {
-        "differences": [],
+        "differences": [
+          "template"
+        ],
         "expected_leaving": {
           "1": "[H]",
           "2": "[OH]",
@@ -20353,9 +20744,9 @@
           "6": "[H]",
           "7": "[H]"
         },
-        "observed_template": "[1*]N([3*])C(C)(CCCN([5*])C(=N[6*])N([4*])[7*])C([2*])=O",
+        "observed_template": "[1*]N([3*])C(C)(CCCN([4*])C(=N[5*])N([6*])[7*])C([2*])=O",
         "preserves_standalone": true,
-        "status": "match"
+        "status": "mismatch"
       },
       "definition_hash": "64740d146b3713f3d3f4a71ada5a73901e9c833a8ed21d53ce83203a15e0a466",
       "issues": [
@@ -20364,6 +20755,15 @@
           "count": 1,
           "message": "The stored standalone structure leaves tetrahedral stereo unspecified.",
           "severity": "warning"
+        },
+        {
+          "code": "activation_exception",
+          "differences": [
+            "template"
+          ],
+          "message": "The stored attachment sites are preserved; automatic detection chooses different sites or numbers.",
+          "severity": "info",
+          "status": "mismatch"
         }
       ]
     },
@@ -21540,7 +21940,9 @@
     },
     "b3hArg": {
       "activation": {
-        "differences": [],
+        "differences": [
+          "template"
+        ],
         "expected_leaving": {
           "1": "[H]",
           "2": "[OH]",
@@ -21560,12 +21962,22 @@
           "6": "[H]",
           "7": "[H]"
         },
-        "observed_template": "[1*]N([3*])[C@@H](CCCN([5*])C(=N[6*])N([4*])[7*])CC([2*])=O",
+        "observed_template": "[1*]N([3*])[C@@H](CCCN([7*])C(=N[4*])N([5*])[6*])CC([2*])=O",
         "preserves_standalone": true,
-        "status": "match"
+        "status": "mismatch"
       },
       "definition_hash": "0cbf07bbdc38d072e5d146a4a0529dd6823da08703cd526f8dcca3fa21a92230",
-      "issues": []
+      "issues": [
+        {
+          "code": "activation_exception",
+          "differences": [
+            "template"
+          ],
+          "message": "The stored attachment sites are preserved; automatic detection chooses different sites or numbers.",
+          "severity": "info",
+          "status": "mismatch"
+        }
+      ]
     },
     "b3hAsn": {
       "activation": {
@@ -22368,7 +22780,7 @@
           "5": "[H]",
           "6": "[H]"
         },
-        "observed_template": "[1*]N([3*])[C@@H](C([2*])=O)[C@@H](CCN([4*])[6*])O[5*]",
+        "observed_template": "[1*]N([3*])[C@@H](C([2*])=O)[C@@H](CCN([4*])[5*])O[6*]",
         "preserves_standalone": true,
         "status": "mismatch"
       },
@@ -22796,7 +23208,9 @@
     },
     "dR": {
       "activation": {
-        "differences": [],
+        "differences": [
+          "template"
+        ],
         "expected_leaving": {
           "1": "[H]",
           "2": "[OH]",
@@ -22816,12 +23230,22 @@
           "6": "[H]",
           "7": "[H]"
         },
-        "observed_template": "[1*]N([3*])[C@H](CCCN([5*])C(=N[6*])N([4*])[7*])C([2*])=O",
+        "observed_template": "[1*]N([3*])[C@H](CCCN([7*])C(=N[4*])N([5*])[6*])C([2*])=O",
         "preserves_standalone": true,
-        "status": "match"
+        "status": "mismatch"
       },
       "definition_hash": "db379e25ad59cb3c26aac966bd3797f094b4e0a8a5a3c315dde994e96f859bc8",
-      "issues": []
+      "issues": [
+        {
+          "code": "activation_exception",
+          "differences": [
+            "template"
+          ],
+          "message": "The stored attachment sites are preserved; automatic detection chooses different sites or numbers.",
+          "severity": "info",
+          "status": "mismatch"
+        }
+      ]
     },
     "dS": {
       "activation": {
@@ -23341,9 +23765,10 @@
           "4": "[H]",
           "5": "[H]",
           "6": "[H]",
-          "7": "[H]"
+          "7": "[H]",
+          "8": "[H]"
         },
-        "observed_template": "[1*]N([3*])[C@@H](CCCCNC(N([4*])[6*])N([5*])[7*])C([2*])=O",
+        "observed_template": "[1*]N([3*])[C@@H](CCCCN([8*])C(N([4*])[5*])N([6*])[7*])C([2*])=O",
         "preserves_standalone": true,
         "status": "mismatch"
       },
@@ -23400,7 +23825,9 @@
     },
     "hCit": {
       "activation": {
-        "differences": [],
+        "differences": [
+          "template"
+        ],
         "expected_leaving": {
           "1": "[H]",
           "2": "[OH]",
@@ -23418,12 +23845,22 @@
           "5": "[H]",
           "6": "[H]"
         },
-        "observed_template": "[1*]N([3*])[C@@H](CCCCN([5*])C(=O)N([4*])[6*])C([2*])=O",
+        "observed_template": "[1*]N([3*])[C@@H](CCCCN([6*])C(=O)N([4*])[5*])C([2*])=O",
         "preserves_standalone": true,
-        "status": "match"
+        "status": "mismatch"
       },
       "definition_hash": "ac54316c61d057030dac6679e8ebeaf64c087a2172b336291534199d3b07b15f",
-      "issues": []
+      "issues": [
+        {
+          "code": "activation_exception",
+          "differences": [
+            "template"
+          ],
+          "message": "The stored attachment sites are preserved; automatic detection chooses different sites or numbers.",
+          "severity": "info",
+          "status": "mismatch"
+        }
+      ]
     },
     "hCys": {
       "activation": {
@@ -25236,7 +25673,9 @@
     },
     "meR": {
       "activation": {
-        "differences": [],
+        "differences": [
+          "template"
+        ],
         "expected_leaving": {
           "1": "[H]",
           "2": "[OH]",
@@ -25254,9 +25693,9 @@
           "6": "[H]",
           "7": "[H]"
         },
-        "observed_template": "[1*]N(C)[C@@H](CCCN([5*])C(=N[6*])N([4*])[7*])C([2*])=O",
+        "observed_template": "[1*]N(C)[C@@H](CCCN([4*])C(=N[5*])N([6*])[7*])C([2*])=O",
         "preserves_standalone": true,
-        "status": "legacy_slot_match"
+        "status": "mismatch"
       },
       "definition_hash": "68f24212903025db4d4078095a5a933e3f647f65b3c754150aa689f97911fc9f",
       "issues": [
@@ -25270,6 +25709,15 @@
             5,
             6
           ]
+        },
+        {
+          "code": "activation_exception",
+          "differences": [
+            "template"
+          ],
+          "message": "The stored attachment sites are preserved; automatic detection chooses different sites or numbers.",
+          "severity": "info",
+          "status": "mismatch"
         }
       ]
     },
@@ -25851,7 +26299,10 @@
     },
     "pnG": {
       "activation": {
-        "differences": [],
+        "differences": [
+          "template",
+          "leaving_groups"
+        ],
         "expected_leaving": {
           "1": "[H]",
           "2": "[OH]",
@@ -25867,11 +26318,13 @@
           "3": "[H]",
           "4": "[H]",
           "5": "[H]",
-          "6": "[H]"
+          "6": "[H]",
+          "7": "[H]",
+          "8": "[H]"
         },
-        "observed_template": "[1*]N([3*])CCN(CC([2*])=O)C(=O)CN1CNC2C(=O)N([5*])C(N([4*])[6*])NC21",
+        "observed_template": "[1*]N([3*])CCN(CC([2*])=O)C(=O)CN1CN([4*])C2C(=O)N([5*])C(N([6*])[7*])N([8*])C21",
         "preserves_standalone": true,
-        "status": "match"
+        "status": "mismatch"
       },
       "definition_hash": "a31d1d3fc24cc8e4303c7920001072a316530ca58150c23d6a56e20b17b3bfe1",
       "issues": [
@@ -25880,6 +26333,16 @@
           "count": 3,
           "message": "The stored standalone structure leaves tetrahedral stereo unspecified.",
           "severity": "warning"
+        },
+        {
+          "code": "activation_exception",
+          "differences": [
+            "template",
+            "leaving_groups"
+          ],
+          "message": "The stored attachment sites are preserved; automatic detection chooses different sites or numbers.",
+          "severity": "info",
+          "status": "mismatch"
         }
       ]
     },
@@ -26136,12 +26599,14 @@
   "summary": {
     "activation": {
       "activation_failed": 2,
-      "legacy_slot_match": 66,
-      "match": 994,
-      "mismatch": 66
+      "legacy_slot_match": 64,
+      "match": 951,
+      "mismatch": 101,
+      "orientation_required": 10
     },
     "issues": {
-      "activation_exception": 68,
+      "activation_exception": 103,
+      "activation_orientation": 10,
       "chemistry_declaration_difference": 2,
       "identity_review": 8,
       "legacy_r3_sidechain": 68,

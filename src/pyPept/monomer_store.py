@@ -106,6 +106,8 @@ def library_binding():
     Hash each library/rule snapshot once. File stamps only invalidate the cache;
     exported identifiers contain neither local paths nor filesystem timestamps.
     """
+    from pyPept.site_chemistry import CHEMISTRY_FINGERPRINT
+
     path = library_path()
     data = Path(__file__).resolve().parent / "data"
     files = {
@@ -144,7 +146,7 @@ def library_binding():
                 while len(_binding_cache) > 2:
                     _binding_cache.popitem(last=False)
             _binding_cache.move_to_end(stamp)
-            return dict(_binding_cache[stamp])
+            return {**_binding_cache[stamp], 'site_chemistry': CHEMISTRY_FINGERPRINT}
     raise ValueError("Monomer library changed repeatedly while binding the export")
 
 
@@ -231,6 +233,7 @@ def monomer_record(
     m_subtype="modified",
     minimum_slots=1,
     strict_metadata=True,
+    activation_policy=None,
 ):
     """Construct a usable stored definition for CLI, web, and bulk ingestion.
 
@@ -247,8 +250,8 @@ def monomer_record(
     from rdkit import Chem
     from rdkit.Chem import rdDepictor
 
-    from pyPept.attachments import attachment_sites
-    from pyPept.interfaces.reaction_library import _CHEM_TYPE_REGISTRY, REACTION_INDEX
+    from pyPept.attachments import attachment_sites, declaration_is_compatible
+    from pyPept.site_chemistry import CHEMISTRY_TYPES
     from pyPept.leaving_groups import restore_leaving_groups
     from pyPept.structure import parse_template_smiles, require_supported_stereo
 
@@ -296,10 +299,7 @@ def monomer_record(
         raise ValueError(
             "Attachment slots, chemistry types, and leaving groups must match"
         )
-    known_types = {kind for pair in REACTION_INDEX for kind in pair} | {
-        entry[0] for entry in _CHEM_TYPE_REGISTRY
-    }
-    if strict_metadata and set(chem_types.values()) - known_types:
+    if strict_metadata and set(chem_types.values()) - CHEMISTRY_TYPES:
         raise ValueError("Unknown attachment chemistry type")
     restore_leaving_groups(mol, leaving)
     mol.SetProp("symbol", symbol)
@@ -310,6 +310,15 @@ def monomer_record(
     groups.extend([None] * max(0, minimum_slots - len(groups)))
     mol.SetProp("m_Rgroups", ",".join(value or "None" for value in groups))
     mol.SetProp("m_chem_types", format_chem_types(chem_types))
+    if strict_metadata:
+        for site in attachment_sites(mol, groups):
+            if site['declared_chem_type'] and not declaration_is_compatible(mol, site):
+                raise ValueError(
+                    f"R{site['slot']} is {site['chem_type']}, "
+                    f"not the declared {site['declared_chem_type']}"
+                )
+    if activation_policy:
+        mol.SetProp("m_activation_policy", activation_policy)
     rdDepictor.Compute2DCoords(mol)
     return mol
 

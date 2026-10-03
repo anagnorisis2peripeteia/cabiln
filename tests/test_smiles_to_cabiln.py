@@ -745,10 +745,10 @@ class TestSmilesToCabiln:
 
     def test_thia_michael_c_smarts_specificity(self):
         """thia_michael_c pre_smarts matches beta-acrylamide C but not thiol, carboxyl, or alkene."""
-        from pyPept.interfaces.reaction_library import _CHEM_TYPE_REGISTRY
+        from pyPept.site_chemistry import SITE_RULES
 
-        entry = next(row for row in _CHEM_TYPE_REGISTRY if row[0] == 'thia_michael_c')
-        thia_smarts = Chem.MolFromSmarts(entry[1])
+        entry = next(rule for rule in SITE_RULES if rule.name == 'thia_michael_c')
+        thia_smarts = Chem.MolFromSmarts(entry.raw_smarts)
         assert thia_smarts is not None, "thia_michael_c pre_smarts failed to compile"
 
         for smi_match in ('C=CC(=O)N', 'C=CC(=O)NC', 'C=CC(=O)N1CCCC1'):

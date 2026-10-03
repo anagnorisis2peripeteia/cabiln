@@ -94,14 +94,14 @@ def test_resolve_connection_uses_only_selected_sites_and_current_leaving(monkeyp
     carbon.SetProp("m_Rgroups", "[H],None,None,[H]")
     carbon.SetProp("m_chem_types", "1:declared_n,4:declared_c")
     nitrogen = Chem.MolFromSmiles("[1*]NC")
-    real_infer = attachments.infer_chem_type
+    real_classify = attachments.Perception.classify
     calls = []
 
-    def infer(mol, index, **kwargs):
-        calls.append((mol, kwargs["slot"]))
-        return real_infer(mol, index, **kwargs)
+    def classify(perception, index, slot=None, leaving=None, declared=None):
+        calls.append((perception.mol, slot))
+        return real_classify(perception, index, slot, leaving, declared)
 
-    monkeypatch.setattr(attachments, "infer_chem_type", infer)
+    monkeypatch.setattr(attachments.Perception, "classify", classify)
     connection = attachments.resolve_connection(
         carbon,
         4,

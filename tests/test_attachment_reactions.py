@@ -17,6 +17,25 @@ from _chemistry_fuzz import reordered
 from _fuzzing import fuzz_settings, record
 
 
+def test_reaction_registry_rejects_collisions_and_resolves_aliases():
+    import yaml
+    from pyPept.interfaces.reaction_library import _YAML_PATH, compile_reactions
+
+    entries = yaml.safe_load(_YAML_PATH.read_text())
+    reactions, forward = compile_reactions(entries)
+    _, reverse = compile_reactions(reversed(entries))
+    assert {pair: entry['id'] for pair, entry in forward.items()} == {
+        pair: entry['id'] for pair, entry in reverse.items()}
+    assert reactions['aspartimide']['steps'] == reactions['imide_n_acylation']['steps']
+    assert reactions['macrolactam_amide']['steps'] == reactions['backbone_amide']['steps']
+    with pytest.raises(ValueError, match='Duplicate reaction route'):
+        compile_reactions([*entries, {**entries[0], 'id': 'conflicting_amide'}])
+    with pytest.raises(ValueError, match='duplicate reaction id'):
+        compile_reactions([*entries, entries[0]])
+    with pytest.raises(ValueError, match='cyclic reaction alias'):
+        compile_reactions([{'id': 'a', 'alias_of': 'b'}, {'id': 'b', 'alias_of': 'a'}])
+
+
 # Independent molecular expectations. {tail} is a spectator substituent, never
 # generated from reaction SMARTS. Activated handles are explicitly supplied.
 _FUZZ_PRODUCTS = [
@@ -844,7 +863,7 @@ class TestReactionPairSMIRKS:
         'selenol':          'N[C@@H](C[SeH])C(=O)O',
         'carboxyl':         'N[C@@H](CC(=O)O)C(=O)O',
         'amine_primary':    'N[C@@H](CCCCN)C(=O)O',
-        'amine_secondary':  'N[C@@H](CCCCN)C(=O)O',
+        'amine_secondary':  'N[C@@H](CCCCNC)C(=O)O',
         'hydroxyl':         'N[C@@H](CO)C(=O)O',
         'alkyl_halide_c':   'N[C@@H](CCl)C(=O)O',
         'aminooxy':         'NOCC[C@@H](N)C(=O)O',

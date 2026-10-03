@@ -60,5 +60,9 @@ test('workspace, editing, tutorial and registration states pass automated access
   await page.locator('#btn-preview').click();
   await expect(page.locator('#preview-canvas svg')).toBeVisible();
   await scan('registration preview');
+  await page.locator('#smiles-in').fill('CNCC(CN)C(=O)O');
+  await page.locator('#btn-preview').click();
+  await expect(page.getByRole('radio')).toHaveCount(2);
+  await scan('registration attachment choice');
   await testInfo.attach('accessibility-results', { body: JSON.stringify(scans, null, 2), contentType: 'application/json' });
 });

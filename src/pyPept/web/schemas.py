@@ -58,6 +58,7 @@ class _RegisterReq(BaseModel):
     ]
     type: Literal["aa", "cap", "linker"] = "aa"
     subtype: Label = "modified"
+    activation_policy: Literal["canonical-sites-v1"] | None = None
 
 
 class _ConvertReq(BaseModel):

@@ -30,6 +30,11 @@
     <section class="card" aria-labelledby="preview-step">
       <h2 id="preview-step">2. Review attachment sites</h2>
       <p class="field-help">The numbered markers match the R-sites listed below. These are where the block can connect; check that they match your intended monomer.</p>
+      <fieldset id="attachment-choices" hidden>
+        <legend>Choose the intended attachments</legend>
+        <p class="field-help" id="attachment-choice-help"></p>
+        <div id="attachment-choice-list"></div>
+      </fieldset>
       <div id="preview-canvas" role="group" aria-label="Monomer with numbered attachment sites" aria-busy="false"><div class="preview-message">Preview the monomer to inspect its attachment sites.</div></div>
       <div id="detected-display" class="detected-types" role="status" aria-live="polite"></div>
       <details class="field">

@@ -38,6 +38,44 @@ def smiles_of_render(client, notation):
     return Chem.MolToSmiles(Chem.MolFromMolBlock(data["mol_block"]))
 
 
+def test_equivalent_dopa_imports_build_the_same_numbered_product(library_app):
+    _, client = library_app
+    sources = ('N[C@@H](Cc1cc(O)c(O)cc1)C(=O)O', 'N[C@@H](Cc1ccc(O)c(O)c1)C(=O)O')
+    products = []
+    for index, source in enumerate(sources):
+        preview = post(client, '/preview_monomer', {'smiles': source})
+        symbol = f'DopaProbe{index}'
+        post(client, '/register_monomer', {
+            **{key: preview[key] for key in ('chuckles', 'chem_types', 'leaving', 'activation_policy')},
+            'abbr': symbol, 'name': 'DOPA numbering probe',
+        })
+        connected = post(client, '/insert_bond', {
+            'cabiln': symbol, 'host_residue_idx': 0, 'new_abbr': 'ac', 'r_host': 4, 'r_new': 2,
+        })
+        products.append(smiles_of_render(client, connected['result']))
+    # R4 is the first phenolic O in canonical traversal: the para hydroxyl.
+    expected = Chem.MolToSmiles(Chem.MolFromSmiles('N[C@@H](Cc1ccc(OC(C)=O)c(O)c1)C(=O)O'))
+    assert products == [expected, expected]
+
+
+@pytest.mark.parametrize('source', ['CNCC(CN)C(=O)O', 'OCC(C)O'])
+def test_ambiguous_preview_offers_registerable_distinct_orientations(library_app, source):
+    path, client = library_app
+    preview = post(client, '/preview_monomer', {'smiles': source})
+    assert 'chuckles' not in preview
+    assert len(preview['choices']) == 2
+    assert len({choice['chuckles'] for choice in preview['choices']}) == 2
+    for index, choice in enumerate(preview['choices']):
+        symbol = f'Choice{index}'
+        post(client, '/register_monomer', {
+            **{key: choice[key] for key in ('chuckles', 'chem_types', 'leaving', 'activation_policy')},
+            'abbr': symbol, 'name': 'Selected orientation',
+        })
+        assert smiles_of_render(client, symbol) == Chem.MolToSmiles(Chem.MolFromSmiles(source))
+    stored = list(Chem.SDMolSupplier(str(path)))[-1]
+    assert stored.GetProp('m_activation_policy') == 'canonical-sites-v1'
+
+
 def test_new_monomer_is_detected_listed_selected_and_bonded(library_app):
     path, client = library_app
     # Warm all relevant caches before ingesting a previously unseen symbol.
@@ -119,7 +157,7 @@ def test_detection_only_labels_from_preview_can_be_registered(library_app):
     preview = post(
         client, "/preview_monomer", {"smiles": "N[C@@H](Cc1ccc(O)cc1)C(=O)O"}
     )
-    assert preview["chem_types"]["4"] == "hydroxyl_phenolic"
+    assert preview["chem_types"]["4"] == "aryl_phenol_o"
     post(
         client,
         "/register_monomer",

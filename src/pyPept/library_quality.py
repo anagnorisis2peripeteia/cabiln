@@ -22,7 +22,7 @@ from rdkit import Chem, rdBase
 from pyPept.leaving_groups import restore_leaving_groups
 from pyPept.structure import require_supported_stereo
 
-AUDIT_VERSION = "cabiln-library-quality-v2"
+AUDIT_VERSION = "cabiln-library-quality-v3"
 
 
 def _property(molecule, name):
@@ -124,7 +124,7 @@ def _issue(code, message, *, severity="warning", **facts):
 def audit_monomer(molecule):
     """Measure one definition without altering its stored structure or slots."""
     from pyPept.attachments import attachment_sites, declaration_is_compatible
-    from pyPept.interfaces.monomer_pipeline import pre_activate
+    from pyPept.interfaces.monomer_pipeline import BackboneAmbiguity, pre_activate
 
     mol = Chem.Mol(molecule)
     leaving = _leaving(mol)
@@ -257,6 +257,17 @@ def audit_monomer(molecule):
                 ) == Chem.MolToSmiles(restored, isomericSmiles=True)
             ),
         )
+    except BackboneAmbiguity as error:
+        activation.update(
+            status='orientation_required',
+            choices=[pre_activate(Chem.MolToSmiles(restored), backbone_indices=choice).chuckles
+                     for choice in error.choices],
+        )
+        issues.append(_issue(
+            'activation_orientation',
+            'Stored attachment sites are explicit. Automatic re-ingestion needs a backbone or cap orientation choice.',
+            severity='info',
+        ))
     except (ValueError, RuntimeError) as error:
         # The exact error text is useful to review but not a portable API contract.
         activation["error_type"] = type(error).__name__

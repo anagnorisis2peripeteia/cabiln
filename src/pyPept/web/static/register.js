@@ -3,6 +3,8 @@ let detectedSmiles = '';
 let formRevision = 0;
 let registering = false;
 let registeredPayload = null;
+let attachmentChoices = [];
+let choiceSmiles = '';
 
 const smilesIn   = document.getElementById('smiles-in');
 const btnPreview = document.getElementById('btn-preview');
@@ -18,6 +20,8 @@ const btnRegister= document.getElementById('btn-register');
 const statusMsg  = document.getElementById('status-msg');
 const previewError = document.getElementById('preview-error');
 const registrationGuide = document.getElementById('registration-guide');
+const choiceSection = document.getElementById('attachment-choices');
+const choiceList = document.getElementById('attachment-choice-list');
 
 function registrationPayload() {
   if (!detectedData || detectedSmiles !== smilesIn.value.trim()) return null;
@@ -25,6 +29,7 @@ function registrationPayload() {
     chuckles: detectedData.chuckles,
     chem_types: detectedData.chem_types,
     leaving: detectedData.leaving,
+    activation_policy: detectedData.activation_policy,
     abbr: abbrIn.value.trim(),
     name: nameIn.value.trim(),
     type: typeIn.value,
@@ -39,7 +44,8 @@ function updateRegisterButton() {
     !payload.name || registered;
   btnRegister.textContent = registering ? 'Registering…' :
     registered ? '✓ Registered' : 'Register monomer';
-  registrationGuide.textContent = !payload ? 'Preview the current SMILES before registering.' :
+  registrationGuide.textContent = attachmentChoices.length && !payload ? 'Choose which numbered attachments this monomer should use.' :
+    !payload ? 'Preview the current SMILES before registering.' :
     !payload.abbr || !payload.name ? 'Enter an abbreviation and full name to register.' :
     registered ? 'Available in Library when you return to the renderer.' :
     'Adds this monomer and its detected sites to this server’s library.';
@@ -50,9 +56,14 @@ function invalidatePreview() {
   detectedData = null;
   detectedSmiles = '';
   registeredPayload = null;
+  attachmentChoices = [];
+  choiceSmiles = '';
+  choiceSection.hidden = true;
+  choiceList.innerHTML = '';
   chucklesOut.value = '';
   detDisp.innerHTML = '';
   prevCanvas.innerHTML = '';
+  prevCanvas.hidden = false;
   prevSec.hidden = true;
   prevCanvas.setAttribute('aria-busy', 'false');
   setInputState(smilesIn, '');
@@ -105,14 +116,18 @@ document.getElementById('preview-form').addEventListener('submit', async event =
         setInputState(smilesIn, 'err');
       }
       btnRegister.disabled = true;
+    } else if (data.choices) {
+      attachmentChoices = data.choices;
+      choiceSmiles = smi;
+      choiceSection.hidden = false;
+      prevCanvas.hidden = true;
+      document.getElementById('attachment-choice-help').textContent = data.message;
+      choiceList.innerHTML = data.choices.map((choice, index) =>
+        `<label class="attachment-choice"><input type="radio" name="attachment-choice" value="${index}">` +
+        `<span>Option ${index + 1}</span><span class="choice-drawing" aria-hidden="true">${choice.svg}</span></label>`
+      ).join('');
     } else {
-      detectedData = data;
-      detectedSmiles = smi;
-      prevCanvas.innerHTML = data.svg;
-      chucklesOut.value = data.chuckles;
-      setInputState(smilesIn, 'ok');
-      renderDetected(data.chem_types, data.leaving);
-      updateRegisterButton();
+      usePreview(data, smi);
     }
   } catch (e) {
     if (!current()) return;
@@ -131,6 +146,26 @@ document.getElementById('preview-form').addEventListener('submit', async event =
     }
     request.finish();
   }
+});
+
+function usePreview(data, smi) {
+  detectedData = data;
+  detectedSmiles = smi;
+  prevCanvas.hidden = false;
+  prevCanvas.innerHTML = data.svg;
+  chucklesOut.value = data.chuckles;
+  setInputState(smilesIn, 'ok');
+  renderDetected(data.chem_types, data.leaving);
+  updateRegisterButton();
+}
+
+choiceList.addEventListener('change', event => {
+  if (choiceSmiles !== smilesIn.value.trim() || event.target.name !== 'attachment-choice') return;
+  const choice = attachmentChoices[Number(event.target.value)];
+  if (!choice) return;
+  formRevision++;
+  statusMsg.style.display = 'none';
+  usePreview(choice, choiceSmiles);
 });
 
 function renderDetected(chem_types, leaving) {

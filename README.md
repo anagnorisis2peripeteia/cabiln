@@ -188,10 +188,16 @@ cabiln --enable-registration
 
 Preview detects attachment sites before registration. Review its numbered markers
 beside the naming form; **Generated notation** contains the detected CHUCKLES.
+If several main-chain or cap orientations are possible, choose a numbered
+drawing first. Registration stays disabled until you choose; editing the input
+requires a new preview. Equivalent SMILES produce the same automatic R numbering.
 Empty input and failed previews explain how to continue without losing entries.
 The server validates the
 slots and metadata, rejects duplicate symbols, and replaces the SDF atomically
-under a file lock.
+under a file lock. Stored templates keep their existing R numbers, including
+older conventions; loading a library does not run detection again. See the
+[attachment contract](docs/architecture.md#attachment-detection-and-registration)
+for numbering, explicit overrides and bulk re-imports.
 
 For durable custom data, copy the distributed `monomers.sdf` outside the
 installation and select it before starting the application or CLI:

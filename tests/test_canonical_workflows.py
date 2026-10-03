@@ -55,7 +55,7 @@ def test_canonical_route_converges_then_renders_exact_structure(
     assert data["canonical"]["format"] == "cabiln-graph-v1"
     assert data["canonical"]["rdkit"]
     assert set(data["canonical"]["binding"]) == {
-        "monomers", "aliases", "reactions", "caps"
+        "monomers", "aliases", "reactions", "caps", "site_chemistry"
     }
     rendered = client.post("/render", json={"cabiln": data["result"]})
     assert rendered.status_code == 200, rendered.text

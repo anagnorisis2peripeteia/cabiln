@@ -209,26 +209,31 @@ def monomer_svg(
 @router.post("/preview_monomer")
 def preview_monomer(req: _PreviewReq):
     try:
-
-        from pyPept.interfaces.monomer_pipeline import pre_activate
-
-        result = pre_activate(req.smiles)
-
+        from pyPept.interfaces.monomer_pipeline import BackboneAmbiguity, pre_activate
         from rdkit import Chem
 
-        mol = Chem.MolFromSmiles(result.chuckles)
-        if mol is None:
-            return JSONResponse(
-                {"error": "Generated CHUCKLES is invalid"}, status_code=400
-            )
+        def preview(result):
+            mol = Chem.MolFromSmiles(result.chuckles)
+            if mol is None:
+                raise ValueError('Generated CHUCKLES is invalid')
+            return {
+                "chuckles": result.chuckles,
+                "chem_types": {str(k): v for k, v in result.chem_types.items()},
+                "leaving": {str(k): v for k, v in result.leaving.items()},
+                "activation_policy": result.policy,
+                "svg": _draw_mol(mol, req.width, req.height),
+            }
 
-        svg = _draw_mol(mol, req.width, req.height)
-        return {
-            "chuckles": result.chuckles,
-            "chem_types": {str(k): v for k, v in result.chem_types.items()},
-            "leaving": {str(k): v for k, v in result.leaving.items()},
-            "svg": svg,
-        }
+        try:
+            return preview(pre_activate(req.smiles))
+        except BackboneAmbiguity as exc:
+            if len(exc.choices) > 16:
+                raise ValueError('More than 16 attachment orientations. Supply a monomer with explicit numbered sites.') from exc
+            return {
+                "choices": [preview(pre_activate(req.smiles, backbone_indices=choice))
+                            for choice in exc.choices],
+                "message": "This molecule has more than one possible main-chain or cap attachment. Choose the intended numbered sites before registering.",
+            }
 
     except Exception as exc:
         if isinstance(exc, ValueError) and str(exc).startswith(
@@ -270,6 +275,7 @@ def register_monomer(req: _RegisterReq, request: Request):
             m_type=req.type,
             m_subtype=req.subtype,
             minimum_slots=6,
+            activation_policy=req.activation_policy,
         )
 
         return {"ok": True, "total": register_molecule(mol)}

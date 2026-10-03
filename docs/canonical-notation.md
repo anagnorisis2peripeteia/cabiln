@@ -201,8 +201,9 @@ describe those interfaces. `canonical.py` adapts them to monomer graphs.
 `canonical_convention()` identifies `cabiln-graph-v1`,
 `rdkit-colored-port-graph-v1`, and the complete RDKit version. Canonical HTTP
 responses also include content hashes for the selected monomer library, aliases,
-reaction rules, and cap rules. Hashes are cached by file revision and expose no
-local paths.
+reaction rules, cap rules, and the attachment chemistry convention. File hashes
+are cached by revision; the chemistry fingerprint includes the versioned
+classifier rules. Neither identifier exposes local paths.
 RDKit documents
 [changes to canonicalization across releases](https://rdkit.org/docs/BackwardsIncompatibleChanges.html).
 Ordering can change after dependency upgrades. Check stored canonical fixtures

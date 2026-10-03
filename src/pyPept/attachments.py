@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from typing import NamedTuple
 
-from pyPept.interfaces.reaction_library import REACTION_INDEX, infer_chem_type
+from pyPept.interfaces.reaction_library import REACTION_INDEX
+from pyPept.site_chemistry import Perception
 
 
 def _attachment_idx(mol, slot):
@@ -64,7 +65,7 @@ def _site_metadata(mol, leaving_groups):
     return leaving_groups, declared
 
 
-def _describe_site(mol, atom, leaving_groups, declared):
+def _describe_site(perception, atom, leaving_groups, declared):
     slot = atom.GetIsotope()
     if slot < 1 or atom.GetDegree() != 1:
         raise ValueError("Attachment dummies need a positive slot and one neighbour")
@@ -74,9 +75,9 @@ def _describe_site(mol, atom, leaving_groups, declared):
         leaving = None
     return {
         "slot": slot,
-        "chem_type": infer_chem_type(
-            mol, atom.GetNeighbors()[0].GetIdx(), slot=slot, leaving=leaving
-        ),
+        "chem_type": perception.classify(
+            atom.GetNeighbors()[0].GetIdx(), slot, leaving, declared.get(slot)
+        ).reaction_type,
         "leaving": leaving or "",
         "declared_chem_type": declared.get(slot, ""),
     }
@@ -93,7 +94,7 @@ def attachment_site(mol, slot, leaving_groups=None):
         raise ValueError(f"Monomer has no R{slot} attachment point")
     if len(atoms) != 1:
         raise ValueError(f"Monomer has multiple R{slot} attachment points")
-    return _describe_site(mol, atoms[0], *_site_metadata(mol, leaving_groups))
+    return _describe_site(Perception(mol), atoms[0], *_site_metadata(mol, leaving_groups))
 
 
 def declaration_is_compatible(mol, site):
@@ -148,9 +149,12 @@ def attachment_sites(mol, leaving_groups=None):
     group, including the assembly engine's supported declaration overrides.
     """
     leaving_groups, declared = _site_metadata(mol, leaving_groups)
+    perception = Perception(mol)
     sites = [
-        _describe_site(mol, atom, leaving_groups, declared)
+        _describe_site(perception, atom, leaving_groups, declared)
         for atom in mol.GetAtoms()
         if atom.GetAtomicNum() == 0
     ]
+    if len({site['slot'] for site in sites}) != len(sites):
+        raise ValueError('attachment slot numbers must be unique')
     return sorted(sites, key=lambda site: site["slot"])

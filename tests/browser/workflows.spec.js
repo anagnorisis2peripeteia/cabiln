@@ -1,5 +1,40 @@
 const { test, expect, render, tile, site, selectChip, connect, capture, isCompletedResponse, interceptOnce } = require('./fixtures');
 
+for (const width of [1440, 390]) test(`registration requires an explicit attachment choice at ${width}px`, async ({ page, app }, testInfo) => {
+  await page.setViewportSize({ width, height: 900 });
+  await page.goto(`${app.url}/register`);
+  await page.locator('#smiles-in').fill('CNCC(CN)C(=O)O');
+  await page.locator('#btn-preview').click();
+  const choices = page.getByRole('radio');
+  await expect(choices).toHaveCount(2);
+  await page.locator('#abbr-in').fill(`BrowserChoice${width}`);
+  await page.locator('#name-in').fill('Selected backbone');
+  await expect(page.locator('#btn-register')).toBeDisabled();
+  await choices.first().focus();
+  await choices.first().press('Space');
+  await expect(page.locator('#btn-register')).toBeEnabled();
+  const first = await page.locator('#chuckles-out').inputValue();
+  await page.locator('.attachment-choice').nth(1).locator('.choice-drawing').click();
+  await expect(choices.nth(1)).toBeChecked();
+  await expect(page.locator('#chuckles-out')).not.toHaveValue(first);
+  await page.screenshot({ path: testInfo.outputPath('selected-backbone.png'), fullPage: true, animations: 'disabled' });
+  await page.locator('#smiles-in').fill('NCC(=O)O');
+  await expect(page.locator('#attachment-choices')).toBeHidden();
+  await expect(page.locator('#btn-register')).toBeDisabled();
+  await page.locator('#smiles-in').fill('CNCC(CN)C(=O)O');
+  await page.locator('#btn-preview').click();
+  await expect(choices).toHaveCount(2);
+  await expect(page.locator('input[name="attachment-choice"]:checked')).toHaveCount(0);
+  await choices.first().check();
+  const selected = await page.locator('#chuckles-out').inputValue();
+  const submitted = page.waitForRequest(request => new URL(request.url()).pathname === '/register_monomer');
+  await page.locator('#btn-register').click();
+  const payload = (await submitted).postDataJSON();
+  expect(payload.chuckles).toBe(selected);
+  expect(payload.activation_policy).toBe('canonical-sites-v1');
+  await expect(page.locator('#status-msg')).toContainText('registered successfully');
+});
+
 const tabCases = [
   { name: 'later segment', source: 'A%K.{G(4,2)}-A', occurrences: 4, markers: 0, groups: [[3]] },
   { name: 'separate bracket policies', source: 'ac-K.[G(4,2)]-K.{A(4,2)}-am', occurrences: 6, markers: 0, groups: [[4], [5]] },

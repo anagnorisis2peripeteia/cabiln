@@ -1,42 +1,9 @@
-"""
-Monomer pre-activation pipeline for pyPept.
+"""Convert complete monomers to explicit, numbered attachment templates.
 
-Converts full monomer SMILES (in any notation) to pre-activated CHUCKLES
-fragments with isotope-labelled dummy atoms and SMILES leaving group metadata.
-
-Supports auto-detection of:
-  - Backbone R1 (N-terminal amine) and R2 (C-terminal carboxyl) via a
-    graph-topology rule: the N and carboxyl C pair with the shortest bond
-    path form the backbone.  Works for α-, β-, γ-amino acids and any chain
-    length without hard-coded stereo or H-count assumptions.
-  - Sidechain R3+ wherever chemistry makes sense (thiol, amine, carboxyl,
-    hydroxyl, aromatic NH) — following the principle that any chemically
-    viable bond site should be available; whether it is *used* is a
-    sequence-level decision.
-
-Each slot carries a chem_type string (e.g. 'backbone_n', 'thiol',
-'amine_primary') that the assembly layer uses to look up the correct
-SMIRKS reaction entry in reactions.yaml without any if-branches.
-
-Leaving group derivation is auto-inferred via SMARTS and stored as SMILES
-fragments (e.g. '[H]', '[OH]') used by Sequence.__remove_rgroups() to
-restore free termini when a slot is left unbonded.
-
-Usage:
-    from pyPept.interfaces.monomer_pipeline import pre_activate
-
-    result = pre_activate("N[C@@H](CS)C(=O)O")
-    # result.chuckles   = '[1*]N([3*])[C@@H](CS[4*])C([2*])=O'
-    # result.leaving    = {1: '[H]', 2: '[OH]', 3: '[H]', 4: '[H]'}
-    # result.chem_types = {1: 'backbone_n', 2: 'backbone_c', 3: 'backbone_n_mod', 4: 'thiol'}
-
-    # Legacy tuple unpacking still works:
-    chuckles, leaving, chem_types, err = pre_activate("N[C@@H](CS)C(=O)O")
-    # err is always None — failures now raise ActivationError
-
-From publication: pyPept: a python library to generate atomistic 2D and 3D
-representations of peptides, Journal of Cheminformatics, 2023.
-Updated 2025.
+Perception resolves chemical handles before canonical numbering. Backbone or
+cap choices that are chemically distinct require author intent. Replacing the
+numbered dummies with their leaving groups must recover the exact input graph.
+Existing CSV templates retain their sites unless a rebuild is requested.
 """
 
 __credits__ = ["J.B. Brown", "Thomas Fox", "Cameron Beesley"]
@@ -49,10 +16,13 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from rdkit import Chem, RDLogger
-from rdkit.Chem import PandasTools, SDWriter, rdDepictor
+from rdkit.Chem import PandasTools, SDWriter
 
 from pyPept.structure import parse_template_smiles, require_supported_stereo
 from pyPept.monomer_store import format_chem_types, monomer_record, parse_chem_types
+from pyPept.site_chemistry import Perception, canonical_atom_order, nitrogen_chem_type
+
+ACTIVATION_POLICY = "canonical-sites-v1"
 
 class ActivationError(ValueError):
     """Raised when pre_activate cannot generate a valid CHUCKLES fragment."""
@@ -64,6 +34,7 @@ class ActivationResult:
     chuckles: str
     leaving: dict
     chem_types: dict
+    policy: str = ACTIVATION_POLICY
 
     def __iter__(self):
         yield self.chuckles
@@ -181,36 +152,6 @@ def normalize_input(raw):
     )
 
 
-# Leaving group inference rules
-# Each entry: (SMARTS with attachment atom mapped :1, leaving_group_smiles)
-# First match wins; more specific rules must come first.
-LEAVING_GROUP_RULES = [
-    # Halide LGs (reagent form) — checked first so acid chlorides beat free acids
-    ('[CX3:1](=O)[ClX1]',        '[Cl]'),  # acid chloride
-    ('[CX3:1](=O)[BrX1]',        '[Br]'),  # acid bromide
-    ('[SX4:1](=O)(=O)[ClX1]',    '[Cl]'),  # sulfonyl chloride (TsCl, MsCl, Pbf-Cl)
-    ('[CX4:1][IX1]',              '[I]'),   # alkyl iodide (MeI)
-    ('[CX4:1][BrX1]',            '[Br]'),  # alkyl bromide (EtBr, BnBr)
-    ('[CX4:1][ClX1]',            '[Cl]'),  # alkyl chloride (TrtCl, AcmCl)
-    # Free-form LGs (condensation / HATU coupling)
-    ('[CX3H1:1](=O)',      '[H]'),   # aldehyde C → H leaves
-    ('[CX3:1](=O)[OX2H1]', '[OH]'),  # carboxylic acid C → OH leaves
-    ('[SX4:1](=O)(=O)[OX2H1]', '[OH]'),  # sulfonyl-OH S → OH leaves
-    ('[NX3;H3:1]',         '[H]'),   # unsubstituted amine (NH3 cap) → H leaves
-    ('[NX3;H2:1]',         '[H]'),   # primary amine N → H leaves
-    ('[NX3;H1;R:1]',       '[H]'),   # proline-type ring N → H leaves
-    ('[NX3;H1:1]',         '[H]'),   # secondary amine N (N-methyl backbone) → H leaves
-    ('[SX2H1:1]',          '[H]'),   # thiol S → H leaves
-    ('[SeX2H1:1]',         '[H]'),   # selenol Se → H leaves
-    ('[OX2H1:1]',          '[H]'),   # hydroxyl O → H leaves
-    # Carbon nucleophile (Grignard) — last resort
-    ('[cH1:1]',            '[H]'),   # aromatic C-H
-    ('[CX4;H1,H2,H3:1]',  '[H]'),   # sp3 C-H
-]
-
-_LG_PATTERNS = [(Chem.MolFromSmarts(s), lg) for s, lg in LEAVING_GROUP_RULES]
-
-
 # Backbone detection — topology patterns
 # Atom-type patterns for the graph-distance backbone search.
 # N: trivalent N with at least one H (covers primary amine, Pro ring N,
@@ -226,19 +167,64 @@ _BB_ALDEHYDE_PAT = Chem.MolFromSmarts('[CX3H1:1](=O)')
 _BB_ALCOHOL_PAT  = Chem.MolFromSmarts('[OX2H1:1][CX4]')
 _BB_LACTONE_PAT  = Chem.MolFromSmarts('[CX3:1](=O)[OX2;R]')
 
-# Sidechain rules derived from the unified registry in reaction_library.
-# Uses pre_smarts column (H≥1 required — there must be an H to replace with dummy).
-# All entries including label_only are included to reserve slots in pre_activate.
-from pyPept.interfaces.reaction_library import _CHEM_TYPE_REGISTRY, nitrogen_chem_type
-_BACKBONE_ONLY_TYPES = frozenset({'backbone_c_red', 'quat_c_anchor'})
-_SIDECHAIN_RULES = [(pre_smarts, lg, ct, lo) for ct, pre_smarts, lg, _infer, lo in _CHEM_TYPE_REGISTRY
-                     if ct not in _BACKBONE_ONLY_TYPES]
+class BackboneAmbiguity(ActivationError):
+    """Several chemically distinct backbone/cap choices need author intent."""
 
-_SC_PATTERNS  = [(Chem.MolFromSmarts(s), lg, ct, lo) for s, lg, ct, lo in _SIDECHAIN_RULES]
-_SECOND_H_PAT = Chem.MolFromSmarts('[NX3;H2:1]')
+    def __init__(self, choices):
+        self.choices = tuple(dict(choice) for choice in choices)
+        super().__init__(
+            "Ambiguous backbone or cap orientation: choose the intended attachment "
+            "path in the preview, or supply backbone_indices."
+        )
 
 
-# Public API
+def _distinct_orientations(mol, choices):
+    """Collapse symmetry-equivalent paths while retaining original atom indices."""
+    if len(choices) <= 1:
+        return choices
+    unique = {}
+    for choice in choices:
+        marked = Chem.Mol(mol)
+        for atom in marked.GetAtoms():
+            atom.SetAtomMapNum(0)
+        for slot, index in choice.items():
+            marked.GetAtomWithIdx(index).SetAtomMapNum(slot)
+        key = Chem.MolToSmiles(Chem.RemoveHs(marked))
+        unique.setdefault(key, choice)
+    return [unique[key] for key in sorted(unique)]
+
+
+def _choose_orientation(mol, choices):
+    choices = _distinct_orientations(mol, choices)
+    if len(choices) > 1:
+        raise BackboneAmbiguity(choices)
+    return choices[0] if choices else None
+
+
+def _backbone_pairs(mol):
+    nitrogen = _backbone_n_indices(mol)
+    carbon = [match[0] for match in mol.GetSubstructMatches(_BB_COOH_PAT)]
+    if not nitrogen and carbon:
+        acid_oxygen = {neighbor.GetIdx() for index in carbon
+                       for neighbor in mol.GetAtomWithIdx(index).GetNeighbors()
+                       if neighbor.GetAtomicNum() == 8}
+        nitrogen = [match[0] for match in mol.GetSubstructMatches(_BB_ALCOHOL_PAT)
+                    if match[0] not in acid_oxygen]
+    if not carbon:
+        for pattern in (_BB_ALDEHYDE_PAT, _BB_ALCOHOL_PAT, _BB_LACTONE_PAT):
+            carbon = [match[0] for match in mol.GetSubstructMatches(pattern)]
+            if carbon:
+                break
+    pairs = []
+    for first in nitrogen:
+        for second in carbon:
+            if first == second:
+                continue
+            path = Chem.GetShortestPath(mol, first, second)
+            if path:
+                pairs.append((len(path) - 1, {1: first, 2: second}))
+    return pairs
+
 
 def _backbone_n_indices(mol):
     return sorted({match[0] for pattern in (_BB_N_PAT, _BB_LACTAM_N_PAT)
@@ -246,65 +232,12 @@ def _backbone_n_indices(mol):
 
 
 def find_backbone_slots(mol):
-    """
-    Identify R1 (N-terminal) and R2 (C-terminal) attachment atoms via a
-    graph-topology rule: the (N, carboxyl-C) pair with the shortest bond
-    path is the backbone pair.
-
-    This replaces the earlier 4-SMARTS approach and handles α-, β-, γ-amino
-    acids, D-amino acids, and any chain length without stereo or H-count
-    constraints.
-
-    :param mol: RDKit mol with explicit H (call AddHs first).
-    :returns: {0: N_atom_idx, 1: carbonyl_C_atom_idx} or None if not found.
-    """
-    n_idxs = _backbone_n_indices(mol)
-    c_idxs = [m[0] for m in mol.GetSubstructMatches(_BB_COOH_PAT)]
-
-    # Depsipeptide / hydroxy acid: no amine but has COOH and a separate OH.
-    # Check before the C-terminal fallback, which would put an alcohol
-    # in c_idxs and collide with the depsipeptide O search.
-    if not n_idxs and c_idxs:
-        cooh_o_idxs = set()
-        for c_idx in c_idxs:
-            for nb in mol.GetAtomWithIdx(c_idx).GetNeighbors():
-                if nb.GetAtomicNum() == 8:
-                    bond = mol.GetBondBetweenAtoms(c_idx, nb.GetIdx())
-                    if bond and bond.GetBondTypeAsDouble() == 1.0:
-                        cooh_o_idxs.add(nb.GetIdx())
-        o_idxs = [m[0] for m in mol.GetSubstructMatches(_BB_ALCOHOL_PAT)
-                  if m[0] not in cooh_o_idxs]
-        if o_idxs:
-            best_o, best_c, best_dist = None, None, float('inf')
-            for o_idx in o_idxs:
-                for c_idx in c_idxs:
-                    path = Chem.GetShortestPath(mol, o_idx, c_idx)
-                    if path and 2 <= len(path) - 1 < best_dist:
-                        best_dist = len(path) - 1
-                        best_o, best_c = o_idx, c_idx
-            if best_o is not None:
-                return {1: best_o, 2: best_c}
-
-    # Fallback: if no COOH, try aldehyde → alcohol → lactone as C-terminal analogue
-    if not c_idxs:
-        c_idxs = [m[0] for m in mol.GetSubstructMatches(_BB_ALDEHYDE_PAT)]
-    if not c_idxs:
-        c_idxs = [m[0] for m in mol.GetSubstructMatches(_BB_ALCOHOL_PAT)]
-    if not c_idxs:
-        c_idxs = [m[0] for m in mol.GetSubstructMatches(_BB_LACTONE_PAT)]
-
-    if not n_idxs or not c_idxs:
+    """Choose the unique shortest N/O-to-C backbone, modulo graph symmetry."""
+    pairs = _backbone_pairs(mol)
+    if not pairs:
         return None
-
-    best_n, best_c, best_dist = None, None, float('inf')
-    for n_idx in n_idxs:
-        for c_idx in c_idxs:
-            path = Chem.GetShortestPath(mol, n_idx, c_idx)
-            if path and len(path) - 1 < best_dist:
-                best_dist = len(path) - 1
-                best_n, best_c = n_idx, c_idx
-
-    return {1: best_n, 2: best_c} if best_n is not None else None
+    distance = min(item[0] for item in pairs)
+    return _choose_orientation(mol, [choice for length, choice in pairs if length == distance])
 
 
 _CAP_SULFONYL_PAT = Chem.MolFromSmarts('[SX4:1](=O)(=O)[OX2H1]')
@@ -320,24 +253,15 @@ _CAP_AROMATIC_CH_PAT    = Chem.MolFromSmarts('[cH1:1]')
 
 
 def _pick_alpha_n(mol, n_idxs):
-    """Among multiple amine N atoms, pick the one closest to a C=O or C-OH."""
-    targets = []
-    for atom in mol.GetAtoms():
-        if atom.GetAtomicNum() == 6:
-            for nb in atom.GetNeighbors():
-                if nb.GetAtomicNum() == 8:
-                    targets.append(atom.GetIdx())
-                    break
-    if not targets:
-        return n_idxs[0]
-    best_n, best_dist = n_idxs[0], float('inf')
-    for n_idx in n_idxs:
-        for c_idx in targets:
-            path = Chem.GetShortestPath(mol, n_idx, c_idx)
-            if path and len(path) - 1 < best_dist:
-                best_dist = len(path) - 1
-                best_n = n_idx
-    return best_n
+    targets = [atom.GetIdx() for atom in mol.GetAtoms()
+               if atom.GetAtomicNum() == 6 and
+               any(nb.GetAtomicNum() == 8 for nb in atom.GetNeighbors())]
+    choices = []
+    for index in n_idxs:
+        distances = [len(Chem.GetShortestPath(mol, index, target)) - 1 for target in targets]
+        choices.append((min((value for value in distances if value >= 0), default=0), index))
+    nearest = min(distance for distance, _ in choices)
+    return _choose_orientation(mol, [{1: index} for distance, index in choices if distance == nearest])[1]
 
 
 def find_cap_slots(mol):
@@ -363,115 +287,80 @@ def find_cap_slots(mol):
 
     # Free-form electrophilic caps
     if c_idxs and not n_idxs:
-        return {2: c_idxs[0]}, {2: 'backbone_c'}
+        return _choose_orientation(mol, [{2: index} for index in c_idxs]), {2: 'backbone_c'}
     if s_idxs and not n_idxs and not c_idxs:
-        return {2: s_idxs[0]}, {2: 'element_16'}
+        return _choose_orientation(mol, [{2: index} for index in s_idxs]), {2: 'element_16'}
 
     # Reagent-form electrophilic caps (halide LG still attached)
     if not n_idxs and not c_idxs and not s_idxs:
         acyl_h = [m[0] for m in mol.GetSubstructMatches(_CAP_ACYL_HALIDE_PAT)]
         if acyl_h:
-            return {2: acyl_h[0]}, {2: 'backbone_c'}
+            return _choose_orientation(mol, [{2: index} for index in acyl_h]), {2: 'backbone_c'}
         sul_cl = [m[0] for m in mol.GetSubstructMatches(_CAP_SULFONYL_CL_PAT)]
         if sul_cl:
-            return {2: sul_cl[0]}, {2: 'element_16'}
+            return _choose_orientation(mol, [{2: index} for index in sul_cl]), {2: 'element_16'}
         alk_h = [m[0] for m in mol.GetSubstructMatches(_CAP_ALKYL_HALIDE_PAT)]
         if alk_h and len(alk_h) < 3:
-            return {2: alk_h[0]}, {2: 'alkyl_halide_c'}
+            return _choose_orientation(mol, [{2: index} for index in alk_h]), {2: 'alkyl_halide_c'}
 
     # Nucleophilic caps — but prefer electrophilic alkyl halide if present
     # (e.g. acm: Cl-CH2-NH-COCH3 has both amine and alkyl chloride)
     if n_idxs and not c_idxs:
         alk_h = [m[0] for m in mol.GetSubstructMatches(_CAP_ALKYL_HALIDE_PAT)]
         if alk_h and len(alk_h) < 3:
-            return {2: alk_h[0]}, {2: 'alkyl_halide_c'}
+            return _choose_orientation(mol, [{2: index} for index in alk_h]), {2: 'alkyl_halide_c'}
         best = _pick_alpha_n(mol, n_idxs) if len(n_idxs) > 1 else n_idxs[0]
         return {1: best}, {1: 'backbone_n'}
     if not n_idxs and not c_idxs and not s_idxs:
         o_idxs = [m[0] for m in mol.GetSubstructMatches(_CAP_ALCOHOL_PAT)]
         if o_idxs:
-            return {1: o_idxs[0]}, {1: 'backbone_o'}
+            return _choose_orientation(mol, [{1: index} for index in o_idxs]), {1: 'backbone_o'}
 
     # Carbon nucleophile caps (Grignard / organometallic — last resort)
     for pat in (_CAP_BENZYLIC_CH_PAT, _CAP_TERTIARY_CH_PAT, _CAP_AROMATIC_CH_PAT):
         hits = [m[0] for m in mol.GetSubstructMatches(pat)]
         if hits:
-            kind = 'aryl_c_anchor' if mol.GetAtomWithIdx(hits[0]).GetIsAromatic() else 'carbon'
-            return {1: hits[0]}, {1: kind}
+            choice = _choose_orientation(mol, [{1: index} for index in hits])
+            kind = 'aryl_c_anchor' if mol.GetAtomWithIdx(choice[1]).GetIsAromatic() else 'carbon'
+            return choice, {1: kind}
 
     return None, None
 
 
-def find_sidechain_slots(mol, assigned_atoms, start_slot=4):
-    """
-    Auto-detect sidechain attachment atoms from atoms not already assigned.
-
-    Assigns sequential slots with no gaps starting from start_slot.
-    backbone_n_mod is handled by pre_activate before this runs.
-
-    :param mol: RDKit mol with explicit H.
-    :param assigned_atoms: atom indices already consumed by backbone slots.
-    :param start_slot: first slot number to assign; caller sets this to
-                       len(backbone) so numbering is always gap-free.
-    :returns: {slot: (attachment_idx, leaving_smiles, chem_type)}.
-    """
+def find_sidechain_slots(mol, assigned_atoms, start_slot=4, *, atom_order=None):
+    """Resolve chemical handles, then number their replaceable groups canonically."""
+    sites = Perception(mol).raw_sites(
+        assigned_atoms, canonical_atom_order(mol) if atom_order is None else atom_order)
     slots = {}
-    next_slot = start_slot
-    seen = set(assigned_atoms)
-    pre_scan = frozenset(seen)  # backbone atoms — excluded from second-H pass
-    protected = set()  # non-attachment atoms in multi-atom SMARTS — off-limits
-    first_ct = {}      # atom_idx -> first assigned chem_type
-
-    _AROMATIC_SLOT_TYPES = frozenset({'aromatic_nh'})
-    for patt, leaving, chem_type, label_only in _SC_PATTERNS:
-        matches = sorted(mol.GetSubstructMatches(patt), key=lambda m: m[0])
-        for match in matches:
-            idx = match[0]
-            if (mol.GetAtomWithIdx(idx).GetIsAromatic()
-                    and chem_type not in _AROMATIC_SLOT_TYPES):
-                continue
-            if idx not in seen and idx not in protected:
-                lg = leaving if leaving is not None else infer_leaving_group(mol, idx)
-                # The generic H2-N pattern reserves both historical slots, but
-                # it is not evidence that an amide/guanidine is an amine.
-                kind = (nitrogen_chem_type(mol, idx)
-                        if mol.GetAtomWithIdx(idx).GetAtomicNum() == 7
-                        else chem_type)
-                slots[next_slot] = (idx, lg, kind)
-                seen.add(idx)
-                first_ct[idx] = chem_type
-                next_slot += 1
-                if not label_only:
-                    for other_idx in match[1:]:
-                        protected.add(other_idx)
-
-    # Second H on sidechain primary amines only (not backbone atoms).
-    for match in mol.GetSubstructMatches(_SECOND_H_PAT):
-        idx = match[0]
-        if (idx in seen and idx not in pre_scan
-                and first_ct.get(idx) == 'amine_primary'):
-            kind = nitrogen_chem_type(mol, idx)
-            # amine_secondary historically marks the second H on a primary
-            # amine. Conjugated N sites keep their real chemistry on both Hs.
-            kind = 'amine_secondary' if kind == 'amine_primary' else kind
-            slots[next_slot] = (idx, '[H]', kind)
-            next_slot += 1
-
+    for site in sites:
+        leaving = site.leaving or infer_leaving_group(mol, site.atom)
+        for _ in range(site.capacity):
+            slots[start_slot + len(slots)] = (site.atom, leaving, site.functionality)
     return slots
 
 
 def infer_leaving_group(mol, attachment_idx):
-    """
-    Infer leaving group SMILES for an attachment atom via SMARTS rules.
+    """Read replaceable groups from bonds after a site has been identified.
 
-    :param mol: RDKit mol with explicit H.
-    :param attachment_idx: index of the attachment atom.
-    :returns: leaving group SMILES string, or None if unrecognised.
+    Reagent halides precede acid OH, which precedes H. Formic acid consequently
+    loses OH at its acyl port, rather than being mistaken for an aldehyde.
     """
-    for patt, leaving in _LG_PATTERNS:
-        for match in mol.GetSubstructMatches(patt):
-            if match[0] == attachment_idx:
-                return leaving
+    atom = mol.GetAtomWithIdx(attachment_idx)
+    neighbors = list(atom.GetNeighbors())
+    if atom.GetAtomicNum() in (6, 16):
+        for element, group in ((53, '[I]'), (35, '[Br]'), (17, '[Cl]')):
+            if any(nb.GetAtomicNum() == element for nb in neighbors):
+                return group
+        if any(nb.GetAtomicNum() == 8 and
+               mol.GetBondBetweenAtoms(attachment_idx, nb.GetIdx()).GetBondTypeAsDouble() == 2
+               for nb in neighbors):
+            if any(nb.GetAtomicNum() == 8 and
+                   mol.GetBondBetweenAtoms(attachment_idx, nb.GetIdx()).GetBondTypeAsDouble() == 1
+                   and (nb.GetTotalNumHs() or any(h.GetAtomicNum() == 1 for h in nb.GetNeighbors()))
+                   for nb in neighbors):
+                return '[OH]'
+    if atom.GetTotalNumHs() or any(nb.GetAtomicNum() == 1 for nb in neighbors):
+        return '[H]'
     return None
 
 
@@ -508,37 +397,13 @@ def validate_leaving_group(mol, attachment_idx, leaving_smiles):
 
 
 def find_all_backbone_slots(mol):
-    """Return ALL (N, COOH) backbone pairings sorted by bond-path length.
-
-    Unlike find_backbone_slots which returns only the shortest-path (alpha)
-    assignment, this returns every distinct COOH paired with the nearest N,
-    ordered by increasing path length.  Use this to generate β, γ, δ backbone
-    orientation registrations for multi-COOH monomers like Asp, Gla.
-
-    :param mol: RDKit mol with explicit H (call AddHs first).
-    :returns: list of ({1: n_idx, 2: c_idx}, path_len) sorted by path_len.
-              First entry matches find_backbone_slots (shortest = alpha).
-    """
-    n_idxs = _backbone_n_indices(mol)
-    c_idxs = [m[0] for m in mol.GetSubstructMatches(_BB_COOH_PAT)]
-    if not n_idxs or not c_idxs:
-        return []
-
-    triples = []
-    for n_idx in n_idxs:
-        for c_idx in c_idxs:
-            path = Chem.GetShortestPath(mol, n_idx, c_idx)
-            if path:
-                triples.append((len(path) - 1, n_idx, c_idx))
-    triples.sort()
-
-    seen_c = set()
-    result = []
-    for dist, n_idx, c_idx in triples:
-        if c_idx not in seen_c:
-            seen_c.add(c_idx)
-            result.append(({1: n_idx, 2: c_idx}, dist))
-    return result
+    """Every distinct backbone orientation, ordered by distance and graph identity."""
+    pairs = _backbone_pairs(mol)
+    results = []
+    for distance in sorted({length for length, _ in pairs}):
+        choices = _distinct_orientations(mol, [choice for length, choice in pairs if length == distance])
+        results.extend((choice, distance) for choice in choices)
+    return results
 
 
 _DIST_SUFFIXES = {2: '', 3: '_b', 4: '_g', 5: '_d'}
@@ -547,10 +412,10 @@ _DIST_SUFFIXES = {2: '', 3: '_b', 4: '_g', 5: '_d'}
 def pre_activate_all(smiles):
     """Generate CHUCKLES registrations for every backbone orientation.
 
-    Calls pre_activate once per distinct (N, COOH) pairing found by
-    find_all_backbone_slots.  Monomers with only one COOH return a single-
-    element list identical to pre_activate.  Monomers with two COOHs (e.g.
-    Asp, Glu) return two entries; three COOHs return three, and so on.
+    Calls pre_activate once per chemically distinct endpoint pairing found by
+    find_all_backbone_slots, including longer alternatives such as beta-Asp.
+    Symmetry-equivalent orientations produce one entry. Equal-length distinct
+    orientations receive numbered suffixes in canonical graph order.
 
     :param smiles: full monomer SMILES.
     :returns: list of (suffix, ActivationResult) sorted by path length.
@@ -569,9 +434,12 @@ def pre_activate_all(smiles):
     pairings = find_all_backbone_slots(mol_h)
     if not pairings:
         raise ActivationError(f"No backbone pairings found in: {smiles}")
-    results = []
+    results, counts = [], {}
     for backbone_dict, dist in pairings:
         suffix = _DIST_SUFFIXES.get(dist, f'_x{dist}')
+        counts[dist] = counts.get(dist, 0) + 1
+        if counts[dist] > 1:
+            suffix += f'_{counts[dist]}'
         result = pre_activate(smiles, backbone_indices=backbone_dict)
         results.append((suffix, result))
     return results
@@ -582,18 +450,20 @@ def pre_activate(smiles, slot_overrides=None, leaving_overrides=None,
     """
     Convert a full monomer SMILES to a pre-activated CHUCKLES fragment.
 
-    Backbone R1/R2 are always auto-detected via SMARTS backbone patterns.
-    Sidechain R3+ are auto-detected wherever a chemically viable bond site
-    exists; the sequence author decides whether to use them.
+    The shortest supported backbone pair determines R1/R2 unless explicitly
+    selected. R3 is reserved for the second backbone N hydrogen. Detected
+    sidechain handles receive R4+ in canonical atom order, independently of
+    rule execution order. Distinct tied backbones/caps raise BackboneAmbiguity.
 
     :param smiles: full monomer SMILES (any stereo/notation, all atoms present).
     :param slot_overrides: {slot: attachment_atom_idx} to add/override slots.
     :param leaving_overrides: {slot: leaving_smiles} to override auto-derived
            leaving groups.  Each override is validated against the mol.
-    :param backbone_indices: {1: n_idx, 2: c_idx} to force specific backbone
-           atoms, bypassing find_backbone_slots.  Atom indices must correspond
-           to the mol AFTER AddHs.  Used by pre_activate_all for β/γ variants.
-    :returns: ActivationResult with .chuckles, .leaving, .chem_types.
+    :param backbone_indices: {1: n_idx, 2: c_idx} to select a supported backbone,
+           or a single R1/R2 entry for a cap. Indices refer to the parsed input
+           SMILES before hydrogens are added. Used by pre_activate_all for β/γ
+           variants and to resolve explicit orientation choices.
+    :returns: ActivationResult with .chuckles, .leaving, .chem_types, .policy.
               Raises ActivationError on failure.
               Also supports legacy tuple unpacking: chuckles, leaving, chem_types, err = pre_activate(...)
               where err is always None (failures raise instead).
@@ -605,18 +475,38 @@ def pre_activate(smiles, slot_overrides=None, leaving_overrides=None,
         require_supported_stereo(mol)
     except ValueError as exc:
         raise ActivationError(str(exc)) from exc
+    if any(atom.GetAtomicNum() == 0 for atom in mol.GetAtoms()):
+        raise ActivationError('Pre-activation requires a full monomer without numbered dummies')
+    atom_order = canonical_atom_order(mol)
+    source_identity = Chem.MolToSmiles(mol)
     mol = Chem.AddHs(mol)
 
     _sidechain_only = False
     if backbone_indices is not None:
         backbone = dict(backbone_indices)
+        if (not backbone or set(backbone) - {1, 2}
+                or any(not isinstance(index, int) or index < 0 or index >= mol.GetNumAtoms()
+                       or mol.GetAtomWithIdx(index).GetAtomicNum() < 2
+                       for index in backbone.values())
+                or len(set(backbone.values())) != len(backbone)):
+            raise ActivationError('Backbone indices must identify distinct heavy atoms for R1/R2')
+        if set(backbone) == {1, 2}:
+            choices = [choice for _, choice in _backbone_pairs(mol)]
+        else:
+            try:
+                cap, _ = find_cap_slots(mol)
+                choices = [cap] if cap else []
+            except BackboneAmbiguity as error:
+                choices = error.choices
+        if backbone not in choices:
+            raise ActivationError('Backbone indices do not select a supported backbone or cap orientation')
     else:
         backbone = find_backbone_slots(mol)
     if backbone is None:
         backbone, backbone_chem_types = find_cap_slots(mol)
         if backbone is None:
             # Last resort: sidechain-only molecule (multi-arm crosslinkers)
-            _sc_all = find_sidechain_slots(mol, assigned_atoms=set(), start_slot=4)
+            _sc_all = find_sidechain_slots(mol, assigned_atoms=set(), start_slot=4, atom_order=atom_order)
             if _sc_all:
                 backbone = {s: info[0] for s, info in _sc_all.items()}
                 backbone_chem_types = {s: info[2] for s, info in _sc_all.items()}
@@ -626,6 +516,18 @@ def pre_activate(smiles, slot_overrides=None, leaving_overrides=None,
                     "Cannot identify backbone (N + COOH) or a single cap terminus. "
                     "Provide pre-filled CHUCKLES in the input column."
                 )
+    elif set(backbone) != {1, 2}:
+        slot, index = next(iter(backbone.items()))
+        atom = mol.GetAtomWithIdx(index)
+        if slot == 1:
+            kind = {7: 'backbone_n', 8: 'backbone_o'}.get(atom.GetAtomicNum(), 'carbon')
+            if atom.GetIsAromatic():
+                kind = 'aryl_c_anchor'
+        elif atom.GetAtomicNum() == 16:
+            kind = 'element_16'
+        else:
+            kind = 'backbone_c' if atom.GetHybridization() == Chem.HybridizationType.SP2 else 'alkyl_halide_c'
+        backbone_chem_types = {slot: kind}
     else:
         r2_atom = mol.GetAtomWithIdx(backbone[2])
         r2_element = r2_atom.GetAtomicNum()
@@ -683,6 +585,7 @@ def pre_activate(smiles, slot_overrides=None, leaving_overrides=None,
             mol,
             assigned_atoms=_bb_excluded,
             start_slot=_sc_start,
+            atom_order=atom_order,
         )
     slots = {**backbone,
              **{s: info[0] for s, info in sidechain.items()}}
@@ -694,9 +597,18 @@ def pre_activate(smiles, slot_overrides=None, leaving_overrides=None,
     }
 
     if slot_overrides:
+        if any(not isinstance(slot, int) or slot <= 0 or not isinstance(index, int)
+               or index < 0 or index >= mol.GetNumAtoms()
+               or mol.GetAtomWithIdx(index).GetAtomicNum() < 2
+               for slot, index in slot_overrides.items()):
+            raise ActivationError('Attachment overrides need positive slots and valid heavy atoms')
         slots.update(slot_overrides)
+        for slot in slot_overrides:
+            sidechain_leaving.pop(slot, None)
 
     leaving = {}
+    if set(leaving_overrides or {}) - set(slots):
+        raise ActivationError('Leaving-group overrides refer to missing attachment slots')
     for slot, attach_idx in slots.items():
         if leaving_overrides and slot in leaving_overrides:
             lg = leaving_overrides[slot]
@@ -721,8 +633,15 @@ def pre_activate(smiles, slot_overrides=None, leaving_overrides=None,
     atoms_to_remove = []
     _already_claimed = set()
     for slot, attach_idx in sorted(slots.items()):
+        explicit = leaving_overrides and slot in leaving_overrides
         indices = _find_leaving_atoms(emol, attach_idx, leaving[slot],
-                                      exclude=_already_claimed)
+                                      exclude=_already_claimed, allow_isotopes=not explicit)
+        if not indices:
+            raise ActivationError(f'R{slot} has no unclaimed {leaving[slot]} leaving group')
+        group_atom = emol.GetAtomWithIdx(indices[0])
+        if not explicit and group_atom.GetIsotope():
+            group = 'OH' if group_atom.GetAtomicNum() == 8 else group_atom.GetSymbol()
+            leaving[slot] = f'[{group_atom.GetIsotope()}{group}]'
         atoms_to_remove.extend(indices)
         _already_claimed.update(indices)
 
@@ -736,18 +655,24 @@ def pre_activate(smiles, slot_overrides=None, leaving_overrides=None,
     for idx in sorted(set(atoms_to_remove), reverse=True):
         emol.RemoveAtom(idx)
 
-    _raw = emol.GetMol()
     try:
-        Chem.SanitizeMol(_raw)
-    except Exception:
-        pass
-    mol_final = Chem.RemoveHs(_raw)
-    try:
-        Chem.SanitizeMol(mol_final)
-    except Exception as e:
+        mol_final = Chem.RemoveHs(emol.GetMol())
+    except (ValueError, RuntimeError) as e:
         raise ActivationError(f"Sanitization failed: {e}") from e
 
-    rdDepictor.Compute2DCoords(mol_final)
+    if slot_overrides:
+        perception = Perception(mol_final)
+        for atom in mol_final.GetAtoms():
+            slot = atom.GetIsotope()
+            if atom.GetAtomicNum() == 0 and slot in slot_overrides:
+                chem_types[slot] = perception.classify(
+                    atom.GetNeighbors()[0].GetIdx(), slot, leaving[slot]
+                ).reaction_type
+
+    from pyPept.leaving_groups import restore_leaving_groups
+    restored = restore_leaving_groups(mol_final, leaving)
+    if Chem.MolToSmiles(restored) != source_identity:
+        raise ActivationError('Attachment detection changed the source structure; supply explicit sites and leaving groups')
 
     return ActivationResult(
         chuckles=Chem.MolToSmiles(mol_final),
@@ -832,6 +757,7 @@ def derive_monomers(csv_path, rebuild=False):
                     )
                     result = pre_activate(normalized, leaving_overrides=overrides)
                     row["chuckles"] = result.chuckles
+                    row["activation_policy"] = result.policy
                     for slot in (
                         set(_LG_COLS) | set(_row_leaving(row)) | set(result.leaving)
                     ):
@@ -872,6 +798,7 @@ def write_sdf(rows, output_sdf):
                     m_type=row.get("type", "aa"),
                     m_subtype="natural" if row.get("type", "") == "aa" else "cap",
                     strict_metadata=False,
+                    activation_policy=row.get("activation_policy"),
                 )
             except ValueError as error:
                 errors.append(f"{token}: {error}")
@@ -976,7 +903,7 @@ def import_helm_sdf(helm_sdf_path, csv_out_path, peptide_only=True):
 
 # Private helpers
 
-def _find_leaving_atoms(mol, attach_idx, leaving_smiles, exclude=None):
+def _find_leaving_atoms(mol, attach_idx, leaving_smiles, exclude=None, *, allow_isotopes=False):
     """Return atom indices to remove from mol for this leaving group.
 
     :param exclude: set of atom indices already claimed by an earlier slot on the
@@ -987,14 +914,17 @@ def _find_leaving_atoms(mol, attach_idx, leaving_smiles, exclude=None):
     exclude = exclude or set()
     lg_mol = Chem.MolFromSmiles(leaving_smiles)
     lg_root_num = lg_mol.GetAtomWithIdx(0).GetAtomicNum()
+    isotope = lg_mol.GetAtomWithIdx(0).GetIsotope()
     attach_atom = mol.GetAtomWithIdx(attach_idx)
 
-    for nb in attach_atom.GetNeighbors():
+    for nb in sorted(attach_atom.GetNeighbors(), key=lambda atom: atom.GetIsotope()):
         if nb.GetAtomicNum() != lg_root_num:
             continue
         if nb.GetIdx() in exclude:
             continue  # already claimed by an earlier slot
-        if leaving_smiles == '[OH]':
+        if nb.GetIsotope() != isotope and not (allow_isotopes and isotope == 0):
+            continue
+        if lg_root_num == 8:
             h_count = sum(1 for h in nb.GetNeighbors() if h.GetAtomicNum() == 1)
             if h_count == 0 and nb.GetTotalNumHs() == 0:
                 continue

@@ -43,6 +43,7 @@ def test_unchanged_csv_rebuild_preserves_derived_chemistry(tmp_path, source):
     rebuilt = one_record(sdf_path)
     assert rebuilt.GetProp("m_chem_types") == declared
     assert rebuilt.GetProp("m_Rgroups") == original.GetProp("m_Rgroups")
+    assert rebuilt.GetProp("m_activation_policy") == original.GetProp("m_activation_policy") == 'canonical-sites-v1'
     assert Chem.MolToSmiles(rebuilt) == Chem.MolToSmiles(original)
 
 
@@ -129,6 +130,22 @@ def test_record_construction_retains_unrelated_properties_without_mutation():
     assert stored.GetProp("author_note") == original.GetProp("author_note")
     assert not original.HasProp("symbol")
     assert stored.GetProp("symbol") == "Annotated"
+
+
+def test_new_registration_rejects_contradictory_chemistry_before_writing(tmp_path, monkeypatch):
+    path = tmp_path / 'monomers.sdf'
+    path.touch()
+    monkeypatch.setenv('CABILN_MONOMER_LIBRARY', str(path))
+    activated = pre_activate('N[C@@H](CS)C(=O)O')
+    with TestClient(create_app(allow_registration=True)) as client:
+        response = client.post('/register_monomer', json={
+            'abbr': 'FalseThiol', 'name': 'Contradictory declaration',
+            'chuckles': activated.chuckles, 'leaving': activated.leaving,
+            'chem_types': {**activated.chem_types, 4: 'hydroxyl'},
+        })
+    assert response.status_code == 400, response.text
+    assert 'R4 is thiol' in response.text
+    assert path.read_bytes() == b''
 
 
 @pytest.mark.parametrize("entry", ["csv", "web"])

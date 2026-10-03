@@ -79,7 +79,7 @@ def test_source_change_is_detected_when_rebinding_library(monkeypatch):
         projects.validate_project(saved)
 
 
-@pytest.mark.parametrize("change", ["rules", "convention", "unresolved"])
+@pytest.mark.parametrize("change", ["rules", "site_chemistry", "convention", "unresolved"])
 def test_incompatible_environment_never_silently_rebinds(monkeypatch, change):
     value = project()
     if change == "unresolved":
@@ -88,6 +88,8 @@ def test_incompatible_environment_never_silently_rebinds(monkeypatch, change):
     current = projects.project_context()
     if change == "rules":
         current["library_binding"]["reactions"] = "changed-rules"
+    elif change == 'site_chemistry':
+        current['library_binding']['site_chemistry'] = 'changed-perception'
     elif change == "convention":
         current["canonical"]["rdkit_version"] = "different-version"
     else:

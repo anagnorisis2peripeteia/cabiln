@@ -123,6 +123,135 @@ class TestMonomerPreActivate:
     right leaving group and chem_type.
     """
 
+    def test_library_inputs_keep_sites_when_atoms_and_rules_are_reordered(self, monkeypatch):
+        from pyPept import site_chemistry
+        from pyPept.interfaces import monomer_pipeline as pipeline
+
+        def activate(source, token):
+            try:
+                return [pipeline.pre_activate(source)]
+            except pipeline.BackboneAmbiguity as error:
+                return [pipeline.pre_activate(source, backbone_indices=choice)
+                        for choice in error.choices]
+            except pipeline.ActivationError:
+                # Hsl has no supported leaving group in the reviewed baseline.
+                assert token == 'Hsl', token
+                return None
+
+        path = pathlib.Path(pipeline.__file__).parents[1] / 'data' / 'monomers.csv'
+        cases = []
+        with path.open(newline='') as stream:
+            for row in csv.DictReader(stream):
+                source, explicit, error = pipeline.normalize_input(row['input'])
+                if error or explicit:
+                    continue
+                cases.append((row['token'], source, activate(source, row['token'])))
+        monkeypatch.setattr(site_chemistry, 'COMPILED_RULES',
+                            site_chemistry.compile_rules(reversed(site_chemistry.SITE_RULES)))
+        for seed, (token, source, expected) in enumerate(cases):
+            assert activate(alternate_smiles(source, seed), token) == expected, token
+
+    @pytest.mark.parametrize('source', [
+        'N[C@@H](Cc1cc(O)c(O)cc1)C(=O)O',
+        'N[C@@H](CCC(S)CC(=O)O)C(=O)O',
+        'N[C@@H](CC(O)CO)C(=O)O',
+    ])
+    @pytest.mark.fuzz
+    @fuzz_settings(examples=20)
+    @given(order=st.integers(0, 65535))
+    def test_multifunctional_sites_do_not_depend_on_smiles_order(self, source, order):
+        from pyPept.interfaces.monomer_pipeline import pre_activate
+
+        expected = pre_activate(source)
+        actual = pre_activate(alternate_smiles(source, order))
+        assert actual.chuckles == expected.chuckles
+        assert actual.leaving == expected.leaving
+        assert actual.chem_types == expected.chem_types
+
+    def test_equivalent_dopa_inputs_keep_numbered_hydroxyls(self):
+        from pyPept.interfaces.monomer_pipeline import pre_activate
+
+        left = pre_activate('N[C@@H](Cc1cc(O)c(O)cc1)C(=O)O')
+        right = pre_activate('N[C@@H](Cc1ccc(O)c(O)c1)C(=O)O')
+        assert left.chuckles == right.chuckles
+
+    @pytest.mark.parametrize('source', ['O=C(C(CN)CNC)O', 'N(C)CC(C(O)=O)CN'])
+    def test_inequivalent_tied_backbones_require_a_choice(self, source):
+        from pyPept.interfaces.monomer_pipeline import ActivationError, pre_activate
+
+        with pytest.raises(ActivationError, match='backbone'):
+            pre_activate(source)
+
+    @pytest.mark.parametrize('source', [
+        'N[C@@H](CCC(S)CC(=O)O)C(=O)O',
+        'N[C@@H](CCCNC(=N)N)C(=O)O',
+        'N[C@@H](CCC(=O)NN)C(=O)O',
+        'N[C@@H](CCCCN1C(=O)C=CC1=O)C(=O)O',
+    ])
+    def test_rule_execution_order_cannot_change_numbering(self, source, monkeypatch):
+        from pyPept import site_chemistry as chemistry
+        from pyPept.interfaces.monomer_pipeline import pre_activate
+
+        expected = pre_activate(source)
+        unrelated = chemistry.SiteRule('silicon_test', 1, '[SiH:1]', '[H]', None)
+        rules = chemistry.compile_rules((*reversed(chemistry.SITE_RULES), unrelated))
+        monkeypatch.setattr(chemistry, 'COMPILED_RULES', rules)
+        assert pre_activate(source) == expected
+
+    def test_equally_ranked_competing_rules_are_rejected(self, monkeypatch):
+        from pyPept import site_chemistry as chemistry
+        from pyPept.interfaces.monomer_pipeline import pre_activate
+
+        conflicting = chemistry.SiteRule('other_phenol', 120, '[OX2H1:1][c]', '[H]', '[OX2;H0,H1:1][c]')
+        monkeypatch.setattr(chemistry, 'COMPILED_RULES',
+                            chemistry.compile_rules((*chemistry.SITE_RULES, conflicting)))
+        with pytest.raises(ValueError, match='precedence'):
+            pre_activate('N[C@@H](Cc1ccc(O)cc1)C(=O)O')
+        with pytest.raises(ValueError, match='precedence'):
+            chemistry.Perception(Chem.MolFromSmiles('[4*]Oc1ccccc1')).classify(1, 4, '[H]')
+
+    def test_backbone_choices_are_complete_stable_and_explicit(self):
+        from pyPept.interfaces.monomer_pipeline import BackboneAmbiguity, pre_activate
+
+        choices = []
+        for source in ('O=C(C(CN)CNC)O', 'N(C)CC(C(O)=O)CN'):
+            with pytest.raises(BackboneAmbiguity) as error:
+                pre_activate(source)
+            results = [pre_activate(source, backbone_indices=choice)
+                       for choice in error.value.choices]
+            assert len(results) == 2
+            choices.append([result.chuckles for result in results])
+            # The remaining secondary N remains available when the primary N
+            # is the backbone; it must not disappear from automatic ingestion.
+            assert any('amine_secondary' in result.chem_types.values() for result in results)
+        assert choices[0] == choices[1]
+        assert pre_activate('NCC(CN)C(=O)O')  # symmetry-equivalent backbone choices
+
+    def test_overrides_recompute_chemistry_and_cannot_overdraw_hydrogens(self):
+        from pyPept.interfaces.monomer_pipeline import ActivationError, pre_activate
+
+        result = pre_activate('NC(CO)C(=O)O', slot_overrides={4: 2})
+        assert result.chem_types[4] == 'carbon'
+        with pytest.raises(ActivationError, match='unclaimed'):
+            pre_activate('NCC(=O)O', slot_overrides={4: 0})
+        with pytest.raises(ActivationError, match='supported backbone'):
+            pre_activate('NCC(=O)O', backbone_indices={1: 1, 2: 2})
+        with pytest.raises(ActivationError, match='missing attachment'):
+            pre_activate('NCC(=O)O', leaving_overrides={7: '[H]'})
+
+    def test_isotopic_leaving_groups_and_formic_acid_are_preserved(self):
+        from pyPept.interfaces.monomer_pipeline import pre_activate
+        from pyPept.leaving_groups import restore_leaving_groups
+
+        source = '[2H]N[C@@H](C)C(=O)[18OH]'
+        result = pre_activate(source)
+        assert result.leaving == {1: '[H]', 2: '[18OH]', 3: '[2H]'}
+        restored = restore_leaving_groups(Chem.MolFromSmiles(result.chuckles), result.leaving)
+        assert Chem.MolToSmiles(restored) == Chem.MolToSmiles(Chem.MolFromSmiles(source))
+        formic = pre_activate('O=CO')
+        assert formic.leaving == {2: '[OH]'}
+        assert formic.chuckles == Chem.MolToSmiles(Chem.MolFromSmiles('[2*]C=O'))
+
     @staticmethod
     def _slot_map(chuckles):
         """Parse CHUCKLES -> {slot_isotope: neighbor_atomic_num}."""
@@ -204,7 +333,7 @@ class TestMonomerPreActivate:
             assert any(not nb.GetIsAromatic() for nb in c_nbs), \
                 f"Hydroxyl slot {slot}: O must be bonded to aliphatic C"
 
-        elif chem_type == 'hydroxyl_phenolic':
+        elif chem_type == 'aryl_phenol_o':
             assert attach.GetAtomicNum() == 8
             has_aromatic = any(nb.GetIsAromatic()
                               for nb in attach.GetNeighbors()
@@ -298,10 +427,10 @@ class TestMonomerPreActivate:
             pytest.param('N[C@@H]([C@@H](O)C)C(=O)O', {1: 7, 2: 6, 3: 7, 4: 8},
                 {4: '[H]'}, {4: 'hydroxyl'}, id='thr_hydroxyl_on_oxygen'),
             pytest.param('N[C@@H](CCCCN)C(=O)O', {1: 7, 2: 6, 3: 7, 4: 7, 5: 7},
-                None, {4: 'amine_primary', 5: 'amine_secondary'},
+                None, {4: 'amine_primary', 5: 'amine_primary'},
                 id='lys_amine_primary_on_nitrogen'),
             pytest.param('N[C@@H](CCCN)C(=O)O', {1: 7, 2: 6, 3: 7, 4: 7, 5: 7}, None,
-                {4: 'amine_primary', 5: 'amine_secondary'},
+                {4: 'amine_primary', 5: 'amine_primary'},
                 id='orn_amine_primary_on_nitrogen'),
             pytest.param('N[C@@H](Cc1c[nH]c2ccccc12)C(=O)O',
                 {1: 7, 2: 6, 3: 7, 4: 7}, None,
@@ -311,7 +440,7 @@ class TestMonomerPreActivate:
                 None, {4: 'aromatic_nh', 1: 'backbone_n', 2: 'backbone_c'},
                 id='his_aromatic_nh'),
             pytest.param('N[C@@H](Cc1ccc(O)cc1)C(=O)O', {1: 7, 2: 6, 3: 7, 4: 8},
-                None, {4: 'hydroxyl_phenolic'}, id='tyr_phenolic_oh'),
+                None, {4: 'aryl_phenol_o'}, id='tyr_phenolic_oh'),
             pytest.param('N[C@@H](CC(=O)N)C(=O)O', {1: 7, 2: 6, 3: 7, 4: 7, 5: 7},
                 None, {4: 'amide_nh', 5: 'amide_nh'}, id='asn_amide_nh2'),
             pytest.param('N[C@@H](CCC(=O)N)C(=O)O', {1: 7, 2: 6, 3: 7, 4: 7, 5: 7},
@@ -341,7 +470,7 @@ class TestMonomerPreActivate:
             pytest.param('N[C@H](CO)C(=O)O', {1: 7, 2: 6, 3: 7, 4: 8}, None,
                 {4: 'hydroxyl'}, id='d_ser_same_as_l_ser'),
             pytest.param('N[C@H](CCCCN)C(=O)O', {1: 7, 2: 6, 3: 7, 4: 7, 5: 7}, None,
-                {4: 'amine_primary', 5: 'amine_secondary'}, id='d_lys_same_as_l_lys'),
+                {4: 'amine_primary', 5: 'amine_primary'}, id='d_lys_same_as_l_lys'),
             pytest.param('N[C@@H](CCS)C(=O)O', {1: 7, 2: 6, 3: 7, 4: 16}, {4: '[H]'},
                 {4: 'thiol'}, id='homocysteine_thiol'),
             pytest.param('N[C@H](CCS)C(=O)O', {1: 7, 2: 6, 3: 7, 4: 16}, None,
@@ -377,18 +506,18 @@ class TestMonomerPreActivate:
             pytest.param('N[C@@H](CCCC(=O)NN)C(=O)O', None, None, {4: 'hydrazide'},
                 id='long_chain_hydrazide'),
             pytest.param('N[C@@H](CCN)C(=O)O', {1: 7, 2: 6, 3: 7, 4: 7, 5: 7},
-                {5: '[H]'}, {4: 'amine_primary', 5: 'amine_secondary'},
+                {5: '[H]'}, {4: 'amine_primary', 5: 'amine_primary'},
                 id='dab_amine_primary'),
             pytest.param('N[C@@H](CN)C(=O)O', {1: 7, 2: 6, 3: 7, 4: 7, 5: 7}, None,
-                {4: 'amine_primary', 5: 'amine_secondary'}, id='dap_amine_primary'),
+                {4: 'amine_primary', 5: 'amine_primary'}, id='dap_amine_primary'),
             pytest.param('N[C@H](CCCN)C(=O)O', {1: 7, 2: 6, 3: 7, 4: 7, 5: 7}, None,
                 {4: 'amine_primary'}, id='d_orn_amine_primary'),
             pytest.param('N[C@H](Cc1ccc(O)cc1)C(=O)O', {1: 7, 2: 6, 3: 7, 4: 8},
-                None, {4: 'hydroxyl_phenolic'}, id='d_tyr_phenolic_oh'),
+                None, {4: 'aryl_phenol_o'}, id='d_tyr_phenolic_oh'),
             pytest.param('N[C@@H](Cc1cc(F)c(O)cc1)C(=O)O', None, None,
-                {4: 'hydroxyl_phenolic'}, id='3f_tyr_phenolic_oh'),
+                {4: 'aryl_phenol_o'}, id='3f_tyr_phenolic_oh'),
             pytest.param('N[C@@H](Cc1cc(Cl)c(O)cc1)C(=O)O', None, None,
-                {4: 'hydroxyl_phenolic'}, id='3cl_tyr_phenolic_oh'),
+                {4: 'aryl_phenol_o'}, id='3cl_tyr_phenolic_oh'),
             pytest.param('N[C@@H](CCO)C(=O)O', {1: 7, 2: 6, 3: 7, 4: 8}, None,
                 {4: 'hydroxyl'}, id='homoserine_hydroxyl'),
             pytest.param('N[C@H]([C@H](O)C)C(=O)O', {1: 7, 2: 6, 3: 7, 4: 8}, None,
@@ -531,8 +660,8 @@ class TestMonomerPreActivate:
         """All guanidine nitrogens retain their slots and actual functionality."""
         r = self._check('N[C@@H](CCCNC(=N)N)C(=O)O')
         assert r.chem_types == {1: 'backbone_n', 2: 'backbone_c',
-                               3: 'backbone_n_mod', 4: 'guanidinium',
-                               5: 'guanidinium', 6: 'guanidinium_imine',
+                               3: 'backbone_n_mod', 4: 'guanidinium_imine',
+                               5: 'guanidinium', 6: 'guanidinium',
                                7: 'guanidinium'}
         smap = self._slot_map(r.chuckles)
         guan_slot = [s for s, ct in r.chem_types.items() if ct == 'guanidinium'][0]
@@ -553,7 +682,7 @@ class TestMonomerPreActivate:
             ('O[C@@H](CC(N)=O)C(=O)O',
              '[1*]O[C@@H](CC(=O)N([4*])[5*])C([2*])=O', 'backbone_o'),
             ('N[C@@H](CCCNC(=N)N)C(=O)O',
-             '[1*]N([3*])[C@@H](CCCN([5*])C(=N[6*])N([4*])[7*])C([2*])=O',
+             '[1*]N([3*])[C@@H](CCCN([7*])C(=N[4*])N([5*])[6*])C([2*])=O',
              'backbone_n'),
         ],
     )
@@ -576,7 +705,7 @@ class TestMonomerPreActivate:
     def test_dopa_two_phenolic_oh(self):
         """DOPA (3,4-dihydroxyphenylalanine): two phenolic OHs detected."""
         r = self._check('N[C@@H](Cc1cc(O)c(O)cc1)C(=O)O')
-        phenol_slots = [s for s, ct in r.chem_types.items() if ct == 'hydroxyl_phenolic']
+        phenol_slots = [s for s, ct in r.chem_types.items() if ct == 'aryl_phenol_o']
         assert len(phenol_slots) == 2
 
     def test_nme_gln_amide_nh(self):
@@ -724,7 +853,7 @@ class TestMonomerPreActivate:
         groups = {1: "[H]", 2: "[OH]", 3: "[H]", 4: leaving}
         types = {1: "backbone_n", 2: "backbone_c", 3: "backbone_n_mod", 4: kind}
         if kind == "amine_primary":
-            slots[5], groups[5], types[5] = 7, "[H]", "amine_secondary"
+            slots[5], groups[5], types[5] = 7, "[H]", "amine_primary"
         activated = self._check(
             alternate_smiles(source, order),
             expect_slots=slots, expect_lg=groups, expect_ct=types,

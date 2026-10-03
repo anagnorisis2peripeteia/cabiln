@@ -54,6 +54,7 @@ flowchart LR
 | `pyPept.editor` | Edit selected occurrences and verify the requested slot-edge change |
 | `pyPept.molecule` | Assemble monomers using reaction definitions |
 | `pyPept.attachments` | Resolve selected or all attachment sites and supported reaction pairs using effective chemistry |
+| `pyPept.site_chemistry` | Compile attachment rules, perceive chemical functionality once per graph and separate it from site roles and numbering |
 | `pyPept.leaving_groups` | Restore the same standalone structures for assembly and previews |
 | `pyPept.structure` | Distinguish exact graph equality from incomplete stereo compatibility |
 | `pyPept.recognition` | Compile library states and search for compatible atom ownership with explicit budgets |
@@ -131,7 +132,8 @@ Registration and bulk import share record construction. Registration requires
 complete slot metadata and atomically appends under a lock. Bulk import retains
 older sparse leaving groups and declarations; an absent leaving group means
 implicit hydrogen. Explicit `rebuild=True` reactivates amino acids and discards
-their leaving-group overrides. Preserve that compatibility when changing imports.
+their leaving-group overrides. A rebuild can report an ambiguous orientation
+instead of choosing one from input atom order; review its returned errors.
 
 The recognizer compiles states from actual library sites, leaving groups and
 effective chemistry. It searches ownership across the whole molecule and
@@ -139,6 +141,54 @@ independently verifies assembled candidates. Cheap proposal search and ownership
 search have separate budgets; both share connection and unknown-region rules.
 Candidates and verification decisions are reused within one active proposal.
 See [recognition](decomposition.md) for result fields, ambiguity and limits.
+
+### Attachment detection and registration
+
+`pre_activate` turns a complete molecule into an explicit attachment template.
+The `canonical-sites-v1` policy separates four decisions:
+
+1. Choose the shortest supported backbone, or a supported cap orientation.
+   Symmetry-equivalent choices collapse to one. Chemically distinct ties raise
+   `BackboneAmbiguity` with the possible endpoint assignments.
+2. Match supported sidechain handles. Explicit chemical precedence resolves
+   overlapping patterns; declaration or execution order cannot number sites.
+   Two competing rules with the same precedence fail rather than silently win.
+3. Assign backbone R1/R2, reserve R3 for the second backbone N hydrogen, and
+   assign R4+ by canonical atom traversal. Two replaceable hydrogens on one
+   sidechain nitrogen have the same functionality. Atom maps do not determine
+   numbering. Canonical traversal follows the installed RDKit convention.
+4. Replace each actual leaving group with its numbered dummy, then restore all
+   groups and compare the complete isomeric structure with the input. This
+   catches overdrawn sites and lost isotopes before registration.
+
+The preview endpoint returns an unselected set of drawings for ambiguous input.
+The browser requires an explicit choice. Python callers can pass one of
+`BackboneAmbiguity.choices` as `backbone_indices`; these are atom indices in the
+original parsed SMILES. `pre_activate_all` enumerates the distinct backbone
+orientations, including longer beta/gamma alternatives. The CLI's `--backbone`
+option selects an R1/R2 pair. Explicit CHUCKLES templates remain available for
+author-defined sites that automatic detection does not cover.
+
+The resulting template, leaving groups and chemistry become a stored definition.
+New CLI, web and CSV activations record `m_activation_policy` in the SDF
+(`activation_policy` in CSV). Existing stored records are never renumbered on
+read. Bulk import preserves explicit templates by default. Rebuilding from raw
+input can discover additional sites or change R4+ numbering; compare numbered
+structures before replacing a definition referenced by existing sequences.
+
+`Perception` shares compiled SMARTS and caches matches within one immutable
+graph. Runtime attachment inspection separates functionality, backbone role and
+the reaction dispatch type. New registration rejects contradictory declarations;
+legacy metadata remains readable and is covered by the library audit.
+`reactions.yaml` compiles to one route per chemistry pair. Duplicate routes,
+invalid SMARTS and missing/cyclic aliases fail at startup. Named equivalent
+reactions use `alias_of`. Executable targeted reactions use a bounded cache.
+
+Project and canonical-export bindings include the chemistry-rule fingerprint as
+well as the monomer, alias, reaction and cap data hashes. A project from a
+different rule convention requires its original installation or a newly verified
+source document. These checks establish software consistency and supported
+graph transformations; they do not predict experimental reaction feasibility.
 
 ## Browser state
 

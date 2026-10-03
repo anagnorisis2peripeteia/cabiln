@@ -3,8 +3,14 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+import re
 
 from rdkit import Chem
+
+
+def leaving_family(value):
+    """Isotopic variants retain the same attachment chemistry."""
+    return re.sub(r'^\[\d+(H|OH|Cl|Br|I)\]$', r'[\1]', value) if value else value
 
 
 def restore_leaving_groups(
