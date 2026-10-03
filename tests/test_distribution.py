@@ -124,11 +124,18 @@ def test_built_wheel_runs_core_and_web_outside_checkout(tmp_path):
                 response = client.get("/")
                 assert response.status_code == 200
                 assert "/static/builder.js" in response.text
-                assert client.get("/capabilities").json() == {"registration": False}
-                assert client.get("/register").status_code == 403
+                assert client.get("/capabilities").json() == {
+                    "registration": False, "session_registration": True,
+                }
+                assert client.get("/register").status_code == 200
+                assert client.post("/register_monomer", json={
+                    "abbr": "DistributionProbe", "name": "test", "chuckles": "invalid",
+                    "chem_types": {}, "leaving": {},
+                }).status_code == 403
                 for name in (
                     "theme.css", "builder.js", "builder.css", "ui.js", "residues.js", "library.js", "register.js",
                     "register.css", "examples.json", "project.js", "document.js", "requests.js", "tutorial.js",
+                    "session-library.js",
                 ):
                     response = client.get("/static/" + name)
                     assert response.status_code == 200, name
@@ -140,7 +147,9 @@ def test_built_wheel_runs_core_and_web_outside_checkout(tmp_path):
                 assert response.status_code == 200, response.text
                 assert "<svg" in response.json()["svg"]
             with TestClient(create_app(allow_registration=True)) as client:
-                assert client.get("/capabilities").json() == {"registration": True}
+                assert client.get("/capabilities").json() == {
+                    "registration": True, "session_registration": True,
+                }
                 assert client.get("/register").status_code == 200
             """),
         cwd=tmp_path,

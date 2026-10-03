@@ -3,7 +3,7 @@
 import argparse
 import json
 import time
-from urllib.error import URLError
+from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 
@@ -12,13 +12,21 @@ def main():
     parser.add_argument("--url", default="http://127.0.0.1:8000")
     args = parser.parse_args()
 
-    def request(path, body=None):
+    def request(path, body=None, *, token=None, status=200):
         data = json.dumps(body).encode() if body is not None else None
         req = Request(args.url + path, data=data)
         if data is not None:
             req.add_header("content-type", "application/json")
-        with urlopen(req, timeout=35) as response:
-            assert response.status == 200
+        if token is not None:
+            req.add_header("X-Cabiln-Library", token)
+        try:
+            response = urlopen(req, timeout=35)
+        except HTTPError as error:
+            if error.code != status:
+                raise
+            response = error
+        with response:
+            assert response.status == status, (path, response.status)
             assert response.headers["x-request-id"]
             return json.load(response)
 
@@ -31,7 +39,7 @@ def main():
             if time.monotonic() >= deadline:
                 raise
             time.sleep(0.2)
-    assert request("/capabilities") == {"registration": False}
+    assert request("/capabilities") == {"registration": False, "session_registration": True}
     source = "K.[G(4,2)]-A"
     rendered = request("/render", {"cabiln": source})
     assert "<svg" in rendered["svg"] and len(rendered["residues"]) == 3
@@ -47,7 +55,15 @@ def main():
     )
     assert request("/validate_project", prepared)["valid"]
     assert request("/monomers")
-    print(json.dumps({"ready": ready, "checks": 5, "status": "passed"}))
+    preview = request("/preview_monomer", {"smiles": "NCC(=O)O"})
+    entry = {key: preview[key] for key in ("chuckles", "chem_types", "leaving", "activation_policy")}
+    entry.update(abbr="ReleaseGly", name="Temporary release check")
+    snapshot = request("/session_library", {"monomers": [entry]})
+    rendered = request("/render", {"cabiln": "ReleaseGly"}, token=snapshot["token"])
+    assert [item["abbr"] for item in rendered["residues"]] == ["ReleaseGly"]
+    request("/render", {"cabiln": "ReleaseGly"}, status=400)
+    request("/register_monomer", entry, status=403)
+    print(json.dumps({"ready": ready, "checks": 8, "status": "passed"}))
 
 
 if __name__ == "__main__":
