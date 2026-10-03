@@ -246,6 +246,20 @@ test('registration refreshes the open library and supplies detected sites to bui
 
 for (const width of [1440, 390]) test(`public monomer onboarding stays private and travels with projects at ${width}px`, async ({ page, context, readonlyApp }, testInfo) => {
   test.setTimeout(90_000);
+  let releasePalette;
+  const cancelledPaletteRequests = [];
+  page.on('requestfailed', request => {
+    if (new URL(request.url()).pathname === '/monomers' && request.headers()['x-cabiln-library']) {
+      cancelledPaletteRequests.push(request.failure()?.errorText);
+    }
+  });
+  const paletteAfterClose = new Promise(resolve => { releasePalette = resolve; });
+  await page.route('**/monomers', async route => {
+    if (route.request().headers()['x-cabiln-library']) {
+      await paletteAfterClose;
+    }
+    await route.continue();
+  });
   await page.setViewportSize({ width, height: 1000 });
   await page.goto(readonlyApp.url);
   await render(page, 'A-G');
@@ -269,9 +283,11 @@ for (const width of [1440, 390]) test(`public monomer onboarding stays private a
   await expect(form.locator('#registration-done')).toBeInViewport();
   await form.locator('#registration-done').click();
   await expect(page.locator('#registration-dialog')).not.toBeVisible();
+  releasePalette();
   await expect(page.locator('#cabiln-input')).toHaveValue('A-G');
   await expect(page.locator(`.lib-row[data-abbr="${symbol}"]`)).toBeVisible();
   await render(page, symbol);
+  expect(cancelledPaletteRequests).toEqual([]);
   await page.locator('#btn-build').click();
   await selectChip(page, 0, 'left', symbol);
   await site(page, 'left', 4);

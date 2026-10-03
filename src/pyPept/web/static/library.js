@@ -67,8 +67,12 @@ class MonomerLibrary {
       if (active && !this.reactionError) this.loadReactions();
     });
 
-    window.addEventListener('focus', () => {
-      if (this.panel.classList.contains('open')) this.load();
+    window.addEventListener('focus', async () => {
+      if (!this.panel.classList.contains('open')) return;
+      const request = requests.start('library-focus');
+      try {
+        if (await request.waitFor('library', 'reactions') && this.panel.classList.contains('open')) await this.load();
+      } finally { request.finish(); }
     });
 
     // Keep one set of listeners while search replaces the rows.

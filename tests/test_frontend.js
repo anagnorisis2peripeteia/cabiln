@@ -135,7 +135,7 @@ test('library metadata waits for the current palette before using the shared wor
   ui.run('library.open()');
   assert.deepEqual(ui.requests.map(request => request.url), ['/monomers']);
 
-  ui.run("window.dispatchEvent(new Event('focus'))");
+  ui.run('library.load()');
   const latest = ui.requests[1];
   ui.requests[0].resolve([]);
   await new Promise(setImmediate);
@@ -171,14 +171,28 @@ test('reopening the palette discovers new monomers and preserves its search', as
 test('older library refresh cannot replace a newer library', async () => {
   const ui = page('builder.js');
   const old = ui.run('library.load()');
-  ui.run("library.panel.classList.add('open')");
-  ui.run("window.dispatchEvent(new Event('focus'))");
+  ui.run('library.load()');
   ui.requests[1].resolve([{ abbr: 'New', name: 'New', type: 'aa', subtype: '', chem_types: '' }]);
   await new Promise(setImmediate);
   ui.requests[0].resolve([]);
   await old;
   assert.equal(ui.run('library.monomers[0].abbr'), 'New');
   assert.match(ui.element('lib-list').innerHTML, /New/);
+});
+
+test('returning focus waits for the current palette before checking for library changes', async () => {
+  const ui = page('builder.js');
+  const pending = ui.run('library.load()');
+  ui.run("library.panel.classList.add('open'); window.dispatchEvent(new Event('focus'))");
+  assert.equal(ui.requests.length, 1);
+  assert.equal(ui.requests[0].options.signal.aborted, false);
+  ui.requests[0].resolve([]);
+  await pending;
+  await new Promise(setImmediate);
+  assert.equal(ui.requests.length, 2);
+  ui.requests[1].resolve([{ abbr: 'New', name: 'New', type: 'aa', chem_types: '' }]);
+  await new Promise(setImmediate);
+  assert.equal(ui.run('library.monomers[0].abbr'), 'New');
 });
 
 function previewRow(ui) {
