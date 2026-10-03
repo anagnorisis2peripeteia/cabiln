@@ -250,7 +250,7 @@ for (const width of [1440, 390]) test(`public monomer onboarding stays private a
   const cancelledPaletteRequests = [];
   page.on('requestfailed', request => {
     if (new URL(request.url()).pathname === '/monomers' && request.headers()['x-cabiln-library']) {
-      cancelledPaletteRequests.push(request.failure()?.errorText);
+      cancelledPaletteRequests.push(request);
     }
   });
   const paletteAfterClose = new Promise(resolve => { releasePalette = resolve; });
@@ -287,7 +287,10 @@ for (const width of [1440, 390]) test(`public monomer onboarding stays private a
   await expect(page.locator('#cabiln-input')).toHaveValue('A-G');
   await expect(page.locator(`.lib-row[data-abbr="${symbol}"]`)).toBeVisible();
   await render(page, symbol);
-  expect(cancelledPaletteRequests).toEqual([]);
+  for (const request of cancelledPaletteRequests) {
+    // Chromium reports the deliberately discarded overload response as aborted.
+    expect((await request.response())?.status(), request.failure()?.errorText).toBe(503);
+  }
   await page.locator('#btn-build').click();
   await selectChip(page, 0, 'left', symbol);
   await site(page, 'left', 4);
