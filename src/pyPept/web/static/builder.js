@@ -1,7 +1,7 @@
 // Page preferences and reference lifetime.
 const drawing = new DrawingState();
 const tutorialLesson = new URLSearchParams(window.location.search).get('tutorial');
-const practiceMode = ['1', 'swap'].includes(tutorialLesson);
+const practiceMode = ['1', 'swap', 'monomer'].includes(tutorialLesson);
 let darkMode   = true;
 let hlEnabled  = true;
 let cabilnTimer = null;
@@ -398,6 +398,7 @@ async function saveProject() {
     replaceDocument({ context: prepared.document.context || prepared.context }, prepared.drafts);
     saveDraft();
     setProjectStatus('Project saved. It includes source, notation drafts, original reference and import details.');
+    tutorial?.recordProject('save', prepared);
   } catch (error) {
     if (request.current()) {
       setProjectStatus(error.message || 'Could not save the project. Your work is unchanged.', true);
@@ -427,6 +428,7 @@ async function validateAndOpenProject(project, successMessage = 'Project opened'
         [mode, { ...state, context }])) });
     if (library.isOpen) library.load();
     setProjectStatus(successMessage + '. Source and reference are preserved; use Undo to return to the previous sequence.');
+    tutorial?.recordProject('open', project);
   } catch (error) {
     if (request.current()) setProjectStatus((error.message || 'Could not open the project.') + ' Your current work is unchanged.', true);
   } finally { request.finish(); }
@@ -537,20 +539,24 @@ registrationFrame.addEventListener('load', () => {
   // Firefox needs the frame focused before its field inside a modal dialog.
   registrationFrame.contentWindow.focus();
   input.focus();
+  tutorial?.registrationChanged();
 });
 registrationLink.addEventListener('click', event => {
   event.preventDefault();
   library.hidePreview();
-  registrationFrame.src = '/register';
+  registrationFrame.src = tutorial?.lesson === 'monomer' ? '/register?tutorial=monomer' : '/register';
   registrationDialog.showModal();
+  tutorial?.registrationChanged();
 });
 document.getElementById('registration-close').addEventListener('click', () => registrationDialog.close());
 registrationDialog.addEventListener('close', () => {
   registrationFrame.removeAttribute('src');
   registrationLink.focus();
+  tutorial?.registrationChanged();
 });
 window.addEventListener('message', event => {
   if (event.origin !== window.location.origin || event.source !== registrationFrame.contentWindow) return;
+  if (event.data?.type === 'cabiln-registration-state') tutorial?.registrationChanged();
   if (event.data?.type === 'cabiln-monomer-added') {
     monomerLibraryChanged();
   }
@@ -1317,7 +1323,7 @@ offerSavedDraft();
 updateHistoryControls();
 if (practiceMode) {
   document.getElementById('btn-clear-draft').hidden = true;
-  tutorial = startTutorial({ lesson: tutorialLesson === 'swap' ? 'swap' : 'connect',
+  tutorial = startTutorial({ lesson: tutorialLesson === '1' ? 'connect' : tutorialLesson,
     loadPractice: source => commitDocument(source, 'cabiln'),
     getExample: async name => {
       const example = (await getExamples()).flatMap(category => category.items).find(item => item.name === name);

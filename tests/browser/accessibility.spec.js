@@ -53,6 +53,17 @@ test('workspace, editing, tutorial and registration states pass automated access
   await scan('swap tutorial');
   await page.setViewportSize({ width: 320, height: 640 });
   await scan('narrow tutorial');
+  await page.goto(`${app.url}/?tutorial=monomer`);
+  await page.locator('#tutorial-load').click();
+  await page.locator('#tutorial-next').click();
+  await page.locator('#tutorial-show').click();
+  await page.locator('#register-link').click();
+  await page.locator('#tutorial-example').click();
+  await page.locator('#tutorial-next').click();
+  await page.frameLocator('#registration-frame').locator('#btn-preview').click();
+  await expect(page.locator('#tutorial-next')).toBeEnabled();
+  await scan('custom monomer dialog guide');
+  await page.locator('#registration-close').click();
   await page.goto(`${app.url}/register`);
   await page.locator('#btn-preview').click();
   await scan('registration error');

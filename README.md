@@ -34,8 +34,9 @@ See [deployment](docs/deployment.md) for hosting, process limits and recovery.
 
 ## Use the builder
 
-Open **Tutorial** in the top toolbar for lessons on building a peptide and
-swapping a building block in Retatrutide. It opens a separate practice tab.
+Open **Tutorial** in the top toolbar for lessons on building a peptide,
+swapping a building block in Retatrutide, and adding a custom monomer.
+It opens a separate practice tab.
 Follow the arrow or highlighted button for each action. The lessons mark the exact
 tile, connection point or control, then confirm success and point to **Next**.
 Open **Why this step?** for the explanation; you do not need to recognise the
@@ -197,6 +198,14 @@ Open **Library → Add monomer**, enter the full SMILES, review the detected sit
 and give the block a unique abbreviation and name. **Show in Library** returns
 to the builder with the new block selected in the search results. New monomers
 work in rendering, highlighting, Build, reaction filters and recognition.
+
+For guided practice, choose **Tutorial → Add a custom monomer**, or **Learn**
+beside **Add monomer** in Library. The lesson supplies a practice molecule,
+guides attachment preview and naming, then connects the block to A–G.
+It finishes with **Save project** and restoring the file in a fresh practice tab.
+Instructions stay visible inside the form. The lesson uses temporary additions
+on both hosted and local apps. After a refresh, load A–G again; a retained
+practice block can be reused without registering it twice.
 
 On the public app, additions belong to the current browser tab. Other tabs and
 users keep their own libraries. Reloading retains the definitions when tab

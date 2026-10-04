@@ -1080,3 +1080,14 @@
   #registration-dialog::backdrop { background: #0009; }
   #registration-close { display: block; margin: 0 0 8px auto; }
   #registration-frame { width: 100%; height: calc(100% - 44px); border: 0; }
+  #registration-dialog.with-tutorial {
+    width: 100vw;
+    height: 100dvh;
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+    padding-right: 332px;
+  }
+  @media (max-width: 960px) {
+    #registration-dialog.with-tutorial { padding-right: 12px; padding-bottom: var(--tutorial-clearance, 280px); }
+  }

@@ -50,6 +50,11 @@ exercise the full build/preview/Undo route at desktop and mobile widths, failed
 drawings, keyboard dismissal, restart and isolation from saved browser drafts.
 The same journeys check precise action cues, real controls receiving clicks,
 bounded animation and still-visible guidance with reduced motion.
+The custom monomer lesson previews and adds a temporary block, connects it,
+saves a project and restores it in an isolated tab at desktop and mobile widths.
+It checks form cue coordinates, Back after Connect, failed saves and malformed
+uploads, closing and reopening the form, invalid preview input, reload recovery,
+lesson changes and temporary-only practice on a writable local installation.
 They also cover reopening closed panels, browsing without search, changing the
 chosen amino acid, and invalidating unfinished steps when selections are cleared.
 Direct Connect, completion while the guide is closed, Back after Apply and Undo,

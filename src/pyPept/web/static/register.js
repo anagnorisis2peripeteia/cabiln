@@ -1,7 +1,7 @@
 let detectedData = null;
 let detectedSmiles = '';
 let formRevision = 0;
-let registering = false;
+let pendingRegistration = null;
 let registeredPayload = null;
 let attachmentChoices = [];
 let choiceSmiles = '';
@@ -9,6 +9,7 @@ let persistentAllowed = false;
 let scopeReady = false;
 let registeredDestination = null;
 let registeredAbbr = '';
+const practiceMode = new URLSearchParams(window.location.search).get('tutorial') === 'monomer';
 
 const smilesIn   = document.getElementById('smiles-in');
 const btnPreview = document.getElementById('btn-preview');
@@ -38,7 +39,7 @@ async function loadRegistrationScope() {
   try {
     const response = await fetchCalculation('/capabilities', { timeoutMs: 5000 });
     const capabilities = await readResponse(response);
-    persistentAllowed = capabilities.registration === true;
+    persistentAllowed = capabilities.registration === true && !practiceMode;
     document.getElementById('registration-destination').hidden = !persistentAllowed;
     if (persistentAllowed) destinationIn.value = 'installed';
   } catch (_) { /* Temporary registration remains available without administrative access. */ }
@@ -84,9 +85,9 @@ function updateRegisterButton() {
   const registered = payload && JSON.stringify(payload) === registeredPayload &&
     registeredDestination === destination();
   doneButton.hidden = !registered;
-  btnRegister.disabled = !scopeReady || registering || !payload || !payload.abbr ||
+  btnRegister.disabled = !scopeReady || !!pendingRegistration || !payload || !payload.abbr ||
     !payload.name || registered;
-  btnRegister.textContent = registering ? 'Adding…' :
+  btnRegister.textContent = pendingRegistration ? 'Adding…' :
     registered ? '✓ Added' : installed ? 'Install monomer' : 'Add to this tab';
   registrationGuide.textContent = attachmentChoices.length && !payload ? 'Choose which numbered attachments this monomer should use.' :
     !payload ? 'Preview the current SMILES before registering.' :
@@ -97,6 +98,9 @@ function updateRegisterButton() {
   document.getElementById('registration-scope').textContent = installed
     ? 'Installed library: additions remain available after restarting the app.'
     : 'Custom monomers stay in this tab. Save a project to keep them after closing it.';
+  if (practiceMode && window.parent !== window) {
+    window.parent.postMessage({ type: 'cabiln-registration-state' }, location.origin);
+  }
 }
 
 function invalidatePreview() {
@@ -226,7 +230,7 @@ function renderDetected(chem_types, leaving) {
 
 document.getElementById('registration-form').addEventListener('submit', async event => {
   event.preventDefault();
-  if (registering) return;
+  if (pendingRegistration) return;
   const payload = registrationPayload();
   if (!payload || !payload.abbr || !payload.name) {
     showStatus('err', 'Preview the current SMILES and fill in abbreviation and name.');
@@ -236,7 +240,7 @@ document.getElementById('registration-form').addEventListener('submit', async ev
   const body = JSON.stringify(payload);
   const target = destination();
   if (body === registeredPayload && registeredDestination === target) return;
-  registering = true;
+  pendingRegistration = payload;
   updateRegisterButton();
   try {
     let data;
@@ -266,7 +270,7 @@ document.getElementById('registration-form').addEventListener('submit', async ev
   } catch (e) {
     if (revision === formRevision) showStatus('err', e.message || 'Could not confirm registration. Your entries are preserved. Check the Library before trying again.');
   } finally {
-    registering = false;
+    pendingRegistration = null;
     updateRegisterButton();
     if (revision === formRevision && !doneButton.hidden) doneButton.focus();
   }
@@ -277,3 +281,23 @@ function showStatus(cls, msg) {
   statusMsg.textContent = msg;
   statusMsg.style.display = '';
 }
+
+if (practiceMode) window.CabilnRegistration = {
+  get state() {
+    return { smiles: smilesIn.value.trim(), payload: registrationPayload(), registering: !!pendingRegistration,
+      submitted: pendingRegistration,
+      choices: attachmentChoices.length > 0 && !detectedData,
+      previewing: btnPreview.disabled, destination: destination(),
+      registered: registeredDestination === 'session' && registeredPayload ? JSON.parse(registeredPayload) : null };
+  },
+  useExample({ smiles, abbr, name }) {
+    smilesIn.value = smiles;
+    abbrIn.value = abbr;
+    nameIn.value = name;
+    formRevision++;
+    statusMsg.style.display = 'none';
+    invalidatePreview();
+    window.focus();
+    smilesIn.focus();
+  },
+};

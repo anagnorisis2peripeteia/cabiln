@@ -1,5 +1,6 @@
 function startTutorial({ lesson = 'connect', loadPractice, getExample, getBuildState, isReady, openBuild, openLibrary, guideResidue }) {
-  const find = selector => document.querySelector(selector);
+  const monomers = createMonomerTutorial(isReady);
+  const find = selector => monomers.element(selector);
   const lessons = {
     connect: { source: 'A-G', name: 'A–G', host: 1, residue: 'G (glycine)', steps: [
       { id: 'load', title: 'Build a chain of three blocks', target: '#cabiln-input',
@@ -40,19 +41,29 @@ function startTutorial({ lesson = 'connect', loadPractice, getExample, getBuildS
         body: 'You have replaced a block without disconnecting its neighbours or side arm. Try another block, or choose Build a peptide above to practise adding one. Save project downloads an editable copy. Close this practice tab to return to your original work.' },
     ] },
   };
+  lessons.monomer = { ...lessons.connect, steps: monomers.steps(lessons.connect.steps) };
   const panel = find('#tutorial-panel'), button = find('#btn-tutorial');
   const next = find('#tutorial-next'), back = find('#tutorial-back'), load = find('#tutorial-load');
   const status = find('#tutorial-status'), show = find('#tutorial-show'), chooser = find('#tutorial-lesson');
   const cue = createTutorialCue(panel, show);
   let index = 0, target = null, frame = null, explored = false, applied = null, reveal = null;
-  let loading = false, loadError = '', generation = 0;
+  let loading = false, loadError = '', generation = 0, clearanceFrame = null;
   const current = () => lessons[lesson];
+  const buildAction = () => lesson === 'swap' ? 'swap' : 'connect';
+  const suggestedMonomer = () => lesson === 'monomer' ? monomers.abbr : lesson === 'swap' ? 'Orn' : 'A';
   const hostTile = () => `.res-chip[data-residue="${current().host}"]`;
-  const observer = new MutationObserver(() => {
+  function scheduleCheck() {
     if (frame === null) frame = requestAnimationFrame(() => { frame = null; check(); });
-  });
+  }
+  const observer = new MutationObserver(scheduleCheck);
+  const formObserver = new MutationObserver(scheduleCheck);
   const sizeObserver = new ResizeObserver(() => {
-    document.documentElement.style.setProperty('--tutorial-clearance', `${Math.ceil(panel.getBoundingClientRect().height) + 24}px`);
+    const height = `${Math.ceil(panel.getBoundingClientRect().height) + 24}px`;
+    cancelAnimationFrame(clearanceFrame);
+    clearanceFrame = requestAnimationFrame(() => {
+      clearanceFrame = null;
+      document.documentElement.style.setProperty('--tutorial-clearance', height);
+    });
   });
   const disclosure = createPanel({ panel, button, closeButton: find('#tutorial-close'),
     focus: find('#tutorial-title'),
@@ -66,7 +77,10 @@ function startTutorial({ lesson = 'connect', loadPractice, getExample, getBuildS
         sizeObserver.observe(panel);
       } else {
         observer.disconnect();
+        formObserver.disconnect();
         sizeObserver.disconnect();
+        cancelAnimationFrame(clearanceFrame);
+        clearanceFrame = null;
         document.documentElement.style.removeProperty('--tutorial-clearance');
         cancelAnimationFrame(frame);
         frame = null;
@@ -75,14 +89,16 @@ function startTutorial({ lesson = 'connect', loadPractice, getExample, getBuildS
         cue.clear();
         guideResidue(null);
       }
+      monomers.moveGuide(panel, find('#tutorial-cue'));
     },
   });
 
   function readState() {
     const base = !!current().source && isReady(current().source), build = getBuildState();
-    const left = base && build.open && build.action === lesson && build.left?.index === current().host;
+    const left = base && build.open && build.action === buildAction() && build.left?.index === current().host;
     const candidate = left && build.right?.index === null && (lesson === 'swap' ||
-      build.right.rgroups.some(site => site.slot === 1 && !site.used));
+      build.right.rgroups.some(site => site.slot === 1 && !site.used)) &&
+      (lesson !== 'monomer' || build.right.abbr === monomers.abbr);
     const connection = candidate && build.ready && (lesson === 'swap' ||
       (build.left.selectedSlot === 2 && build.right.selectedSlot === 1));
     const product = !!applied && isReady(applied.result);
@@ -107,14 +123,15 @@ function startTutorial({ lesson = 'connect', loadPractice, getExample, getBuildS
     }
     if (id === 'undo') return { target: '#build-connect', message: 'Apply the practice edit before trying Undo. Back revisits the earlier steps.' };
     if (!state.build.open) return { target: '#btn-build', message: 'Build is closed. Reopen it to continue.', label: 'Open Build', action: openBuild };
-    if (state.build.action !== lesson) return { target: '#build-action', message: `Choose ${lesson === 'swap' ? 'Swap monomer' : 'Connect'} in the Build action menu for this exercise.` };
+    if (state.build.action !== buildAction()) return { target: '#build-action', message: `Choose ${lesson === 'swap' ? 'Swap monomer' : 'Connect'} in the Build action menu for this exercise.` };
     if (state.build.busy) return { target: '#build-status', message: 'Build is loading or checking your choices. Please wait.' };
     if (!state.left) return { target: hostTile(), message: `Click the marked ${current().residue} tile above the drawing.` };
     if (id === 'select') return null;
     if (!state.candidate) {
       if (find('#lib-panel').hidden) return { target: '#btn-lib', message: 'Library is closed. Reopen it to choose a building block.', label: 'Open Library', action: openLibrary };
       return { target: '#lib-list', message: lesson === 'swap' ? 'Search for Orn, then click Select on its row.'
-        : 'Find A (alanine) or L (leucine) in Library, then click Use on its row.' };
+        : lesson === 'monomer' ? `Find ${monomers.abbr} in Library, then click Use on its row.`
+          : 'Find A (alanine) or L (leucine) in Library, then click Use on its row.' };
     }
     if (id === 'choose') return null;
     if (!state.connection) return lesson === 'swap'
@@ -140,8 +157,8 @@ function startTutorial({ lesson = 'connect', loadPractice, getExample, getBuildS
     }[step.id];
     if (step.id === 'load') selector = '#tutorial-load';
     if (selector === '#lib-list') {
-      const abbr = lesson === 'swap' ? 'Orn' : 'A';
-      const choice = `.lib-row[data-abbr="${abbr}"] .lib-use`;
+      const abbr = suggestedMonomer();
+      const choice = `.lib-row[data-abbr="${CSS.escape(abbr)}"] .lib-use`;
       selector = find(choice) ? choice : '#lib-search';
       label = selector === '#lib-search' ? `Search for ${abbr}`
         : `Click ${lesson === 'swap' ? 'Select' : 'Use'} beside ${abbr}`;
@@ -164,12 +181,14 @@ function startTutorial({ lesson = 'connect', loadPractice, getExample, getBuildS
 
   function check(revealTarget = false) {
     if (!disclosure.isOpen) return;
-    const step = current().steps[index], state = readState(), help = recovery(state, step.id);
-    const reviewing = state.review && !['undo', 'finish'].includes(step.id);
+    const step = current().steps[index], state = readState();
+    const detail = lesson === 'monomer' ? monomers.inspect(step.id, state) : null;
+    const help = detail ? null : recovery(state, step.id);
+    const reviewing = !detail && state.review && !['undo', 'finish'].includes(step.id);
     find('#tutorial-title').textContent = `${reviewing ? 'Review: ' : ''}${step.title}`;
     guideResidue(state.base && !state.review && (step.id === 'select' ||
-      (!['load', 'explore', 'undo', 'finish'].includes(step.id) && !state.left)) ? current().host : null);
-    const ready = reviewing || ({ load: state.base, explore: explored && state.base, select: state.left,
+      (['choose', 'sites', 'preview', 'apply'].includes(step.id) && !state.left)) ? current().host : null);
+    const ready = detail ? detail.ready : reviewing || ({ load: state.base, explore: explored && state.base, select: state.left,
       choose: state.candidate, sites: state.connection, preview: state.preview, apply: state.product,
       undo: !!applied && state.base, finish: true })[step.id];
     next.disabled = loading || !!loadError || !!help || !ready;
@@ -184,7 +203,7 @@ function startTutorial({ lesson = 'connect', loadPractice, getExample, getBuildS
       preview: 'Preview ready. Your chain is unchanged. Click Next.',
       apply: `${replacement} is now in your chain. Click Next.`,
       undo: `${current().name} is restored. Click Next.` };
-    status.textContent = loading ? `Loading ${current().name}…` : loadError || help?.message ||
+    status.textContent = loading ? `Loading ${current().name}…` : loadError || detail?.message || help?.message ||
       (reviewing ? `Edit completed${state.base ? ' and undone' : ''}. Back and Next review the instructions; Restart begins again.`
         : next.disabled ? 'Complete this step to continue.' : confirmation[step.id] || 'Ready to finish.');
     const previewReady = step.id === 'preview' && state.preview;
@@ -192,25 +211,31 @@ function startTutorial({ lesson = 'connect', loadPractice, getExample, getBuildS
     // Replacing the text during a press can cancel WebKit's click event.
     if (show.textContent !== showLabel) show.textContent = showLabel;
     reveal = reviewing ? null : help?.action;
-    const body = step.body.replaceAll('{replacement}', replacement);
+    const body = step.body.replaceAll('{replacement}', replacement).replaceAll('{custom}', monomers.abbr);
     find('#tutorial-body').textContent = reviewing && step.id !== 'load'
       ? `${body} You already completed this edit with ${applied.request.new_abbr}; continue to review the next step.` : body;
-    const element = find(reviewing ? '#render-canvas' : help?.target || (previewReady ? '#build-preview-canvas' : step.target) || hostTile());
-    const action = actionFor(step, help), complete = !next.disabled;
+    const element = find(reviewing ? '#render-canvas' : detail?.target || help?.target || (previewReady ? '#build-preview-canvas' : step.target) || hostTile());
+    const action = detail ? { element, label: detail.label } : actionFor(step, help), complete = !next.disabled;
     const reviewConnections = lesson === 'swap' && step.id === 'sites' && complete && !reviewing;
+    const reviewAttachments = lesson === 'monomer' && step.id === 'attachments' && complete && !!monomers.registrationDocument;
+    const reviewDetails = reviewConnections || reviewAttachments;
     const focusTarget = complete ? element : action.element || element;
     if (target !== focusTarget) {
       target?.classList.remove('tutorial-target');
       target = focusTarget;
       target?.classList.add('tutorial-target');
+      if (reviewAttachments) target?.scrollIntoView({ block: 'center', inline: 'nearest' });
     }
     panel.classList.toggle('step-complete', complete);
-    find('#tutorial-instruction').textContent = reviewConnections ? 'Check the three links, then click Next.' : complete
+    find('#tutorial-instruction').textContent = reviewConnections ? 'Check the three links, then click Next.'
+      : reviewAttachments ? 'Find R1 and R2, then click Next.' : complete
       ? (step.id === 'finish' ? 'You did it! Click Finish.' : 'Click Next to keep going.') : action.label;
     find('#tutorial-meter-fill').style.transform = `scaleX(${(index + Number(complete)) / current().steps.length})`;
+    monomers.moveGuide(panel, find('#tutorial-cue'));
     if (loading || state.build.busy || (!state.base && find('#render-pane').getAttribute('aria-busy') === 'true')) cue.clear();
-    else cue.point(reviewConnections ? element : complete ? next : action.element,
-      reviewConnections ? 'These three links stay attached' : complete ? (step.id === 'finish' ? 'Finish!' : 'Next step →') : action.label,
+    else cue.point(reviewDetails ? element : complete ? next : action.element,
+      reviewConnections ? 'These three links stay attached' : reviewAttachments ? 'Your block’s connection points'
+        : complete ? (step.id === 'finish' ? 'Finish!' : 'Next step →') : action.label,
       { complete, reveal: revealTarget });
   }
 
@@ -231,6 +256,14 @@ function startTutorial({ lesson = 'connect', loadPractice, getExample, getBuildS
     applied = null;
     loading = false;
     loadError = '';
+    monomers.reset();
+    monomers.closeForm();
+    lessons.monomer.steps = monomers.steps(lessons.connect.steps);
+    const url = new URL(window.location.href);
+    url.searchParams.set('tutorial', lesson === 'connect' ? '1' : lesson);
+    url.searchParams.delete('reopen');
+    url.hash = '';
+    window.history.replaceState(null, '', url);
   }
   async function restart() {
     reset();
@@ -266,9 +299,20 @@ function startTutorial({ lesson = 'connect', loadPractice, getExample, getBuildS
     if (target?.closest('#build-panel')?.hidden) openBuild();
     target?.scrollIntoView({ block: 'center', inline: 'nearest' });
     const control = target?.matches('button, input, textarea, select, [tabindex]')
-      ? target : target?.querySelector('button:not(:disabled)');
+      ? target : target?.querySelector('button:not(:disabled), input:not(:disabled)');
+    if (control && control.ownerDocument !== document) control.ownerDocument.defaultView.focus();
     control?.focus({ preventScroll: true });
   });
+  function registrationChanged() {
+    monomers.recordRegistration();
+    const document = monomers.registrationDocument;
+    formObserver.disconnect();
+    if (document?.body && disclosure.isOpen) {
+      formObserver.observe(document.body, { subtree: true, childList: true, attributes: true, characterData: true });
+    }
+    check();
+  }
+  window.addEventListener('cabiln-library-changed', () => { monomers.recordRegistration(); check(); });
   document.addEventListener('click', event => {
     const entry = event.target.closest('.tutorial-start');
     if (!entry) return;
@@ -281,12 +325,17 @@ function startTutorial({ lesson = 'connect', loadPractice, getExample, getBuildS
   button.hidden = false;
   disclosure.open({ focus: false });
   return {
+    registrationChanged,
+    get lesson() { return lesson; },
+    recordProject(kind, project) {
+      if (lesson === 'monomer') { monomers.recordProject(kind, project); check(); }
+    },
     recordApplied(edit) {
-      if (edit.action !== lesson || edit.request.cabiln !== current().source) return;
+      if (edit.action !== buildAction() || edit.request.cabiln !== current().source) return;
       const matches = lesson === 'swap' ? edit.request.residue_idx === current().host
         : edit.request.host_residue_idx === current().host && edit.request.target_residue_idx === -1 &&
           edit.request.r_host === 2 && edit.request.r_new === 1;
-      if (matches) { applied = edit; check(); }
+      if (matches && (lesson !== 'monomer' || edit.request.new_abbr === monomers.abbr)) { applied = edit; check(); }
     },
   };
 }
@@ -299,6 +348,7 @@ function createTutorialCue(panel, show) {
   const arrow = pointer.querySelector('svg'), path = arrow.querySelector('path');
   const reduced = matchMedia('(prefers-reduced-motion: reduce)');
   let target = null, caption = '', frame = null, animatedTarget = null;
+  let targetDocument = null;
 
   function stopMotion() {
     for (const animation of cue.getAnimations({ subtree: true })) animation.cancel();
@@ -308,19 +358,34 @@ function createTutorialCue(panel, show) {
   }
   const resize = new ResizeObserver(schedule);
 
-  function visibleBox(element) {
-    if (!element?.getClientRects().length) return null;
+  function screenBox(element) {
     const box = element.getBoundingClientRect();
+    const host = element.ownerDocument.defaultView?.frameElement;
+    const offset = host?.getBoundingClientRect();
+    const x = offset ? offset.left + host.clientLeft : 0;
+    const y = offset ? offset.top + host.clientTop : 0;
+    return { left: box.left + x, top: box.top + y, right: box.right + x,
+      bottom: box.bottom + y, width: box.width, height: box.height };
+  }
+
+  function visibleBox(element) {
+    if (!element?.isConnected || !element.getClientRects().length) return null;
+    const box = screenBox(element), host = element.ownerDocument.defaultView?.frameElement;
     let left = Math.max(8, box.left), top = Math.max(8, box.top);
     let right = Math.min(innerWidth - 8, box.right), bottom = Math.min(innerHeight - 8, box.bottom);
     for (let parent = element.parentElement; parent; parent = parent.parentElement) {
-      const style = getComputedStyle(parent), bounds = parent.getBoundingClientRect();
+      const style = getComputedStyle(parent), bounds = screenBox(parent);
       if (/(auto|scroll|hidden|clip)/.test(style.overflowX)) {
         left = Math.max(left, bounds.left); right = Math.min(right, bounds.right);
       }
       if (/(auto|scroll|hidden|clip)/.test(style.overflowY)) {
         top = Math.max(top, bounds.top); bottom = Math.min(bottom, bounds.bottom);
       }
+    }
+    if (host) {
+      const bounds = host.getBoundingClientRect();
+      left = Math.max(left, bounds.left); right = Math.min(right, bounds.right);
+      top = Math.max(top, bounds.top); bottom = Math.min(bottom, bounds.bottom);
     }
     if (!panel.contains(element)) {
       const guide = panel.getBoundingClientRect();
@@ -376,9 +441,13 @@ function createTutorialCue(panel, show) {
     point(element, text, { complete, reveal }) {
       if (target !== element) {
         resize.disconnect();
+        targetDocument?.removeEventListener('scroll', schedule, true);
         target = element;
+        targetDocument = target?.ownerDocument !== document ? target?.ownerDocument : null;
+        targetDocument?.addEventListener('scroll', schedule, true);
         animatedTarget = null;
-        for (const item of [target, panel, document.getElementById('input-bar'), document.getElementById('build-panel'), document.getElementById('main')]) {
+        for (const item of [target, target?.ownerDocument.defaultView?.frameElement, panel,
+          document.getElementById('input-bar'), document.getElementById('build-panel'), document.getElementById('main')]) {
           if (item) resize.observe(item);
         }
       }
@@ -393,6 +462,8 @@ function createTutorialCue(panel, show) {
       cancelAnimationFrame(frame);
       frame = null;
       resize.disconnect();
+      targetDocument?.removeEventListener('scroll', schedule, true);
+      targetDocument = null;
       cue.hidden = true;
       stopMotion();
     },

@@ -22,7 +22,7 @@
   <div class="header-actions">
     <div class="toolbar-group" role="group" aria-label="Project files">
       <button type="button" id="btn-project-save" class="hbtn" title="Save source, drafts, reference and import details as a portable project">Save project</button>
-      <label class="hbtn upload-trigger">Open project
+      <label id="btn-project-open" class="hbtn upload-trigger">Open project
         <input type="file" id="project-upload" class="sr-only" accept=".cabiln.json,.json,application/json" aria-label="Open a CABILN project">
       </label>
     </div>
@@ -36,7 +36,7 @@
 
 <section id="help-panel" class="help-panel" aria-labelledby="help-title" hidden>
   <div class="help-heading"><h2 id="help-title">Working with CABILN</h2><button type="button" id="help-close" class="panel-close" aria-label="Close help">✕</button></div>
-  <p><a class="hbtn tutorial-start" href="/?tutorial=1" target="_blank" rel="noopener">Start guided tutorial ↗</a> Build a short peptide or practise a swap in Retatrutide in a separate tab. Your current work stays here.</p>
+  <p><a class="hbtn tutorial-start" href="/?tutorial=1" target="_blank" rel="noopener">Start guided tutorial ↗</a> Build a peptide, swap a block in Retatrutide, or create and save a custom monomer in a separate tab. Your current work stays here.</p>
   <details><summary>Start a peptide and add a monomer</summary>
     <p>A monomer is one building block; a residue is that block inside your peptide. Type a sequence, choose an Example, or open Build to start.</p>
     <p>In Build, select a residue in the drawing or its tile, then choose Use in the library. Choose a free numbered site on each side. These R-sites are attachment points. Used sites cannot connect again. Preview shows the proposed molecule; Connect applies it. Undo and Redo restore sequence edits.</p>
@@ -45,6 +45,7 @@
   <details><summary>Add a custom monomer</summary>
     <p>In Library, choose Add monomer. Paste its full SMILES, preview the structure and review the numbered attachment sites. If several orientations are offered, choose the intended one. Detection covers supported functional groups; check the structure and stereochemistry before adding it.</p>
     <p>Give the block a unique abbreviation and name, then choose Add to this tab. Show in Library returns to the builder. Temporary additions stay in this tab; Save project keeps their definitions for later. An enabled local installer also offers Installed library for permanent additions.</p>
+    <p><a class="hbtn tutorial-start" data-lesson="monomer" href="/?tutorial=monomer" target="_blank" rel="noopener">Learn with a practice monomer ↗</a></p>
   </details>
   <details><summary>Swap a monomer without losing its connections</summary>
     <p>Choose Swap monomer in Build, then select the residue to replace. The library checks every existing connection. Select a replacement, review which numbered sites match, and preview the full product. Apply swap commits it; Undo restores the original. Site numbers can differ, and the preview shows any reformatted notation.</p>
@@ -208,6 +209,7 @@
       <div class="lib-heading">
         <h2 class="panel-title" id="lib-title">Monomer Library</h2>
         <a id="register-link" class="hbtn" href="/register" aria-haspopup="dialog" hidden>Add monomer</a>
+        <a id="monomer-tutorial-link" class="hbtn tutorial-start" data-lesson="monomer" href="/?tutorial=monomer" target="_blank" rel="noopener" aria-label="Learn to add a custom monomer">Learn ↗</a>
       </div>
       <input id="lib-search" name="monomer-search" type="search" placeholder="Search abbr / name / type…" autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off" aria-label="Search monomer library" aria-describedby="lib-count">
       <button type="button" id="btn-rxn-filter" class="hbtn" title="Filter by compatible attachment sites" aria-describedby="lib-filter-status" aria-pressed="false"><svg class="ui-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M2 3h12L9 9v4l-2 1V9z"/></svg>Filter</button>
@@ -316,11 +318,14 @@
       <select id="tutorial-lesson" class="hbtn">
         <option value="connect">Build a peptide</option>
         <option value="swap">Swap in Retatrutide</option>
+        <option value="monomer">Add a custom monomer</option>
       </select>
     </label>
     <h2 id="tutorial-title" tabindex="-1"></h2>
     <p id="tutorial-instruction"></p>
     <details id="tutorial-details"><summary>Why this step?</summary><p id="tutorial-body"></p></details>
+    <button type="button" id="tutorial-example" class="hbtn" hidden>Use practice molecule</button>
+    <a id="tutorial-open-tab" class="hbtn" href="/?tutorial=monomer&amp;reopen=1" target="_blank" rel="noopener" hidden>Open a fresh tab ↗</a>
     <div id="tutorial-status" role="status" aria-live="polite"></div>
   </div>
   <div class="tutorial-actions">
@@ -349,6 +354,7 @@
 <script src="/static/residues.js" defer></script>
 <script src="/static/library.js" defer></script>
 <script src="/static/build.js" defer></script>
+<script src="/static/tutorial-monomer.js" defer></script>
 <script src="/static/tutorial.js" defer></script>
 <script src="/static/builder.js" defer></script>
 </body>

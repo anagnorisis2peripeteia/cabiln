@@ -262,6 +262,7 @@ graph transformations; they do not predict experimental reaction feasibility.
 | `session-library.js` | Tab definitions, temporary server tokens, expiry recovery and staged project imports |
 | `ui.js` | Viewport controls, panels, loading/retry presentation and status details |
 | `tutorial.js` | Practice lessons, action cues, live prerequisites and completed-edit review |
+| `tutorial-monomer.js` | Custom monomer lesson, form guidance and project save/restore checks |
 
 Editing invalidates selections, comparisons and exports while retaining the last
 valid drawing. Free typing has a 180 ms delay; explicit actions render
@@ -297,7 +298,8 @@ shares the charcoal surfaces and reviews sites alongside naming on wide screens.
 Input validation exposes its state through both text feedback and `aria-invalid`.
 [Drawing performance](drawing-performance.md) describes layout and notation reuse.
 
-The optional tutorial runs in a separate `?tutorial=1` or `?tutorial=swap` tab.
+The optional tutorial runs in a separate `?tutorial=1`, `?tutorial=swap`, or
+`?tutorial=monomer` tab.
 It reads the Build session and accepted drawings. Build reports successful edits
 even when the guide is closed; Back and Next can then review completed steps
 without requiring the old selections. Review text retains the replacement from
@@ -305,6 +307,15 @@ the completed edit. Unfinished steps require valid selections and use
 Build's pending-request state for loading instructions. Undo restores the source
 through normal editor history. Retatrutide comes from the same cached catalog as
 Examples; the guide has no chemistry code.
+The custom monomer lesson reads the registration form's current preview and
+successful temporary additions. Its guide moves into the modal while the form
+is open; cue coordinates include the iframe position and follow its scrolling.
+The form always uses temporary storage during this lesson, including on local
+instances with installation enabled. Project steps advance on successful save
+and validated open events. A fresh practice tab uses `rel="noopener"` and carries
+only the expected abbreviation in its URL fragment; the user restores the
+definition from the downloaded project. A tab remembers the practice block's
+abbreviation so a restarted lesson can reuse a retained definition after reload.
 The desktop guide reserves its own column. On smaller screens, a resize observer
 reserves space matching the guide's height so it can accommodate changing text.
 Short action prompts accompany arrows and rings around the next control; completed
