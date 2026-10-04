@@ -12,6 +12,12 @@ async function startMonomerLesson(page, url) {
   await expect(page.locator('#cabiln-input')).toHaveClass('ok');
   await nextStep(page, 'Enter a practice molecule');
   await page.locator('#tutorial-show').click();
+  expect(await page.evaluate(() => {
+    const text = document.createRange();
+    text.selectNodeContents(document.getElementById('lib-title'));
+    const title = text.getBoundingClientRect(), add = document.getElementById('register-link').getBoundingClientRect();
+    return title.right <= add.left || title.bottom <= add.top || add.bottom <= title.top;
+  }), 'Library title and Add monomer do not overlap').toBe(true);
   await page.locator('#register-link').click();
   const form = page.frameLocator('#registration-frame');
   await expect(form.locator('#smiles-in')).toBeFocused();

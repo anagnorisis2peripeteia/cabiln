@@ -502,7 +502,7 @@
     align-items: center;
     gap: 8px;
   }
-  .lib-heading { grid-column: 1; grid-row: 1; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .lib-heading { grid-column: 1; grid-row: 1; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
   #register-link { white-space: nowrap; text-decoration: none; }
   #lib-close { grid-column: 2; grid-row: 1; justify-self: end; }
   #btn-rxn-filter { grid-column: 2; grid-row: 2; }
