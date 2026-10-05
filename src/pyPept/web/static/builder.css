@@ -170,7 +170,13 @@
   }
   #input-bar-row { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px; min-width: 0; }
   .sequence-format { display: flex; align-items: center; gap: 8px; }
-  #cabiln-input { flex: 1; min-width: 320px; height: 44px; }
+  #cabiln-input {
+    flex: 1;
+    min-width: 320px;
+    min-height: 44px;
+    height: auto;
+    field-sizing: content;
+  }
   .history-controls { display: flex; gap: 5px; flex-shrink: 0; margin-left: 6px; }
   .notation-targets { display: flex; gap: 6px; }
   .convert-input { flex-shrink: 0; }
