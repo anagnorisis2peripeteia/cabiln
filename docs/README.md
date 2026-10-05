@@ -18,4 +18,4 @@
 | [Domain terms](../CONTEXT.md) | Definitions used in the code and guides |
 
 For current release results, check the commit's
-[Tests and Fuzzing workflows](https://github.com/anagnorisis2peripeteia/pyPept/actions).
+[Tests and Fuzzing workflows](https://github.com/anagnorisis2peripeteia/cabiln/actions).

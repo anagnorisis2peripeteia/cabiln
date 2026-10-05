@@ -101,7 +101,7 @@ the latest eight Python observations in `active.json`, alongside the captured CI
 ## Historical scripts
 
 Dataset repair recipes, monomer batches and scratch probes are preserved in
-[commit c67df6f](https://github.com/anagnorisis2peripeteia/pyPept/tree/c67df6fdc57e875cf6001ad9e5178a22188eb7d1/tools).
+[commit c67df6f](https://github.com/anagnorisis2peripeteia/cabiln/tree/c67df6fdc57e875cf6001ad9e5178a22188eb7d1/tools).
 To inspect an original recipe:
 
 ```sh

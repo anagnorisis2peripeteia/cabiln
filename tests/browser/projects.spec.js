@@ -140,7 +140,7 @@ test('help explains data handling and clearing a browser draft preserves the cur
   await page.locator('#btn-help').click();
   await expect(page.locator('#help-panel')).toContainText('server hosting this page');
   await page.getByText('Privacy and reporting a problem', { exact: true }).click();
-  await expect(page.getByRole('link', { name: 'Report a problem' })).toHaveAttribute('href', 'https://github.com/anagnorisis2peripeteia/pyPept/issues');
+  await expect(page.getByRole('link', { name: 'Report a problem' })).toHaveAttribute('href', 'https://github.com/anagnorisis2peripeteia/cabiln/issues');
   await page.getByText('Save, restore and export your work', { exact: true }).click();
   await page.locator('#btn-clear-draft').click();
   await expect(page.locator('#cabiln-input')).toHaveValue('A-G');

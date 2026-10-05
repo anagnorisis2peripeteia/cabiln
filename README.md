@@ -1,7 +1,9 @@
-# CABILN / pyPept
+# CABILN
 
-CABILN is a peptide notation and interactive builder based on
+CABILN is an independently maintained peptide notation and interactive builder
+developed by Cameron Beeley. Its code is derived from
 [Boehringer Ingelheim's pyPept](https://github.com/Boehringer-Ingelheim/pyPept).
+Its notation extends [BILN](https://doi.org/10.1021/acs.jcim.2c00703).
 Its monomer library supplies the builder's vocabulary: registration detects
 attachment sites and chemistry, creates a library tile, and makes the monomer
 available for construction and recognition. New monomers with supported
@@ -15,9 +17,11 @@ definitions determine the assembled RDKit molecule.
 
 ## Install and run
 
-Use Python 3.9 or newer. From a checkout:
+Use Python 3.9 or newer. Install CABILN from this repository:
 
 ```bash
+git clone https://github.com/anagnorisis2peripeteia/cabiln.git
+cd cabiln
 python -m venv .venv
 source .venv/bin/activate
 python -m pip install -e '.[web]'
@@ -27,6 +31,7 @@ cabiln
 Open `http://127.0.0.1:8732`. On Windows, activate the environment with
 `.venv\Scripts\activate`. For the chemistry library alone, install with
 `python -m pip install -e .`.
+The Python package and imports retain the `pyPept` name for compatibility.
 
 `cabiln --host` and `--port` set the listening address; the launcher also reads
 `HOST` and `PORT`. `python tools/live_renderer.py` remains supported.
@@ -287,14 +292,33 @@ failures; they do not exhaust possible peptides or editing histories.
 
 [Architecture](docs/architecture.md) maps the current modules.
 [Documentation](docs/README.md) links the usage guides and performance records.
-See the [CI runs](https://github.com/anagnorisis2peripeteia/pyPept/actions) for
+See the [CI runs](https://github.com/anagnorisis2peripeteia/cabiln/actions) for
 results from a particular release.
 
-## Attribution
+## Attribution and citation
 
-Original pyPept authors: Rodrigo Ochoa, J. B. Brown, and Thomas Fox.
-CABILN extensions: Cameron Beeley. See [LICENSE](LICENSE) and
-[LICENSE-ORIGINAL](LICENSE-ORIGINAL).
+CABILN began as a fork of
+[pyPept](https://github.com/Boehringer-Ingelheim/pyPept), developed by
+Rodrigo Ochoa, J. B. Brown and Thomas Fox at Boehringer Ingelheim.
+The CABILN notation builds on BILN. Cameron Beeley develops and maintains the
+CABILN extensions, including the interactive builder, monomer pipeline and
+reaction system.
 
-- [pyPept publication](https://doi.org/10.1186/s13321-023-00748-2), Journal of Cheminformatics, 2023.
-- [BILN publication](https://doi.org/10.1021/acs.jcim.2c00703), Journal of Chemical Information and Modeling, 2022.
+The project retains the original Git history and copyright notices for
+Boehringer Ingelheim and the Pistoia Alliance HELM Project.
+[LICENSE](LICENSE) contains the MIT terms and contribution notices;
+[LICENSE-ORIGINAL](LICENSE-ORIGINAL) preserves the upstream licence.
+
+When using CABILN in research, cite the repository and the commit or release
+used, together with the pyPept and BILN papers:
+
+- Ochoa, R.; Brown, J. B.; Fox, T. **pyPept: a python library to generate
+  atomistic 2D and 3D representations of peptides.** *Journal of Cheminformatics*
+  **15**, 79 (2023). [doi:10.1186/s13321-023-00748-2](https://doi.org/10.1186/s13321-023-00748-2).
+- Fox, T.; Bieler, M.; Haebel, P.; Ochoa, R.; Peters, S.; Weber, A.
+  **BILN: A Human-Readable Line Notation for Complex Peptides.**
+  *Journal of Chemical Information and Modeling* **62** (17), 3942–3947 (2022).
+  [doi:10.1021/acs.jcim.2c00703](https://doi.org/10.1021/acs.jcim.2c00703).
+
+[CITATION.cff](CITATION.cff) provides the software citation and both references
+in a machine-readable format.

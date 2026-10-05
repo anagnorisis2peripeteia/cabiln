@@ -1,0 +1,50 @@
+cff-version: 1.2.0
+message: >-
+  If you use CABILN, cite this repository and the commit or release used,
+  together with the pyPept and BILN papers listed below.
+type: software
+title: "CABILN: peptide notation and interactive builder"
+authors:
+  - family-names: Beeley
+    given-names: Cameron
+repository-code: "https://github.com/anagnorisis2peripeteia/cabiln"
+url: "https://cabiln.onrender.com/"
+license: MIT
+references:
+  - type: article
+    title: "pyPept: a python library to generate atomistic 2D and 3D representations of peptides"
+    authors:
+      - family-names: Ochoa
+        given-names: Rodrigo
+      - family-names: Brown
+        given-names: J. B.
+      - family-names: Fox
+        given-names: Thomas
+    journal: Journal of Cheminformatics
+    volume: "15"
+    issue: "1"
+    number: "79"
+    year: 2023
+    doi: "10.1186/s13321-023-00748-2"
+  - type: article
+    title: "BILN: A Human-Readable Line Notation for Complex Peptides"
+    authors:
+      - family-names: Fox
+        given-names: Thomas
+      - family-names: Bieler
+        given-names: Michael
+      - family-names: Haebel
+        given-names: Peter
+      - family-names: Ochoa
+        given-names: Rodrigo
+      - family-names: Peters
+        given-names: Stefan
+      - family-names: Weber
+        given-names: Alexander
+    journal: Journal of Chemical Information and Modeling
+    volume: "62"
+    issue: "17"
+    start: "3942"
+    end: "3947"
+    year: 2022
+    doi: "10.1021/acs.jcim.2c00703"

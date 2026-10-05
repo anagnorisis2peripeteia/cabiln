@@ -18,7 +18,7 @@ disabled; it does not describe the live service's deployment trigger.
 
 ```bash
 release_ref=$(git rev-parse HEAD)
-gh run list --repo anagnorisis2peripeteia/pyPept --commit "$release_ref"
+gh run list --repo anagnorisis2peripeteia/cabiln --commit "$release_ref"
 curl -fsS https://cabiln.onrender.com/ready
 ```
 
